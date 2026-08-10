@@ -52,6 +52,7 @@ import {
   FileUp,
   Beer,
   Sun,
+  Moon,
   Loader2,
 } from "lucide-react";
 import {
@@ -116,6 +117,7 @@ import {
   INITIAL_TRANSACTIONS,
 } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
+import { useTheme } from "./lib/useTheme";
 import {
   db,
   auth,
@@ -322,12 +324,14 @@ const Card = ({
 }) => (
   <div
     className={cn(
-      "bg-white/80 backdrop-blur-md border border-white/40 rounded-[20px] sm:rounded-[28px] overflow-hidden premium-shadow transition-none",
+      // Dung border-slate-200 (thay vi border-white) de vien hien dung o ca
+      // che do sang lan toi, vi thang slate duoc dao chieu trong index.css.
+      "bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[20px] sm:rounded-[28px] overflow-hidden premium-shadow transition-none",
       className,
     )}
   >
     {title && (
-      <div className="px-4 py-2.5 sm:px-8 sm:py-5 border-b border-slate-50/50 flex items-center justify-between bg-slate-50/20">
+      <div className="px-4 py-2.5 sm:px-8 sm:py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">
         <h3 className="text-[9px] sm:text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
           {title}
         </h3>
@@ -351,17 +355,30 @@ const StatCard = ({
   chartData,
 }: any) => (
   <Card className="relative group overflow-hidden border-none ring-1 ring-slate-100/50 pb-0">
+    {/* Vach mau tren dau the - chi tiet nhan dien hoc tu app mau */}
+    <div
+      className={cn(
+        "absolute top-0 left-0 right-0 h-1",
+        color === "primary"
+          ? "bg-gradient-to-r from-amber-500 to-amber-600"
+          : color === "green"
+            ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+            : color === "amber"
+              ? "bg-gradient-to-r from-amber-400 to-yellow-500"
+              : "bg-gradient-to-r from-rose-500 to-rose-400",
+      )}
+    />
     <div className="flex items-center justify-between mb-2 sm:mb-4">
       <div
         className={cn(
-          "w-9 h-9 sm:w-12 sm:h-12 rounded-[10px] sm:rounded-[16px] flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm",
+          "w-9 h-9 sm:w-12 sm:h-12 rounded-[12px] sm:rounded-[18px] flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm",
           color === "primary"
-            ? "bg-slate-900 text-white shadow-slate-200"
+            ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-amber-500/25"
             : color === "green"
-              ? "bg-emerald-500 text-white shadow-emerald-100"
+              ? "bg-emerald-500 text-white shadow-emerald-500/25"
               : color === "amber"
-                ? "bg-amber-500 text-white shadow-amber-100"
-                : "bg-rose-500 text-white shadow-rose-100",
+                ? "bg-amber-500 text-white shadow-amber-500/25"
+                : "bg-rose-500 text-white shadow-rose-500/25",
         )}
       >
         {Icon && <Icon className="w-4 h-4 sm:w-6 sm:h-6" />}
@@ -498,20 +515,22 @@ const Button = ({
   ...props
 }: any) => {
   const variants = {
+    // Luu y: truoc day dung "hover:bg-primary-dark" nhung mau primary-dark
+    // chua bao gio duoc dinh nghia nen di chuot vao nut khong doi mau.
     primary:
-      "bg-primary text-white hover:bg-primary-dark shadow-lg shadow-primary/25 active:scale-[0.97]",
+      "bg-primary text-white hover:brightness-110 shadow-lg shadow-primary/25 active:scale-[0.97]",
     secondary:
       "bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-[0.97]",
     outline:
-      "border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-[0.97]",
+      "border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-primary/40 active:scale-[0.97]",
     danger:
-      "bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-200 active:scale-[0.97]",
+      "bg-rose-500 text-white hover:bg-rose-600 shadow-lg shadow-rose-500/25 active:scale-[0.97]",
     ghost: "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
   };
   return (
     <button
       className={cn(
-        "px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-lg sm:rounded-xl font-black transition-all duration-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed",
+        "px-4 py-2.5 sm:px-6 sm:py-3.5 rounded-xl sm:rounded-2xl font-black transition-all duration-200 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed",
         variants[variant as keyof typeof variants],
         className,
       )}
@@ -532,7 +551,7 @@ const Input = ({ label, ...props }: any) => (
       </label>
     )}
     <input
-      className="w-full px-4 py-3 sm:px-5 sm:py-4 bg-slate-50/50 border border-slate-200 rounded-lg sm:rounded-xl text-sm sm:text-base font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:bg-white transition-all outline-none placeholder:text-slate-400"
+      className="w-full px-4 py-3 sm:px-5 sm:py-4 bg-slate-50/50 border border-slate-200 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all outline-none placeholder:text-slate-400"
       {...props}
     />
   </div>
@@ -547,7 +566,7 @@ const Select = ({ label, options, ...props }: any) => (
     )}
     <div className="relative">
       <select
-        className="w-full px-4 py-3 sm:px-5 sm:py-4 bg-slate-50/50 border border-slate-200 rounded-lg sm:rounded-xl text-sm sm:text-base font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:bg-white transition-all outline-none appearance-none"
+        className="w-full px-4 py-3 sm:px-5 sm:py-4 bg-slate-50/50 border border-slate-200 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary focus:bg-white transition-all outline-none appearance-none"
         {...props}
       >
         {options.map((opt: any) => (
@@ -566,6 +585,8 @@ const Select = ({ label, options, ...props }: any) => (
 // --- Main Application ---
 
 export default function App() {
+  const { toggleTheme, isDark } = useTheme();
+
   const [user, setUser] = useState<string | null>(
     localStorage.getItem("bt_username"),
   );
@@ -4468,7 +4489,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-6">
+          <div className="flex items-center gap-2 sm:gap-4">
             <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
               <Calendar className="w-4 h-4 text-primary" />
               <span className="text-xs font-bold text-slate-600">
@@ -4480,6 +4501,19 @@ export default function App() {
                 })}
               </span>
             </div>
+
+            {/* Chuyen che do sang / toi */}
+            <button
+              onClick={toggleTheme}
+              title={isDark ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+              className="p-2 sm:p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-primary/40 hover:bg-slate-100 transition-all"
+            >
+              {isDark ? (
+                <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
+              ) : (
+                <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
+              )}
+            </button>
           </div>
         </header>
 

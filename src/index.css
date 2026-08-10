@@ -1,36 +1,97 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
 @import "tailwindcss";
 
+/* Che do toi bat bang cach them class "dark" vao the <html>. */
+@custom-variant dark (&:is(.dark *));
+
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Chu: Plus Jakarta Sans am va tron hon Inter, hop tong bia.
+     Playfair Display giu lai cho cac tieu de kieu serif nghieng.
+     JetBrains Mono danh cho con so (deu chieu ngang, de doc bang bieu). */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-primary: #0f172a; /* Deep Slate for professional vibe */
-  --color-bg-main: #f8fafc;
-  --color-accent: #f59e0b; /* Amber/Gold for beer/premium feel */
+  /* Mau thuong hieu: ho phach / vang bia thay cho xam lanh.
+     primary dung lam nen nut va chu nhan manh nen chon sac du dam
+     de tuong phan tot tren nen sang. */
+  --color-primary: #b45309;      /* ho phach dam  */
+  --color-accent: #f59e0b;       /* vang bia      */
+  --color-bg-main: #faf8f4;      /* nen kem am    */
+
+  /* Khong doi thang bo goc toan cuc: se lam cac huy hieu/nhan nho bi tron
+     qua muc. Do mem goc duoc chinh rieng o tung component (Button/Input/...). */
 
   @keyframes spin-slow {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
   --animate-spin-slow: spin-slow 8s linear infinite;
 }
 
+/* ---------------------------------------------------------------------------
+   CHE DO TOI
+   App co san ~680 cho ghi cung mau slate-* / bg-white rai rac trong App.tsx.
+   Thay vi sua tung cho (rui ro cao), ta DINH NGHIA LAI chinh thang mau slate
+   va mau white khi o che do toi. Tailwind v4 luu mau trong bien CSS nen moi
+   lop tien ich co san tu dong thich ung, khong phai dong vao App.tsx.
+
+   Nguyen tac: dao thang do sang toi.
+     slate-50  (nhat nhat)  -> nen toi nhat
+     slate-900 (dam nhat)   -> chu sang nhat
+   Nho vay cac cap nhu "bg-slate-900 text-white" van giu nguyen do tuong phan,
+   chi la dao chieu sang/toi.
+--------------------------------------------------------------------------- */
+.dark {
+  /* Nen va be mat */
+  --color-white: #1e2531;        /* the/card: bg-white -> be mat toi   */
+  --color-bg-main: #141922;      /* nen trang chinh                    */
+  --color-primary: #fbbf24;      /* ho phach sang de noi tren nen toi  */
+
+  /* Thang slate dao chieu (giu sac xanh-xam nhe, khong den tuyet doi) */
+  --color-slate-50:  #161b24;
+  --color-slate-100: #1c222d;
+  --color-slate-200: #262e3c;
+  --color-slate-300: #35404f;
+  --color-slate-400: #8592a6;    /* chu phu: phai du sang de doc duoc  */
+  --color-slate-500: #9aa6b8;
+  --color-slate-600: #b3bdcc;
+  --color-slate-700: #ccd4df;
+  --color-slate-800: #dfe5ed;
+  --color-slate-900: #eef2f7;    /* chu chinh                          */
+  --color-slate-950: #f8fafc;
+
+  /* Mau ngu nghia diu bot cho do gat mat tren nen toi */
+  --color-emerald-50:  #0e2b22;
+  --color-emerald-100: #14392d;
+  --color-rose-50:     #2e1519;
+  --color-rose-100:    #3d1b21;
+  --color-amber-50:    #2b2110;
+  --color-amber-100:   #3a2c14;
+  --color-blue-50:     #12203a;
+  --color-blue-100:    #172a4a;
+}
+
 @layer base {
   body {
-    @apply bg-bg-main text-slate-900 font-sans antialiased selection:bg-primary/10 selection:text-primary;
+    @apply bg-bg-main text-slate-900 font-sans antialiased selection:bg-accent/20 selection:text-primary;
+  }
+
+  /* Doi mau nen/chu muot khi bam nut chuyen sang/toi */
+  html {
+    transition: background-color 0.25s ease;
   }
 }
 
 @layer components {
   .premium-shadow {
-    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.04), 
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.04),
                 0 4px 12px -2px rgba(0, 0, 0, 0.02);
+  }
+  /* Che do toi can bong dam hon moi thay duoc do noi khoi */
+  .dark .premium-shadow {
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5),
+                0 4px 12px -2px rgba(0, 0, 0, 0.3);
   }
 
   .glass-card {
@@ -44,9 +105,14 @@
   .nav-item-active {
     @apply bg-primary text-white shadow-xl shadow-primary/20 scale-[1.02];
   }
+
+  /* Vach mau tren dau the so lieu (hoc tu app mau) */
+  .stat-accent-bar {
+    @apply absolute top-0 left-0 right-0 h-1;
+  }
 }
 
-/* Custom Scrollbar */
+/* Thanh cuon */
 ::-webkit-scrollbar {
   width: 6px;
 }
