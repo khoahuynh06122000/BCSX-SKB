@@ -1,6 +1,6 @@
 {
-  "name": "BiaLogistics - Quản lý Kho Bia",
-  "description": "Hệ thống quản lý nhập xuất kho bia chuyên nghiệp, hỗ trợ phân loại theo Lon/Lít/Chai, quản lý đối tác và báo cáo tồn kho.",
+  "name": "Bia Bà Nà - SUNCRAFT",
+  "description": "Hệ thống quản trị sản xuất và kinh doanh Bia Bà Nà (SunCraft), phân tích dữ liệu tồn kho và doanh thu chuyên sâu.",
   "requestFramePermissions": ["camera"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
