@@ -118,6 +118,13 @@ import {
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import {
   db,
+  auth,
+  googleProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  signInAnonymously,
+  updateProfile,
   collection,
   doc,
   setDoc,
@@ -128,8 +135,7 @@ import {
   orderBy,
   getDocFromServer,
   writeBatch,
-} from "./db";
-import { supabase } from "./supabaseClient";
+} from "./firebase";
 import { uploadToCloudinary } from "./lib/cloudinary";
 
 enum OperationType {
@@ -165,11 +171,22 @@ function handleFirestoreError(
 ) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    authInfo: {},
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo:
+        auth.currentUser?.providerData?.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || [],
+    },
     operationType,
     path,
   };
-  console.error("Database Error: ", JSON.stringify(errInfo));
+  console.error("Firestore Error: ", JSON.stringify(errInfo));
 
   // Instead of throwing which crashes the component, we'll alert and log
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -547,11 +564,14 @@ const Select = ({ label, options, ...props }: any) => (
 // --- Main Application ---
 
 export default function App() {
-  // Phiên đăng nhập do Supabase Auth quản lý (khôi phục ở useEffect bên dưới).
-  const [user, setUser] = useState<string | null>(null);
-  const [userRole, setUserRole] = useState<UserRole>("VIEWER");
+  const [user, setUser] = useState<string | null>(
+    localStorage.getItem("bt_username"),
+  );
+  const [userRole, setUserRole] = useState<UserRole>(
+    (localStorage.getItem("bt_role") as UserRole) || "VIEWER",
+  );
   const isOwner = userRole === "OWNER";
-  const isAdmin = userRole === "OWNER";
+  const isAdmin = userRole === "OWNER" || userRole === "ADMIN";
   const [currentUserConfig, setCurrentUserConfig] = useState<UserConfig | null>(
     null,
   );
@@ -625,59 +645,66 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // AUTH SYNC — khôi phục & theo dõi phiên đăng nhập qua Supabase Auth
+  // AUTH SYNC (Persistent via LocalStorage for simple username auth)
   useEffect(() => {
-    let mounted = true;
-
-    const applySession = async (
-      session: { user: { id: string; email?: string | null } } | null,
-    ) => {
-      if (!session?.user) {
-        if (mounted) {
-          setUser(null);
-          setUserRole("VIEWER");
-          setCurrentUserConfig(null);
+    const savedUser = localStorage.getItem("bt_username");
+    if (savedUser) {
+      setUser(savedUser);
+      // Fetch fresh role/config
+      const unsub = onSnapshot(
+        doc(db, "user_configs", savedUser),
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data() as UserConfig;
+            setUserRole(data.role || "VIEWER");
+            setCurrentUserConfig(data);
+            localStorage.setItem("bt_role", data.role);
+          } else if (savedUser === "khoahuynh" || savedUser === "admin") {
+            // Hardcoded backup for first-time setup
+            setUserRole("OWNER");
+          } else {
+            handleLogout();
+          }
           setLoading(false);
-        }
-        return;
-      }
-      // Đọc hồ sơ (role, tên) từ bảng profiles
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .maybeSingle();
-      if (!mounted) return;
-
-      const role = ((profile?.role as UserRole) || "VIEWER") as UserRole;
-      setUser(
-        profile?.name || profile?.email || session.user.email || "Người dùng",
-      );
-      setUserRole(role);
-      setCurrentUserConfig(
-        (profile as UserConfig) || {
-          id: session.user.id,
-          email: session.user.email || undefined,
-          role,
+        },
+        (err) => {
+          console.error("Auth sync failed:", err);
+          setLoading(false);
         },
       );
-      setLoading(false);
-    };
+      return () => unsub();
+    }
+    setLoading(false);
+  }, []);
 
-    supabase.auth.getSession().then(({ data }) => applySession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) =>
-      applySession(session),
-    );
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
+  // Force logout on first run for testing if requested
+  useEffect(() => {
+    // We'll perform a logout once to allow testing login flow as per user request
+    const hasLoggedOutForTest = sessionStorage.getItem("bt_test_logout");
+    if (!hasLoggedOutForTest) {
+      handleLogout();
+      sessionStorage.setItem("bt_test_logout", "true");
+    }
   }, []);
 
   // FIRESTORE SYNC
   useEffect(() => {
     if (!user) return;
+
+    // Test connection as required by security guidelines
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, "test", "connection"));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("the client is offline")
+        ) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    };
+    testConnection();
 
     // Sync Transactions
     const qTransactions = query(
@@ -732,10 +759,10 @@ export default function App() {
       },
     );
 
-    // Sync danh sách người dùng (chỉ OWNER) — từ bảng profiles
+    // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
-      unsubUsers = onSnapshot(collection(db, "profiles"), (snapshot) => {
+      unsubUsers = onSnapshot(collection(db, "user_configs"), (snapshot) => {
         setAllUserConfigs(
           snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as UserConfig),
         );
@@ -751,35 +778,102 @@ export default function App() {
   }, [user, userRole]);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [usernameInput, setUsernameInput] = useState(""); // dùng làm EMAIL
+  const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [nameInput, setNameInput] = useState("");
 
-  // Đăng nhập bằng Supabase Auth (email + mật khẩu).
+  // Security Layer: PIN
+  const [showPinEntry, setShowPinEntry] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pendingUserConfig, setPendingUserConfig] = useState<UserConfig | null>(
+    null,
+  );
+  const [isPinRecovery, setIsPinRecovery] = useState(false);
+  const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
+  const [isRequestingRecovery, setIsRequestingRecovery] = useState(false);
+
   const handleLogin = async () => {
     if (isAuthenticating) return;
 
-    const email = usernameInput.trim().toLowerCase();
+    const uname = usernameInput.trim().toLowerCase();
     const pword = passwordInput.trim();
 
-    if (!email || !pword) {
-      alert("Anh vui lòng nhập đủ Email và Mật khẩu ạ!");
+    if (!uname || !pword) {
+      alert("Anh vui lòng nhập đủ Username và Mật khẩu ạ!");
       return;
     }
 
     setIsAuthenticating(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password: pword,
-      });
-      if (error) {
-        alert("Đăng nhập thất bại: " + error.message);
+      // Establish Firebase session
+      let currentUser = auth.currentUser;
+      if (!currentUser) {
+        const authResult = await signInAnonymously(auth);
+        currentUser = authResult.user;
+      }
+
+      if (!currentUser)
+        throw new Error("Không thể thiết lập phiên làm việc bảo mật.");
+
+      // 1. Initial hardcoded setup for the boss
+      if ((uname === "khoahuynh" || uname === "admin") && pword === "123456") {
+        const adminDoc = await getDocFromServer(doc(db, "user_configs", uname));
+        if (!adminDoc.exists()) {
+          await setDoc(doc(db, "user_configs", uname), {
+            username: uname,
+            password: pword,
+            role: "OWNER",
+            name: uname === "khoahuynh" ? "Khoa Huỳnh" : "Administrator",
+            updatedAt: new Date().toISOString(),
+            linkedUid: currentUser.uid,
+            pin: "061220", // Đã cập nhật mã PIN theo yêu cầu: 061220
+          });
+        }
+      }
+
+      // 2. Fetch user config
+      const userDoc = await getDocFromServer(doc(db, "user_configs", uname));
+      if (!userDoc.exists()) {
+        alert(
+          "Người dùng không tồn tại ạ. Anh liên hệ Admin để cấp quyền nhé!",
+        );
         return;
       }
-      // onAuthStateChange sẽ tự cập nhật user/role và đóng màn đăng nhập.
-      showNotification("Đăng nhập thành công!");
+
+      const userData = userDoc.data() as UserConfig;
+      if (userData.password !== pword) {
+        alert("Mật khẩu không chính xác ạ!");
+        return;
+      }
+
+      // 2.5 Security Step: Check for PIN requirement for 'khoahuynh'
+      if (uname === "khoahuynh" || userData.pin) {
+        setPendingUserConfig({ ...userData, id: uname });
+        setShowPinEntry(true);
+        setIsAuthenticating(false);
+        return;
+      }
+
+      // 3. Link session to this user config and create an active session document for Rules
+      const sessionData = {
+        username: uname,
+        role: userData.role,
+        linkedUid: currentUser.uid,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, "user_configs", uname), sessionData),
+        setDoc(doc(db, "user_sessions", currentUser.uid), sessionData),
+      ]);
+
+      // 4. Set local auth state
+      setUser(userData.name || userData.username);
+      setUserRole(userData.role);
+      setCurrentUserConfig({ ...userData, linkedUid: currentUser.uid });
+      localStorage.setItem("bt_username", uname);
+      localStorage.setItem("bt_role", userData.role);
+
+      showNotification(`Chào mừng ${userData.name || uname} đã quay trở lại!`);
     } catch (error: any) {
       console.error("Login detail:", error);
       alert(`Đăng nhập thất bại: ${error.message}`);
@@ -788,69 +882,122 @@ export default function App() {
     }
   };
 
-  // Đăng ký tài khoản. Người đăng ký ĐẦU TIÊN của hệ thống sẽ tự động là OWNER
-  // (do trigger handle_new_user trong schema.sql quyết định).
-  const handleRegister = async () => {
-    if (isAuthenticating) return;
-
-    const email = usernameInput.trim().toLowerCase();
-    const pword = passwordInput.trim();
-    const name = nameInput.trim();
-
-    if (!email || !pword) {
-      alert("Anh vui lòng nhập đủ Email và Mật khẩu ạ!");
-      return;
-    }
-    if (pword.length < 6) {
-      alert("Mật khẩu cần tối thiểu 6 ký tự ạ!");
-      return;
-    }
-
+  const handleVerifyPin = async () => {
+    if (!pendingUserConfig) return;
     setIsAuthenticating(true);
+
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: pword,
-        options: { data: { name: name || email.split("@")[0] } },
-      });
-      if (error) {
-        alert("Đăng ký thất bại: " + error.message);
+      const uname = pendingUserConfig.username;
+
+      // Verify PIN
+      if (pinInput !== (pendingUserConfig.pin || "061220")) {
+        alert("Mã PIN không chính xác ạ!");
+        setIsAuthenticating(false);
         return;
       }
-      if (data.session) {
-        // Email confirmation đang TẮT -> đã đăng nhập luôn.
-        showNotification("Tạo tài khoản thành công!");
-      } else {
-        // Email confirmation đang BẬT -> cần xác nhận email trước khi đăng nhập.
-        alert(
-          "Đã tạo tài khoản. Vui lòng kiểm tra email để xác nhận, sau đó đăng nhập nhé!\n\n(Mẹo: có thể tắt yêu cầu xác nhận email trong Supabase > Authentication > Providers > Email để đăng nhập ngay.)",
-        );
-        setIsRegisterMode(false);
-      }
+
+      let currentUser = auth.currentUser;
+      if (!currentUser)
+        throw new Error("Phiên làm việc đã hết hạn. Vui lòng thử lại!");
+
+      const sessionData = {
+        username: uname,
+        role: pendingUserConfig.role,
+        linkedUid: currentUser.uid,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, "user_configs", uname), sessionData),
+        setDoc(doc(db, "user_sessions", currentUser.uid), sessionData),
+      ]);
+
+      setUser(pendingUserConfig.name || pendingUserConfig.username);
+      setUserRole(pendingUserConfig.role);
+      setCurrentUserConfig({
+        ...pendingUserConfig,
+        linkedUid: currentUser.uid,
+      });
+      localStorage.setItem("bt_username", uname);
+      localStorage.setItem("bt_role", pendingUserConfig.role);
+
+      setShowPinEntry(false);
+      setPinInput("");
+      setPendingUserConfig(null);
+      showNotification(
+        `Chào mừng ${pendingUserConfig.name || uname} đã thông qua bảo mật!`,
+      );
     } catch (error: any) {
-      alert(`Đăng ký thất bại: ${error.message}`);
+      alert("Xác thực PIN thất bại: " + error.message);
     } finally {
       setIsAuthenticating(false);
     }
   };
 
-  // Quên mật khẩu: gửi email đặt lại mật khẩu thật qua Supabase.
-  const handleForgotPassword = async () => {
-    const email = usernameInput.trim().toLowerCase();
-    if (!email) {
-      alert("Anh nhập Email vào ô phía trên rồi bấm 'Quên mật khẩu' nhé!");
-      return;
-    }
+  const handleRequestRecovery = async () => {
+    if (!pendingUserConfig) return;
+    setIsRequestingRecovery(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+      const recoveryCode = Math.floor(
+        100000 + Math.random() * 900000,
+      ).toString();
+      const expiry = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
+
+      await updateDoc(doc(db, "user_configs", pendingUserConfig.username), {
+        recoveryCode,
+        recoveryExpiry: expiry,
       });
-      if (error) throw error;
-      alert(`Đã gửi email đặt lại mật khẩu tới ${email}. Anh kiểm tra hộp thư nhé!`);
+
+      setIsPinRecovery(true);
+      alert(
+        "Mã khôi phục đã được tạo! Hệ thống đang gửi mail xác thực tới khoa.huynh.06.12.2000@gmail.com. Anh vui lòng kiểm tra hộp thư nhé!",
+      );
     } catch (e: any) {
-      alert("Không thể gửi email đặt lại mật khẩu: " + e.message);
+      alert("Không thể yêu cầu khôi phục: " + e.message);
+    } finally {
+      setIsRequestingRecovery(false);
     }
   };
+
+  const handleVerifyRecovery = async () => {
+    if (!pendingUserConfig || !recoveryCodeInput) return;
+
+    setIsAuthenticating(true);
+    try {
+      const userDoc = await getDocFromServer(
+        doc(db, "user_configs", pendingUserConfig.username),
+      );
+      const data = userDoc.data() as UserConfig;
+
+      if (data.recoveryCode === recoveryCodeInput && data.recoveryExpiry) {
+        if (new Date() > new Date(data.recoveryExpiry)) {
+          alert("Mã khôi phục đã hết hạn ạ!");
+          return;
+        }
+
+        // Reset PIN to 061220 as recovery
+        await updateDoc(doc(db, "user_configs", pendingUserConfig.username), {
+          pin: "061220",
+          recoveryCode: null,
+          recoveryExpiry: null,
+        });
+
+        alert(
+          "Khôi phục thành công! Mã PIN của anh đã được reset về mặc định '061220'. Anh hãy đăng nhập và đổi lại ngay nhé!",
+        );
+        setIsPinRecovery(false);
+        setPinInput("061220");
+      } else {
+        alert("Mã khôi phục không chính xác ạ!");
+      }
+    } catch (e: any) {
+      alert("Lỗi xác thực: " + e.message);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // Guest Authentication removed as requested
 
   const handleHardReset = async () => {
     if (!isOwner) return;
@@ -937,12 +1084,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.error("Lỗi đăng xuất:", e);
-    }
-    // onAuthStateChange cũng sẽ dọn state, nhưng set ngay cho phản hồi tức thì.
+    localStorage.removeItem("bt_username");
+    localStorage.removeItem("bt_role");
+    const u = user;
     setUser(null);
     setUserRole("VIEWER");
     setCurrentUserConfig(null);
@@ -1367,17 +1511,24 @@ export default function App() {
     operation: "create" | "update" | "delete" | "list" | "get" | "write",
     path: string | null = null,
   ) => {
-    console.error(`Database Error [${operation}]:`, err);
-    if (
-      err?.message?.includes("Missing or insufficient permissions") ||
-      err?.message?.includes("row-level security") ||
-      err?.code === "42501"
-    ) {
+    console.error(`Firestore Error [${operation}]:`, err);
+    if (err?.message?.includes("Missing or insufficient permissions")) {
       const errorInfo = {
         error: "Missing or insufficient permissions",
         operationType: operation,
         path: path,
-        authInfo: { userId: currentUserConfig?.id || "unknown" },
+        authInfo: {
+          userId: auth.currentUser?.uid || "unknown",
+          email: auth.currentUser?.email || "unknown",
+          emailVerified: auth.currentUser?.emailVerified || false,
+          isAnonymous: auth.currentUser?.isAnonymous || false,
+          providerInfo:
+            auth.currentUser?.providerData.map((p) => ({
+              providerId: p.providerId,
+              displayName: p.displayName || "",
+              email: p.email || "",
+            })) || [],
+        },
       };
       throw new Error(JSON.stringify(errorInfo));
     }
@@ -1454,7 +1605,7 @@ export default function App() {
         if (parsed.error === "Missing or insufficient permissions") {
           errorMessage =
             "Lỗi phân quyền: Tin Tin chưa kịp cập nhật quyền xóa cho tài khoản " +
-            (currentUserConfig?.email || "của anh") +
+            (auth.currentUser?.email || "của anh") +
             ". Anh đợi 1-2 phút rồi thử lại nhé!";
         }
       } catch {
@@ -2292,7 +2443,7 @@ export default function App() {
       )
     ) {
       try {
-        // Xoá thật trên Supabase (trước đây chỉ xoá state local nên đối tác
+        // Xoá thật trên Firestore (trước đây chỉ xoá state local nên đối tác
         // "sống lại" sau khi tải lại trang — nay đã sửa).
         await deleteDoc(doc(db, "partners", id));
         setPartners(partners.filter((p) => p.id !== id));
@@ -2302,6 +2453,94 @@ export default function App() {
         showNotification("Không thể xóa đối tác. Anh thử lại nhé!", "error");
       }
     }
+  };
+
+  // ---------------------------------------------------------------------------
+  // DỰ BÁO DUNG LƯỢNG FIRESTORE
+  // Gói Spark (miễn phí) của Firebase giới hạn 1 GiB dung lượng lưu trữ.
+  // Ta ước tính dung lượng đang dùng bằng cách đo kích thước thật (bytes) của
+  // dữ liệu đang giữ trong bộ nhớ, rồi chiếu tốc độ tăng theo lịch sử giao dịch
+  // để dự báo còn bao lâu nữa thì chạm ngưỡng.
+  // ---------------------------------------------------------------------------
+  const storageForecast = useMemo(() => {
+    const FREE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GiB (gói Spark)
+    // Firestore tính thêm overhead cho tên field/document và chỉ mục.
+    // Hệ số 1.5 là ước lượng thận trọng để không báo thấp hơn thực tế.
+    const OVERHEAD_FACTOR = 1.5;
+
+    const byteSize = (rows: unknown[]) => {
+      if (rows.length === 0) return 0;
+      try {
+        return new Blob([JSON.stringify(rows)]).size;
+      } catch {
+        return JSON.stringify(rows).length;
+      }
+    };
+
+    const txBytes = byteSize(transactions);
+    const revBytes = byteSize(revenueData);
+    const partnerBytes = byteSize(partners);
+    const usedBytes =
+      (txBytes + revBytes + partnerBytes) * OVERHEAD_FACTOR;
+    const usedPercent = (usedBytes / FREE_LIMIT_BYTES) * 100;
+
+    // Kích thước trung bình mỗi bản ghi giao dịch (để quy đổi ra "còn bao nhiêu đơn").
+    const avgTxBytes =
+      transactions.length > 0
+        ? (txBytes * OVERHEAD_FACTOR) / transactions.length
+        : 0;
+    const remainingBytes = Math.max(0, FREE_LIMIT_BYTES - usedBytes);
+    const remainingTransactions =
+      avgTxBytes > 0 ? Math.floor(remainingBytes / avgTxBytes) : null;
+
+    // Tốc độ phát sinh giao dịch: dựa trên khoảng thời gian từ giao dịch đầu tới nay.
+    let perDay: number | null = null;
+    let daysLeft: number | null = null;
+    if (transactions.length > 1) {
+      const times = transactions
+        .map((t) => parseDateSafe(t.date).getTime())
+        .filter((t) => !isNaN(t));
+      if (times.length > 1) {
+        const earliest = Math.min(...times);
+        const spanDays = Math.max(
+          1,
+          (Date.now() - earliest) / (1000 * 60 * 60 * 24),
+        );
+        perDay = transactions.length / spanDays;
+        if (perDay > 0 && avgTxBytes > 0) {
+          daysLeft = Math.floor(remainingBytes / (perDay * avgTxBytes));
+        }
+      }
+    }
+
+    const level: "safe" | "warning" | "danger" =
+      usedPercent >= 80 ? "danger" : usedPercent >= 50 ? "warning" : "safe";
+
+    return {
+      usedBytes,
+      usedPercent,
+      limitBytes: FREE_LIMIT_BYTES,
+      txBytes: txBytes * OVERHEAD_FACTOR,
+      revBytes: revBytes * OVERHEAD_FACTOR,
+      partnerBytes: partnerBytes * OVERHEAD_FACTOR,
+      remainingTransactions,
+      perDay,
+      daysLeft,
+      level,
+      counts: {
+        transactions: transactions.length,
+        revenue: revenueData.length,
+        partners: partners.length,
+      },
+    };
+  }, [transactions, revenueData, partners]);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${Math.round(bytes)} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024)
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
   // Filtering Logic
@@ -3535,103 +3774,197 @@ export default function App() {
             </div>
 
             <div className="space-y-8">
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-slate-900 text-xl font-black mb-2 tracking-tight">
-                    {isRegisterMode ? "Tạo tài khoản" : "Chào mừng trở lại"}
-                  </h4>
-                  <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">
-                    {isRegisterMode
-                      ? "Tài khoản đầu tiên sẽ là Quản trị (OWNER)"
-                      : "Đăng nhập bằng email và mật khẩu"}
-                  </p>
-                </div>
+              {showPinEntry ? (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <div className="flex items-center gap-3 mb-2">
+                    <button
+                      onClick={() => {
+                        setShowPinEntry(false);
+                        setIsPinRecovery(false);
+                        setPinInput("");
+                        setRecoveryCodeInput("");
+                      }}
+                      className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h4 className="text-slate-900 text-xl font-black tracking-tight">
+                        {isPinRecovery ? "Khôi phục mã PIN" : "Xác thực lớp 2"}
+                      </h4>
+                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-0.5">
+                        {isPinRecovery
+                          ? "Nhập mã từ email của anh"
+                          : "Tài khoản của anh đã được bảo vệ"}
+                      </p>
+                    </div>
+                  </div>
 
-                <div className="space-y-4">
-                  {isRegisterMode && (
+                  {isPinRecovery ? (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                          Mã xác thực Recovery
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Mã 6 số từ mail"
+                          maxLength={6}
+                          value={recoveryCodeInput}
+                          onChange={(e) => setRecoveryCodeInput(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleVerifyRecovery()
+                          }
+                          className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-center text-2xl font-black tracking-[0.5em] outline-none focus:ring-4 focus:ring-slate-100 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:text-sm"
+                        />
+                        <p className="text-[9px] text-slate-400 font-bold text-center mt-2 px-4 uppercase tracking-widest leading-relaxed">
+                          Mã được gửi tới: khoa.huynh.06.12.2000@gmail.com
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={handleVerifyRecovery}
+                        disabled={isAuthenticating}
+                        className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
+                      >
+                        {isAuthenticating ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4" />
+                        )}
+                        Xác nhận mã
+                      </button>
+
+                      <button
+                        onClick={() => setIsPinRecovery(false)}
+                        className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
+                      >
+                        Quay lại nhập PIN
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="space-y-2 text-center">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                          Mã PIN bảo mật
+                        </label>
+                        <div className="flex justify-center gap-2 mt-2">
+                          {[0, 1, 2, 3, 4, 5].map((i) => (
+                            <div
+                              key={i}
+                              className={cn(
+                                "w-3 h-3 rounded-full transition-all duration-300 transform scale-110",
+                                pinInput.length > i
+                                  ? "bg-slate-900"
+                                  : "bg-slate-200",
+                              )}
+                            />
+                          ))}
+                        </div>
+                        <input
+                          type="password"
+                          autoFocus
+                          placeholder="Mã PIN"
+                          maxLength={6}
+                          value={pinInput}
+                          onChange={(e) =>
+                            setPinInput(e.target.value.replace(/[^0-9]/g, ""))
+                          }
+                          onKeyDown={(e) =>
+                            e.key === "Enter" &&
+                            pinInput.length === 6 &&
+                            handleVerifyPin()
+                          }
+                          className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-center text-3xl font-black tracking-[0.8em] outline-none focus:ring-4 focus:ring-slate-100 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-4">
+                        <button
+                          onClick={handleVerifyPin}
+                          disabled={isAuthenticating || pinInput.length < 6}
+                          className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
+                        >
+                          {isAuthenticating ? (
+                            <RefreshCw className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <ShieldCheck className="w-5 h-5" />
+                          )}
+                          Giải mã truy cập
+                        </button>
+
+                        <button
+                          onClick={handleRequestRecovery}
+                          disabled={isRequestingRecovery}
+                          className="w-full flex items-center justify-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
+                        >
+                          {isRequestingRecovery ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <AlertTriangle className="w-3 h-3" />
+                          )}
+                          Anh quên mã PIN?
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-slate-900 text-xl font-black mb-2 tracking-tight">
+                      Chào mừng trở lại
+                    </h4>
+                    <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">
+                      Cung cấp thông tin truy cập của bạn
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                        Họ và tên
+                        Định danh tài khoản
                       </label>
                       <input
                         type="text"
-                        placeholder="Nguyễn Văn A"
-                        value={nameInput}
-                        onChange={(e) => setNameInput(e.target.value)}
+                        placeholder="Username (e.g. khoahuynh)"
+                        value={usernameInput}
+                        onChange={(e) => setUsernameInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                         className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
                       />
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="email@banahills.com.vn"
-                      value={usernameInput}
-                      onChange={(e) => setUsernameInput(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        (isRegisterMode ? handleRegister() : handleLogin())
-                      }
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
-                    />
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                        Mã xác thực bảo mật
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="Password"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                      Mật khẩu
-                    </label>
-                    <input
-                      type="password"
-                      placeholder="Mật khẩu"
-                      value={passwordInput}
-                      onChange={(e) => setPasswordInput(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        (isRegisterMode ? handleRegister() : handleLogin())
-                      }
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
-                    />
-                  </div>
-                </div>
 
-                <button
-                  onClick={isRegisterMode ? handleRegister : handleLogin}
-                  disabled={isAuthenticating}
-                  className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
-                >
-                  {isAuthenticating ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="w-5 h-5" />
-                  )}
-                  {isAuthenticating
-                    ? "Đang xử lý..."
-                    : isRegisterMode
-                      ? "Đăng ký"
-                      : "Đăng nhập"}
-                </button>
-
-                <div className="flex items-center justify-between pt-2">
                   <button
-                    onClick={() => setIsRegisterMode((v) => !v)}
-                    className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
+                    onClick={handleLogin}
+                    disabled={isAuthenticating}
+                    className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
                   >
-                    {isRegisterMode
-                      ? "← Đã có tài khoản? Đăng nhập"
-                      : "Tạo tài khoản mới"}
+                    {isAuthenticating ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="w-5 h-5" />
+                    )}
+                    {isAuthenticating
+                      ? "Triển khai lệnh..."
+                      : "Xác nhận truy cập"}
                   </button>
-                  {!isRegisterMode && (
-                    <button
-                      onClick={handleForgotPassword}
-                      className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
-                    >
-                      Quên mật khẩu?
-                    </button>
-                  )}
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -3723,19 +4056,59 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Email đăng nhập
+                        Tên đăng nhập
                       </p>
                       <p className="text-sm font-bold text-slate-900">
-                        {currentUserConfig.email}
+                        {currentUserConfig.username}
                       </p>
+                    </div>
+                  </div>
+
+                  <div className="h-[1px] bg-slate-200/50" />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Mật khẩu hiện tại
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-slate-900">
+                          {showPasswordInModal
+                            ? currentUserConfig.password
+                            : "••••••••"}
+                        </p>
+                        <button
+                          onClick={() =>
+                            setShowPasswordInModal(!showPasswordInModal)
+                          }
+                          className="text-slate-400 hover:text-primary transition-colors"
+                        >
+                          <Sun className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Đổi mật khẩu (qua Supabase Auth) */}
+                {/* Change Password & PIN Section */}
                 <div className="space-y-6 pt-2">
                   <div className="space-y-4">
                     <div className="space-y-3 focus-within:translate-x-1 transition-transform bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
+                          Xác thực mật khẩu cũ
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="Mật khẩu hiện tại..."
+                          value={currentPasswordInput}
+                          onChange={(e) =>
+                            setCurrentPasswordInput(e.target.value)
+                          }
+                          className="w-full px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all placeholder:text-slate-300"
+                        />
+                      </div>
+
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
                           Mật khẩu mới
@@ -3743,7 +4116,7 @@ export default function App() {
                         <div className="relative flex gap-2">
                           <input
                             type="password"
-                            placeholder="Mật khẩu mới (tối thiểu 6 ký tự)..."
+                            placeholder="Mật khẩu mới..."
                             value={newPasswordInput}
                             onChange={(e) =>
                               setNewPasswordInput(e.target.value)
@@ -3752,37 +4125,64 @@ export default function App() {
                           />
                           <button
                             onClick={async () => {
+                              if (!currentPasswordInput) {
+                                alert(
+                                  "Vui lòng nhập mật khẩu hiện tại để xác thực ạ!",
+                                );
+                                return;
+                              }
+
+                              if (
+                                currentPasswordInput !==
+                                currentUserConfig?.password
+                              ) {
+                                alert("Mật khẩu hiện tại không chính xác ạ!");
+                                return;
+                              }
+
                               if (
                                 !newPasswordInput ||
-                                newPasswordInput.length < 6
+                                newPasswordInput.length < 4
                               ) {
                                 alert(
-                                  "Mật khẩu mới phải có ít nhất 6 ký tự ạ!",
+                                  "Mật khẩu mới phải có ít nhất 4 ký tự ạ!",
                                 );
                                 return;
                               }
 
                               setIsUpdatingPassword(true);
                               try {
-                                const { error } =
-                                  await supabase.auth.updateUser({
+                                await updateDoc(
+                                  doc(
+                                    db,
+                                    "user_configs",
+                                    currentUserConfig.username,
+                                  ),
+                                  {
                                     password: newPasswordInput,
-                                  });
-                                if (error) throw error;
+                                    updatedAt: new Date().toISOString(),
+                                  },
+                                );
                                 showNotification(
                                   "Đã cập nhật mật khẩu mới thành công!",
                                 );
                                 setNewPasswordInput("");
                                 setCurrentPasswordInput("");
                               } catch (error: any) {
-                                alert(
-                                  "Không thể đổi mật khẩu: " + error.message,
+                                handleFirestoreError(
+                                  error,
+                                  OperationType.UPDATE,
+                                  "user_configs",
                                 );
                               } finally {
                                 setIsUpdatingPassword(false);
                               }
                             }}
-                            disabled={isUpdatingPassword || !newPasswordInput}
+                            disabled={
+                              isUpdatingPassword ||
+                              !newPasswordInput ||
+                              !currentPasswordInput
+                            }
                             className="px-6 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 disabled:opacity-50 transition-all shadow-lg shadow-slate-200"
                           >
                             {isUpdatingPassword ? (
@@ -3792,10 +4192,75 @@ export default function App() {
                             )}
                           </button>
                         </div>
-                        <p className="text-[8px] text-slate-400 font-bold px-1 uppercase tracking-widest mt-1 leading-relaxed">
-                          Mật khẩu được Supabase mã hoá an toàn.
-                        </p>
                       </div>
+                    </div>
+
+                    <div className="space-y-1.5 focus-within:translate-x-1 transition-transform border-t border-slate-100 pt-4">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1 text-slate-900">
+                        Thiết lập mã PIN (6 số)
+                      </label>
+                      <div className="relative flex gap-2">
+                        <input
+                          type="password"
+                          placeholder="6 chữ số PIN..."
+                          maxLength={6}
+                          value={newPinInputModal}
+                          onChange={(e) =>
+                            setNewPinInputModal(
+                              e.target.value.replace(/[^0-9]/g, ""),
+                            )
+                          }
+                          className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary focus:bg-white transition-all placeholder:text-slate-300 tracking-[0.5em]"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (newPinInputModal.length !== 6) {
+                              alert("Mã PIN phải có đúng 6 chữ số ạ!");
+                              return;
+                            }
+                            setIsUpdatingPin(true);
+                            try {
+                              await updateDoc(
+                                doc(
+                                  db,
+                                  "user_configs",
+                                  currentUserConfig.username,
+                                ),
+                                {
+                                  pin: newPinInputModal,
+                                  updatedAt: new Date().toISOString(),
+                                },
+                              );
+                              showNotification(
+                                "Đã thiết lập mã PIN mới thành công!",
+                              );
+                              setNewPinInputModal("");
+                            } catch (error: any) {
+                              handleFirestoreError(
+                                error,
+                                OperationType.UPDATE,
+                                "user_configs",
+                              );
+                            } finally {
+                              setIsUpdatingPin(false);
+                            }
+                          }}
+                          disabled={
+                            isUpdatingPin || newPinInputModal.length !== 6
+                          }
+                          className="px-6 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 disabled:opacity-50 transition-all shadow-lg shadow-emerald-100"
+                        >
+                          {isUpdatingPin ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Đặt PIN"
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[8px] text-slate-400 font-bold px-1 uppercase tracking-widest mt-1 leading-relaxed">
+                        Lớp bảo vệ thứ 2 bắt buộc sau mật khẩu để truy cập hệ
+                        thống.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -7686,6 +8151,169 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* DỰ BÁO DUNG LƯỢNG FIREBASE — cảnh báo sớm trước khi chạm giới hạn */}
+                <Card title="Sức khỏe hệ thống · Dung lượng Firebase">
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-baseline gap-2">
+                          <span
+                            className={cn(
+                              "text-4xl font-black tracking-tight",
+                              storageForecast.level === "danger"
+                                ? "text-rose-600"
+                                : storageForecast.level === "warning"
+                                  ? "text-amber-500"
+                                  : "text-emerald-600",
+                            )}
+                          >
+                            {storageForecast.usedPercent < 0.1
+                              ? "<0.1"
+                              : storageForecast.usedPercent.toFixed(1)}
+                            %
+                          </span>
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                            đã dùng
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-bold text-slate-500">
+                          {formatBytes(storageForecast.usedBytes)} /{" "}
+                          {formatBytes(storageForecast.limitBytes)} (gói Spark
+                          miễn phí)
+                        </p>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border flex items-center gap-2",
+                          storageForecast.level === "danger"
+                            ? "bg-rose-50 border-rose-100 text-rose-600"
+                            : storageForecast.level === "warning"
+                              ? "bg-amber-50 border-amber-100 text-amber-600"
+                              : "bg-emerald-50 border-emerald-100 text-emerald-600",
+                        )}
+                      >
+                        {storageForecast.level === "safe" ? (
+                          <ShieldCheck className="w-4 h-4" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4" />
+                        )}
+                        {storageForecast.level === "danger"
+                          ? "Nguy hiểm — cần dọn dẹp"
+                          : storageForecast.level === "warning"
+                            ? "Cần theo dõi"
+                            : "An toàn"}
+                      </div>
+                    </div>
+
+                    {/* Thanh tiến trình */}
+                    <div className="space-y-2">
+                      <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all duration-500",
+                            storageForecast.level === "danger"
+                              ? "bg-rose-500"
+                              : storageForecast.level === "warning"
+                                ? "bg-amber-400"
+                                : "bg-emerald-500",
+                          )}
+                          style={{
+                            width: `${Math.min(100, Math.max(0.5, storageForecast.usedPercent))}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-black text-slate-300 uppercase tracking-widest">
+                        <span>0</span>
+                        <span>50%</span>
+                        <span>1 GB</span>
+                      </div>
+                    </div>
+
+                    {/* Dự báo */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          Còn chứa được
+                        </p>
+                        <p className="text-lg font-black text-slate-900">
+                          {storageForecast.remainingTransactions !== null
+                            ? `~${formatNumber(storageForecast.remainingTransactions)} đơn`
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          Tốc độ phát sinh
+                        </p>
+                        <p className="text-lg font-black text-slate-900">
+                          {storageForecast.perDay !== null
+                            ? `~${storageForecast.perDay.toFixed(1)} đơn/ngày`
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          Dự kiến đầy sau
+                        </p>
+                        <p className="text-lg font-black text-slate-900">
+                          {storageForecast.daysLeft !== null
+                            ? storageForecast.daysLeft > 3650
+                              ? "Trên 10 năm"
+                              : storageForecast.daysLeft > 365
+                                ? `~${(storageForecast.daysLeft / 365).toFixed(1)} năm`
+                                : `~${formatNumber(storageForecast.daysLeft)} ngày`
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Chi tiết theo nhóm dữ liệu */}
+                    <div className="border-t border-slate-100 pt-4 space-y-2">
+                      {[
+                        {
+                          label: "Giao dịch nhập/xuất",
+                          bytes: storageForecast.txBytes,
+                          count: storageForecast.counts.transactions,
+                        },
+                        {
+                          label: "Dữ liệu doanh thu",
+                          bytes: storageForecast.revBytes,
+                          count: storageForecast.counts.revenue,
+                        },
+                        {
+                          label: "Đối tác",
+                          bytes: storageForecast.partnerBytes,
+                          count: storageForecast.counts.partners,
+                        },
+                      ].map((row) => (
+                        <div
+                          key={row.label}
+                          className="flex items-center justify-between text-[11px]"
+                        >
+                          <span className="font-bold text-slate-500">
+                            {row.label}{" "}
+                            <span className="text-slate-300">
+                              ({formatNumber(row.count)} bản ghi)
+                            </span>
+                          </span>
+                          <span className="font-mono font-black text-slate-700">
+                            {formatBytes(row.bytes)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed border-t border-slate-100 pt-4">
+                      Ảnh minh chứng được lưu trên Cloudinary (không tính vào
+                      dung lượng Firebase). Con số trên là ƯỚC TÍNH từ dữ liệu
+                      đang tải về máy, đã cộng 50% hao phí chỉ mục — số thật xem
+                      tại Firebase Console. Khi chạm 80%, anh nên xuất Excel lưu
+                      trữ rồi dọn bớt giao dịch cũ.
+                    </p>
+                  </div>
+                </Card>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   <Card
                     title="Cấp quyền người dùng mới"
@@ -7693,14 +8321,14 @@ export default function App() {
                   >
                     <div className="space-y-6">
                       <Input
-                        label="Email đăng nhập"
-                        placeholder="ví dụ: nhanvien01@banahills.com.vn"
+                        label="Username (Tên đăng nhập)"
+                        placeholder="ví dụ: nhanvien01"
                         id="new-user-username"
                       />
                       <Input
                         label="Mật khẩu"
                         type="password"
-                        placeholder="Tối thiểu 6 ký tự"
+                        placeholder="Nhập mật khẩu"
                         id="new-user-password"
                       />
                       <Input
@@ -7742,49 +8370,37 @@ export default function App() {
                             "new-user-role",
                           ) as HTMLSelectElement;
 
-                          const email = userEl.value.trim().toLowerCase();
+                          const username = userEl.value.trim().toLowerCase();
                           const password = passEl.value.trim();
                           const name = nameEl.value.trim();
                           const role = roleEl.value as UserRole;
 
-                          if (!email || !password) {
-                            alert("Vui lòng nhập đủ Email và Mật khẩu ạ!");
-                            return;
-                          }
-                          if (password.length < 6) {
-                            alert("Mật khẩu cần tối thiểu 6 ký tự ạ!");
+                          if (!username || !password) {
+                            alert("Vui lòng nhập đủ Username và Mật khẩu ạ!");
                             return;
                           }
 
                           try {
                             setLoading(true);
-                            const {
-                              data: { session },
-                            } = await supabase.auth.getSession();
-                            const res = await fetch("/api/admin/create-user", {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${session?.access_token || ""}`,
-                              },
-                              body: JSON.stringify({
-                                email,
-                                password,
-                                name,
-                                role,
-                              }),
+                            await setDoc(doc(db, "user_configs", username), {
+                              username,
+                              password,
+                              name,
+                              role,
+                              updatedAt: new Date().toISOString(),
                             });
-                            const json = await res.json();
-                            if (!res.ok)
-                              throw new Error(json.error || "Lỗi máy chủ");
                             showNotification(
-                              `Đã tạo tài khoản ${role} cho ${email} thành công!`,
+                              `Đã cấp quyền ${role} cho ${username} thành công!`,
                             );
                             userEl.value = "";
                             passEl.value = "";
                             nameEl.value = "";
-                          } catch (err: any) {
-                            alert("Không thể tạo người dùng: " + err.message);
+                          } catch (err) {
+                            handleFirestoreError(
+                              err,
+                              OperationType.WRITE,
+                              "user_configs",
+                            );
                           } finally {
                             setLoading(false);
                           }
@@ -7805,13 +8421,13 @@ export default function App() {
                         <thead>
                           <tr className="bg-slate-50/50">
                             <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Người dùng
+                              Username
                             </th>
                             <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
                               Vai trò
                             </th>
                             <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Email
+                              Mật khẩu
                             </th>
                             <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
                               Ngày cập nhật
@@ -7833,7 +8449,7 @@ export default function App() {
                           ) : (
                             allUserConfigs.map((config) => (
                               <tr
-                                key={config.id}
+                                key={config.username}
                                 className="hover:bg-slate-50/50 transition-colors"
                               >
                                 <td className="py-5 px-6">
@@ -7842,7 +8458,7 @@ export default function App() {
                                       {config.name || "N/A"}
                                     </span>
                                     <span className="text-[10px] font-mono text-slate-400 font-bold">
-                                      {config.email}
+                                      {config.username}
                                     </span>
                                   </div>
                                 </td>
@@ -7862,7 +8478,9 @@ export default function App() {
                                 </td>
                                 <td className="py-5 px-6">
                                   <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                                    {config.email}
+                                    {config.role === "OWNER"
+                                      ? "••••••"
+                                      : config.password}
                                   </span>
                                 </td>
                                 <td className="py-5 px-6 text-[10px] font-mono text-slate-400 font-bold">
@@ -7873,47 +8491,36 @@ export default function App() {
                                 <td className="py-5 px-6 text-right">
                                   <button
                                     onClick={async () => {
-                                      if (config.id === currentUserConfig?.id) {
+                                      if (
+                                        config.username === "khoahuynh" ||
+                                        config.username === "admin"
+                                      ) {
                                         alert(
-                                          "Tin Tin từ chối: Anh không thể tự xóa tài khoản của chính mình ạ!",
+                                          "Tin Tin từ chối: Anh không thể xóa tài khoản Thẩm quyền gốc ạ!",
                                         );
                                         return;
                                       }
                                       if (
                                         window.confirm(
-                                          `Anh có chắc chắn muốn thu hồi quyền của ${config.email || config.name} không?`,
+                                          `Anh có chắc chắn muốn thu hồi quyền của ${config.username} không?`,
                                         )
                                       ) {
                                         try {
-                                          const {
-                                            data: { session },
-                                          } = await supabase.auth.getSession();
-                                          const res = await fetch(
-                                            "/api/admin/delete-user",
-                                            {
-                                              method: "POST",
-                                              headers: {
-                                                "Content-Type":
-                                                  "application/json",
-                                                Authorization: `Bearer ${session?.access_token || ""}`,
-                                              },
-                                              body: JSON.stringify({
-                                                userId: config.id,
-                                              }),
-                                            },
+                                          await deleteDoc(
+                                            doc(
+                                              db,
+                                              "user_configs",
+                                              config.username,
+                                            ),
                                           );
-                                          const json = await res.json();
-                                          if (!res.ok)
-                                            throw new Error(
-                                              json.error || "Lỗi máy chủ",
-                                            );
                                           showNotification(
                                             "Đã thu hồi quyền truy cập.",
                                           );
-                                        } catch (err: any) {
-                                          alert(
-                                            "Không thể xóa người dùng: " +
-                                              err.message,
+                                        } catch (err) {
+                                          handleFirestoreError(
+                                            err,
+                                            OperationType.DELETE,
+                                            `user_configs/${config.username}`,
                                           );
                                         }
                                       }

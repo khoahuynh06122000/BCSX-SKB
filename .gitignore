@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Cấu hình kết nối Firebase (chứa thông tin project riêng) — không đẩy lên GitHub
+firebase-applet-config.json

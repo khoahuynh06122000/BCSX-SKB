@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // -------------------------------------------------------------------------
+    // Global Deny
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Primitives
+    // -------------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAnonymous() {
+      return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    }
+
+    function getEmail() {
+      return request.auth.token.get('email', '').lower();
+    }
+
+    // Kiểm tra quyền hống nhất
+    function isOwner() {
+      // 1. Check Google Auth Email
+      // 2. Check Traditional Session UID
+      return isSignedIn() && (
+        getEmail() == 'khoa.huynh.06.12.2000@gmail.com' ||
+        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'OWNER') ||
+        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'OWNER')
+      );
+    }
+
+    function isStaff() {
+      return isSignedIn() && (
+        isOwner() ||
+        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'STAFF') ||
+        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'STAFF')
+      );
+    }
+
+    function isViewer() {
+      return isSignedIn() && (
+        isStaff() ||
+        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'VIEWER') ||
+        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'VIEWER')
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Collections
+    // -------------------------------------------------------------------------
+
+    // 1. Transactions
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isViewer();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isOwner() || (isStaff() && resource.data.status == 'in_transit');
+    }
+
+    // 2. Revenue Records
+    match /revenue/{recordId} {
+      allow read: if isViewer();
+      allow create, update: if isStaff();
+      allow delete: if isOwner();
+    }
+
+    // 3. Partners
+    match /partners/{partnerId} {
+      allow read: if isViewer();
+      allow create, update: if isStaff();
+      allow delete: if isOwner();
+    }
+
+    // 4. User Configurations (Internal Security)
+    match /user_configs/{id} {
+      // Cho phép đọc thông tin cấu hình để xác thực vai trò
+      allow get: if true;
+      // Cho phép cập nhật linkedUid nếu biết mật khẩu (để thiết lập session)
+      allow update: if request.resource.data.password == resource.data.password;
+      allow list: if isOwner();
+      allow write: if isOwner();
+    }
+
+    // 5. Active Sessions (Để Rules nhận diện vai trò từ Anonymous Auth)
+    match /user_sessions/{uid} {
+      allow get, write: if isSignedIn() && request.auth.uid == uid;
+      allow list: if isOwner();
+    }
+  }
+}

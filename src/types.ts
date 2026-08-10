@@ -7,29 +7,18 @@ export type Category = 'Lon' | 'Lít' | 'Chai';
 export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
 export type UserRole = 'OWNER' | 'STAFF' | 'VIEWER';
 
-// Hồ sơ người dùng, ánh xạ tới bảng public.profiles trên Supabase.
-// Thông tin đăng nhập (email/mật khẩu) do Supabase Auth quản lý, KHÔNG lưu ở đây.
-export interface Profile {
-  id: string;        // = auth.users.id (uuid)
-  email?: string;
-  name?: string;
-  role: UserRole;
-  createdAt?: string;
-  updatedAt?: string;
-
-  // --- Các trường LEGACY (đã bỏ dùng khi chuyển sang Supabase Auth) ---
-  // Giữ lại ở dạng optional để phần UI cũ còn tham chiếu vẫn biên dịch được;
-  // luôn undefined ở runtime. Sẽ dọn dần.
-  username?: string;
+export interface UserConfig {
+  id?: string;
+  username: string;
   password?: string;
-  pin?: string;
-  linkedUid?: string;
+  role: UserRole;
+  name?: string;
+  updatedAt?: string;
+  pin?: string; // mã PIN 6 số
+  linkedUid?: string; // Firebase Auth UID
   recoveryCode?: string;
   recoveryExpiry?: string;
 }
-
-// Alias tương thích cho các nơi còn dùng tên cũ.
-export type UserConfig = Profile;
 
 export interface Product {
   id: string;

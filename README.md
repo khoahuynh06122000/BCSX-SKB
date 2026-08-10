@@ -2,8 +2,8 @@
 
 Ứng dụng quản lý nhập/xuất kho bia (Lon/Lít/Chai), đối tác và báo cáo tồn kho.
 
-**Nền tảng:** React + Vite + TailwindCSS, backend **Supabase** (Postgres + Auth + Realtime),
-lưu ảnh trên **Cloudinary**, và tính năng quét phiếu xuất bằng AI (**Gemini**).
+**Nền tảng:** React + Vite + TailwindCSS, dữ liệu trên **Firebase (Firestore)**,
+ảnh minh chứng lưu trên **Cloudinary**, quét phiếu chuyển bộ phận bằng AI (**Gemini**).
 
 ## Chạy tại máy
 
@@ -15,26 +15,36 @@ lưu ảnh trên **Cloudinary**, và tính năng quét phiếu xuất bằng AI 
 npm install
 ```
 
-### 2. Tạo Supabase project
+### 2. Cấu hình Firebase
 
-1. Vào https://supabase.com tạo project mới.
-2. Mở **SQL Editor**, dán toàn bộ nội dung file [`supabase/schema.sql`](supabase/schema.sql) và chạy một lần
-   (tạo bảng, RLS, trigger, và seed sẵn danh mục sản phẩm + đối tác).
-3. Vào **Authentication → Providers → Email**, tắt tuỳ chọn *"Confirm email"*
-   để đăng nhập được ngay sau khi đăng ký (khuyến nghị cho hệ thống nội bộ).
-4. Lấy **Project URL**, **anon public key** và **service_role key** ở **Project Settings → API**.
+App đọc cấu hình kết nối từ file `firebase-applet-config.json` ở thư mục gốc dự án
+(file này chứa khoá riêng nên **không** được commit lên GitHub). Nội dung có dạng:
 
-### 3. Tạo Cloudinary account
+```json
+{
+  "apiKey": "...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "...",
+  "firestoreDatabaseId": "(default)"
+}
+```
+
+Quy tắc bảo mật Firestore nằm ở [`firestore.rules`](firestore.rules) — deploy lên
+Firebase Console (Firestore → Rules) để phân quyền OWNER/STAFF/VIEWER hoạt động đúng.
+
+### 3. Tạo Cloudinary account (lưu ảnh)
 
 1. Vào https://cloudinary.com tạo tài khoản, lấy **Cloud name**.
-2. Vào **Settings → Upload → Upload presets**, tạo một preset **Unsigned** và lấy tên preset.
+2. Vào **Settings → Upload → Upload presets**, tạo một preset **Unsigned**, lấy tên preset.
 
 ### 4. Cấu hình biến môi trường
 
-Sao chép `.env.example` thành `.env.local` rồi điền đầy đủ giá trị:
+Sao chép `.env.example` thành `.env.local` rồi điền:
 
 ```
-VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
 VITE_CLOUDINARY_CLOUD_NAME, VITE_CLOUDINARY_UPLOAD_PRESET, GEMINI_API_KEY
 ```
 
@@ -44,5 +54,13 @@ VITE_CLOUDINARY_CLOUD_NAME, VITE_CLOUDINARY_UPLOAD_PRESET, GEMINI_API_KEY
 npm run dev
 ```
 
-Mở http://localhost:3000. **Tài khoản đăng ký ĐẦU TIÊN sẽ tự động là OWNER (quản trị).**
-Sau đó OWNER vào mục **Thiết lập** để tạo tài khoản cho nhân viên (STAFF/VIEWER).
+Mở http://localhost:3000. Đăng nhập lần đầu bằng tài khoản quản trị
+(`khoahuynh` / `123456`, PIN `061220`) — **nhớ đổi mật khẩu và PIN ngay sau đó**
+trong mục Hồ sơ cá nhân.
+
+## Theo dõi dung lượng
+
+Tab **Thiết lập** có mục *Sức khỏe hệ thống · Dung lượng Firebase*: ước tính phần
+trăm dung lượng đã dùng trên 1 GB của gói Spark miễn phí, tốc độ phát sinh giao dịch
+và dự báo còn bao lâu thì đầy — giúp dọn dẹp trước khi hệ thống gặp sự cố.
+Ảnh minh chứng nằm trên Cloudinary nên không chiếm dung lượng Firebase.
