@@ -14,8 +14,11 @@ const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string;
 
 if (!CLOUD_NAME || !UPLOAD_PRESET) {
-  console.error(
-    'Thiếu VITE_CLOUDINARY_CLOUD_NAME hoặc VITE_CLOUDINARY_UPLOAD_PRESET. Hãy điền vào file .env.local.',
+  // Chi canh bao: app van chay binh thuong, chi rieng tinh nang tai anh
+  // minh chung se khong dung duoc cho toi khi dien du 2 bien nay.
+  console.warn(
+    'Chua cau hinh Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). ' +
+      'Tinh nang tai anh minh chung se tam thoi khong dung duoc. Cac chuc nang khac van hoat dong binh thuong.',
   );
 }
 

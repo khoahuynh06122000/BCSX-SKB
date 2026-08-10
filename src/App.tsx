@@ -414,7 +414,9 @@ const StatCard = ({
 
     {chartData && (
       <div className="h-16 w-full -mx-8 mt-2 overflow-hidden">
-        <ResponsiveContainer width="100%" height="100%">
+        {/* Dung chieu cao co dinh (khong dung "100%") de Recharts khong do ra -1
+            roi ve lai lien tuc gay rung man hinh. */}
+        <ResponsiveContainer width="100%" height={64} minWidth={0}>
           <AreaChart data={chartData}>
             <defs>
               <linearGradient
@@ -5858,7 +5860,11 @@ export default function App() {
 
                       <Card title="Xu hướng nhập/xuất bia">
                         <div className="h-[300px] w-full mt-4">
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer
+                            width="100%"
+                            height={300}
+                            minWidth={0}
+                          >
                             <BarChart data={chartData}>
                               <CartesianGrid
                                 strokeDasharray="3 3"
@@ -6343,7 +6349,11 @@ export default function App() {
                                 I. Tỷ trọng doanh thu theo SKU
                               </p>
                               <div className="h-[280px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer
+                                  width="100%"
+                                  height={280}
+                                  minWidth={0}
+                                >
                                   <BarChart
                                     layout="vertical"
                                     data={cfoMetrics.productStats.slice(0, 5)}
@@ -6388,7 +6398,11 @@ export default function App() {
                                 II. Top 5 Đối tác trọng điểm
                               </p>
                               <div className="h-[280px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer
+                                  width="100%"
+                                  height={280}
+                                  minWidth={0}
+                                >
                                   <PieChart>
                                     <Pie
                                       data={cfoMetrics.partnerStats.slice(0, 5)}
