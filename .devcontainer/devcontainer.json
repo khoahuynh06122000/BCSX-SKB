@@ -1,0 +1,26 @@
+{
+  "name": "BiaLogistics - Quan ly Kho Bia",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+
+  // Tự động cài package ngay khi Codespace khởi tạo xong.
+  "postCreateCommand": "npm install",
+
+  // Cổng 3000 là nơi app chạy (xem script "dev" trong package.json).
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "BiaLogistics App",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}
