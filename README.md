@@ -2,103 +2,85 @@
 
 Ứng dụng quản lý nhập/xuất kho bia (Lon/Lít/Chai), đối tác và báo cáo tồn kho.
 
-**Nền tảng:** React + Vite + TailwindCSS, dữ liệu trên **Firebase (Firestore)**,
-ảnh minh chứng lưu trên **Cloudinary**, quét phiếu chuyển bộ phận bằng AI (**Gemini**).
+**Nền tảng:** React + Vite + TailwindCSS · dữ liệu **Firebase (Firestore)** ·
+ảnh minh chứng **Cloudinary** · quét phiếu bằng AI **Gemini** · chạy trên **Vercel**.
 
 ---
 
-## Cách 1 — Chạy trên GitHub Codespaces (khuyên dùng, không cần cài gì)
+## Triển khai trên Vercel
 
-Dùng khi máy không cài được Node.js (ví dụ máy công ty bị khoá quyền cài đặt).
-Mọi thứ chạy trên máy chủ GitHub, thao tác qua trình duyệt.
+Dự án Vercel nối trực tiếp với repo này: **mỗi lần có commit mới vào nhánh `main`,
+Vercel tự động build và cập nhật app.** Push lên nhánh khác sẽ tạo bản xem thử
+(Preview) riêng, không ảnh hưởng bản đang chạy.
 
-### Bước 1: Mở Codespace
+### Biến môi trường (bắt buộc)
 
-Vào repo trên GitHub → nút **Code** (màu xanh) → tab **Codespaces** →
-**Create codespace on main**.
+Vào **Vercel → dự án → Settings → Environment Variables** và điền đầy đủ các biến
+liệt kê trong [`.env.example`](.env.example). Thiếu biến Firebase thì app sẽ mở lên
+nhưng không tải được dữ liệu.
 
-Chờ khoảng 2–3 phút. Codespace tự cài sẵn Node 22 và chạy `npm install`
-(cấu hình ở [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json)).
+| Nhóm | Biến | Lấy ở đâu |
+|---|---|---|
+| Firebase | `VITE_FIREBASE_*` | Firebase Console → Project settings → *Your apps* → SDK setup and configuration → Config |
+| Cloudinary | `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET` | Cloudinary Dashboard (cloud name) và Settings → Upload → tạo preset **Unsigned** |
+| Gemini | `GEMINI_API_KEY` | Google AI Studio. Không có tiền tố `VITE_` nên chỉ máy chủ đọc được. |
 
-### Bước 2: Tạo 2 file cấu hình
+Sau khi thêm hoặc sửa biến, phải **Redeploy** thì thay đổi mới có hiệu lực.
 
-Hai file này chứa thông tin riêng nên **không** nằm trong repo — cần tạo thủ công
-trong Codespace (chuột phải vào vùng danh sách file → **New File**):
+### Phân quyền Firestore
 
-**File `firebase-applet-config.json`** (đặt ở thư mục gốc) — lấy nội dung từ
-Firebase Console → ⚙️ Project settings → mục *Your apps* → *SDK setup and configuration*:
+Quy tắc bảo mật nằm ở [`firestore.rules`](firestore.rules). Dán nội dung file này vào
+Firebase Console → **Firestore Database → Rules → Publish** thì phân quyền
+OWNER / STAFF / VIEWER mới có hiệu lực.
 
-```json
-{
-  "apiKey": "...",
-  "authDomain": "...",
-  "projectId": "...",
-  "storageBucket": "...",
-  "messagingSenderId": "...",
-  "appId": "...",
-  "firestoreDatabaseId": "(default)"
-}
-```
+---
 
-**File `.env.local`** (đặt ở thư mục gốc):
+## Chạy thử (tuỳ chọn)
 
-```
-VITE_CLOUDINARY_CLOUD_NAME=ten_cloud_cua_ban
-VITE_CLOUDINARY_UPLOAD_PRESET=ten_upload_preset
-GEMINI_API_KEY=khoa_gemini_cua_ban
-```
+### Trên GitHub Codespaces — không cần cài gì
 
-### Bước 3: Chạy
-
-Trong ô Terminal phía dưới của Codespace, gõ:
+Repo → nút **Code** → tab **Codespaces** → **Create codespace on main**.
+Codespace tự cài Node và chạy `npm install` (cấu hình ở
+[`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json)).
+Tạo file `.env.local` theo mẫu `.env.example`, rồi:
 
 ```bash
 npm run dev
 ```
 
-Codespace sẽ hiện thông báo mở cổng 3000 → bấm **Open in Browser**.
+### Trên máy cá nhân
 
-> Kiểm tra lỗi cú pháp/kiểu dữ liệu trước khi chạy: `npm run lint`
-
----
-
-## Cách 2 — Chạy tại máy (nếu máy cài được Node.js)
-
-**Yêu cầu:** Node.js 20 trở lên.
+Cần Node.js 20 trở lên.
 
 ```bash
 npm install
 ```
 
-Tạo 2 file cấu hình như mô tả ở Bước 2 phía trên, rồi:
+Tạo `.env.local` theo mẫu, rồi `npm run dev` và mở http://localhost:3000.
 
-```bash
-npm run dev
-```
-
-Mở http://localhost:3000.
+> Kiểm tra lỗi kiểu dữ liệu trước khi deploy: `npm run lint`
 
 ---
 
 ## Đăng nhập lần đầu
 
 Tài khoản quản trị mặc định: `khoahuynh` / `123456`, mã PIN `061220`.
-**Hãy đổi mật khẩu và PIN ngay sau lần đăng nhập đầu tiên** trong mục Hồ sơ cá nhân.
-
-## Cấu hình Cloudinary (lưu ảnh)
-
-1. Tạo tài khoản tại https://cloudinary.com → lấy **Cloud name** ở Dashboard.
-2. Vào **Settings → Upload → Upload presets** → tạo preset chế độ **Unsigned** → lấy tên preset.
-
-## Phân quyền Firestore
-
-Quy tắc bảo mật nằm ở [`firestore.rules`](firestore.rules). Cần dán nội dung file này
-vào Firebase Console → **Firestore Database → Rules → Publish** thì phân quyền
-OWNER / STAFF / VIEWER mới có hiệu lực.
+**Hãy đổi mật khẩu và PIN ngay sau lần đăng nhập đầu tiên** ở mục Hồ sơ cá nhân.
 
 ## Theo dõi dung lượng
 
 Tab **Thiết lập** có mục *Sức khỏe hệ thống · Dung lượng Firebase*: ước tính phần trăm
-dung lượng đã dùng trên 1 GB của gói Spark miễn phí, tốc độ phát sinh giao dịch và dự báo
-còn bao lâu thì đầy — giúp dọn dẹp trước khi hệ thống gặp sự cố.
-Ảnh minh chứng nằm trên Cloudinary nên không chiếm dung lượng Firebase.
+dung lượng đã dùng trên 1 GB của gói Spark miễn phí, tốc độ phát sinh giao dịch và dự
+báo còn bao lâu thì đầy. Ảnh minh chứng nằm trên Cloudinary nên không chiếm dung lượng
+Firebase.
+
+## Kiến trúc thư mục
+
+```
+src/App.tsx        Toàn bộ giao diện và logic nghiệp vụ (file lớn ~9.100 dòng)
+src/firebase.ts    Khởi tạo Firebase, đọc cấu hình từ biến môi trường
+src/lib/cloudinary.ts  Nén và tải ảnh lên Cloudinary
+api/gemini/        Hàm serverless của Vercel cho tính năng quét phiếu bằng AI
+server.ts          Máy chủ Express dùng khi chạy tại máy (Vercel không dùng file này)
+firestore.rules    Quy tắc phân quyền Firestore
+```

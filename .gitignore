@@ -7,5 +7,5 @@ coverage/
 .env*
 !.env.example
 
-# Cấu hình kết nối Firebase (chứa thông tin project riêng) — không đẩy lên GitHub
+# Cấu hình Firebase cũ (nay đọc từ biến môi trường VITE_FIREBASE_*)
 firebase-applet-config.json
