@@ -3913,66 +3913,127 @@ export default function App() {
     return userRole === "OWNER";
   }, [userRole]);
 
-  // Nav items configuration
-  const navItems = useMemo(() => {
-    const allItems = [
+  /**
+   * Menu bên trái, chia theo NHÓM CÔNG VIỆC thay vì một danh sách dài.
+   *
+   * Người dùng tìm mục theo việc họ đang làm ("tôi cần nhập hàng") chứ không
+   * theo thứ tự chữ cái, nên gom thành 5 nhóm quen thuộc với nghiệp vụ kho.
+   * Nhóm nào hết mục (do phân quyền) thì tự ẩn luôn cả tiêu đề.
+   */
+  const navGroups = useMemo(() => {
+    const isOwnerRole = userRole === "OWNER";
+    const groups = [
       {
-        id: "dashboard",
-        label: "Tổng quan",
-        icon: LayoutDashboard,
-        color: "#3b82f6",
+        id: "overview",
+        title: "Tổng quan",
+        items: [
+          {
+            id: "dashboard",
+            label: "Bảng điều khiển",
+            icon: LayoutDashboard,
+            color: "#3b82f6",
+          },
+          {
+            id: "inventory",
+            label: "Tồn kho",
+            icon: Package,
+            color: "#f59e0b",
+          },
+        ],
       },
-      { id: "inventory", label: "Tồn kho", icon: Package, color: "#f59e0b" },
-      // REPORTS: Available to Owner, Staff and Viewer
-      { id: "reports", label: "Báo cáo", icon: TrendingUp, color: "#f43f5e" },
-      // REVENUE: RESTRICTED TO OWNER ONLY
-      ...(userRole === "OWNER"
-        ? [
-            {
-              id: "revenue-mgmt",
-              label: "Doanh thu",
-              icon: FileSpreadsheet,
-              color: "#8b5cf6",
-            },
-          ]
-        : []),
       {
-        id: "in-transit",
-        label: "Đơn đi đường",
-        icon: Truck,
-        color: "#fbbf24",
+        id: "operations",
+        title: "Nhập · Xuất",
+        items: [
+          {
+            id: "import",
+            label: "Nhập kho",
+            icon: PlusCircle,
+            color: "#10b981",
+          },
+          {
+            id: "slips",
+            label: "Phiếu nhập",
+            icon: FileText,
+            color: "#0ea5e9",
+          },
+          {
+            id: "export",
+            label: "Xuất kho",
+            icon: MinusCircle,
+            color: "#f97316",
+          },
+          {
+            id: "in-transit",
+            label: "Đơn đi đường",
+            icon: Truck,
+            color: "#fbbf24",
+          },
+        ],
       },
-      { id: "import", label: "Nhập kho", icon: PlusCircle, color: "#10b981" },
       {
-        id: "slips",
-        label: "Phiếu nhập",
-        icon: FileText,
-        color: "#0ea5e9",
+        id: "reports",
+        title: "Báo cáo",
+        items: [
+          // Báo cáo: Owner, Staff và Viewer đều xem được
+          {
+            id: "reports",
+            label: "Báo cáo tổng hợp",
+            icon: TrendingUp,
+            color: "#f43f5e",
+          },
+          // Doanh thu: CHỈ CHỦ SỞ HỮU
+          ...(isOwnerRole
+            ? [
+                {
+                  id: "revenue-mgmt",
+                  label: "Doanh thu",
+                  icon: FileSpreadsheet,
+                  color: "#8b5cf6",
+                },
+              ]
+            : []),
+        ],
       },
-      { id: "export", label: "Xuất kho", icon: MinusCircle, color: "#f97316" },
       {
-        id: "gallery",
-        label: "Thư viện ảnh",
-        icon: ImageIcon,
-        color: "#ec4899",
+        id: "records",
+        title: "Dữ liệu",
+        items: [
+          {
+            id: "gallery",
+            label: "Thư viện ảnh",
+            icon: ImageIcon,
+            color: "#ec4899",
+          },
+          { id: "partners", label: "Đối tác", icon: Users, color: "#6366f1" },
+          { id: "history", label: "Lịch sử", icon: History, color: "#64748b" },
+        ],
       },
-      { id: "partners", label: "Đối tác", icon: Users, color: "#6366f1" },
-      { id: "history", label: "Lịch sử", icon: History, color: "#64748b" },
-      // SETTINGS RESTRICTED TO OWNER ONLY
-      ...(userRole === "OWNER"
-        ? [
-            {
-              id: "settings",
-              label: "Cài đặt",
-              icon: ShieldCheck,
-              color: "#ef4444",
-            },
-          ]
-        : []),
+      {
+        id: "system",
+        title: "Hệ thống",
+        // Cài đặt: CHỈ CHỦ SỞ HỮU
+        items: isOwnerRole
+          ? [
+              {
+                id: "settings",
+                label: "Cài đặt",
+                icon: ShieldCheck,
+                color: "#ef4444",
+              },
+            ]
+          : [],
+      },
     ];
 
-    return allItems;
+    return groups.filter((g) => g.items.length > 0);
   }, [userRole]);
+
+  // Danh sách phẳng — dùng cho kiểm tra quyền vào tab và tra tên tab đang mở
+  const navItems = useMemo(
+    () => navGroups.flatMap((g) => g.items),
+    [navGroups],
+  );
 
   // Handle unauthorized tab access
   useEffect(() => {
@@ -4518,7 +4579,7 @@ export default function App() {
         )}
       >
         <div className="flex flex-col h-full">
-          <div className="p-6 sm:p-10">
+          <div className="p-5 sm:p-6">
             <div className="flex items-center gap-3 sm:gap-4">
               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-[14px] sm:rounded-[18px] flex items-center justify-center text-white shadow-xl shadow-amber-500/30 rotate-3 group hover:rotate-0 transition-transform">
                 <Beer className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -4534,55 +4595,55 @@ export default function App() {
             </div>
           </div>
 
-          <nav className="flex-1 px-3 sm:px-5 space-y-2 sm:space-y-3 custom-scrollbar overflow-y-auto pt-2 sm:pt-4">
-            <p className="px-4 sm:px-5 text-[8px] sm:text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] sm:tracking-[0.25em] mb-3 sm:mb-4">
-              Command Center
-            </p>
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  if (item.id === "export") {
-                    setNewTransaction((prev) => ({
-                      ...prev,
-                      isInTransit: true,
-                    }));
-                  } else if (item.id === "import") {
-                    setNewTransaction((prev) => ({
-                      ...prev,
-                      isInTransit: false,
-                    }));
-                  }
-                  if (window.innerWidth < 1024) setSidebarOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 sm:py-4.5 rounded-xl sm:rounded-2xl transition-all duration-200 group relative overflow-hidden",
-                  activeTab === item.id
-                    ? "bg-slate-900 text-white shadow-2xl shadow-slate-200"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-                )}
-              >
-                <item.icon
-                  className={cn(
-                    "w-5 h-5 sm:w-6 sm:h-6 transition-transform duration-200 group-hover:scale-110",
-                  )}
-                  style={{
-                    color: activeTab === item.id ? "#ffffff" : item.color,
-                  }}
-                />
-                <span className="text-xs sm:text-sm font-black uppercase tracking-widest">
-                  {item.label}
-                </span>
-                {activeTab === item.id && (
-                  <div
-                    className="absolute inset-0 bg-gradient-to-r"
-                    style={{
-                      background: `linear-gradient(to right, ${item.color}20, transparent)`,
-                    }}
-                  />
-                )}
-              </button>
+          <nav className="flex-1 px-3 sm:px-4 custom-scrollbar overflow-y-auto pb-4">
+            {navGroups.map((group, groupIndex) => (
+              <div key={group.id} className={groupIndex > 0 ? "mt-6" : ""}>
+                <p className="px-3 sm:px-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">
+                  {group.title}
+                </p>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        if (item.id === "export") {
+                          setNewTransaction((prev) => ({
+                            ...prev,
+                            isInTransit: true,
+                          }));
+                        } else if (item.id === "import") {
+                          setNewTransaction((prev) => ({
+                            ...prev,
+                            isInTransit: false,
+                          }));
+                        }
+                        if (window.innerWidth < 1024) setSidebarOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all duration-200 group relative overflow-hidden text-left",
+                        activeTab === item.id
+                          ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                      )}
+                    >
+                      <item.icon
+                        className="w-[18px] h-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110"
+                        style={{
+                          color:
+                            activeTab === item.id ? "#ffffff" : item.color,
+                        }}
+                      />
+                      <span className="flex-1 min-w-0 truncate text-[13px] sm:text-sm font-bold tracking-tight">
+                        {item.label}
+                      </span>
+                      {activeTab === item.id && (
+                        <ChevronRight className="w-4 h-4 shrink-0 opacity-70" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
 
