@@ -54,6 +54,7 @@ import {
   Sun,
   Moon,
   Lock,
+  FlaskConical,
   Loader2,
 } from "lucide-react";
 import {
@@ -1026,6 +1027,122 @@ export default function App() {
     setUser(null);
     setUserRole("PENDING");
     setCurrentUserProfile(null);
+  };
+
+  /* ---------------- Du lieu thu nghiem ---------------- */
+
+  /**
+   * Tao du lieu mau de chay thu quy trinh nhap kho -> in phieu -> ky -> duyet.
+   *
+   * Moi ban ghi deu mang tien to "demo-" trong ma va ghi chu danh dau, nen
+   * nut xoa ben duoi go duoc chinh xac va sach se, khong the dung nham vao
+   * so lieu that sau nay.
+   */
+  const DEMO_PREFIX = "demo-";
+  const DEMO_NOTE = "DỮ LIỆU THỬ NGHIỆM";
+  const [demoBusy, setDemoBusy] = useState(false);
+
+  const demoTransactionCount = useMemo(
+    () => transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX)).length,
+    [transactions],
+  );
+
+  const handleGenerateDemoData = async () => {
+    if (!isOwner || demoBusy) return;
+    if (
+      !confirm(
+        "Tạo dữ liệu thử nghiệm cho 5 ngày gần nhất?\n\nDữ liệu này được đánh dấu riêng và có thể xoá sạch bằng một nút.",
+      )
+    )
+      return;
+
+    setDemoBusy(true);
+    try {
+      const supplier =
+        partners.find((p) => p.type === "SUPPLIER") || partners[0];
+      const batch = writeBatch(db);
+      let created = 0;
+
+      // 5 ngay gan nhat, moi ngay 3-5 loai bia
+      for (let dayBack = 4; dayBack >= 0; dayBack--) {
+        const day = new Date();
+        day.setDate(day.getDate() - dayBack);
+        day.setHours(8 + (dayBack % 3), 15, 0, 0);
+
+        const dayStamp = format(day, "ddMM");
+        const picked = [...products]
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3 + (dayBack % 3));
+
+        picked.forEach((p, idx) => {
+          // Bia hoi tinh theo lit, bia lon tinh theo lon
+          const qty =
+            p.category === "Lít"
+              ? Math.round((60 + Math.random() * 240) / 10) * 10
+              : Math.round((48 + Math.random() * 200) / 24) * 24;
+
+          const id = `${DEMO_PREFIX}in-${format(day, "yyyyMMdd")}-${p.id}-${idx}`;
+          batch.set(doc(db, "transactions", id), {
+            id,
+            date: day.toISOString(),
+            type: "IN",
+            productId: p.id,
+            productName: p.name,
+            category: p.category,
+            quantity: qty,
+            partnerId: supplier?.id || "",
+            partnerName: supplier?.name || "",
+            batchNumber: `LOT-${dayStamp}-${p.category === "Lít" ? "H" : "L"}`,
+            notes: DEMO_NOTE,
+            createdBy: currentUserProfile?.name || user || "Demo",
+            status: "completed",
+          });
+          created++;
+        });
+      }
+
+      await batch.commit();
+      showNotification(`Đã tạo ${created} giao dịch thử nghiệm`);
+    } catch (e: any) {
+      alert("Không tạo được dữ liệu thử: " + e.message);
+    } finally {
+      setDemoBusy(false);
+    }
+  };
+
+  const handleClearDemoData = async () => {
+    if (!isOwner || demoBusy) return;
+
+    const demoTx = transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX));
+    const demoSlipDates = new Set(
+      demoTx.map((t) => format(new Date(t.date), "yyyy-MM-dd")),
+    );
+    const demoSlips = slips.filter((s) => demoSlipDates.has(s.date));
+
+    if (demoTx.length === 0 && demoSlips.length === 0) {
+      showNotification("Không có dữ liệu thử nghiệm nào để xoá");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Xoá ${demoTx.length} giao dịch thử nghiệm và ${demoSlips.length} phiếu liên quan?\n\nDữ liệu thật KHÔNG bị ảnh hưởng.`,
+      )
+    )
+      return;
+
+    setDemoBusy(true);
+    try {
+      const batch = writeBatch(db);
+      demoTx.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
+      demoSlips.forEach((s) => batch.delete(doc(db, "slips", s.id)));
+      await batch.commit();
+      showNotification("Đã xoá sạch dữ liệu thử nghiệm");
+    } catch (e: any) {
+      alert("Không xoá được: " + e.message);
+    } finally {
+      setDemoBusy(false);
+    }
   };
 
   const handleHardReset = async () => {
@@ -8123,6 +8240,55 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+
+                {/* DỮ LIỆU THỬ NGHIỆM — dùng khi app chưa đưa vào vận hành */}
+                <Card title="Dữ liệu thử nghiệm">
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
+                      <FlaskConical className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                        Tạo sẵn giao dịch nhập kho của 5 ngày gần nhất để chạy
+                        thử quy trình: nhập số → in phiếu → ký → tải ảnh duyệt.
+                        Mọi bản ghi đều mang dấu riêng nên xoá được sạch, không
+                        lẫn vào số liệu thật về sau.
+                      </p>
+                    </div>
+
+                    {demoTransactionCount > 0 && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <p className="text-[11px] font-black text-amber-800">
+                          Đang có {demoTransactionCount} giao dịch thử nghiệm
+                          trong hệ thống
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button
+                        className="flex-1"
+                        loading={demoBusy}
+                        onClick={handleGenerateDemoData}
+                      >
+                        <FlaskConical className="w-4 h-4" /> Tạo dữ liệu thử
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        loading={demoBusy}
+                        onClick={handleClearDemoData}
+                        disabled={demoTransactionCount === 0}
+                      >
+                        <Trash2 className="w-4 h-4" /> Xoá dữ liệu thử
+                      </Button>
+                    </div>
+
+                    <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                      Nút xoá chỉ động tới các bản ghi mang dấu thử nghiệm và
+                      phiếu của những ngày đó. Muốn xoá sạch mọi thứ kể cả số
+                      thật thì dùng "Dọn sạch hệ thống" ở thanh bên.
+                    </p>
+                  </div>
+                </Card>
 
                 {/* DỰ BÁO DUNG LƯỢNG FIREBASE — cảnh báo sớm trước khi chạm giới hạn */}
                 <Card title="Sức khỏe hệ thống · Dung lượng Firebase">
