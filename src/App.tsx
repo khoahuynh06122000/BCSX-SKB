@@ -109,7 +109,7 @@ import {
   BatchInfo,
   RevenueRecord,
   UserRole,
-  UserConfig,
+  UserProfile,
 } from "./types";
 import {
   INITIAL_PRODUCTS,
@@ -118,6 +118,7 @@ import {
 } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
+
 import {
   db,
   auth,
@@ -125,8 +126,6 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  signInAnonymously,
-  updateProfile,
   collection,
   doc,
   setDoc,
@@ -139,6 +138,15 @@ import {
   writeBatch,
 } from "./firebase";
 import { uploadToCloudinary } from "./lib/cloudinary";
+
+/**
+ * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
+ * dung moi va co toan quyen.
+ *
+ * Gia tri nay phai trung voi ownerEmail() trong firestore.rules - do moi la
+ * noi thuc su chan quyen; khai bao o day chi de giao dien hien dung.
+ */
+const OWNER_EMAIL = "khoa.huynh.06.12.2000@gmail.com";
 
 enum OperationType {
   CREATE = "create",
@@ -616,15 +624,16 @@ export default function App() {
     [isDark],
   );
 
-  const [user, setUser] = useState<string | null>(
-    localStorage.getItem("bt_username"),
-  );
-  const [userRole, setUserRole] = useState<UserRole>(
-    (localStorage.getItem("bt_role") as UserRole) || "VIEWER",
-  );
+  // Phien dang nhap do Firebase Auth quan ly (xem useEffect onAuthStateChanged).
+  // Ban cu doc vai tro tu localStorage - ai cung sua duoc bang cong cu trinh
+  // duyet de tu nang minh len OWNER.
+  const [user, setUser] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>("PENDING");
   const isOwner = userRole === "OWNER";
-  const isAdmin = userRole === "OWNER" || userRole === "ADMIN";
-  const [currentUserConfig, setCurrentUserConfig] = useState<UserConfig | null>(
+  const isAdmin = isOwner;
+  /** Da dang nhap Google nhung chu so huu chua duyet. */
+  const isPending = !!user && userRole === "PENDING";
+  const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
@@ -633,7 +642,7 @@ export default function App() {
     type: "success" | "error";
   } | null>(null);
 
-  const [allUserConfigs, setAllUserConfigs] = useState<UserConfig[]>([]);
+  const [allUserProfiles, setAllUserProfiles] = useState<UserProfile[]>([]);
   const [transactions, setTransactions] =
     useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [partners, setPartners] = useState<Partner[]>(INITIAL_PARTNERS);
@@ -682,12 +691,7 @@ export default function App() {
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
-  const [showPasswordInModal, setShowPasswordInModal] = useState(false);
-  const [newPasswordInput, setNewPasswordInput] = useState("");
-  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [newPinInputModal, setNewPinInputModal] = useState("");
-  const [isUpdatingPin, setIsUpdatingPin] = useState(false);
+  // Cac o nhap mat khau / PIN da duoc go bo: viec xac thuc nay do Google lo.
 
   const showNotification = (
     message: string,
@@ -697,46 +701,66 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // AUTH SYNC (Persistent via LocalStorage for simple username auth)
+  /**
+   * THEO DOI PHIEN DANG NHAP
+   *
+   * Firebase Auth tu nho phien nen khong can luu gi trong localStorage nhu
+   * ban cu (vua khong an toan vua de gia mao bang cach sua localStorage).
+   *
+   * Luong: dang nhap Google -> neu chua co ho so thi tao moi o trang thai
+   * PENDING -> chu so huu duyet -> vao duoc app.
+   */
   useEffect(() => {
-    const savedUser = localStorage.getItem("bt_username");
-    if (savedUser) {
-      setUser(savedUser);
-      // Fetch fresh role/config
-      const unsub = onSnapshot(
-        doc(db, "user_configs", savedUser),
-        (snap) => {
-          if (snap.exists()) {
-            const data = snap.data() as UserConfig;
-            setUserRole(data.role || "VIEWER");
-            setCurrentUserConfig(data);
-            localStorage.setItem("bt_role", data.role);
-          } else if (savedUser === "khoahuynh" || savedUser === "admin") {
-            // Hardcoded backup for first-time setup
-            setUserRole("OWNER");
-          } else {
-            handleLogout();
-          }
-          setLoading(false);
-        },
-        (err) => {
-          console.error("Auth sync failed:", err);
-          setLoading(false);
-        },
-      );
-      return () => unsub();
-    }
-    setLoading(false);
-  }, []);
+    const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) {
+        setUser(null);
+        setUserRole("PENDING");
+        setCurrentUserProfile(null);
+        setLoading(false);
+        return;
+      }
 
-  // Force logout on first run for testing if requested
-  useEffect(() => {
-    // We'll perform a logout once to allow testing login flow as per user request
-    const hasLoggedOutForTest = sessionStorage.getItem("bt_test_logout");
-    if (!hasLoggedOutForTest) {
-      handleLogout();
-      sessionStorage.setItem("bt_test_logout", "true");
-    }
+      const uid = fbUser.uid;
+      const emailLower = (fbUser.email || "").toLowerCase();
+      setUser(fbUser.displayName || fbUser.email || "Người dùng");
+
+      try {
+        const ref = doc(db, "users", uid);
+        const snap = await getDocFromServer(ref);
+
+        if (!snap.exists()) {
+          // Lan dau dang nhap: tao ho so cho duyet.
+          // Quy tac Firestore chi cho tao voi role PENDING nen khong the
+          // tu nang quyen tu day.
+          const fresh: UserProfile = {
+            uid,
+            email: emailLower,
+            name: fbUser.displayName || undefined,
+            photoURL: fbUser.photoURL || undefined,
+            role: "PENDING",
+            createdAt: new Date().toISOString(),
+          };
+          await setDoc(ref, fresh);
+          setCurrentUserProfile(fresh);
+          setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
+        } else {
+          const data = snap.data() as UserProfile;
+          setCurrentUserProfile(data);
+          // Chu so huu duoc nhan dien bang email, khong phu thuoc du lieu
+          // trong Firestore - trung khop voi firestore.rules.
+          setUserRole(
+            emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING",
+          );
+        }
+      } catch (err) {
+        console.error("Khong doc duoc ho so nguoi dung:", err);
+        setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubAuth();
   }, []);
 
   // FIRESTORE SYNC
@@ -814,9 +838,9 @@ export default function App() {
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
-      unsubUsers = onSnapshot(collection(db, "user_configs"), (snapshot) => {
-        setAllUserConfigs(
-          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as UserConfig),
+      unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+        setAllUserProfiles(
+          snapshot.docs.map((d) => ({ ...d.data(), uid: d.id }) as UserProfile),
         );
       });
     }
@@ -830,226 +854,51 @@ export default function App() {
   }, [user, userRole]);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [usernameInput, setUsernameInput] = useState("");
-  const [passwordInput, setPasswordInput] = useState("");
+  const [authError, setAuthError] = useState("");
 
-  // Security Layer: PIN
-  const [showPinEntry, setShowPinEntry] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pendingUserConfig, setPendingUserConfig] = useState<UserConfig | null>(
-    null,
-  );
-  const [isPinRecovery, setIsPinRecovery] = useState(false);
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
-  const [isRequestingRecovery, setIsRequestingRecovery] = useState(false);
-
-  const handleLogin = async () => {
+  /**
+   * Dang nhap bang tai khoan Google.
+   *
+   * App khong con giu mat khau nao: Google lo phan xac thuc. Sau khi dang
+   * nhap, onAuthStateChanged (o useEffect ben duoi) se lo phan tao ho so va
+   * xac dinh vai tro.
+   */
+  const handleGoogleLogin = async () => {
     if (isAuthenticating) return;
-
-    const uname = usernameInput.trim().toLowerCase();
-    const pword = passwordInput.trim();
-
-    if (!uname || !pword) {
-      alert("Anh vui lòng nhập đủ Username và Mật khẩu ạ!");
-      return;
-    }
-
     setIsAuthenticating(true);
+    setAuthError("");
     try {
-      // Establish Firebase session
-      let currentUser = auth.currentUser;
-      if (!currentUser) {
-        const authResult = await signInAnonymously(auth);
-        currentUser = authResult.user;
-      }
-
-      if (!currentUser)
-        throw new Error("Không thể thiết lập phiên làm việc bảo mật.");
-
-      // 1. Initial hardcoded setup for the boss
-      if ((uname === "khoahuynh" || uname === "admin") && pword === "123456") {
-        const adminDoc = await getDocFromServer(doc(db, "user_configs", uname));
-        if (!adminDoc.exists()) {
-          await setDoc(doc(db, "user_configs", uname), {
-            username: uname,
-            password: pword,
-            role: "OWNER",
-            name: uname === "khoahuynh" ? "Khoa Huỳnh" : "Administrator",
-            updatedAt: new Date().toISOString(),
-            linkedUid: currentUser.uid,
-            pin: "061220", // Đã cập nhật mã PIN theo yêu cầu: 061220
-          });
-        }
-      }
-
-      // 2. Fetch user config
-      const userDoc = await getDocFromServer(doc(db, "user_configs", uname));
-      if (!userDoc.exists()) {
-        alert(
-          "Người dùng không tồn tại ạ. Anh liên hệ Admin để cấp quyền nhé!",
-        );
-        return;
-      }
-
-      const userData = userDoc.data() as UserConfig;
-      if (userData.password !== pword) {
-        alert("Mật khẩu không chính xác ạ!");
-        return;
-      }
-
-      // 2.5 Security Step: Check for PIN requirement for 'khoahuynh'
-      if (uname === "khoahuynh" || userData.pin) {
-        setPendingUserConfig({ ...userData, id: uname });
-        setShowPinEntry(true);
-        setIsAuthenticating(false);
-        return;
-      }
-
-      // 3. Link session to this user config and create an active session document for Rules
-      const sessionData = {
-        username: uname,
-        role: userData.role,
-        linkedUid: currentUser.uid,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await Promise.all([
-        updateDoc(doc(db, "user_configs", uname), sessionData),
-        setDoc(doc(db, "user_sessions", currentUser.uid), sessionData),
-      ]);
-
-      // 4. Set local auth state
-      setUser(userData.name || userData.username);
-      setUserRole(userData.role);
-      setCurrentUserConfig({ ...userData, linkedUid: currentUser.uid });
-      localStorage.setItem("bt_username", uname);
-      localStorage.setItem("bt_role", userData.role);
-
-      showNotification(`Chào mừng ${userData.name || uname} đã quay trở lại!`);
-    } catch (error: any) {
-      console.error("Login detail:", error);
-      alert(`Đăng nhập thất bại: ${error.message}`);
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
-  const handleVerifyPin = async () => {
-    if (!pendingUserConfig) return;
-    setIsAuthenticating(true);
-
-    try {
-      const uname = pendingUserConfig.username;
-
-      // Verify PIN
-      if (pinInput !== (pendingUserConfig.pin || "061220")) {
-        alert("Mã PIN không chính xác ạ!");
-        setIsAuthenticating(false);
-        return;
-      }
-
-      let currentUser = auth.currentUser;
-      if (!currentUser)
-        throw new Error("Phiên làm việc đã hết hạn. Vui lòng thử lại!");
-
-      const sessionData = {
-        username: uname,
-        role: pendingUserConfig.role,
-        linkedUid: currentUser.uid,
-        updatedAt: new Date().toISOString(),
-      };
-
-      await Promise.all([
-        updateDoc(doc(db, "user_configs", uname), sessionData),
-        setDoc(doc(db, "user_sessions", currentUser.uid), sessionData),
-      ]);
-
-      setUser(pendingUserConfig.name || pendingUserConfig.username);
-      setUserRole(pendingUserConfig.role);
-      setCurrentUserConfig({
-        ...pendingUserConfig,
-        linkedUid: currentUser.uid,
-      });
-      localStorage.setItem("bt_username", uname);
-      localStorage.setItem("bt_role", pendingUserConfig.role);
-
-      setShowPinEntry(false);
-      setPinInput("");
-      setPendingUserConfig(null);
-      showNotification(
-        `Chào mừng ${pendingUserConfig.name || uname} đã thông qua bảo mật!`,
-      );
-    } catch (error: any) {
-      alert("Xác thực PIN thất bại: " + error.message);
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
-  const handleRequestRecovery = async () => {
-    if (!pendingUserConfig) return;
-    setIsRequestingRecovery(true);
-    try {
-      const recoveryCode = Math.floor(
-        100000 + Math.random() * 900000,
-      ).toString();
-      const expiry = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 mins
-
-      await updateDoc(doc(db, "user_configs", pendingUserConfig.username), {
-        recoveryCode,
-        recoveryExpiry: expiry,
-      });
-
-      setIsPinRecovery(true);
-      alert(
-        "Mã khôi phục đã được tạo! Hệ thống đang gửi mail xác thực tới khoa.huynh.06.12.2000@gmail.com. Anh vui lòng kiểm tra hộp thư nhé!",
-      );
+      await signInWithPopup(auth, googleProvider);
     } catch (e: any) {
-      alert("Không thể yêu cầu khôi phục: " + e.message);
-    } finally {
-      setIsRequestingRecovery(false);
-    }
-  };
-
-  const handleVerifyRecovery = async () => {
-    if (!pendingUserConfig || !recoveryCodeInput) return;
-
-    setIsAuthenticating(true);
-    try {
-      const userDoc = await getDocFromServer(
-        doc(db, "user_configs", pendingUserConfig.username),
-      );
-      const data = userDoc.data() as UserConfig;
-
-      if (data.recoveryCode === recoveryCodeInput && data.recoveryExpiry) {
-        if (new Date() > new Date(data.recoveryExpiry)) {
-          alert("Mã khôi phục đã hết hạn ạ!");
-          return;
-        }
-
-        // Reset PIN to 061220 as recovery
-        await updateDoc(doc(db, "user_configs", pendingUserConfig.username), {
-          pin: "061220",
-          recoveryCode: null,
-          recoveryExpiry: null,
-        });
-
-        alert(
-          "Khôi phục thành công! Mã PIN của anh đã được reset về mặc định '061220'. Anh hãy đăng nhập và đổi lại ngay nhé!",
+      const code = e?.code || "";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        // Nguoi dung tu dong cua so - khong phai loi.
+      } else if (code === "auth/unauthorized-domain") {
+        setAuthError(
+          "Tên miền này chưa được cấp phép trong Firebase. Vào Firebase Console > Authentication > Settings > Authorized domains để thêm.",
         );
-        setIsPinRecovery(false);
-        setPinInput("061220");
+      } else if (code === "auth/operation-not-allowed") {
+        setAuthError(
+          "Chưa bật đăng nhập bằng Google. Vào Firebase Console > Authentication > Sign-in method để bật.",
+        );
       } else {
-        alert("Mã khôi phục không chính xác ạ!");
+        setAuthError("Đăng nhập thất bại: " + (e?.message || code));
       }
-    } catch (e: any) {
-      alert("Lỗi xác thực: " + e.message);
     } finally {
       setIsAuthenticating(false);
     }
   };
 
-  // Guest Authentication removed as requested
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Loi dang xuat:", e);
+    }
+    setUser(null);
+    setUserRole("PENDING");
+    setCurrentUserProfile(null);
+  };
 
   const handleHardReset = async () => {
     if (!isOwner) return;
@@ -1133,15 +982,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    localStorage.removeItem("bt_username");
-    localStorage.removeItem("bt_role");
-    const u = user;
-    setUser(null);
-    setUserRole("VIEWER");
-    setCurrentUserConfig(null);
   };
 
   const sidebarOpenRef = useRef(true);
@@ -3826,197 +3666,67 @@ export default function App() {
             </div>
 
             <div className="space-y-8">
-              {showPinEntry ? (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <div className="flex items-center gap-3 mb-2">
-                    <button
-                      onClick={() => {
-                        setShowPinEntry(false);
-                        setIsPinRecovery(false);
-                        setPinInput("");
-                        setRecoveryCodeInput("");
-                      }}
-                      className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <div>
-                      <h4 className="text-slate-900 text-xl font-black tracking-tight">
-                        {isPinRecovery ? "Khôi phục mã PIN" : "Xác thực lớp 2"}
-                      </h4>
-                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mt-0.5">
-                        {isPinRecovery
-                          ? "Nhập mã từ email của anh"
-                          : "Tài khoản của anh đã được bảo vệ"}
-                      </p>
-                    </div>
-                  </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  Chào mừng trở lại
+                </h2>
+                <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
+                  Đăng nhập bằng tài khoản Google
+                </p>
+              </div>
 
-                  {isPinRecovery ? (
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                          Mã xác thực Recovery
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Mã 6 số từ mail"
-                          maxLength={6}
-                          value={recoveryCodeInput}
-                          onChange={(e) => setRecoveryCodeInput(e.target.value)}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && handleVerifyRecovery()
-                          }
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-center text-2xl font-black tracking-[0.5em] outline-none focus:ring-4 focus:ring-slate-100 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:text-sm"
-                        />
-                        <p className="text-[9px] text-slate-400 font-bold text-center mt-2 px-4 uppercase tracking-widest leading-relaxed">
-                          Mã được gửi tới: khoa.huynh.06.12.2000@gmail.com
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={handleVerifyRecovery}
-                        disabled={isAuthenticating}
-                        className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
-                      >
-                        {isAuthenticating ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ShieldCheck className="w-4 h-4" />
-                        )}
-                        Xác nhận mã
-                      </button>
-
-                      <button
-                        onClick={() => setIsPinRecovery(false)}
-                        className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
-                      >
-                        Quay lại nhập PIN
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="space-y-2 text-center">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                          Mã PIN bảo mật
-                        </label>
-                        <div className="flex justify-center gap-2 mt-2">
-                          {[0, 1, 2, 3, 4, 5].map((i) => (
-                            <div
-                              key={i}
-                              className={cn(
-                                "w-3 h-3 rounded-full transition-all duration-300 transform scale-110",
-                                pinInput.length > i
-                                  ? "bg-slate-900"
-                                  : "bg-slate-200",
-                              )}
-                            />
-                          ))}
-                        </div>
-                        <input
-                          type="password"
-                          autoFocus
-                          placeholder="Mã PIN"
-                          maxLength={6}
-                          value={pinInput}
-                          onChange={(e) =>
-                            setPinInput(e.target.value.replace(/[^0-9]/g, ""))
-                          }
-                          onKeyDown={(e) =>
-                            e.key === "Enter" &&
-                            pinInput.length === 6 &&
-                            handleVerifyPin()
-                          }
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-center text-3xl font-black tracking-[0.8em] outline-none focus:ring-4 focus:ring-slate-100 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-200 placeholder:tracking-normal placeholder:text-sm"
-                        />
-                      </div>
-
-                      <div className="space-y-4">
-                        <button
-                          onClick={handleVerifyPin}
-                          disabled={isAuthenticating || pinInput.length < 6}
-                          className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
-                        >
-                          {isAuthenticating ? (
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                          ) : (
-                            <ShieldCheck className="w-5 h-5" />
-                          )}
-                          Giải mã truy cập
-                        </button>
-
-                        <button
-                          onClick={handleRequestRecovery}
-                          disabled={isRequestingRecovery}
-                          className="w-full flex items-center justify-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
-                        >
-                          {isRequestingRecovery ? (
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <AlertTriangle className="w-3 h-3" />
-                          )}
-                          Anh quên mã PIN?
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div>
-                    <h4 className="text-slate-900 text-xl font-black mb-2 tracking-tight">
-                      Chào mừng trở lại
-                    </h4>
-                    <p className="text-slate-500 text-xs font-medium uppercase tracking-widest">
-                      Cung cấp thông tin truy cập của bạn
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                        Định danh tài khoản
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Username (e.g. khoahuynh)"
-                        value={usernameInput}
-                        onChange={(e) => setUsernameInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
-                        Mã xác thực bảo mật
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="Password"
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-2 focus:ring-slate-200 focus:bg-white focus:border-slate-400 transition-all placeholder:text-slate-300"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleLogin}
-                    disabled={isAuthenticating}
-                    className="w-full py-5 flex items-center justify-center gap-3 text-[11px] tracking-[0.2em] uppercase font-black bg-slate-900 text-white hover:bg-slate-800 transition-all active:scale-[0.98] rounded-2xl shadow-xl shadow-slate-200"
-                  >
-                    {isAuthenticating ? (
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="w-5 h-5" />
-                    )}
-                    {isAuthenticating
-                      ? "Triển khai lệnh..."
-                      : "Xác nhận truy cập"}
-                  </button>
+              {authError && (
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-rose-700 leading-relaxed">
+                    {authError}
+                  </p>
                 </div>
               )}
+
+              <button
+                onClick={handleGoogleLogin}
+                disabled={isAuthenticating}
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 sm:py-5 bg-white border-2 border-slate-200 rounded-2xl font-black text-sm sm:text-base text-slate-700 hover:border-primary hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isAuthenticating ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  /* Logo Google ve bang SVG de khong phai tai anh tu ben ngoai */
+                  <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
+                    <path
+                      fill="#EA4335"
+                      d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                    />
+                    <path
+                      fill="#4285F4"
+                      d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                    />
+                  </svg>
+                )}
+                {isAuthenticating ? "Đang xác thực..." : "Đăng nhập bằng Google"}
+              </button>
+
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                    Cần được phê duyệt
+                  </p>
+                </div>
+                <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                  Lần đầu đăng nhập, tài khoản của bạn sẽ ở trạng thái chờ. Quản
+                  trị viên duyệt xong bạn mới xem được dữ liệu kho.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -4026,6 +3736,59 @@ export default function App() {
           <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
             Tài sản thuộc Bana BrewHouse • Bảo mật mức 4 • Tin Tin OS
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * Da dang nhap Google nhung chu so huu chua duyet.
+   *
+   * Man hinh nay chan hoan toan phan giao dien du lieu. Nhung do khong phai
+   * lop bao ve that: quy tac Firestore moi la thu chan that su - nguoi chua
+   * duyet co goi thang vao co so du lieu cung khong doc duoc gi.
+   */
+  if (isPending) {
+    return (
+      <div className="min-h-screen bg-bg-main flex items-center justify-center p-6 font-sans">
+        <div className="fixed top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-600" />
+        <div className="w-full max-w-md bg-white rounded-[32px] p-8 sm:p-12 border border-slate-200 premium-shadow text-center space-y-6">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-100 flex items-center justify-center">
+            <Clock className="w-8 h-8 text-amber-600" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Tài khoản đang chờ duyệt
+            </h2>
+            <p className="text-xs font-bold text-slate-500 leading-relaxed">
+              Bạn đã đăng nhập thành công bằng
+              <br />
+              <span className="text-slate-900 break-all">
+                {currentUserProfile?.email}
+              </span>
+            </p>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+              Vui lòng liên hệ quản trị viên để được cấp quyền truy cập. Sau khi
+              được duyệt, bạn chỉ cần tải lại trang là vào được.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="w-4 h-4" /> Tải lại
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" /> Đăng xuất
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -4049,7 +3812,7 @@ export default function App() {
       <div className="fixed -bottom-48 -right-32 w-[560px] h-[560px] rounded-full bg-amber-400/10 dark:bg-amber-400/10 blur-[140px] pointer-events-none z-0" />
 
       {/* Account Profile Modal */}
-      {isAccountModalOpen && currentUserConfig && (
+      {isAccountModalOpen && currentUserProfile && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
           <div
             onClick={() => setIsAccountModalOpen(false)}
@@ -4075,20 +3838,38 @@ export default function App() {
               </div>
 
               <div className="space-y-6">
-                {/* Basic Info */}
                 <div className="p-6 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
                   <div className="flex items-center justify-between group">
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                         Họ và tên
                       </p>
-                      <p className="text-sm font-bold text-slate-900">
-                        {currentUserConfig.name || currentUserConfig.username}
+                      <p className="text-sm font-bold text-slate-900 truncate">
+                        {currentUserProfile.name || "Chưa đặt tên"}
                       </p>
                     </div>
-                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm border border-slate-100">
-                      <User className="w-5 h-5" />
-                    </div>
+                    {currentUserProfile.photoURL ? (
+                      <img
+                        src={currentUserProfile.photoURL}
+                        alt=""
+                        className="w-10 h-10 rounded-xl object-cover border border-slate-100 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-primary shadow-sm border border-slate-100 shrink-0">
+                        <User className="w-5 h-5" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-[1px] bg-slate-200/50" />
+
+                  <div className="space-y-0.5">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                      Tài khoản Google
+                    </p>
+                    <p className="text-sm font-bold text-slate-900 break-all">
+                      {currentUserProfile.email}
+                    </p>
                   </div>
 
                   <div className="h-[1px] bg-slate-200/50" />
@@ -4099,229 +3880,40 @@ export default function App() {
                         Chức danh
                       </p>
                       <p className="text-sm font-bold text-slate-900">
-                        {currentUserConfig.role === "OWNER"
+                        {userRole === "OWNER"
                           ? "Thẩm quyền tối cao"
-                          : currentUserConfig.role === "STAFF"
+                          : userRole === "STAFF"
                             ? "Chuyên viên Vận hành"
-                            : "Người xem phân tích"}
+                            : userRole === "VIEWER"
+                              ? "Người xem phân tích"
+                              : "Chờ phê duyệt"}
                       </p>
                     </div>
-                    <div className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-600 text-[9px] font-black uppercase tracking-widest">
-                      Active
-                    </div>
-                  </div>
-
-                  <div className="h-[1px] bg-slate-200/50" />
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Tên đăng nhập
-                      </p>
-                      <p className="text-sm font-bold text-slate-900">
-                        {currentUserConfig.username}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="h-[1px] bg-slate-200/50" />
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Mật khẩu hiện tại
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-slate-900">
-                          {showPasswordInModal
-                            ? currentUserConfig.password
-                            : "••••••••"}
-                        </p>
-                        <button
-                          onClick={() =>
-                            setShowPasswordInModal(!showPasswordInModal)
-                          }
-                          className="text-slate-400 hover:text-primary transition-colors"
-                        >
-                          <Sun className="w-4 h-4" />
-                        </button>
-                      </div>
+                    <div
+                      className={cn(
+                        "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
+                        userRole === "PENDING"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-emerald-100 text-emerald-600",
+                      )}
+                    >
+                      {userRole === "PENDING" ? "Chờ duyệt" : "Active"}
                     </div>
                   </div>
                 </div>
 
-                {/* Change Password & PIN Section */}
-                <div className="space-y-6 pt-2">
-                  <div className="space-y-4">
-                    <div className="space-y-3 focus-within:translate-x-1 transition-transform bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
-                          Xác thực mật khẩu cũ
-                        </label>
-                        <input
-                          type="password"
-                          placeholder="Mật khẩu hiện tại..."
-                          value={currentPasswordInput}
-                          onChange={(e) =>
-                            setCurrentPasswordInput(e.target.value)
-                          }
-                          className="w-full px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all placeholder:text-slate-300"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">
-                          Mật khẩu mới
-                        </label>
-                        <div className="relative flex gap-2">
-                          <input
-                            type="password"
-                            placeholder="Mật khẩu mới..."
-                            value={newPasswordInput}
-                            onChange={(e) =>
-                              setNewPasswordInput(e.target.value)
-                            }
-                            className="flex-1 px-6 py-4 bg-white border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all placeholder:text-slate-300"
-                          />
-                          <button
-                            onClick={async () => {
-                              if (!currentPasswordInput) {
-                                alert(
-                                  "Vui lòng nhập mật khẩu hiện tại để xác thực ạ!",
-                                );
-                                return;
-                              }
-
-                              if (
-                                currentPasswordInput !==
-                                currentUserConfig?.password
-                              ) {
-                                alert("Mật khẩu hiện tại không chính xác ạ!");
-                                return;
-                              }
-
-                              if (
-                                !newPasswordInput ||
-                                newPasswordInput.length < 4
-                              ) {
-                                alert(
-                                  "Mật khẩu mới phải có ít nhất 4 ký tự ạ!",
-                                );
-                                return;
-                              }
-
-                              setIsUpdatingPassword(true);
-                              try {
-                                await updateDoc(
-                                  doc(
-                                    db,
-                                    "user_configs",
-                                    currentUserConfig.username,
-                                  ),
-                                  {
-                                    password: newPasswordInput,
-                                    updatedAt: new Date().toISOString(),
-                                  },
-                                );
-                                showNotification(
-                                  "Đã cập nhật mật khẩu mới thành công!",
-                                );
-                                setNewPasswordInput("");
-                                setCurrentPasswordInput("");
-                              } catch (error: any) {
-                                handleFirestoreError(
-                                  error,
-                                  OperationType.UPDATE,
-                                  "user_configs",
-                                );
-                              } finally {
-                                setIsUpdatingPassword(false);
-                              }
-                            }}
-                            disabled={
-                              isUpdatingPassword ||
-                              !newPasswordInput ||
-                              !currentPasswordInput
-                            }
-                            className="px-6 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 disabled:opacity-50 transition-all shadow-lg shadow-slate-200"
-                          >
-                            {isUpdatingPassword ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              "Lưu"
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 focus-within:translate-x-1 transition-transform border-t border-slate-100 pt-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1 text-slate-900">
-                        Thiết lập mã PIN (6 số)
-                      </label>
-                      <div className="relative flex gap-2">
-                        <input
-                          type="password"
-                          placeholder="6 chữ số PIN..."
-                          maxLength={6}
-                          value={newPinInputModal}
-                          onChange={(e) =>
-                            setNewPinInputModal(
-                              e.target.value.replace(/[^0-9]/g, ""),
-                            )
-                          }
-                          className="flex-1 px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary focus:bg-white transition-all placeholder:text-slate-300 tracking-[0.5em]"
-                        />
-                        <button
-                          onClick={async () => {
-                            if (newPinInputModal.length !== 6) {
-                              alert("Mã PIN phải có đúng 6 chữ số ạ!");
-                              return;
-                            }
-                            setIsUpdatingPin(true);
-                            try {
-                              await updateDoc(
-                                doc(
-                                  db,
-                                  "user_configs",
-                                  currentUserConfig.username,
-                                ),
-                                {
-                                  pin: newPinInputModal,
-                                  updatedAt: new Date().toISOString(),
-                                },
-                              );
-                              showNotification(
-                                "Đã thiết lập mã PIN mới thành công!",
-                              );
-                              setNewPinInputModal("");
-                            } catch (error: any) {
-                              handleFirestoreError(
-                                error,
-                                OperationType.UPDATE,
-                                "user_configs",
-                              );
-                            } finally {
-                              setIsUpdatingPin(false);
-                            }
-                          }}
-                          disabled={
-                            isUpdatingPin || newPinInputModal.length !== 6
-                          }
-                          className="px-6 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 disabled:opacity-50 transition-all shadow-lg shadow-emerald-100"
-                        >
-                          {isUpdatingPin ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                          ) : (
-                            "Đặt PIN"
-                          )}
-                        </button>
-                      </div>
-                      <p className="text-[8px] text-slate-400 font-bold px-1 uppercase tracking-widest mt-1 leading-relaxed">
-                        Lớp bảo vệ thứ 2 bắt buộc sau mật khẩu để truy cập hệ
-                        thống.
-                      </p>
-                    </div>
+                {/* Mat khau do Google quan ly - app khong luu gi ca */}
+                <div className="p-5 rounded-3xl border border-emerald-200 bg-emerald-50/60 flex gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-black text-emerald-800 uppercase tracking-wider">
+                      Bảo mật bởi Google
+                    </p>
+                    <p className="text-[11px] font-bold text-emerald-700/80 leading-relaxed">
+                      Mật khẩu và xác thực hai lớp do tài khoản Google của bạn
+                      quản lý. Hệ thống này không lưu mật khẩu của bạn. Muốn đổi
+                      mật khẩu, vui lòng đổi trực tiếp trong tài khoản Google.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -8425,230 +8017,149 @@ export default function App() {
                   </div>
                 </Card>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  <Card
-                    title="Cấp quyền người dùng mới"
-                    className="lg:col-span-4 h-fit"
-                  >
-                    <div className="space-y-6">
-                      <Input
-                        label="Username (Tên đăng nhập)"
-                        placeholder="ví dụ: nhanvien01"
-                        id="new-user-username"
-                      />
-                      <Input
-                        label="Mật khẩu"
-                        type="password"
-                        placeholder="Nhập mật khẩu"
-                        id="new-user-password"
-                      />
-                      <Input
-                        label="Tên hiển thị"
-                        placeholder="ví dụ: Nguyễn Văn A"
-                        id="new-user-name"
-                      />
-                      <Select
-                        label="Vai trò cấp bậc"
-                        id="new-user-role"
-                        options={[
-                          {
-                            value: "STAFF",
-                            label: "STAFF - Nhân viên vận hành (Nhập/Xuất)",
-                          },
-                          {
-                            value: "VIEWER",
-                            label: "VIEWER - Người xem (Báo cáo/Tồn kho)",
-                          },
-                          {
-                            value: "OWNER",
-                            label: "OWNER - Quản trị viên toàn quyền",
-                          },
-                        ]}
-                      />
-                      <Button
-                        className="w-full py-4"
-                        onClick={async () => {
-                          const userEl = document.getElementById(
-                            "new-user-username",
-                          ) as HTMLInputElement;
-                          const passEl = document.getElementById(
-                            "new-user-password",
-                          ) as HTMLInputElement;
-                          const nameEl = document.getElementById(
-                            "new-user-name",
-                          ) as HTMLInputElement;
-                          const roleEl = document.getElementById(
-                            "new-user-role",
-                          ) as HTMLSelectElement;
-
-                          const username = userEl.value.trim().toLowerCase();
-                          const password = passEl.value.trim();
-                          const name = nameEl.value.trim();
-                          const role = roleEl.value as UserRole;
-
-                          if (!username || !password) {
-                            alert("Vui lòng nhập đủ Username và Mật khẩu ạ!");
-                            return;
-                          }
-
-                          try {
-                            setLoading(true);
-                            await setDoc(doc(db, "user_configs", username), {
-                              username,
-                              password,
-                              name,
-                              role,
-                              updatedAt: new Date().toISOString(),
-                            });
-                            showNotification(
-                              `Đã cấp quyền ${role} cho ${username} thành công!`,
-                            );
-                            userEl.value = "";
-                            passEl.value = "";
-                            nameEl.value = "";
-                          } catch (err) {
-                            handleFirestoreError(
-                              err,
-                              OperationType.WRITE,
-                              "user_configs",
-                            );
-                          } finally {
-                            setLoading(false);
-                          }
-                        }}
-                      >
-                        XÁC NHẬN CẤP QUYỀN
-                      </Button>
+                <Card title="Phê duyệt & phân quyền người dùng">
+                  <div className="space-y-5">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                        Người dùng tự đăng nhập bằng Google và sẽ ở trạng thái
+                        <span className="text-amber-600"> chờ duyệt</span> cho
+                        tới khi được cấp vai trò tại đây. Hệ thống không lưu mật
+                        khẩu của ai — phần đó do Google quản lý.
+                      </p>
                     </div>
-                  </Card>
 
-                  <Card
-                    title="Danh sách Thẩm quyền hiện tại"
-                    className="lg:col-span-8"
-                    noPadding
-                  >
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead>
-                          <tr className="bg-slate-50/50">
-                            <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Username
-                            </th>
-                            <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Vai trò
-                            </th>
-                            <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Mật khẩu
-                            </th>
-                            <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-5 px-6">
-                              Ngày cập nhật
-                            </th>
-                            <th className="py-5 px-6"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 italic">
-                          {allUserConfigs.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={4}
-                                className="py-12 text-center text-slate-300 font-bold uppercase text-[10px] tracking-widest"
+                    {allUserProfiles.length === 0 ? (
+                      <p className="text-center text-xs font-bold text-slate-400 py-10">
+                        Chưa có người dùng nào đăng nhập.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {[...allUserProfiles]
+                          // Nguoi cho duyet len dau cho de thay
+                          .sort((a, b) =>
+                            a.role === "PENDING" && b.role !== "PENDING"
+                              ? -1
+                              : b.role === "PENDING" && a.role !== "PENDING"
+                                ? 1
+                                : (a.email || "").localeCompare(b.email || ""),
+                          )
+                          .map((profile) => {
+                            const isSelf = profile.email === OWNER_EMAIL;
+                            return (
+                              <div
+                                key={profile.uid}
+                                className="p-4 rounded-2xl border border-slate-100 bg-white flex flex-col sm:flex-row sm:items-center gap-3 justify-between"
                               >
-                                Chưa có danh sách tùy chỉnh (Mặc định khoahuynh
-                                là OWNER)
-                              </td>
-                            </tr>
-                          ) : (
-                            allUserConfigs.map((config) => (
-                              <tr
-                                key={config.username}
-                                className="hover:bg-slate-50/50 transition-colors"
-                              >
-                                <td className="py-5 px-6">
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-black text-slate-900">
-                                      {config.name || "N/A"}
-                                    </span>
-                                    <span className="text-[10px] font-mono text-slate-400 font-bold">
-                                      {config.username}
-                                    </span>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {profile.photoURL ? (
+                                    <img
+                                      src={profile.photoURL}
+                                      alt=""
+                                      className="w-10 h-10 rounded-xl object-cover border border-slate-100 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                                      <User className="w-5 h-5 text-slate-400" />
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-black text-slate-900 truncate">
+                                      {profile.name || "Chưa đặt tên"}
+                                      {isSelf && (
+                                        <span className="ml-2 text-[9px] font-black text-amber-600 uppercase tracking-widest">
+                                          Chủ sở hữu
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-[11px] font-bold text-slate-400 truncate">
+                                      {profile.email}
+                                    </p>
                                   </div>
-                                </td>
-                                <td className="py-5 px-6">
-                                  <span
-                                    className={cn(
-                                      "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border",
-                                      config.role === "OWNER"
-                                        ? "bg-rose-50 border-rose-100 text-rose-600"
-                                        : config.role === "STAFF"
-                                          ? "bg-amber-50 border-amber-100 text-amber-600"
-                                          : "bg-slate-50 border-slate-200 text-slate-500",
-                                    )}
-                                  >
-                                    {config.role}
-                                  </span>
-                                </td>
-                                <td className="py-5 px-6">
-                                  <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                                    {config.role === "OWNER"
-                                      ? "••••••"
-                                      : config.password}
-                                  </span>
-                                </td>
-                                <td className="py-5 px-6 text-[10px] font-mono text-slate-400 font-bold">
-                                  {config.updatedAt
-                                    ? formatDisplayDate(config.updatedAt)
-                                    : "—"}
-                                </td>
-                                <td className="py-5 px-6 text-right">
-                                  <button
-                                    onClick={async () => {
-                                      if (
-                                        config.username === "khoahuynh" ||
-                                        config.username === "admin"
-                                      ) {
-                                        alert(
-                                          "Tin Tin từ chối: Anh không thể xóa tài khoản Thẩm quyền gốc ạ!",
-                                        );
-                                        return;
-                                      }
-                                      if (
-                                        window.confirm(
-                                          `Anh có chắc chắn muốn thu hồi quyền của ${config.username} không?`,
-                                        )
-                                      ) {
-                                        try {
-                                          await deleteDoc(
-                                            doc(
-                                              db,
-                                              "user_configs",
-                                              config.username,
-                                            ),
-                                          );
-                                          showNotification(
-                                            "Đã thu hồi quyền truy cập.",
-                                          );
-                                        } catch (err) {
-                                          handleFirestoreError(
-                                            err,
-                                            OperationType.DELETE,
-                                            `user_configs/${config.username}`,
-                                          );
-                                        }
-                                      }
-                                    }}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
-                </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {isSelf ? (
+                                    <span className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest">
+                                      Toàn quyền
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <select
+                                        value={profile.role}
+                                        onChange={async (e) => {
+                                          const newRole = e.target
+                                            .value as UserRole;
+                                          try {
+                                            await updateDoc(
+                                              doc(db, "users", profile.uid),
+                                              {
+                                                role: newRole,
+                                                updatedAt:
+                                                  new Date().toISOString(),
+                                                approvedBy: OWNER_EMAIL,
+                                              },
+                                            );
+                                            showNotification(
+                                              `Đã cập nhật quyền cho ${profile.email}`,
+                                            );
+                                          } catch (err: any) {
+                                            alert(
+                                              "Không cập nhật được: " +
+                                                err.message,
+                                            );
+                                          }
+                                        }}
+                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black outline-none focus:border-primary"
+                                      >
+                                        <option value="PENDING">
+                                          Chờ duyệt
+                                        </option>
+                                        <option value="VIEWER">
+                                          VIEWER — Chỉ xem
+                                        </option>
+                                        <option value="STAFF">
+                                          STAFF — Nhập/xuất kho
+                                        </option>
+                                        <option value="OWNER">
+                                          OWNER — Toàn quyền
+                                        </option>
+                                      </select>
+
+                                      <button
+                                        onClick={async () => {
+                                          if (
+                                            !confirm(
+                                              `Xoá quyền truy cập của ${profile.email}?`,
+                                            )
+                                          )
+                                            return;
+                                          try {
+                                            await deleteDoc(
+                                              doc(db, "users", profile.uid),
+                                            );
+                                            showNotification("Đã thu hồi quyền");
+                                          } catch (err: any) {
+                                            alert(
+                                              "Không xoá được: " + err.message,
+                                            );
+                                          }
+                                        }}
+                                        className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-colors"
+                                        title="Thu hồi quyền truy cập"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </Card>
               </div>
             )}
 

@@ -5,8 +5,6 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  signInAnonymously,
-  updateProfile
 } from 'firebase/auth';
 import {
   initializeFirestore,
@@ -73,6 +71,4 @@ export {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  signInAnonymously,
-  updateProfile
 };

@@ -1,99 +1,106 @@
 rules_version = '2';
+
+// =============================================================================
+// QUY TAC PHAN QUYEN - BiaLogistics
+//
+// Nguyen tac cot loi: KHONG BAO GIO quyet dinh quyen dua tren tai lieu ma
+// chinh nguoi dung ghi duoc.
+//
+// Ban cu pham dung loi nay: ham isOwner() doc vai tro tu user_sessions/{uid},
+// ma tai lieu do lai cho phep chinh nguoi dung ghi -> ai cung tu phong minh
+// lam OWNER duoc. Ban nay xac dinh chu so huu bang EMAIL trong ID token do
+// Google cap, khong the gia mao.
+// =============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // -------------------------------------------------------------------------
-    // Global Deny
-    // -------------------------------------------------------------------------
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Email cua chu so huu. Chi tai khoan Google nay moi duyet duoc nguoi dung.
+    function ownerEmail() {
+      return 'khoa.huynh.06.12.2000@gmail.com';
     }
 
-    // -------------------------------------------------------------------------
-    // Primitives
-    // -------------------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAnonymous() {
-      return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous';
+    function email() {
+      return request.auth.token.get('email', '');
     }
 
-    function getEmail() {
-      return request.auth.token.get('email', '').lower();
+    // Bat buoc email da xac minh: chan truong hop tao tai khoan voi email
+    // nguoi khac ma chua chung minh quyen so huu hop thu.
+    function emailVerified() {
+      return request.auth.token.get('email_verified', false);
     }
 
-    // Kiểm tra quyền hống nhất
     function isOwner() {
-      // 1. Check Google Auth Email
-      // 2. Check Traditional Session UID
-      return isSignedIn() && (
-        getEmail() == 'khoa.huynh.06.12.2000@gmail.com' ||
-        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'OWNER') ||
-        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'OWNER')
-      );
+      return isSignedIn() && emailVerified() && email() == ownerEmail();
+    }
+
+    function hasProfile() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return hasProfile()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'PENDING')
+        : 'PENDING';
     }
 
     function isStaff() {
-      return isSignedIn() && (
-        isOwner() ||
-        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'STAFF') ||
-        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'STAFF')
-      );
+      return isOwner() || (isSignedIn() && role() == 'STAFF');
     }
 
     function isViewer() {
-      return isSignedIn() && (
-        isStaff() ||
-        (exists(/databases/$(database)/documents/user_configs/$(getEmail())) && get(/databases/$(database)/documents/user_configs/$(getEmail())).data.get('role', 'VIEWER') == 'VIEWER') ||
-        (exists(/databases/$(database)/documents/user_sessions/$(request.auth.uid)) && get(/databases/$(database)/documents/user_sessions/$(request.auth.uid)).data.get('role', 'VIEWER') == 'VIEWER')
-      );
+      return isStaff() || (isSignedIn() && role() == 'VIEWER');
     }
 
     // -------------------------------------------------------------------------
-    // Collections
+    // Ho so nguoi dung
     // -------------------------------------------------------------------------
+    match /users/{uid} {
+      // Tu doc ho so cua minh (de biet da duoc duyet chua); chu so huu doc tat ca.
+      allow get: if isSignedIn() && (request.auth.uid == uid || isOwner());
+      allow list: if isOwner();
 
-    // 1. Transactions
+      // Nguoi moi dang nhap tu tao duoc ho so, NHUNG chi o trang thai CHO DUYET
+      // va phai dung email cua chinh minh. Khong the tu dat vai tro cao hon.
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'PENDING'
+        && request.resource.data.email == email();
+
+      // CHI chu so huu moi doi duoc vai tro hoac xoa nguoi dung.
+      allow update, delete: if isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Du lieu nghiep vu
+    // -------------------------------------------------------------------------
     match /test/connection {
       allow read: if isSignedIn();
     }
 
     match /transactions/{transactionId} {
       allow read: if isViewer();
-      allow create: if isStaff();
-      allow update: if isStaff();
-      allow delete: if isOwner() || (isStaff() && resource.data.status == 'in_transit');
+      allow create, update: if isStaff();
+      // Nhan vien chi xoa duoc phieu dang tren duong van chuyen.
+      allow delete: if isOwner() ||
+        (isStaff() && resource.data.get('status', '') == 'in_transit');
     }
 
-    // 2. Revenue Records
     match /revenue/{recordId} {
       allow read: if isViewer();
       allow create, update: if isStaff();
       allow delete: if isOwner();
     }
 
-    // 3. Partners
     match /partners/{partnerId} {
       allow read: if isViewer();
       allow create, update: if isStaff();
       allow delete: if isOwner();
-    }
-
-    // 4. User Configurations (Internal Security)
-    match /user_configs/{id} {
-      // Cho phép đọc thông tin cấu hình để xác thực vai trò
-      allow get: if true;
-      // Cho phép cập nhật linkedUid nếu biết mật khẩu (để thiết lập session)
-      allow update: if request.resource.data.password == resource.data.password;
-      allow list: if isOwner();
-      allow write: if isOwner();
-    }
-
-    // 5. Active Sessions (Để Rules nhận diện vai trò từ Anonymous Auth)
-    match /user_sessions/{uid} {
-      allow get, write: if isSignedIn() && request.auth.uid == uid;
-      allow list: if isOwner();
     }
   }
 }

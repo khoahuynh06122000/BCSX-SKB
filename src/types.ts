@@ -5,19 +5,26 @@
 
 export type Category = 'Lon' | 'Lít' | 'Chai';
 export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
-export type UserRole = 'OWNER' | 'STAFF' | 'VIEWER';
+/** PENDING = đã đăng nhập Google nhưng chủ sở hữu chưa duyệt. */
+export type UserRole = 'OWNER' | 'STAFF' | 'VIEWER' | 'PENDING';
 
-export interface UserConfig {
-  id?: string;
-  username: string;
-  password?: string;
-  role: UserRole;
+/**
+ * Hồ sơ người dùng, lưu ở collection `users`, khoá là Firebase Auth UID.
+ *
+ * Không còn trường `password`/`pin`/`recoveryCode` như bản cũ: mật khẩu do
+ * Google quản lý, app không giữ gì cả. Vai trò chỉ chủ sở hữu mới sửa được
+ * (xem firestore.rules).
+ */
+export interface UserProfile {
+  uid: string;
+  email: string;
   name?: string;
+  photoURL?: string;
+  role: UserRole;
+  createdAt?: string;
   updatedAt?: string;
-  pin?: string; // mã PIN 6 số
-  linkedUid?: string; // Firebase Auth UID
-  recoveryCode?: string;
-  recoveryExpiry?: string;
+  /** Email của người đã duyệt tài khoản này. */
+  approvedBy?: string;
 }
 
 export interface Product {
