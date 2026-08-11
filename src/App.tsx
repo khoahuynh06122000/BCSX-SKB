@@ -3313,6 +3313,39 @@ export default function App() {
   ]);
 
   // Use the time-filtered transactions for inventory/stats
+  /**
+   * DUYET SO LIEU BANG CHU KY
+   *
+   * Mot ngay duoc coi la DA DUYET khi phieu nhap cua ngay do da co anh to
+   * phieu ky tuoi. Trang thai nay SUY RA tu slips chu khong luu them co nao
+   * tren tung giao dich - nho vay khong bao gio lech hai nguon, va vua tai
+   * anh ky xong la ca loat giao dich trong ngay doi trang thai cung luc.
+   */
+  const approvedDates = useMemo(() => {
+    const s = new Set<string>();
+    slips.forEach((sl) => {
+      if (sl.signedPhotoUrls?.length) s.add(sl.date);
+    });
+    return s;
+  }, [slips]);
+
+  /** Cac giao dich nhap chua co chu ky duyet. */
+  const pendingApproval = useMemo(() => {
+    const rows = transactions.filter(
+      (t) =>
+        (t.type === "IN" || t.type === "OPENING") &&
+        !approvedDates.has(format(new Date(t.date), "yyyy-MM-dd")),
+    );
+    const days = new Set(
+      rows.map((t) => format(new Date(t.date), "yyyy-MM-dd")),
+    );
+    const liters = rows.reduce((sum, t) => {
+      const p = products.find((x) => x.id === t.productId);
+      return sum + (t.quantity || 0) * ((p?.capacityPerUnit || 0) / 1000);
+    }, 0);
+    return { count: rows.length, dayCount: days.size, liters };
+  }, [transactions, approvedDates, products]);
+
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
 
@@ -7720,6 +7753,24 @@ export default function App() {
                       muc. Kho co hon chuc loai bia, bam "them dong" roi chon
                       trong danh sach tha xuong vua cham vua de bo sot.
                     */}
+                    {activeTab === "import" && pendingApproval.count > 0 && (
+                      <div className="md:col-span-2 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex gap-3">
+                        <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider">
+                            {pendingApproval.dayCount} ngày nhập chưa được duyệt
+                          </p>
+                          <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
+                            {formatNumber(pendingApproval.liters)} lít đã nhập
+                            nhưng phiếu chưa có chữ ký. Sang tab{" "}
+                            <strong>Phiếu nhập</strong> để in, ký rồi tải ảnh
+                            lên — số liệu chỉ được coi là chính thức sau bước
+                            đó.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     {activeTab === "import" && (
                       <div className="md:col-span-2 mt-4">
                         <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
