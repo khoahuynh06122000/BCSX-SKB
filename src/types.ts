@@ -25,6 +25,12 @@ export interface UserProfile {
   updatedAt?: string;
   /** Email của người đã duyệt tài khoản này. */
   approvedBy?: string;
+  /**
+   * Mã PIN đã băm bằng PBKDF2 (xem src/lib/pin.ts) — KHÔNG lưu số thật.
+   * Đây là lớp khoá màn hình cho máy dùng chung, không thay thế đăng nhập.
+   */
+  pinHash?: string;
+  pinUpdatedAt?: string;
 }
 
 export interface Product {

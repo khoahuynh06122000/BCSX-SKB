@@ -53,6 +53,7 @@ import {
   Beer,
   Sun,
   Moon,
+  Lock,
   Loader2,
 } from "lucide-react";
 import {
@@ -138,6 +139,12 @@ import {
   writeBatch,
 } from "./firebase";
 import { uploadToCloudinary } from "./lib/cloudinary";
+import {
+  hashPin,
+  verifyPin,
+  isValidPinFormat,
+  PIN_SESSION_KEY,
+} from "./lib/pin";
 
 /**
  * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
@@ -856,6 +863,100 @@ export default function App() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState("");
 
+  // --- Lop khoa man hinh bang ma PIN -------------------------------------
+  // Chi mo khoa trong pham vi tab hien tai (sessionStorage): dong tab la
+  // phai nhap lai. Day la khoa man hinh cho may dung chung, khong phai lop
+  // xac thuc thay the dang nhap Google.
+  const [pinUnlocked, setPinUnlocked] = useState(
+    () => sessionStorage.getItem(PIN_SESSION_KEY) === "1",
+  );
+  const [pinInput, setPinInput] = useState("");
+  const [pinConfirmInput, setPinConfirmInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [pinAttempts, setPinAttempts] = useState(0);
+
+  const unlockSession = () => {
+    sessionStorage.setItem(PIN_SESSION_KEY, "1");
+    setPinUnlocked(true);
+    setPinInput("");
+    setPinConfirmInput("");
+    setPinError("");
+    setPinAttempts(0);
+  };
+
+  /** Lan dau: nguoi dung tu dat ma PIN 6 so cho tai khoan cua minh. */
+  const handleCreatePin = async () => {
+    if (pinBusy) return;
+    setPinError("");
+
+    if (!isValidPinFormat(pinInput)) {
+      setPinError("Mã PIN phải gồm đúng 6 chữ số.");
+      return;
+    }
+    if (pinInput !== pinConfirmInput) {
+      setPinError("Hai lần nhập chưa khớp nhau.");
+      return;
+    }
+    // Chan vai to hop qua de doan
+    if (/^(\d)\1{5}$/.test(pinInput) || pinInput === "123456") {
+      setPinError("Mã PIN quá dễ đoán. Anh/chị chọn dãy số khác nhé.");
+      return;
+    }
+
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setPinError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      return;
+    }
+
+    setPinBusy(true);
+    try {
+      const pinHash = await hashPin(pinInput, uid);
+      await updateDoc(doc(db, "users", uid), {
+        pinHash,
+        pinUpdatedAt: new Date().toISOString(),
+      });
+      setCurrentUserProfile((p) => (p ? { ...p, pinHash } : p));
+      unlockSession();
+      showNotification("Đã thiết lập mã PIN bảo vệ");
+    } catch (e: any) {
+      setPinError("Không lưu được mã PIN: " + e.message);
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const handleVerifyPin = async () => {
+    if (pinBusy) return;
+    setPinError("");
+
+    const uid = auth.currentUser?.uid;
+    const stored = currentUserProfile?.pinHash;
+    if (!uid || !stored) return;
+
+    setPinBusy(true);
+    try {
+      const ok = await verifyPin(pinInput, uid, stored);
+      if (ok) {
+        unlockSession();
+      } else {
+        const n = pinAttempts + 1;
+        setPinAttempts(n);
+        setPinInput("");
+        if (n >= 5) {
+          // Nhap sai nhieu lan: buoc dang xuat de tranh do PIN
+          setPinError("Sai quá 5 lần. Đang đăng xuất để bảo vệ tài khoản...");
+          setTimeout(() => handleLogout(), 1200);
+        } else {
+          setPinError(`Mã PIN không đúng. Còn ${5 - n} lần thử.`);
+        }
+      }
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
   /**
    * Dang nhap bang tai khoan Google.
    *
@@ -895,6 +996,8 @@ export default function App() {
     } catch (e) {
       console.error("Loi dang xuat:", e);
     }
+    sessionStorage.removeItem(PIN_SESSION_KEY);
+    setPinUnlocked(false);
     setUser(null);
     setUserRole("PENDING");
     setCurrentUserProfile(null);
@@ -3789,6 +3892,114 @@ export default function App() {
               <LogOut className="w-4 h-4" /> Đăng xuất
             </Button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * LOP BAO VE THU 2: MA PIN
+   *
+   * Day la KHOA MAN HINH cho may dung chung, khong phai lop xac thuc
+   * mat ma. Nguoi da co tai khoan Google hop le van co the goi thang vao
+   * co so du lieu ma khong qua man hinh nay - viec chan that su nam o
+   * firestore.rules. Muc dich cua PIN la: dong nghiep ngoi vao may ai do
+   * quen dang xuat thi khong xem/sua duoc du lieu kho.
+   */
+  if (!pinUnlocked) {
+    const needsSetup = !currentUserProfile?.pinHash;
+
+    return (
+      <div className="min-h-screen bg-bg-main flex items-center justify-center p-6 font-sans">
+        <div className="fixed top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-600" />
+        <div className="w-full max-w-md bg-white rounded-[32px] p-8 sm:p-10 border border-slate-200 premium-shadow space-y-6">
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
+              <Lock className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              {needsSetup ? "Thiết lập mã PIN" : "Nhập mã PIN"}
+            </h2>
+            <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+              {needsSetup
+                ? "Đặt mã PIN 6 chữ số để bảo vệ khi dùng máy chung. Bạn sẽ cần mã này mỗi lần mở app."
+                : "Lớp bảo vệ thứ 2 cho tài khoản"}
+              <br />
+              <span className="text-slate-900">{currentUserProfile?.email}</span>
+            </p>
+          </div>
+
+          {pinError && (
+            <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] font-bold text-rose-700 leading-relaxed">
+                {pinError}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={6}
+              autoFocus
+              placeholder="● ● ● ● ● ●"
+              value={pinInput}
+              onChange={(e) =>
+                setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  needsSetup ? handleCreatePin() : handleVerifyPin();
+                }
+              }}
+              className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center text-2xl font-black tracking-[0.5em] outline-none focus:border-primary focus:bg-white transition-all"
+            />
+
+            {needsSetup && (
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={6}
+                placeholder="Nhập lại mã PIN"
+                value={pinConfirmInput}
+                onChange={(e) =>
+                  setPinConfirmInput(
+                    e.target.value.replace(/\D/g, "").slice(0, 6),
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreatePin();
+                }}
+                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center text-lg font-black tracking-[0.4em] outline-none focus:border-primary focus:bg-white transition-all"
+              />
+            )}
+          </div>
+
+          <Button
+            className="w-full"
+            loading={pinBusy}
+            onClick={needsSetup ? handleCreatePin : handleVerifyPin}
+            disabled={pinBusy || pinInput.length !== 6}
+          >
+            {needsSetup ? "Đặt mã PIN" : "Mở khoá"}
+          </Button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors py-2"
+          >
+            Đăng xuất
+          </button>
+
+          {!needsSetup && (
+            <p className="text-[10px] font-bold text-slate-400 text-center leading-relaxed">
+              Quên mã PIN? Liên hệ quản trị viên để đặt lại.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -8125,6 +8336,41 @@ export default function App() {
                                           OWNER — Toàn quyền
                                         </option>
                                       </select>
+
+                                      {profile.pinHash && (
+                                        <button
+                                          onClick={async () => {
+                                            if (
+                                              !confirm(
+                                                `Đặt lại mã PIN của ${profile.email}?\n\nHọ sẽ được yêu cầu tạo mã PIN mới ở lần đăng nhập tới.`,
+                                              )
+                                            )
+                                              return;
+                                            try {
+                                              await updateDoc(
+                                                doc(db, "users", profile.uid),
+                                                {
+                                                  pinHash: null,
+                                                  pinUpdatedAt:
+                                                    new Date().toISOString(),
+                                                },
+                                              );
+                                              showNotification(
+                                                "Đã đặt lại mã PIN",
+                                              );
+                                            } catch (err: any) {
+                                              alert(
+                                                "Không đặt lại được: " +
+                                                  err.message,
+                                              );
+                                            }
+                                          }}
+                                          className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-primary transition-colors"
+                                          title="Đặt lại mã PIN"
+                                        >
+                                          <Lock className="w-4 h-4" />
+                                        </button>
+                                      )}
 
                                       <button
                                         onClick={async () => {

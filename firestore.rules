@@ -72,8 +72,21 @@ service cloud.firestore {
         && request.resource.data.role == 'PENDING'
         && request.resource.data.email == email();
 
-      // CHI chu so huu moi doi duoc vai tro hoac xoa nguoi dung.
-      allow update, delete: if isOwner();
+      // Chu so huu: sua duoc moi thu (vai tro, dat lai PIN...).
+      // Nguoi dung thuong: CHI sua duoc dung 2 o pinHash/pinUpdatedAt cua
+      // chinh minh, va vai tro bat buoc giu nguyen. Nho dieu kien
+      // affectedKeys().hasOnly(...) nen khong the loi dung viec dat PIN de
+      // tu nang quyen len OWNER.
+      allow update: if isOwner()
+        || (
+          isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['pinHash', 'pinUpdatedAt'])
+          && request.resource.data.role == resource.data.role
+        );
+
+      allow delete: if isOwner();
     }
 
     // -------------------------------------------------------------------------
