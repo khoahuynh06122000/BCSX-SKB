@@ -93,6 +93,33 @@ export interface InventoryItem {
   minStock: number;
 }
 
+/**
+ * PHIẾU NHẬP KHO — gộp toàn bộ giao dịch nhập trong một ngày thành một phiếu.
+ *
+ * Chỉ lưu phần "vỏ" (trạng thái, ảnh đã ký, thời điểm in). Nội dung các dòng
+ * hàng KHÔNG lưu ở đây mà suy ra từ `transactions` có type IN trong ngày —
+ * nhờ vậy sửa giao dịch thì phiếu tự khớp theo, không bị lệch hai nguồn.
+ *
+ * Mã phiếu dùng luôn làm khoá tài liệu, dạng `PN-YYMMDD` (ví dụ PN-260811).
+ */
+export type SlipStatus = 'draft' | 'printed' | 'signed';
+
+export interface ImportSlip {
+  /** = code, dạng PN-YYMMDD */
+  id: string;
+  code: string;
+  /** Ngày của phiếu, dạng yyyy-MM-dd */
+  date: string;
+  status: SlipStatus;
+  printedAt?: string;
+  /** Ảnh phiếu giấy đã ký tươi, lưu trên Cloudinary. */
+  signedPhotoUrls?: string[];
+  signedAt?: string;
+  signedBy?: string;
+  note?: string;
+  updatedAt?: string;
+}
+
 export interface RevenueRecord {
   id: string;
   date: string;

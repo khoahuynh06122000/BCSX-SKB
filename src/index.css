@@ -112,6 +112,44 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   IN PHIEU NHAP KHO
+   Khi bam In, chi to phieu (#slip-print-area) duoc hien; toan bo giao dien
+   con lai bi an. Dung visibility thay vi display de khong pha vo bo cuc ben
+   trong to phieu.
+--------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #slip-print-area,
+  #slip-print-area * {
+    visibility: visible;
+  }
+
+  #slip-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    /* Ep nen trang chu den du app dang o che do toi */
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  /* Khong ngat trang giua mot dong hang */
+  #slip-print-area tr {
+    break-inside: avoid;
+  }
+}
+
 /* Thanh cuon */
 ::-webkit-scrollbar {
   width: 6px;

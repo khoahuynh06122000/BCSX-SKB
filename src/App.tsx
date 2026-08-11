@@ -111,6 +111,7 @@ import {
   RevenueRecord,
   UserRole,
   UserProfile,
+  ImportSlip,
 } from "./types";
 import {
   INITIAL_PRODUCTS,
@@ -145,6 +146,7 @@ import {
   isValidPinFormat,
   PIN_SESSION_KEY,
 } from "./lib/pin";
+import ImportSlipPanel from "./components/ImportSlip";
 
 /**
  * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
@@ -650,6 +652,10 @@ export default function App() {
   } | null>(null);
 
   const [allUserProfiles, setAllUserProfiles] = useState<UserProfile[]>([]);
+  const [slips, setSlips] = useState<ImportSlip[]>([]);
+  const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
+    null,
+  );
   const [transactions, setTransactions] =
     useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [partners, setPartners] = useState<Partner[]>(INITIAL_PARTNERS);
@@ -842,6 +848,19 @@ export default function App() {
       },
     );
 
+    // Sync phieu nhap kho (chi trang thai + anh ky, noi dung suy tu transactions)
+    const unsubSlips = onSnapshot(
+      collection(db, "slips"),
+      (snapshot) => {
+        setSlips(
+          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as ImportSlip),
+        );
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, "slips");
+      },
+    );
+
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
@@ -856,6 +875,7 @@ export default function App() {
       unsubTransactions();
       unsubPartners();
       unsubRevenue();
+      unsubSlips();
       unsubUsers();
     };
   }, [user, userRole]);
@@ -1084,6 +1104,71 @@ export default function App() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* ---------------- Phieu nhap kho ---------------- */
+
+  /** Danh dau phieu da duoc in (de biet phieu nao dang cho ky). */
+  const handleMarkSlipPrinted = async (code: string, dateKey: string) => {
+    try {
+      const existing = slips.find((s) => s.code === code);
+      await setDoc(
+        doc(db, "slips", code),
+        {
+          id: code,
+          code,
+          date: dateKey,
+          // Da co anh ky roi thi giu nguyen trang thai, in lai khong ha cap
+          status: existing?.signedPhotoUrls?.length ? "signed" : "printed",
+          printedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.error("Khong ghi duoc trang thai in:", e);
+      // Khong chan viec in: ghi trang thai that bai thi van cho in binh thuong
+    }
+  };
+
+  /** Tai anh to phieu da ky tuoi len Cloudinary roi gan vao phieu. */
+  const handleUploadSignedSlip = async (
+    code: string,
+    dateKey: string,
+    files: FileList,
+  ) => {
+    if (uploadingSlipCode) return;
+    setUploadingSlipCode(code);
+    try {
+      const urls: string[] = [];
+      for (const file of Array.from(files)) {
+        urls.push(await uploadToCloudinary(file));
+      }
+
+      const existing = slips.find((s) => s.code === code);
+      const merged = [...(existing?.signedPhotoUrls || []), ...urls];
+
+      await setDoc(
+        doc(db, "slips", code),
+        {
+          id: code,
+          code,
+          date: dateKey,
+          status: "signed",
+          signedPhotoUrls: merged,
+          signedAt: new Date().toISOString(),
+          signedBy: currentUserProfile?.email || user || "",
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+
+      showNotification(`Đã lưu ảnh phiếu ${code}`);
+    } catch (e: any) {
+      alert("Không tải được ảnh phiếu: " + e.message);
+    } finally {
+      setUploadingSlipCode(null);
     }
   };
 
@@ -3628,6 +3713,12 @@ export default function App() {
         color: "#fbbf24",
       },
       { id: "import", label: "Nhập kho", icon: PlusCircle, color: "#10b981" },
+      {
+        id: "slips",
+        label: "Phiếu nhập",
+        icon: FileText,
+        color: "#0ea5e9",
+      },
       { id: "export", label: "Xuất kho", icon: MinusCircle, color: "#f97316" },
       {
         id: "gallery",
@@ -8572,6 +8663,46 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "slips" && (
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                      Phiếu nhập kho
+                    </h2>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                      Gộp cả ngày một phiếu · In · Ký tươi · Chụp ảnh lưu
+                    </p>
+                  </div>
+                </div>
+
+                <Card>
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3 mb-5">
+                    <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                    <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                      Số liệu nhập kho được kết xuất thành phiếu theo từng ngày.
+                      Cuối ngày bấm <strong>Xem &amp; in</strong>, ký tươi lên
+                      bản in, rồi chụp ảnh tờ phiếu đã ký tải lên đây để lưu
+                      chứng từ. Phiếu nào chưa có ảnh ký sẽ được cảnh báo ở đầu
+                      trang.
+                    </p>
+                  </div>
+
+                  <ImportSlipPanel
+                    transactions={transactions}
+                    products={products}
+                    partners={partners}
+                    slips={slips}
+                    canWrite={canWrite}
+                    currentUserName={currentUserProfile?.name || user || ""}
+                    onMarkPrinted={handleMarkSlipPrinted}
+                    onUploadSigned={handleUploadSignedSlip}
+                    uploadingCode={uploadingSlipCode}
+                  />
                 </Card>
               </div>
             )}

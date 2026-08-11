@@ -115,5 +115,13 @@ service cloud.firestore {
       allow create, update: if isStaff();
       allow delete: if isOwner();
     }
+
+    // Phieu nhap kho: chi luu trang thai va anh da ky, noi dung suy ra tu
+    // transactions nen khong so lech hai nguon.
+    match /slips/{slipId} {
+      allow read: if isViewer();
+      allow create, update: if isStaff();
+      allow delete: if isOwner();
+    }
   }
 }
