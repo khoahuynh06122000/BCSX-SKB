@@ -7,6 +7,7 @@ import {
   FileText,
   Loader2,
   ScanLine,
+  Upload,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -55,6 +56,8 @@ interface Props {
   currentUserName: string;
   onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
   onUploadSigned: (code: string, dateKey: string, files: FileList) => Promise<void>;
+  /** Gỡ một ảnh đã tải nhầm khỏi phiếu. Không truyền thì không hiện nút gỡ. */
+  onRemoveSigned?: (code: string, url: string) => Promise<void>;
   uploadingCode: string | null;
   /** Gửi ảnh phiếu đã ký cho AI đối soát với số liệu trong hệ thống. */
   onVerify: (
@@ -74,11 +77,13 @@ export default function ImportSlipPanel({
   currentUserName,
   onMarkPrinted,
   onUploadSigned,
+  onRemoveSigned,
   uploadingCode,
   onVerify,
   verifyingCode,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
   const slipMetaByCode = useMemo(() => {
     const m = new Map<string, ImportSlipType>();
@@ -157,14 +162,16 @@ export default function ImportSlipPanel({
           </p>
         ) : (
           daySlips.map((d) => {
-            const signed = !!d.meta?.signedPhotoUrls?.length;
+            const photos = d.meta?.signedPhotoUrls || [];
+            const signed = photos.length > 0;
             const printed = !!d.meta?.printedAt;
+            const hasFooter = signed || !!d.meta?.verification;
             return (
               <div key={d.code} className="space-y-0">
               <div
                 className={cn(
                   "p-4 rounded-2xl border border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center gap-4 justify-between",
-                  d.meta?.verification && "rounded-b-none border-b-0",
+                  hasFooter && "rounded-b-none border-b-0",
                 )}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -215,34 +222,71 @@ export default function ImportSlipPanel({
                     <Printer className="w-3.5 h-3.5" /> Xem &amp; in
                   </button>
 
+                  {/*
+                    Hai lối đưa ảnh vào, cố ý tách riêng: thuộc tính `capture`
+                    trên điện thoại BẮT BUỘC mở camera, không cho chọn ảnh có
+                    sẵn. Người dùng máy bàn quét phiếu bằng máy scan hoặc đã
+                    chụp sẵn thì cần lối thứ hai không có `capture`.
+                  */}
                   {canWrite && (
-                    <label
-                      className={cn(
-                        "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
-                        uploadingCode === d.code && "opacity-60",
-                      )}
-                    >
-                      {uploadingCode === d.code ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Camera className="w-3.5 h-3.5" />
-                      )}
-                      {signed ? "Thêm ảnh" : "Ảnh đã ký"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        multiple
-                        className="hidden"
-                        disabled={uploadingCode === d.code}
-                        onChange={(e) => {
-                          if (e.target.files?.length) {
-                            onUploadSigned(d.code, d.dateKey, e.target.files);
-                          }
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+                    <>
+                      <label
+                        className={cn(
+                          "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
+                          uploadingCode === d.code &&
+                            "opacity-60 pointer-events-none",
+                        )}
+                      >
+                        {uploadingCode === d.code ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Camera className="w-3.5 h-3.5" />
+                        )}
+                        Chụp ảnh
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          multiple
+                          className="hidden"
+                          disabled={uploadingCode === d.code}
+                          onChange={(e) => {
+                            if (e.target.files?.length) {
+                              onUploadSigned(d.code, d.dateKey, e.target.files);
+                            }
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      <label
+                        className={cn(
+                          "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
+                          uploadingCode === d.code &&
+                            "opacity-60 pointer-events-none",
+                        )}
+                      >
+                        {uploadingCode === d.code ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5" />
+                        )}
+                        Tải ảnh lên
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          disabled={uploadingCode === d.code}
+                          onChange={(e) => {
+                            if (e.target.files?.length) {
+                              onUploadSigned(d.code, d.dateKey, e.target.files);
+                            }
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </>
                   )}
 
                   {canWrite && signed && (
@@ -278,6 +322,55 @@ export default function ImportSlipPanel({
                 </div>
               </div>
 
+              {/* Dải ảnh đã lưu — để người dùng thấy ngay mình đã tải đúng tờ nào */}
+              {signed && (
+                <div
+                  className={cn(
+                    "px-4 py-3 border border-slate-200 border-t-0 bg-slate-50/60 flex items-center gap-3 flex-wrap",
+                    d.meta?.verification
+                      ? "border-b-0"
+                      : "rounded-b-2xl",
+                  )}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    {photos.length} ảnh đã lưu
+                  </span>
+                  {photos.map((url, i) => (
+                    <div key={url + i} className="relative group">
+                      <button
+                        onClick={() => setPreviewPhoto(url)}
+                        title="Bấm để xem ảnh lớn"
+                        className="block w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white hover:border-primary transition-all"
+                      >
+                        <img
+                          src={url}
+                          alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                      {canWrite && onRemoveSigned && (
+                        <button
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Gỡ ảnh này khỏi phiếu ${d.code}?\n\nẢnh là chứng từ đã ký — chỉ gỡ khi tải nhầm.`,
+                              )
+                            ) {
+                              onRemoveSigned(d.code, url);
+                            }
+                          }}
+                          title="Gỡ ảnh này"
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shadow-sm"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {d.meta?.verification && (
                 <VerificationResult v={d.meta.verification} />
               )}
@@ -300,6 +393,41 @@ export default function ImportSlipPanel({
             window.print();
           }}
         />
+      )}
+
+      {/* ---------- Xem ảnh phiếu đã ký cỡ lớn ---------- */}
+      {previewPhoto && (
+        <div
+          onClick={() => setPreviewPhoto(null)}
+          className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl w-full max-h-full flex flex-col gap-3"
+          >
+            <img
+              src={previewPhoto}
+              alt="Phiếu đã ký"
+              className="w-full max-h-[80vh] object-contain rounded-2xl bg-white"
+            />
+            <div className="flex items-center justify-center gap-2">
+              <a
+                href={previewPhoto}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
+              >
+                Mở ảnh gốc
+              </a>
+              <button
+                onClick={() => setPreviewPhoto(null)}
+                className="px-4 py-2 rounded-xl bg-white text-slate-900 text-[10px] font-black uppercase tracking-widest hover:brightness-95 transition-all flex items-center gap-1.5"
+              >
+                <X className="w-3.5 h-3.5" /> Đóng
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

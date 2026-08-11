@@ -134,6 +134,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   onSnapshot,
   query,
   orderBy,
@@ -1268,7 +1269,10 @@ export default function App() {
     try {
       const urls: string[] = [];
       for (const file of Array.from(files)) {
-        urls.push(await uploadToCloudinary(file));
+        // Nen truoc khi day len: anh dien thoai 4-8 MB deu ve vai tram KB,
+        // van du net doc chu so viet tay ma tiet kiem dung luong Cloudinary.
+        const compressed = await compressFile(file, 2000, 2000, 0.85);
+        urls.push(await uploadToCloudinary(compressed));
       }
 
       const existing = slips.find((s) => s.code === code);
@@ -1294,6 +1298,39 @@ export default function App() {
       alert("Không tải được ảnh phiếu: " + e.message);
     } finally {
       setUploadingSlipCode(null);
+    }
+  };
+
+  /**
+   * Go mot anh da tai nham khoi phieu.
+   *
+   * Anh ky la chung tu duyet so lieu, nen go anh la viec he trong: khi go het
+   * anh thi phieu quay ve trang thai chua duyet, va ket qua doi soat cu bi xoa
+   * (no gan voi to anh khong con nua, giu lai chi gay hieu nham).
+   *
+   * Chi xoa lien ket trong Firestore, KHONG xoa file tren Cloudinary — de con
+   * dau vet neu can tra lai ve sau.
+   */
+  const handleRemoveSignedSlipPhoto = async (code: string, url: string) => {
+    const existing = slips.find((s) => s.code === code);
+    if (!existing) return;
+
+    const remaining = (existing.signedPhotoUrls || []).filter((u) => u !== url);
+
+    try {
+      await updateDoc(doc(db, "slips", code), {
+        signedPhotoUrls: remaining,
+        status: remaining.length ? "signed" : existing.printedAt ? "printed" : "draft",
+        verification: deleteField(),
+        updatedAt: new Date().toISOString(),
+      });
+      showNotification(
+        remaining.length
+          ? `Đã gỡ 1 ảnh khỏi phiếu ${code}`
+          : `Phiếu ${code} không còn ảnh ký — số liệu trở lại trạng thái chưa duyệt`,
+      );
+    } catch (e: any) {
+      alert("Không gỡ được ảnh: " + e.message);
     }
   };
 
@@ -8892,9 +8929,11 @@ export default function App() {
                     <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
                       Số liệu nhập kho được kết xuất thành phiếu theo từng ngày.
                       Cuối ngày bấm <strong>Xem &amp; in</strong>, ký tươi lên
-                      bản in, rồi chụp ảnh tờ phiếu đã ký tải lên đây để lưu
-                      chứng từ. Phiếu nào chưa có ảnh ký sẽ được cảnh báo ở đầu
-                      trang.
+                      bản in, rồi đưa ảnh tờ phiếu đã ký vào đây để lưu chứng
+                      từ — <strong>Chụp ảnh</strong> nếu đang dùng điện thoại,
+                      hoặc <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản
+                      quét sẵn trên máy. Phiếu nào chưa có ảnh ký sẽ được cảnh
+                      báo ở đầu trang.
                     </p>
                   </div>
 
@@ -8907,6 +8946,9 @@ export default function App() {
                     currentUserName={currentUserProfile?.name || user || ""}
                     onMarkPrinted={handleMarkSlipPrinted}
                     onUploadSigned={handleUploadSignedSlip}
+                    onRemoveSigned={
+                      isOwner ? handleRemoveSignedSlipPhoto : undefined
+                    }
                     uploadingCode={uploadingSlipCode}
                     onVerify={handleVerifySlip}
                     verifyingCode={verifyingSlipCode}
