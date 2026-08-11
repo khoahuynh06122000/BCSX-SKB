@@ -354,7 +354,7 @@ const StatCard = ({
   trend,
   chartData,
 }: any) => (
-  <Card className="relative group overflow-hidden border-none ring-1 ring-slate-100/50 pb-0">
+  <Card className="relative group overflow-hidden border-none ring-1 ring-slate-100/50 pb-0 transition-all duration-300 hover:-translate-y-0.5 hover:ring-amber-500/30 hover:shadow-[0_12px_28px_-8px_rgba(217,119,6,0.18)]">
     {/* Vach mau tren dau the - chi tiet nhan dien hoc tu app mau */}
     <div
       className={cn(
@@ -447,7 +447,7 @@ const StatCard = ({
                   offset="5%"
                   stopColor={
                     color === "primary"
-                      ? "#0f172a"
+                      ? "#d97706"
                       : color === "green"
                         ? "#10b981"
                         : color === "amber"
@@ -460,7 +460,7 @@ const StatCard = ({
                   offset="95%"
                   stopColor={
                     color === "primary"
-                      ? "#0f172a"
+                      ? "#d97706"
                       : color === "green"
                         ? "#10b981"
                         : color === "amber"
@@ -476,7 +476,7 @@ const StatCard = ({
               dataKey="value"
               stroke={
                 color === "primary"
-                  ? "#0f172a"
+                  ? "#d97706"
                   : color === "green"
                     ? "#10b981"
                     : color === "amber"
@@ -586,6 +586,35 @@ const Select = ({ label, options, ...props }: any) => (
 
 export default function App() {
   const { toggleTheme, isDark } = useTheme();
+
+  /**
+   * Bang mau cho bieu do.
+   *
+   * Recharts ve bang thuoc tinh fill/stroke tren the SVG nen KHONG an theo
+   * thang mau cua Tailwind - phai tu doi tay theo che do sang/toi. Neu bo qua,
+   * cac mau dam (vi du #0f172a) se chim hoan toan tren nen toi.
+   *
+   * Nguyen tac: che do toi dung ban mau sang hon va bot bao hoa de do doc.
+   */
+  const chartColors = useMemo(
+    () => ({
+      grid: isDark ? "#2f3949" : "#E2E8F0",
+      axis: isDark ? "#8592a6" : "#64748b",
+      // Day mau cho bieu do tron / nhieu chuoi du lieu
+      series: isDark
+        ? ["#fbbf24", "#60a5fa", "#34d399", "#f472b6", "#c084fc"]
+        : ["#0f172a", "#2563eb", "#10b981", "#f59e0b", "#ec4899"],
+      blue: isDark ? "#60a5fa" : "#2563eb",
+      rose: isDark ? "#fb7185" : "#f43f5e",
+      emerald: isDark ? "#34d399" : "#10b981",
+      // Mau nhan manh: nen toi dung ho phach thay cho navy gan nhu den
+      accent: isDark ? "#fbbf24" : "#0f172a",
+      tooltipBg: isDark ? "#1e2531" : "#ffffff",
+      tooltipText: isDark ? "#eef2f7" : "#0f172a",
+      tooltipBorder: isDark ? "1px solid #2f3949" : "none",
+    }),
+    [isDark],
+  );
 
   const [user, setUser] = useState<string | null>(
     localStorage.getItem("bt_username"),
@@ -4011,6 +4040,14 @@ export default function App() {
           : "",
       )}
     >
+      {/* Vach vang tren dinh man hinh - dau nhan dien cua thuong hieu bia */}
+      <div className="fixed top-0 inset-x-0 h-1 z-[100] bg-gradient-to-r from-amber-500 via-amber-300 to-amber-600 pointer-events-none" />
+
+      {/* Hai vet sang ho phach lam nen bot phang. Dat duoi cung (z-0) va
+          khong bat su kien chuot de khong can tro thao tac. */}
+      <div className="fixed -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-amber-500/10 dark:bg-amber-500/15 blur-[130px] pointer-events-none z-0" />
+      <div className="fixed -bottom-48 -right-32 w-[560px] h-[560px] rounded-full bg-amber-400/10 dark:bg-amber-400/10 blur-[140px] pointer-events-none z-0" />
+
       {/* Account Profile Modal */}
       {isAccountModalOpen && currentUserConfig && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
@@ -4359,7 +4396,7 @@ export default function App() {
         <div className="flex flex-col h-full">
           <div className="p-6 sm:p-10">
             <div className="flex items-center gap-3 sm:gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-amber-500 rounded-[14px] sm:rounded-[18px] flex items-center justify-center text-white shadow-xl shadow-amber-500/20 rotate-3 group hover:rotate-0 transition-transform">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 rounded-[14px] sm:rounded-[18px] flex items-center justify-center text-white shadow-xl shadow-amber-500/30 rotate-3 group hover:rotate-0 transition-transform">
                 <Beer className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div className="min-w-0">
@@ -5903,27 +5940,38 @@ export default function App() {
                               <CartesianGrid
                                 strokeDasharray="3 3"
                                 vertical={false}
-                                stroke="#E2E8F0"
+                                stroke={chartColors.grid}
                               />
                               <XAxis
                                 dataKey="name"
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
+                                tick={{ fill: chartColors.axis }}
                               />
                               <YAxis
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
+                                tick={{ fill: chartColors.axis }}
                               />
                               <Tooltip
                                 contentStyle={{
                                   borderRadius: "12px",
-                                  border: "none",
+                                  border: chartColors.tooltipBorder,
+                                  backgroundColor: chartColors.tooltipBg,
+                                  color: chartColors.tooltipText,
                                   boxShadow:
                                     "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
-                                  fontFamily: "Inter, sans-serif",
+                                  fontFamily: "'Plus Jakarta Sans', sans-serif",
                                   fontSize: "12px",
+                                }}
+                                itemStyle={{ color: chartColors.tooltipText }}
+                                labelStyle={{ color: chartColors.tooltipText }}
+                                cursor={{
+                                  fill: isDark
+                                    ? "rgba(255,255,255,0.06)"
+                                    : "rgba(0,0,0,0.04)",
                                 }}
                               />
                               <Legend
@@ -5936,20 +5984,20 @@ export default function App() {
                               />
                               <Bar
                                 dataKey="Nhập"
-                                fill="#2563eb"
+                                fill={chartColors.blue}
                                 radius={[4, 4, 0, 0]}
                                 barSize={20}
                               />
                               <Bar
                                 dataKey="Xuất"
-                                fill="#f43f5e"
+                                fill={chartColors.rose}
                                 radius={[4, 4, 0, 0]}
                                 barSize={20}
                               />
                               {userRole === "OWNER" ? (
                                 <Bar
                                   dataKey="Doanh thu"
-                                  fill="#10b981"
+                                  fill={chartColors.emerald}
                                   radius={[4, 4, 0, 0]}
                                   barSize={20}
                                 />
@@ -6402,16 +6450,29 @@ export default function App() {
                                       axisLine={false}
                                       tickLine={false}
                                       tick={{
-                                        fill: "#475569",
+                                        fill: chartColors.axis,
                                         fontWeight: 700,
                                       }}
                                     />
                                     <Tooltip
                                       contentStyle={{
                                         borderRadius: "16px",
-                                        border: "none",
+                                        border: chartColors.tooltipBorder,
+                                        backgroundColor: chartColors.tooltipBg,
+                                        color: chartColors.tooltipText,
                                         boxShadow:
                                           "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+                                      }}
+                                      itemStyle={{
+                                        color: chartColors.tooltipText,
+                                      }}
+                                      labelStyle={{
+                                        color: chartColors.tooltipText,
+                                      }}
+                                      cursor={{
+                                        fill: isDark
+                                          ? "rgba(255,255,255,0.06)"
+                                          : "rgba(0,0,0,0.04)",
                                       }}
                                       formatter={(val: number) =>
                                         formatNumber(val) + " đ"
@@ -6419,7 +6480,7 @@ export default function App() {
                                     />
                                     <Bar
                                       dataKey="value"
-                                      fill="#0f172a"
+                                      fill={chartColors.accent}
                                       radius={[0, 6, 6, 0]}
                                       barSize={24}
                                     />
@@ -6446,13 +6507,7 @@ export default function App() {
                                       dataKey="value"
                                       stroke="none"
                                     >
-                                      {[
-                                        "#0f172a",
-                                        "#2563eb",
-                                        "#10b981",
-                                        "#f59e0b",
-                                        "#ec4899",
-                                      ].map((color, index) => (
+                                      {chartColors.series.map((color, index) => (
                                         <Cell
                                           key={`cell-${index}`}
                                           fill={color}
@@ -6462,9 +6517,17 @@ export default function App() {
                                     <Tooltip
                                       contentStyle={{
                                         borderRadius: "16px",
-                                        border: "none",
+                                        border: chartColors.tooltipBorder,
+                                        backgroundColor: chartColors.tooltipBg,
+                                        color: chartColors.tooltipText,
                                         boxShadow:
                                           "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+                                      }}
+                                      itemStyle={{
+                                        color: chartColors.tooltipText,
+                                      }}
+                                      labelStyle={{
+                                        color: chartColors.tooltipText,
                                       }}
                                       formatter={(val: number) =>
                                         formatNumber(val) + " đ"
