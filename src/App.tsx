@@ -148,6 +148,7 @@ import {
 } from "./lib/pin";
 import ImportSlipPanel from "./components/ImportSlip";
 import { compressFile } from "./lib/image";
+import BulkImportGrid from "./components/BulkImportGrid";
 
 /**
  * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
@@ -7714,7 +7715,49 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Items List */}
+                    {/*
+                      NHAP KHO: dung bang nhap nhanh liet ke san toan bo danh
+                      muc. Kho co hon chuc loai bia, bam "them dong" roi chon
+                      trong danh sach tha xuong vua cham vua de bo sot.
+                    */}
+                    {activeTab === "import" && (
+                      <div className="md:col-span-2 mt-4">
+                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Nhập theo danh mục
+                          </h4>
+                          <p className="text-[10px] font-bold text-slate-400">
+                            Điền số vào loại nhận được · để trống là không nhập
+                          </p>
+                        </div>
+                        <BulkImportGrid
+                          products={products}
+                          inventory={inventory}
+                          initialRows={newTransaction.items.map((i) => ({
+                            productId: i.productId,
+                            quantity: i.quantity,
+                            batchNumber: i.batchNumber || "",
+                          }))}
+                          onChange={(rows) =>
+                            setNewTransaction((prev) => ({
+                              ...prev,
+                              items: rows.length
+                                ? rows
+                                : [
+                                    {
+                                      productId: "",
+                                      quantity: 0,
+                                      batchNumber: "",
+                                    },
+                                  ],
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {/* Items List (xuat kho / ton dau ky van nhap tung dong) */}
+                    {activeTab !== "import" && (
                     <div className="md:col-span-2 mt-4">
                       <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -7929,6 +7972,7 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                    )}
 
                     <div className="md:col-span-2">
                       <Input
@@ -7964,215 +8008,9 @@ export default function App() {
                       </div>
                     )}
 
-                    {activeTab === "import" && (
-                      <div className="md:col-span-2 space-y-4">
-                        <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1">
-                          Minh chứng (Ảnh chụp chứng từ cho cả đơn)
-                        </label>
-                        <div className="flex flex-col gap-4">
-                          {!newTransaction.evidencePhotoUrls ||
-                          newTransaction.evidencePhotoUrls.length === 0 ? (
-                            <div className="flex gap-4">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  document
-                                    .getElementById("photo-upload-multi")
-                                    ?.click()
-                                }
-                                className="flex-1 h-32 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all group"
-                              >
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-white transition-colors">
-                                  <ImageIcon className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest">
-                                  Tải nhiều ảnh
-                                </span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  document
-                                    .getElementById("camera-capture-multi")
-                                    ?.click()
-                                }
-                                className="flex-1 h-32 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:border-emerald-400 hover:text-emerald-500 hover:bg-emerald-50 transition-all group"
-                              >
-                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-white transition-colors">
-                                  <Camera className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest">
-                                  Chụp bằng máy ảnh
-                                </span>
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                {newTransaction.evidencePhotoUrls.map(
-                                  (photo, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="relative aspect-square rounded-2xl overflow-hidden border border-slate-100 group shadow-sm bg-slate-50"
-                                    >
-                                      <img
-                                        src={photo}
-                                        alt={`Preview ${idx}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                      <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const updated =
-                                              newTransaction.evidencePhotoUrls.filter(
-                                                (_, i) => i !== idx,
-                                              );
-                                            setNewTransaction((prev) => ({
-                                              ...prev,
-                                              evidencePhotoUrls: updated,
-                                              evidencePhotoUrl:
-                                                updated[0] || "",
-                                            }));
-                                          }}
-                                          className="p-2.5 bg-rose-500 text-white rounded-xl shadow-lg hover:bg-rose-600 hover:scale-110 transition-all"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ),
-                                )}
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    document
-                                      .getElementById("photo-upload-multi")
-                                      ?.click()
-                                  }
-                                  className="aspect-square border-2 border-dashed border-slate-200 hover:border-primary hover:bg-primary/5 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-primary transition-all group"
-                                >
-                                  <ImageIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                  <span className="text-[10px] font-black uppercase tracking-tighter">
-                                    Thêm ảnh
-                                  </span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    document
-                                      .getElementById("camera-capture-multi")
-                                      ?.click()
-                                  }
-                                  className="aspect-square border-2 border-dashed border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-emerald-500 transition-all group"
-                                >
-                                  <Camera className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                  <span className="text-[10px] font-black uppercase tracking-tighter">
-                                    Chụp tiếp
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          <input
-                            id="photo-upload-multi"
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={async (e) => {
-                              const files = e.target.files;
-                              if (files && files.length > 0) {
-                                const compressedPhotos: string[] = [];
-                                try {
-                                  for (let i = 0; i < files.length; i++) {
-                                    const base64 = await readFileAsDataURL(
-                                      files[i],
-                                    );
-                                    compressedPhotos.push(
-                                      await compressAndUploadPhoto(base64),
-                                    );
-                                  }
-                                } catch (err) {
-                                  console.error("Lỗi tải ảnh:", err);
-                                  alert(
-                                    "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
-                                  );
-                                  return;
-                                }
-
-                                setNewTransaction((prev) => {
-                                  const existing =
-                                    prev.evidencePhotoUrls ||
-                                    (prev.evidencePhotoUrl
-                                      ? [prev.evidencePhotoUrl]
-                                      : []);
-                                  const combined = [
-                                    ...existing,
-                                    ...compressedPhotos,
-                                  ];
-                                  return {
-                                    ...prev,
-                                    evidencePhotoUrls: combined,
-                                    evidencePhotoUrl: combined[0] || "",
-                                  };
-                                });
-                              }
-                            }}
-                          />
-                          <input
-                            id="camera-capture-multi"
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            multiple
-                            className="hidden"
-                            onChange={async (e) => {
-                              const files = e.target.files;
-                              if (files && files.length > 0) {
-                                const compressedPhotos: string[] = [];
-                                try {
-                                  for (let i = 0; i < files.length; i++) {
-                                    const base64 = await readFileAsDataURL(
-                                      files[i],
-                                    );
-                                    compressedPhotos.push(
-                                      await compressAndUploadPhoto(base64),
-                                    );
-                                  }
-                                } catch (err) {
-                                  console.error("Lỗi tải ảnh:", err);
-                                  alert(
-                                    "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
-                                  );
-                                  return;
-                                }
-
-                                setNewTransaction((prev) => {
-                                  const existing =
-                                    prev.evidencePhotoUrls ||
-                                    (prev.evidencePhotoUrl
-                                      ? [prev.evidencePhotoUrl]
-                                      : []);
-                                  const combined = [
-                                    ...existing,
-                                    ...compressedPhotos,
-                                  ];
-                                  return {
-                                    ...prev,
-                                    evidencePhotoUrls: combined,
-                                    evidencePhotoUrl: combined[0] || "",
-                                  };
-                                });
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                    {/* Anh minh chung da chuyen sang tab "Phieu nhap": chup
+                        anh to phieu DA KY chinh la buoc duyet so lieu. Xem
+                        src/components/ImportSlip.tsx */}
                   </div>
 
                   <div className="mt-12 flex flex-col sm:flex-row gap-4 items-center border-t border-slate-100 pt-10">
