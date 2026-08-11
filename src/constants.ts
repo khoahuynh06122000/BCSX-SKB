@@ -1,17 +1,27 @@
 import { Product, Partner, Transaction } from './types';
 
+/**
+ * Danh mục bia.
+ *
+ * `materialCode` là mã vật tư SAP, lấy đúng theo file công nợ và file BBGN của
+ * bộ phận — đây là chìa khoá để nạp dữ liệu từ Excel và để kết xuất hóa đơn.
+ * Sản phẩm nào chưa có mã thì vẫn nhập xuất bình thường trong kho, chỉ là
+ * không lên được file công nợ cho tới khi bổ sung mã.
+ */
 export const INITIAL_PRODUCTS: Product[] = [
-  { id: 'p1', name: 'Bia Golden Bridge Helles Lager', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p2', name: 'Bia Wings Dark Lager', category: 'Lít', unit: 'Lít', price: 48000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p4', name: 'Bia Golden Bridge Helles Lager lon330ml', category: 'Lon', unit: 'Lon', price: 15833, conversionFactor: 1, capacityPerUnit: 330 },
-  { id: 'p5', name: 'Bia Wings Dark Lager 330ml', category: 'Lon', unit: 'Lon', price: 17083, conversionFactor: 1, capacityPerUnit: 330 },
-  { id: 'p10', name: 'Bia Volcano Kiss dry hop lager', category: 'Lít', unit: 'Lít', price: 58000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p11', name: 'Bia Helios Wheat Lager', category: 'Lít', unit: 'Lít', price: 53000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p12', name: 'Bia Eclipse Plaza Dry Hop Wheat', category: 'Lít', unit: 'Lít', price: 54000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p14', name: 'Bia Golden Zest', category: 'Lít', unit: 'Lít', price: 47000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p15', name: 'Bia Lunar Castle Dry hop Pale Ale', category: 'Lít', unit: 'Lít', price: 55000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p1', name: 'Bia Golden Bridge Helles Lager', materialCode: '10168107', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p2', name: 'Bia Wings Dark Lager', materialCode: '10168108', category: 'Lít', unit: 'Lít', price: 48000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p4', name: 'Bia Golden Bridge Helles Lager lon330ml', materialCode: '10168110', category: 'Lon', unit: 'Lon', price: 15833, conversionFactor: 1, capacityPerUnit: 330 },
+  { id: 'p5', name: 'Bia Wings Dark Lager 330ml', materialCode: '10168111', category: 'Lon', unit: 'Lon', price: 17083, conversionFactor: 1, capacityPerUnit: 330 },
+  { id: 'p10', name: 'Bia Volcano Kiss dry hop lager', materialCode: '10186383', category: 'Lít', unit: 'Lít', price: 58000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p11', name: 'Bia Helios Wheat Lager', materialCode: '10191541', category: 'Lít', unit: 'Lít', price: 53000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p12', name: 'Bia Eclipse Plaza Dry Hop Wheat', materialCode: '10191539', category: 'Lít', unit: 'Lít', price: 54000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p14', name: 'Bia Golden Zest', materialCode: '10224742', category: 'Lít', unit: 'Lít', price: 47000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p15', name: 'Bia Lunar Castle Dry hop Pale Ale', materialCode: '10174040', category: 'Lít', unit: 'Lít', price: 55000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p18', name: 'Bia Rosa Garden Light Lager', materialCode: '10218490', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
+  // Chua tim thay ma vat tu trong file cong no — tam de trong, bo sung sau.
   { id: 'p16', name: 'Bia Time Gate Light Lager', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
-  { id: 'p17', name: 'Bia Lunar Castle Dry hop Pale Ale 330ml', category: 'Lon', unit: 'Lon', price: 17500, conversionFactor: 1, capacityPerUnit: 330 },
+  { id: 'p17', name: 'Bia Lunar Castle Dry hop Pale Ale 330ml', materialCode: '10174039', category: 'Lon', unit: 'Lon', price: 17500, conversionFactor: 1, capacityPerUnit: 330 },
 ];
 
 export const INITIAL_PARTNERS: Partner[] = [

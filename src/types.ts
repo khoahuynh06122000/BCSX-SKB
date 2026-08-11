@@ -36,6 +36,11 @@ export interface UserProfile {
 export interface Product {
   id: string;
   name: string;
+  /**
+   * Mã vật tư SAP (ví dụ 10168107). Dùng để khớp khi nạp file BBGN và để
+   * xuất ra file công nợ. Sản phẩm chưa có mã thì không lên được hóa đơn.
+   */
+  materialCode?: string;
   category: Category;
   unit: string; // e.g., 'Thùng', 'Bom', 'Két'
   price: number; // Giá trị ước tính trên mỗi đơn vị (VNĐ)

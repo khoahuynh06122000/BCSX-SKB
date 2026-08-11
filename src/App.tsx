@@ -55,6 +55,7 @@ import {
   Moon,
   Lock,
   FlaskConical,
+  Receipt,
   Loader2,
 } from "lucide-react";
 import {
@@ -151,6 +152,8 @@ import {
 import ImportSlipPanel from "./components/ImportSlip";
 import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
+import BbgnImport, { type BbgnDraft } from "./components/BbgnImport";
+import DebtExport from "./components/DebtExport";
 
 /**
  * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
@@ -1228,6 +1231,121 @@ export default function App() {
       alert(
         "Có lỗi khi khôi phục đối tác. Anh kiểm tra lại kết nối mạng hoặc phân quyền nhé.",
       );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ---------------- Nap nhanh xuat kho tu file BBGN ---------------- */
+
+  /**
+   * Ghi hang loat giao dich xuat kho doc duoc tu file BBGN cua bo phan.
+   *
+   * Van chay qua FIFO nhu nhap tay tung dong, khong di duong tat: neu bo qua
+   * buoc nay thi so lo tren giao dich se trong, va bao cao ton theo lo se
+   * lech ngay. Moi (ngay + don vi) duoc coi la mot phieu -> chung mot
+   * referenceGroupId, dung nhu khi nhap tay nhieu mat hang cung luc.
+   *
+   * Dat status 'completed' (khong phai 'in_transit') vi file BBGN la bien ban
+   * giao nhan DA KY — hang da toi noi roi.
+   */
+  const handleCreateFromBbgn = async (drafts: BbgnDraft[]) => {
+    if (!drafts.length || loading) return;
+    if (
+      !window.confirm(
+        `Tạo ${drafts.length} giao dịch xuất kho từ file BBGN?\n\nSố lượng sẽ trừ vào tồn kho theo nguyên tắc lô nhập trước xuất trước.`,
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Ban sao ton theo lo de FIFO "nhin thay" phan da bi tru trong cung lan chay
+      const localBatches = batches.map((b) => ({ ...b }));
+      const stamp = Date.now();
+      const groupIds = new Map<string, string>();
+      let seq = 0;
+      let shortfall = 0;
+
+      // Firestore gioi han 500 thao tac moi batch — chia lo de khong vuot
+      const CHUNK = 400;
+      let batch = writeBatch(db);
+      let opCount = 0;
+
+      for (const d of drafts) {
+        const product = products.find((p) => p.id === d.productId);
+        if (!product) continue;
+
+        const groupKey = `${d.dateKey}|${d.partnerId}`;
+        if (!groupIds.has(groupKey)) {
+          groupIds.set(groupKey, `multi-${stamp}-${groupIds.size}`);
+        }
+        const referenceGroupId = groupIds.get(groupKey)!;
+
+        const noteParts = [
+          d.outlet ? `Điểm nhận: ${d.outlet}` : "",
+          d.note,
+          "Nạp từ file BBGN",
+        ].filter(Boolean);
+
+        const allocations = getFIFOAllocations(
+          product.id,
+          d.quantity,
+          localBatches,
+        );
+
+        for (let i = 0; i < allocations.length; i++) {
+          const alloc = allocations[i];
+          if (alloc.batchNumber === "VUOT_DINH_MUC") shortfall++;
+
+          const id = `bbgn-${stamp}-${seq++}`;
+          const transaction: Transaction = {
+            id,
+            date: `${d.dateKey}T08:00:00.000Z`,
+            type: "OUT",
+            productId: product.id,
+            productName: product.name,
+            category: product.category,
+            quantity: alloc.quantity,
+            partnerId: d.partnerId,
+            partnerName: d.partnerName,
+            notes:
+              allocations.length > 1
+                ? `[Lô ${i + 1}/${allocations.length}] ${noteParts.join(" · ")}`
+                : noteParts.join(" · "),
+            batchNumber: alloc.batchNumber,
+            evidencePhotoUrls: [],
+            createdBy: user || "Guest",
+            referenceGroupId,
+            status: "completed",
+            originalQuantity: alloc.quantity,
+          };
+
+          batch.set(doc(db, "transactions", id), transaction);
+          opCount++;
+          if (opCount >= CHUNK) {
+            await batch.commit();
+            batch = writeBatch(db);
+            opCount = 0;
+          }
+        }
+      }
+
+      if (opCount > 0) await batch.commit();
+
+      showNotification(`Đã tạo ${seq} dòng xuất kho từ file BBGN`);
+      if (shortfall > 0) {
+        alert(
+          `Đã ghi xong, nhưng có ${shortfall} dòng xuất vượt tồn kho hiện có ` +
+            `(đánh dấu lô VUOT_DINH_MUC).\n\nThường là do chưa nhập kho phần ` +
+            `hàng tương ứng. Anh kiểm tra lại phần nhập trước rồi sửa các dòng này.`,
+        );
+      }
+      setActiveTab("history");
+    } catch (e: any) {
+      console.error("Nap BBGN that bai:", e);
+      alert("Không ghi được dữ liệu BBGN: " + (e?.message || e));
     } finally {
       setLoading(false);
     }
@@ -4022,6 +4140,17 @@ export default function App() {
             icon: TrendingUp,
             color: "#f43f5e",
           },
+          // Công nợ: người làm số để xuất hóa đơn, không mở cho VIEWER
+          ...(isOwnerRole || userRole === "STAFF"
+            ? [
+                {
+                  id: "debt",
+                  label: "Công nợ · Hóa đơn",
+                  icon: Receipt,
+                  color: "#14b8a6",
+                },
+              ]
+            : []),
           // Doanh thu: CHỈ CHỦ SỞ HỮU
           ...(isOwnerRole
             ? [
@@ -7888,6 +8017,18 @@ export default function App() {
                   </p>
                 </div>
 
+                {/* Nap nhanh ca thang tu file BBGN cua bo phan */}
+                {activeTab === "export" && canWrite && (
+                  <Card title="Nạp nhanh từ file BBGN">
+                    <BbgnImport
+                      products={products}
+                      partners={partners}
+                      onCreate={handleCreateFromBbgn}
+                      busy={loading}
+                    />
+                  </Card>
+                )}
+
                 <Card className="p-4 sm:p-10 relative overflow-hidden">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
                     {activeTab === "import" && (
@@ -8906,6 +9047,26 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "debt" && isAuthorizedFull && (
+              <div className="space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                    Công nợ · Hóa đơn
+                  </h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Gom xuất kho theo kỳ · tính thuế · kết xuất mẫu Chốt
+                  </p>
+                </div>
+                <Card>
+                  <DebtExport
+                    transactions={transactions}
+                    products={products}
+                    partners={partners}
+                  />
                 </Card>
               </div>
             )}
