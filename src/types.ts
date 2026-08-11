@@ -104,6 +104,31 @@ export interface InventoryItem {
  */
 export type SlipStatus = 'draft' | 'printed' | 'signed';
 
+/**
+ * Kết quả AI đối soát ảnh phiếu đã ký với số liệu trong hệ thống.
+ *
+ * Đây là CẢNH BÁO ĐỂ NGƯỜI XEM LẠI, không phải kết luận giám định. AI có thể
+ * bỏ sót sửa đổi tinh vi, hoặc báo nhầm khi ảnh mờ / chữ viết xấu.
+ */
+export interface SlipVerification {
+  checkedAt: string;
+  checkedBy?: string;
+  /** ok = đã ký và số khớp · warning = lệch số hoặc nghi bị sửa · unsigned = chưa ký */
+  verdict: 'ok' | 'warning' | 'unsigned';
+  signaturePresent: boolean;
+  signedBoxes?: string[];
+  mismatchCount: number;
+  rows?: {
+    name: string;
+    expectedQuantity?: number;
+    paperQuantity?: number;
+    matched: boolean;
+  }[];
+  alterationSuspected: boolean;
+  alterationNotes?: string;
+  imageQualityNote?: string;
+}
+
 export interface ImportSlip {
   /** = code, dạng PN-YYMMDD */
   id: string;
@@ -116,6 +141,8 @@ export interface ImportSlip {
   signedPhotoUrls?: string[];
   signedAt?: string;
   signedBy?: string;
+  /** Kết quả AI đối soát ảnh phiếu ký với số trong hệ thống. */
+  verification?: SlipVerification;
   note?: string;
   updatedAt?: string;
 }

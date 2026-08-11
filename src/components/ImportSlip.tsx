@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   FileText,
   Loader2,
+  ScanLine,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -14,6 +15,7 @@ import type {
   Product,
   Partner,
   ImportSlip as ImportSlipType,
+  SlipVerification,
 } from "../types";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -54,6 +56,13 @@ interface Props {
   onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
   onUploadSigned: (code: string, dateKey: string, files: FileList) => Promise<void>;
   uploadingCode: string | null;
+  /** Gửi ảnh phiếu đã ký cho AI đối soát với số liệu trong hệ thống. */
+  onVerify: (
+    code: string,
+    dateKey: string,
+    rows: { name: string; unit: string; batch: string; quantity: number }[],
+  ) => Promise<void>;
+  verifyingCode: string | null;
 }
 
 export default function ImportSlipPanel({
@@ -66,6 +75,8 @@ export default function ImportSlipPanel({
   onMarkPrinted,
   onUploadSigned,
   uploadingCode,
+  onVerify,
+  verifyingCode,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
 
@@ -149,9 +160,12 @@ export default function ImportSlipPanel({
             const signed = !!d.meta?.signedPhotoUrls?.length;
             const printed = !!d.meta?.printedAt;
             return (
+              <div key={d.code} className="space-y-0">
               <div
-                key={d.code}
-                className="p-4 rounded-2xl border border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center gap-4 justify-between"
+                className={cn(
+                  "p-4 rounded-2xl border border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center gap-4 justify-between",
+                  d.meta?.verification && "rounded-b-none border-b-0",
+                )}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -230,7 +244,43 @@ export default function ImportSlipPanel({
                       />
                     </label>
                   )}
+
+                  {canWrite && signed && (
+                    <button
+                      onClick={() =>
+                        onVerify(
+                          d.code,
+                          d.dateKey,
+                          d.transactions.map((t) => {
+                            const p = products.find(
+                              (x) => x.id === t.productId,
+                            );
+                            return {
+                              name: t.productName || p?.name || "",
+                              unit: p?.unit || "",
+                              batch: t.batchNumber || "",
+                              quantity: t.quantity || 0,
+                            };
+                          }),
+                        )
+                      }
+                      disabled={verifyingCode === d.code}
+                      className="px-4 py-2 rounded-xl border border-primary/40 text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 transition-all flex items-center gap-1.5 disabled:opacity-60"
+                    >
+                      {verifyingCode === d.code ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ScanLine className="w-3.5 h-3.5" />
+                      )}
+                      Đối soát
+                    </button>
+                  )}
                 </div>
+              </div>
+
+              {d.meta?.verification && (
+                <VerificationResult v={d.meta.verification} />
+              )}
               </div>
             );
           })
@@ -256,6 +306,97 @@ export default function ImportSlipPanel({
 }
 
 /* ========================================================================== */
+
+/** Hiển thị kết quả AI đối soát ảnh phiếu ký với số liệu trong hệ thống. */
+function VerificationResult({ v }: { v: SlipVerification }) {
+  const tone =
+    v.verdict === "ok"
+      ? {
+          box: "border-emerald-300 bg-emerald-50",
+          text: "text-emerald-800",
+          sub: "text-emerald-700/80",
+          Icon: CheckCircle2,
+        }
+      : v.verdict === "unsigned"
+        ? {
+            box: "border-slate-300 bg-slate-50",
+            text: "text-slate-700",
+            sub: "text-slate-500",
+            Icon: AlertTriangle,
+          }
+        : {
+            box: "border-rose-300 bg-rose-50",
+            text: "text-rose-800",
+            sub: "text-rose-700/80",
+            Icon: AlertTriangle,
+          };
+
+  const { Icon } = tone;
+
+  return (
+    <div
+      className={cn(
+        "p-4 rounded-2xl rounded-t-none border border-t-0 space-y-2.5 print:hidden",
+        tone.box,
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", tone.text)} />
+        <div className="space-y-1 min-w-0">
+          <p className={cn("text-[11px] font-black uppercase tracking-wider", tone.text)}>
+            {v.verdict === "ok"
+              ? "Đã ký · Số liệu khớp"
+              : v.verdict === "unsigned"
+                ? "Chưa thấy chữ ký trên phiếu"
+                : v.alterationSuspected
+                  ? "Nghi có sửa số trên phiếu"
+                  : `Lệch số ở ${v.mismatchCount} dòng hàng`}
+          </p>
+
+          {v.signaturePresent && v.signedBoxes?.length ? (
+            <p className={cn("text-[11px] font-bold", tone.sub)}>
+              Đã ký ở: {v.signedBoxes.join(", ")}
+            </p>
+          ) : null}
+
+          {v.alterationSuspected && v.alterationNotes && (
+            <p className={cn("text-[11px] font-bold leading-relaxed", tone.sub)}>
+              {v.alterationNotes}
+            </p>
+          )}
+
+          {v.mismatchCount > 0 && (
+            <ul className="space-y-0.5 mt-1">
+              {(v.rows || [])
+                .filter((r) => !r.matched)
+                .map((r, i) => (
+                  <li
+                    key={i}
+                    className={cn("text-[11px] font-bold", tone.sub)}
+                  >
+                    {r.name}: hệ thống{" "}
+                    <strong>{formatNumber(r.expectedQuantity)}</strong> · trên
+                    giấy <strong>{formatNumber(r.paperQuantity)}</strong>
+                  </li>
+                ))}
+            </ul>
+          )}
+
+          {v.imageQualityNote && (
+            <p className={cn("text-[10px] font-bold italic", tone.sub)}>
+              {v.imageQualityNote}
+            </p>
+          )}
+
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-1">
+            AI đối soát lúc {format(new Date(v.checkedAt), "HH:mm dd/MM/yyyy")} ·
+            Kết quả mang tính cảnh báo, cần người kiểm tra lại
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SlipPreview({
   slip,

@@ -147,6 +147,7 @@ import {
   PIN_SESSION_KEY,
 } from "./lib/pin";
 import ImportSlipPanel from "./components/ImportSlip";
+import { compressFile } from "./lib/image";
 
 /**
  * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
@@ -654,6 +655,9 @@ export default function App() {
   const [allUserProfiles, setAllUserProfiles] = useState<UserProfile[]>([]);
   const [slips, setSlips] = useState<ImportSlip[]>([]);
   const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
+    null,
+  );
+  const [verifyingSlipCode, setVerifyingSlipCode] = useState<string | null>(
     null,
   );
   const [transactions, setTransactions] =
@@ -1169,6 +1173,81 @@ export default function App() {
       alert("Không tải được ảnh phiếu: " + e.message);
     } finally {
       setUploadingSlipCode(null);
+    }
+  };
+
+  /**
+   * Goi AI doi soat anh phieu da ky voi so lieu trong he thong.
+   *
+   * Khac voi viec quet de nhap lieu: o day ta DUA TRUOC so dung cho AI roi
+   * chi yeu cau so sanh. So sanh chac hon nhieu so voi bat AI tu doc so.
+   */
+  const handleVerifySlip = async (
+    code: string,
+    dateKey: string,
+    rows: { name: string; unit: string; batch: string; quantity: number }[],
+  ) => {
+    if (verifyingSlipCode) return;
+
+    const slip = slips.find((s) => s.code === code);
+    const photoUrl = slip?.signedPhotoUrls?.[0];
+    if (!photoUrl) {
+      alert("Phiếu này chưa có ảnh đã ký để đối soát.");
+      return;
+    }
+
+    setVerifyingSlipCode(code);
+    try {
+      // Tai anh tu Cloudinary ve roi nen lai truoc khi gui: anh chup dien
+      // thoai thuong 4-8 MB, vuot gioi han cua ham serverless.
+      const imgRes = await fetch(photoUrl);
+      const blob = await imgRes.blob();
+      const compressed = await compressFile(blob, 1600, 1600, 0.8);
+
+      const res = await fetch("/api/gemini/verify-slip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: compressed,
+          expected: { code, date: dateKey, rows },
+        }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(detail || `Máy chủ trả về ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      const verification = {
+        checkedAt: new Date().toISOString(),
+        checkedBy: currentUserProfile?.email || user || "",
+        verdict: data.verdict || "warning",
+        signaturePresent: !!data.signaturePresent,
+        signedBoxes: data.signedBoxes || [],
+        mismatchCount: data.mismatchCount || 0,
+        rows: data.rows || [],
+        alterationSuspected: !!data.alterationSuspected,
+        alterationNotes: data.alterationNotes || "",
+        imageQualityNote: data.imageQualityNote || "",
+      };
+
+      await setDoc(
+        doc(db, "slips", code),
+        { verification, updatedAt: new Date().toISOString() },
+        { merge: true },
+      );
+
+      showNotification(
+        verification.verdict === "ok"
+          ? `Phiếu ${code}: đã ký, số liệu khớp`
+          : `Phiếu ${code}: cần xem lại`,
+      );
+    } catch (e: any) {
+      alert("Không đối soát được: " + e.message);
+    } finally {
+      setVerifyingSlipCode(null);
     }
   };
 
@@ -8702,6 +8781,8 @@ export default function App() {
                     onMarkPrinted={handleMarkSlipPrinted}
                     onUploadSigned={handleUploadSignedSlip}
                     uploadingCode={uploadingSlipCode}
+                    onVerify={handleVerifySlip}
+                    verifyingCode={verifyingSlipCode}
                   />
                 </Card>
               </div>
