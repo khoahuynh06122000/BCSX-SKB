@@ -77,10 +77,24 @@ Firebase.
 ## Kiến trúc thư mục
 
 ```
-src/App.tsx        Toàn bộ giao diện và logic nghiệp vụ (file lớn ~9.100 dòng)
+src/App.tsx        Toàn bộ giao diện và logic nghiệp vụ (file lớn ~10.000 dòng)
 src/firebase.ts    Khởi tạo Firebase, đọc cấu hình từ biến môi trường
 src/lib/cloudinary.ts  Nén và tải ảnh lên Cloudinary
+src/lib/reconcile.ts     Đối soát xuất kho ↔ hóa đơn, quy đổi lít, khớp mã vật tư
+src/lib/revenueKey.ts    Khoá định danh dòng doanh thu để chống nạp trùng
+src/lib/revenueImport.ts Quyết định ghi gì / xoá gì khi nạp file doanh thu
+src/lib/__tests__/       Chạy thử các phép tính trên bằng dữ liệu giả
 api/gemini/        Hàm serverless của Vercel cho tính năng quét phiếu bằng AI
 server.ts          Máy chủ Express dùng khi chạy tại máy (Vercel không dùng file này)
 firestore.rules    Quy tắc phân quyền Firestore
 ```
+
+## Kiểm tra trước khi đẩy code
+
+```bash
+npm run lint && npm test
+```
+
+`lint` kiểm kiểu dữ liệu toàn bộ dự án (phải sạch, 0 lỗi). `test` chạy các phép
+tính nghiệp vụ nặng nhất — đối soát và chống trùng doanh thu — bằng dữ liệu giả,
+không cần Firebase hay mở app.

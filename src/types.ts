@@ -46,6 +46,15 @@ export interface Product {
   price: number; // Giá trị ước tính trên mỗi đơn vị (VNĐ)
   conversionFactor?: number; // e.g., số lượng đơn vị quy đổi (1 thùng = 24 lon, hoặc 1 lít = 1000ml)
   capacityPerUnit: number; // Trong ml (ví dụ: 330(ml) cho lon, 20000(ml) cho bom bia hơi)
+  /**
+   * Định mức tồn tối thiểu; dưới mức này thì báo "sắp hết".
+   *
+   * Không đặt thì dùng ngưỡng chung DEFAULT_MIN_STOCK. Trước đây trường này
+   * không có trong kiểu nhưng code vẫn đọc `p.minStock`, nên định mức luôn là
+   * undefined và phép so `stock <= undefined` luôn sai — danh sách "sắp hết
+   * hàng" vì vậy chưa bao giờ hiện được sản phẩm nào.
+   */
+  minStock?: number;
 }
 
 export interface Partner {
@@ -152,6 +161,17 @@ export interface ImportSlip {
   updatedAt?: string;
 }
 
+/**
+ * MỘT DÒNG HÀNG TRÊN HÓA ĐƠN BÁN.
+ *
+ * Về tiền: file Excel của các đơn vị không thống nhất cột nào là trước thuế,
+ * cột nào là sau thuế. Bản cũ đọc "Thành tiền sau thuế", không có thì lấy
+ * "Thành tiền" (trước thuế) và nhồi cả hai vào `totalAmount` — nạp hai file
+ * khác định dạng là tổng doanh thu lệch đúng phần VAT mà không ai thấy.
+ *
+ * Nay lưu tách bạch ba số. `totalAmount` giữ nguyên tên (nhiều nơi đang đọc)
+ * nhưng luôn mang nghĩa DOANH THU TRƯỚC VAT — đúng nghĩa doanh thu.
+ */
 export interface RevenueRecord {
   id: string;
   date: string;
@@ -160,8 +180,13 @@ export interface RevenueRecord {
   unit?: string;
   quantity: number;
   unitPrice: number;
+  /** Doanh thu trước VAT. Đây là số dùng cho mọi báo cáo doanh thu. */
   totalAmount: number;
   vatAmount?: number;
+  /** = totalAmount, để dành đọc cho rõ nghĩa khi viết code mới. */
+  amountBeforeVat?: number;
+  /** Tổng tiền khách trả (trước VAT + VAT). */
+  amountAfterVat?: number;
   invoiceNumber?: string;
   partnerName: string;
   partnerId?: string;

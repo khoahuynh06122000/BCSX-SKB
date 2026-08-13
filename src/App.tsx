@@ -122,6 +122,19 @@ import {
 } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
+import {
+  buildReconciliation,
+  summarizeReconciliation,
+  matchRevenueProduct,
+  revenueRowLiters,
+  RECON_STATUS_LABEL,
+} from "./lib/reconcile";
+import { revenueDocId } from "./lib/revenueKey";
+import {
+  planRevenueImport,
+  resolveRevenueImport,
+  type ParsedRevenueRow,
+} from "./lib/revenueImport";
 
 import {
   db,
@@ -320,6 +333,12 @@ const parseExcelNumberSafe = (val: any): number => {
   const finalVal = isNaN(parsed) ? 0 : parsed;
   return isNegative ? -finalVal : finalVal;
 };
+
+/**
+ * Định mức tồn tối thiểu dùng chung cho sản phẩm chưa đặt định mức riêng.
+ * Bằng đúng con số 10 mà thẻ "Cảnh báo cạn kho" vẫn dùng từ trước.
+ */
+const DEFAULT_MIN_STOCK = 10;
 
 const formatDisplayDate = (dateStr: string) => {
   try {
@@ -673,12 +692,25 @@ export default function App() {
     useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [partners, setPartners] = useState<Partner[]>(INITIAL_PARTNERS);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [revenueData, setRevenueData] = useState<Transaction[]>([]);
+  // Doanh thu la ban ghi hoa don, KHONG phai giao dich kho. Truoc day khai
+  // sai thanh Transaction[] nen moi cho doc totalAmount/unit/invoiceNumber deu
+  // lech kieu va TypeScript khong con bat duoc loi truong.
+  const [revenueData, setRevenueData] = useState<
+    (RevenueRecord & { _parsedDate?: Date })[]
+  >([]);
 
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [reportSubTab, setReportSubTab] = useState<
-    "overview" | "detailed" | "inventory"
-  >("overview");
+  /**
+   * Tab con trong mục Báo cáo. Ba giá trị này đúng với ba nút trên giao diện.
+   *
+   * Bản cũ khai là "overview" | "detailed" | "inventory" — không khớp giá trị
+   * nào mà giao diện thực sự dùng, và khởi tạo bằng "overview" nên mở tab Báo
+   * cáo lên là không thấy nội dung nào (khối Tổng hợp chỉ hiện khi bằng
+   * "summary") và cũng không nút nào sáng.
+   */
+  const [reportSubTab, setReportSubTab] = useState<"summary" | "in" | "out">(
+    "summary",
+  );
 
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [batchSearchQuery, setBatchSearchQuery] = useState("");
@@ -690,12 +722,33 @@ export default function App() {
     new Date().toISOString().substring(0, 7),
   );
   const [gallerySearchQuery, setGallerySearchQuery] = useState("");
-  const [selectedGalleryImage, setSelectedGalleryImage] = useState<
-    string | null
-  >(null);
-  const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(
-    new Set(),
+  /**
+   * Giao dịch đang xem ảnh minh chứng ở chế độ toàn màn hình.
+   *
+   * Bản cũ khai là `string | null` nhưng chỗ mở modal lại truyền cả giao dịch
+   * vào, rồi modal đọc `.productName` / `.date` / `.evidencePhotoUrl` — chạy
+   * được nhưng kiểu sai nên TypeScript không còn bắt được lỗi tên trường.
+   */
+  const [selectedGalleryImage, setSelectedGalleryImage] =
+    useState<Transaction | null>(null);
+  // Danh sach so hoa don dang bung chi tiet o so chi tiet doanh thu.
+  // Truoc day khai bao la Set nhung cho dung lai goi .includes()/.filter() nen
+  // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
+  const [expandedInvoices, setExpandedInvoices] = useState<string[]>([]);
+
+  /** Bang doi soat: chi hien nhung dong dang co van de. */
+  const [reconOnlyIssues, setReconOnlyIssues] = useState(true);
+
+  /**
+   * Dong doanh thu dang mo form sua. Truoc day muon sua mot dong sai thi phai
+   * xoa sach toan bo doanh thu roi nap lai ca file - nay sua duoc tung dong.
+   */
+  const [editingRevenue, setEditingRevenue] = useState<RevenueRecord | null>(
+    null,
   );
+  const [revenueDraft, setRevenueDraft] = useState<Record<string, string>>({});
+  const [revenueSaving, setRevenueSaving] = useState(false);
+
   const [isScanning, setIsScanning] = useState(false);
   const [scannedInvoiceDate, setScannedInvoiceDate] = useState<string | null>(
     null,
@@ -704,12 +757,25 @@ export default function App() {
     new Set(),
   );
 
+  /**
+   * Bộ lọc thời gian dùng chung cho Tổng quan / Tồn kho / Báo cáo / Doanh thu.
+   *
+   * Năm giá trị này đúng với năm nút trên thanh lọc. Bản cũ khai
+   * "today" | "yesterday" | "custom" — không có giá trị nào được dùng thật,
+   * nên mọi phép so sánh với "day"/"year" đều bị TypeScript coi là vô nghĩa và
+   * không còn ai canh giúp khi gõ sai tên bộ lọc.
+   */
   const [timeFilter, setTimeFilter] = useState<
-    "all" | "today" | "yesterday" | "week" | "month" | "custom"
+    "all" | "day" | "week" | "month" | "year"
   >("all");
-  const [filterBaseDate, setFilterBaseDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
+
+  /**
+   * Mốc thời gian đang xem. Là Date vì mọi nơi đều đưa thẳng vào date-fns
+   * (startOfDay, subMonths, format...). Bản cũ khởi tạo bằng chuỗi
+   * "yyyy-MM-dd" rồi các nút lại gán Date vào — chạy được nhờ date-fns tự đổi
+   * chuỗi thành Date, nhưng kiểu thì sai và rất dễ vỡ về sau.
+   */
+  const [filterBaseDate, setFilterBaseDate] = useState<Date>(new Date());
   const [selectedInventoryProduct, setSelectedInventoryProduct] = useState<
     string | null
   >(null);
@@ -852,9 +918,9 @@ export default function App() {
             ...d,
             id: doc.id,
             _parsedDate: parseDateSafe(d.date), // Pre-parse for performance
-          } as Transaction & { _parsedDate: Date };
+          } as RevenueRecord & { _parsedDate: Date };
         });
-        setRevenueData(data as any);
+        setRevenueData(data);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, "revenue");
@@ -1050,15 +1116,17 @@ export default function App() {
   const [demoBusy, setDemoBusy] = useState(false);
 
   const demoTransactionCount = useMemo(
-    () => transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX)).length,
-    [transactions],
+    () =>
+      transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX)).length +
+      revenueData.filter((r) => r.id?.startsWith(DEMO_PREFIX)).length,
+    [transactions, revenueData],
   );
 
   const handleGenerateDemoData = async () => {
     if (!isOwner || demoBusy) return;
     if (
       !confirm(
-        "Tạo dữ liệu thử nghiệm cho 5 ngày gần nhất?\n\nDữ liệu này được đánh dấu riêng và có thể xoá sạch bằng một nút.",
+        "Tạo dữ liệu thử nghiệm: nhập kho 5 ngày gần nhất, kèm phiếu xuất và hóa đơn 3 ngày gần nhất để chạy thử bảng Đối soát?\n\nDữ liệu này được đánh dấu riêng và có thể xoá sạch bằng một nút.",
       )
     )
       return;
@@ -1108,8 +1176,108 @@ export default function App() {
         });
       }
 
+      /* ---- Phiếu xuất + hóa đơn để chạy thử bảng ĐỐI SOÁT ----
+       *
+       * Cố ý dựng đủ các trạng thái để nhìn là biết bảng có chạy đúng không:
+       *   SP thứ 1: xuất và ra hóa đơn khớp        -> "Khớp"
+       *   SP thứ 2: hóa đơn chỉ 85% lượng xuất     -> "Thiếu hóa đơn"
+       *   SP thứ 3: xuất mà không có hóa đơn nào   -> "Chưa có hóa đơn"
+       *   thêm 1 hóa đơn tên hàng không có trong danh mục -> "Chưa khớp danh mục"
+       */
+      const buyer =
+        partners.find((p) => p.type === "AGENT" || p.type === "RESTAURANT") ||
+        partners.find((p) => p.type !== "SUPPLIER") ||
+        partners[0];
+
+      // Chỉ xuất những sản phẩm có dung tích, để số lít có nghĩa
+      const sellable = products.filter((p) => (p.capacityPerUnit || 0) > 0);
+      let revenueCreated = 0;
+
+      for (let dayBack = 2; dayBack >= 0; dayBack--) {
+        const day = new Date();
+        day.setDate(day.getDate() - dayBack);
+        day.setHours(14, 30, 0, 0);
+        const stamp = format(day, "yyyyMMdd");
+
+        sellable.slice(0, 3).forEach((p, idx) => {
+          const qty =
+            p.category === "Lít"
+              ? Math.round((40 + Math.random() * 120) / 10) * 10
+              : Math.round((24 + Math.random() * 96) / 24) * 24;
+
+          const txId = `${DEMO_PREFIX}out-${stamp}-${p.id}-${idx}`;
+          batch.set(doc(db, "transactions", txId), {
+            id: txId,
+            date: day.toISOString(),
+            type: "OUT",
+            productId: p.id,
+            productName: p.name,
+            category: p.category,
+            quantity: qty,
+            partnerId: buyer?.id || "",
+            partnerName: buyer?.name || "",
+            notes: DEMO_NOTE,
+            createdBy: currentUserProfile?.name || user || "Demo",
+            status: "completed",
+          });
+          created++;
+
+          // idx 2 = cố ý không ra hóa đơn
+          if (idx === 2) return;
+          // idx 1 = hóa đơn chỉ 85% sản lượng
+          const invoicedQty = idx === 1 ? Math.round(qty * 0.85) : qty;
+          const unitPrice = p.price || 30000;
+          const beforeVat = invoicedQty * unitPrice;
+
+          const revId = `${DEMO_PREFIX}rev-${stamp}-${p.id}-${idx}`;
+          batch.set(doc(db, "revenue", revId), {
+            id: revId,
+            date: day.toISOString(),
+            productName: p.name,
+            materialCode: p.materialCode || "",
+            unit: p.unit,
+            quantity: invoicedQty,
+            unitPrice,
+            totalAmount: beforeVat,
+            amountBeforeVat: beforeVat,
+            vatAmount: Math.round(beforeVat * 0.1),
+            amountAfterVat: beforeVat + Math.round(beforeVat * 0.1),
+            invoiceNumber: `DEMO-${stamp}-${idx}`,
+            partnerName: buyer?.name || "",
+            partnerId: buyer?.id || "",
+            deptCode: DEMO_NOTE,
+          });
+          revenueCreated++;
+        });
+      }
+
+      // Một hóa đơn có tên hàng không tồn tại trong danh mục
+      const orphanId = `${DEMO_PREFIX}rev-orphan`;
+      const orphanDate = new Date();
+      orphanDate.setHours(15, 0, 0, 0);
+      batch.set(doc(db, "revenue", orphanId), {
+        id: orphanId,
+        date: orphanDate.toISOString(),
+        productName: "Bia Thử Nghiệm Không Có Trong Danh Mục",
+        materialCode: "",
+        unit: "LIT",
+        quantity: 25,
+        unitPrice: 40000,
+        totalAmount: 1000000,
+        amountBeforeVat: 1000000,
+        vatAmount: 100000,
+        amountAfterVat: 1100000,
+        invoiceNumber: `DEMO-ORPHAN`,
+        partnerName: buyer?.name || "",
+        partnerId: buyer?.id || "",
+        deptCode: DEMO_NOTE,
+      });
+      revenueCreated++;
+
       await batch.commit();
-      showNotification(`Đã tạo ${created} giao dịch thử nghiệm`);
+      showNotification(
+        `Đã tạo ${created} giao dịch và ${revenueCreated} dòng doanh thu thử nghiệm`,
+      );
     } catch (e: any) {
       alert("Không tạo được dữ liệu thử: " + e.message);
     } finally {
@@ -1121,19 +1289,20 @@ export default function App() {
     if (!isOwner || demoBusy) return;
 
     const demoTx = transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX));
+    const demoRev = revenueData.filter((r) => r.id?.startsWith(DEMO_PREFIX));
     const demoSlipDates = new Set(
       demoTx.map((t) => format(new Date(t.date), "yyyy-MM-dd")),
     );
     const demoSlips = slips.filter((s) => demoSlipDates.has(s.date));
 
-    if (demoTx.length === 0 && demoSlips.length === 0) {
+    if (demoTx.length === 0 && demoRev.length === 0 && demoSlips.length === 0) {
       showNotification("Không có dữ liệu thử nghiệm nào để xoá");
       return;
     }
 
     if (
       !confirm(
-        `Xoá ${demoTx.length} giao dịch thử nghiệm và ${demoSlips.length} phiếu liên quan?\n\nDữ liệu thật KHÔNG bị ảnh hưởng.`,
+        `Xoá ${demoTx.length} giao dịch, ${demoRev.length} dòng doanh thu thử nghiệm và ${demoSlips.length} phiếu liên quan?\n\nDữ liệu thật KHÔNG bị ảnh hưởng.`,
       )
     )
       return;
@@ -1142,6 +1311,7 @@ export default function App() {
     try {
       const batch = writeBatch(db);
       demoTx.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
+      demoRev.forEach((r) => batch.delete(doc(db, "revenue", r.id)));
       demoSlips.forEach((s) => batch.delete(doc(db, "slips", s.id)));
       await batch.commit();
       showNotification("Đã xoá sạch dữ liệu thử nghiệm");
@@ -1660,18 +1830,8 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Security check: Removed as requested, now available to all users
-    const isAuthorized = true;
-
-    if (!isAuthorized) {
-      alert(
-        "Chỉ quản trị viên hoặc Khoahuynh mới có quyền nạp dữ liệu hệ thống.",
-      );
-      return;
-    }
-
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const bstr = event.target?.result;
         const wb = XLSX.read(bstr, { type: "binary" });
@@ -1684,50 +1844,21 @@ export default function App() {
           return;
         }
 
-        // Helper to generate a unique signature for a record
-        const generateSignature = (r: any) => {
-          // Normalize date to YYYY-MM-DD for signature to avoid time mismatches
-          let dStr = "NO_DATE";
-          try {
-            if (r.date) {
-              const d = new Date(r.date);
-              if (!isNaN(d.getTime())) {
-                dStr = d.toISOString().split("T")[0];
-              } else if (typeof r.date === "string") {
-                dStr = r.date.split("T")[0];
-              }
-            }
-          } catch (e) {}
-
-          return `${dStr}|${r.invoiceNumber || "NO_INV"}|${r.productName}|${r.quantity}|${r.unitPrice}|${r.partnerName}`
-            .toLowerCase()
-            .replace(/\s+/g, "");
-        };
-
-        // Step 1: Identify all unique Invoice Numbers in the incoming file
-        const incomingInvoices = new Set<string>();
-        data.forEach((row) => {
-          const inv = String(
-            row["Số hóa đơn"] ||
-              row["Số HĐ"] ||
-              row["Invoice No"] ||
-              row["Số chứng từ"] ||
-              row["Số CT"] ||
-              "",
-          ).trim();
-          if (inv && inv !== "") incomingInvoices.add(inv);
-        });
-
-        // Step 2: Identify existing invoice numbers in DB to prevent duplicates
-        const dbInvoices = new Set<string>();
-        revenueData.forEach((r) => {
-          if (r.invoiceNumber) dbInvoices.add(r.invoiceNumber.trim());
-        });
-
-        const recordsToSave: { docRef: any; record: any }[] = [];
-        let newAddedCount = 0;
-        let skippedCount = 0;
-        let idxCounter = 0;
+        /* ---- CHỐNG TRÙNG ----
+         *
+         * Khoá tài liệu suy ra từ chính nội dung dòng (xem lib/revenueKey.ts),
+         * nên nạp lại đúng dòng đó là ghi đè lên chính nó, không sinh bản thứ
+         * hai. Nhờ vậy không cần "thấy số hóa đơn đã có thì bỏ qua cả tờ" như
+         * bản cũ — cách đó làm mất luôn dòng mới bổ sung vào hóa đơn cũ.
+         *
+         * Còn lại một trường hợp phải hỏi người dùng: hóa đơn đã có trên hệ
+         * thống nhưng nội dung trong file lần này KHÁC (sửa số lượng, sửa đơn
+         * giá, bớt/thêm dòng). Không thể tự đoán nên thay hay giữ, vì thay sai
+         * là mất số, giữ sai là số cũ tồn lại. Sẽ hỏi rồi mới làm.
+         */
+        const parsedRows: ParsedRevenueRow[] = [];
+        let dupInFileCount = 0;
+        const seenInFile = new Set<string>();
 
         data.forEach((row, idx) => {
           // Skip completely empty/blank rows
@@ -1752,12 +1883,6 @@ export default function App() {
               row["Số CT"] ||
               "",
           ).trim();
-
-          // If this invoice already exists in the database, skip it entirely
-          if (invNumber && dbInvoices.has(invNumber)) {
-            skippedCount++;
-            return;
-          }
 
           const dateVal =
             row["Ngày hóa đơn"] ||
@@ -1805,44 +1930,86 @@ export default function App() {
             row["Số lượng"] || row["Quantity"] || row["SL"] || 0,
           );
 
+          const excelMaterialCode = String(
+            row["Mã vật tư"] ||
+              row["Mã hàng"] ||
+              row["Material Code"] ||
+              row["Mã sản phẩm"] ||
+              row["Mã số"] ||
+              "",
+          ).trim();
+
+          /* ---- TIỀN: TÁCH RÕ TRƯỚC THUẾ / VAT / SAU THUẾ ----
+           *
+           * File của mỗi đơn vị đặt tên cột một kiểu. Bản cũ lấy "Thành tiền
+           * sau thuế", không có thì lấy "Thành tiền" (trước thuế) rồi nhồi cả
+           * hai vào một trường — nạp hai file khác định dạng là tổng doanh thu
+           * lệch đúng phần VAT mà không ai thấy. Nay đọc riêng từng cột rồi tự
+           * suy ra số còn thiếu.
+           */
+          const rawBefore = parseExcelNumberSafe(
+            row["Thành tiền trước thuế"] ||
+              row["Thành tiền chưa thuế"] ||
+              row["Thành tiền"] ||
+              row["Total"] ||
+              row["Revenue Amount"] ||
+              0,
+          );
+          const rawVat = parseExcelNumberSafe(
+            row["VAT"] || row["Thuế GTGT"] || row["Tiền thuế"] || 0,
+          );
+          const rawAfter = parseExcelNumberSafe(
+            row["Thành tiền sau thuế"] ||
+              row["Tổng tiền sau thuế"] ||
+              row["Tổng tiền"] ||
+              row["Tổng cộng"] ||
+              0,
+          );
+
+          let beforeVat = rawBefore;
+          let afterVat = rawAfter;
+          const vat = rawVat;
+
+          if (!beforeVat && afterVat) beforeVat = afterVat - vat;
+          if (!afterVat && beforeVat) afterVat = beforeVat + vat;
+          // Không có cột tiền nào: suy từ số lượng × đơn giá để không mất dòng
+          const unitPrice = parseExcelNumberSafe(
+            row["SKB - TLD"] ||
+              row["ĐG TLD"] ||
+              row["Đơn giá"] ||
+              row["Price"] ||
+              row["Unit Price"] ||
+              row["ĐG"] ||
+              0,
+          );
+          if (!beforeVat && !afterVat && qty && unitPrice) {
+            beforeVat = qty * unitPrice;
+            afterVat = beforeVat + vat;
+          }
+
           const record = {
             id: "",
             date: parseExcelDate(dateVal),
             productName: productName,
-            materialCode: String(
-              row["Mã vật tư"] ||
-                row["Mã hàng"] ||
-                row["Material Code"] ||
-                row["Mã sản phẩm"] ||
-                row["Mã số"] ||
-                "",
-            ),
+            // Thiếu mã vật tư thì lấy từ Danh mục khi tên khớp — có mã thì bảng
+            // Đối soát và file công nợ mới khớp được về sau.
+            materialCode:
+              excelMaterialCode ||
+              matchRevenueProduct(products, { productName })?.materialCode ||
+              "",
+            // KHÔNG lấy cột "Đơn vị" làm đơn vị tính: trong file mẫu "Đơn vị"
+            // là mã đơn vị thụ hưởng (BNC/BNG), lấy vào sẽ ra đơn vị tính
+            // "BNC" rồi quy đổi lít sai.
             unit: String(
-              row["Đơn vị tính"] ||
-                row["ĐVT"] ||
-                row["Unit"] ||
-                row["Đơn vị"] ||
-                "",
-            ),
+              row["Đơn vị tính"] || row["ĐVT"] || row["Unit"] || row["DVT"] || "",
+            ).trim(),
             quantity: qty,
-            unitPrice: parseExcelNumberSafe(
-              row["SKB - TLD"] ||
-                row["ĐG TLD"] ||
-                row["Đơn giá"] ||
-                row["Price"] ||
-                row["Unit Price"] ||
-                row["ĐG"] ||
-                0,
-            ),
-            totalAmount: parseExcelNumberSafe(
-              row["Thành tiền sau thuế"] ||
-                row["Thành tiền"] ||
-                row["Total"] ||
-                row["Revenue Amount"] ||
-                row["Tổng tiền"] ||
-                0,
-            ),
-            vatAmount: parseExcelNumberSafe(row["VAT"] || row["Thuế GTGT"] || 0),
+            unitPrice,
+            /** Doanh thu = TRƯỚC VAT. */
+            totalAmount: beforeVat,
+            amountBeforeVat: beforeVat,
+            vatAmount: vat,
+            amountAfterVat: afterVat,
             invoiceNumber: invNumber,
             deptCode: String(
               row["Mã BP"] || row["Bộ phận"] || row["Mã phòng ban"] || "",
@@ -1853,57 +2020,105 @@ export default function App() {
             partnerId: officialPartner?.id || "",
           };
 
-          idxCounter++;
-          const deterministicId = `rev-${record.invoiceNumber || "INV"}-${idx}-${Date.now()}-${idxCounter}-${Math.random().toString(36).substr(2, 4)}`;
-          record.id = deterministicId;
+          // Khoá suy ra từ nội dung: nạp lại đúng dòng này thì ghi đè lên
+          // chính nó, không thể sinh bản thứ hai.
+          const id = revenueDocId(record);
+          record.id = id;
 
-          const docRef = doc(db, "revenue", deterministicId);
-          recordsToSave.push({ docRef, record });
-          newAddedCount++;
+          // Trùng ngay trong cùng một file (file gốc có dòng lặp)
+          if (seenInFile.has(id)) {
+            dupInFileCount++;
+            return;
+          }
+          seenInFile.add(id);
+
+          parsedRows.push({
+            id,
+            invoiceKey: invNumber.toUpperCase(),
+            record,
+          });
         });
 
-        if (newAddedCount === 0) {
-          if (skippedCount > 0) {
-            showNotification(
-              `Tất cả ${skippedCount} dòng đã tồn tại trên hệ thống. Không có dữ liệu mới được nạp.`,
-              "error",
-            );
-          } else {
-            showNotification("File không có dữ liệu hợp lệ để xử lý.", "error");
-          }
-          setLoading(false);
+        if (parsedRows.length === 0) {
+          showNotification("File không có dòng dữ liệu hợp lệ.", "error");
+          if (revenueInputRef.current) revenueInputRef.current.value = "";
+          return;
+        }
+
+        // Phân loại: đã có y nguyên · hóa đơn cũ nhưng nội dung khác · mới hẳn
+        const plan = planRevenueImport(revenueData, parsedRows);
+        const { identical, conflicting, conflictInvoices } = plan;
+
+        // Hỏi một lần cho toàn bộ hóa đơn bị lệch nội dung
+        let replaceConflicts = false;
+
+        if (conflictInvoices.length > 0) {
+          const preview = conflictInvoices.slice(0, 8).join(", ");
+          const more =
+            conflictInvoices.length > 8
+              ? ` và ${conflictInvoices.length - 8} hóa đơn khác`
+              : "";
+          replaceConflicts = confirm(
+            `${conflictInvoices.length} hóa đơn đã có trên hệ thống nhưng nội dung trong file lần này KHÁC:\n\n${preview}${more}\n\nBẤM OK: thay toàn bộ dòng của những hóa đơn đó bằng nội dung trong file (số cũ bị xoá).\nBẤM CANCEL: giữ nguyên số cũ, chỉ nạp những hóa đơn hoàn toàn mới.`,
+          );
+        }
+
+        // Khi thay thế: xoá hết dòng cũ của những hóa đơn đó, tránh còn sót
+        // dòng mà file mới đã bỏ đi.
+        const { toWrite, toDelete } = resolveRevenueImport(
+          revenueData,
+          parsedRows,
+          plan,
+          replaceConflicts,
+        );
+
+        if (toWrite.length === 0 && toDelete.length === 0) {
+          showNotification(
+            `Không có gì để nạp: ${identical.length} dòng đã có y nguyên trên hệ thống${conflictInvoices.length > 0 ? `, ${conflicting.length} dòng thuộc hóa đơn cũ được giữ nguyên theo lựa chọn của anh` : ""}.`,
+          );
+          if (revenueInputRef.current) revenueInputRef.current.value = "";
           return;
         }
 
         setLoading(true);
-
-        const chunkedSave = async () => {
-          const CHUNK_SIZE = 40; // Safely below standard network congestion and rate limits
-          for (let i = 0; i < recordsToSave.length; i += CHUNK_SIZE) {
-            const chunk = recordsToSave.slice(i, i + CHUNK_SIZE);
+        try {
+          const CHUNK_SIZE = 40; // dưới ngưỡng nghẽn mạng và giới hạn ghi
+          for (let i = 0; i < toWrite.length; i += CHUNK_SIZE) {
             await Promise.all(
-              chunk.map(({ docRef, record }) => setDoc(docRef, record))
+              toWrite
+                .slice(i, i + CHUNK_SIZE)
+                .map(({ id, record }) => setDoc(doc(db, "revenue", id), record)),
             );
           }
-        };
+          for (let i = 0; i < toDelete.length; i += CHUNK_SIZE) {
+            await Promise.all(
+              toDelete
+                .slice(i, i + CHUNK_SIZE)
+                .map((id) => deleteDoc(doc(db, "revenue", id))),
+            );
+          }
 
-        chunkedSave()
-          .then(() => {
-            setActiveTab("revenue-mgmt");
-            setLoading(false);
-            showNotification(
-              `Đã nạp mới ${newAddedCount} dòng dữ liệu. Bỏ qua ${skippedCount} dòng do trùng Số hóa đơn.`,
-            );
-            if (revenueInputRef.current) revenueInputRef.current.value = "";
-          })
-          .catch((err) => {
-            console.error(err);
-            setLoading(false);
-            showNotification(
-              "Lỗi khi cập nhật dữ liệu. Vui lòng thử lại.",
-              "error",
-            );
-          });
+          setActiveTab("revenue-mgmt");
+          const parts = [`nạp ${toWrite.length} dòng`];
+          if (identical.length > 0)
+            parts.push(`bỏ qua ${identical.length} dòng đã có y nguyên`);
+          if (dupInFileCount > 0)
+            parts.push(`bỏ ${dupInFileCount} dòng lặp trong file`);
+          if (toDelete.length > 0)
+            parts.push(`xoá ${toDelete.length} dòng cũ của hóa đơn được thay`);
+          if (!replaceConflicts && conflicting.length > 0)
+            parts.push(`giữ nguyên ${conflicting.length} dòng của hóa đơn cũ`);
+          showNotification(`Đã ${parts.join(", ")}.`);
+          if (revenueInputRef.current) revenueInputRef.current.value = "";
+        } catch (err) {
+          console.error(err);
+          showNotification(
+            "Lỗi khi cập nhật dữ liệu. Vui lòng thử lại.",
+            "error",
+          );
+        } finally {
+          setLoading(false);
+        }
       } catch (err) {
         console.error("Error parsing file:", err);
         showNotification("Có lỗi xảy ra khi nạp dữ liệu lên Cloud.", "error");
@@ -1919,7 +2134,9 @@ export default function App() {
     }
 
     const exportData = filteredRevenueByTime.map((r) => ({
-      "Ngày xuất hoá đơn": format(parseISO(r.date), "dd/MM/yyyy"),
+      // parseDateSafe thay cho parseISO: dòng nào ngày không đúng chuẩn ISO thì
+      // parseISO trả Invalid Date và format() ném lỗi, mất cả file xuất.
+      "Ngày xuất hoá đơn": format(parseDateSafe(r.date), "dd/MM/yyyy"),
       "Số hóa đơn": r.invoiceNumber,
       "Đơn vị thụ hưởng": r.partnerName,
       "Mã vật tư": r.materialCode,
@@ -1927,8 +2144,10 @@ export default function App() {
       "Đơn vị tính": r.unit,
       "Số lượng": r.quantity,
       "SKB - TLD": r.unitPrice,
-      "Thành tiền sau thuế": r.totalAmount,
-      VAT: r.vatAmount,
+      "Thành tiền": r.amountBeforeVat ?? r.totalAmount,
+      VAT: r.vatAmount ?? 0,
+      "Thành tiền sau thuế":
+        r.amountAfterVat ?? (r.totalAmount || 0) + (r.vatAmount || 0),
       "Mã BP": r.deptCode,
     }));
 
@@ -1938,6 +2157,183 @@ export default function App() {
 
     const fileName = `Bao_cao_Doanh_thu_${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`;
     XLSX.writeFile(wb, fileName);
+  };
+
+  const handleExportReconciliationToExcel = () => {
+    if (reconciliationData.length === 0) {
+      showNotification("Chưa có dữ liệu để đối soát.", "error");
+      return;
+    }
+
+    const exportData = reconciliationData.map((r) => ({
+      "Sản phẩm": r.productName,
+      "Mã vật tư": r.materialCode || "",
+      "Nhóm": r.category,
+      "Đơn vị kho": r.stockUnit,
+      "SL xuất kho": r.exportQty,
+      "Xuất kho (lít)": Number(r.exportLiters.toFixed(2)),
+      "ĐVT hóa đơn": r.revenueUnit || "",
+      "SL hóa đơn": r.revenueQty,
+      "Hóa đơn (lít)": Number(r.revenueLiters.toFixed(2)),
+      "Lệch (lít)": Number(r.diffLiters.toFixed(2)),
+      "% ra hóa đơn": Number(r.matchPercentage.toFixed(1)),
+      "Doanh thu (VNĐ)": r.revenueAmount,
+      "Số hóa đơn liên quan": r.invoiceCount,
+      "Trạng thái": RECON_STATUS_LABEL[r.status] || r.status,
+      "Lệch đơn vị": r.unitMismatch ? "CÓ" : "",
+      "Thiếu dung tích SP": r.missingCapacity ? "CÓ" : "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DoiSoat");
+
+    const fileName = `Doi_soat_Xuat_kho_Hoa_don_${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
+  /* ---------------- SUA / XOA TUNG DONG DOANH THU ----------------
+   *
+   * Nap file Excel thi nhanh nhung sai mot o la ca file sai. Truoc day cach
+   * duy nhat de sua la bam DON DEP xoa sach roi nap lai - rat de mat so lieu
+   * cua nhung file da nap dung truoc do. Ba viec duoi day cho sua/xoa dung
+   * dong can sua.
+   */
+
+  /** Mo form sua, do so hien tai vao cac o nhap. */
+  const openEditRevenue = (r: RevenueRecord) => {
+    setEditingRevenue(r);
+    setRevenueDraft({
+      // input type="date" chi nhan dang yyyy-MM-dd
+      date: (() => {
+        try {
+          return format(parseDateSafe(r.date), "yyyy-MM-dd");
+        } catch {
+          return format(new Date(), "yyyy-MM-dd");
+        }
+      })(),
+      invoiceNumber: r.invoiceNumber || "",
+      partnerName: r.partnerName || "",
+      productName: r.productName || "",
+      materialCode: r.materialCode || "",
+      unit: r.unit || "",
+      quantity: String(r.quantity ?? ""),
+      unitPrice: String(r.unitPrice ?? ""),
+      totalAmount: String(r.totalAmount ?? ""),
+      vatAmount: String(r.vatAmount ?? ""),
+      deptCode: r.deptCode || "",
+    });
+  };
+
+  const handleSaveRevenueEdit = async () => {
+    if (!editingRevenue || revenueSaving) return;
+
+    const qty = parseExcelNumberSafe(revenueDraft.quantity);
+    const price = parseExcelNumberSafe(revenueDraft.unitPrice);
+    const total = parseExcelNumberSafe(revenueDraft.totalAmount);
+
+    if (!revenueDraft.productName?.trim()) {
+      alert("Tên hàng hóa không được để trống.");
+      return;
+    }
+    if (qty <= 0) {
+      alert("Số lượng phải lớn hơn 0.");
+      return;
+    }
+
+    // Canh bao khi thanh tien lech xa so luong x don gia, nhung KHONG tu sua:
+    // hoa don that co the co chiet khau hoac lam tron, nguoi nhap quyet dinh.
+    if (price > 0 && total > 0) {
+      const expected = qty * price;
+      if (Math.abs(expected - total) / expected > 0.02) {
+        const ok = confirm(
+          `Thành tiền đang là ${formatNumber(total)} đ, nhưng Số lượng × Đơn giá = ${formatNumber(Math.round(expected))} đ.\n\nVẫn lưu theo số anh nhập?`,
+        );
+        if (!ok) return;
+      }
+    }
+
+    setRevenueSaving(true);
+    try {
+      const partner = partners.find(
+        (p) =>
+          p.name?.toLowerCase() ===
+          revenueDraft.partnerName?.trim().toLowerCase(),
+      );
+
+      const vat = parseExcelNumberSafe(revenueDraft.vatAmount);
+      const patch = {
+        date: parseExcelDate(revenueDraft.date),
+        invoiceNumber: revenueDraft.invoiceNumber?.trim() || "",
+        partnerName: revenueDraft.partnerName?.trim() || "",
+        partnerId: partner?.id || editingRevenue.partnerId || "",
+        productName: revenueDraft.productName.trim(),
+        materialCode: revenueDraft.materialCode?.trim() || "",
+        unit: revenueDraft.unit?.trim() || "",
+        quantity: qty,
+        unitPrice: price,
+        // Ô "Thành tiền" trong form là doanh thu TRƯỚC VAT (xem types.ts),
+        // giữ cả ba số cùng gốc để không phải suy diễn lại về sau.
+        totalAmount: total,
+        amountBeforeVat: total,
+        vatAmount: vat,
+        amountAfterVat: total + vat,
+        deptCode: revenueDraft.deptCode?.trim() || "",
+      };
+
+      await updateDoc(doc(db, "revenue", editingRevenue.id), patch);
+      setEditingRevenue(null);
+      showNotification("Đã lưu dòng doanh thu.");
+    } catch (e: any) {
+      console.error(e);
+      handleFirestoreError(e, "update", `revenue/${editingRevenue.id}`);
+      showNotification("Không lưu được dòng doanh thu.", "error");
+    } finally {
+      setRevenueSaving(false);
+    }
+  };
+
+  const handleDeleteRevenueRow = async (r: RevenueRecord) => {
+    if (
+      !confirm(
+        `Xoá dòng này khỏi doanh thu?\n\n${r.productName}\nSố lượng ${formatNumber(r.quantity)} · ${formatNumber(r.totalAmount)} đ\nSố HĐ ${r.invoiceNumber || "—"}`,
+      )
+    )
+      return;
+
+    try {
+      await deleteDoc(doc(db, "revenue", r.id));
+      showNotification("Đã xoá dòng doanh thu.");
+    } catch (e: any) {
+      console.error(e);
+      handleFirestoreError(e, "delete", `revenue/${r.id}`);
+      showNotification("Không xoá được dòng doanh thu.", "error");
+    }
+  };
+
+  /** Xoá cả hóa đơn — dùng khi nạp trùng hoặc nạp sai cả tờ. */
+  const handleDeleteInvoice = async (
+    invoiceNumber: string,
+    items: RevenueRecord[],
+  ) => {
+    if (
+      !confirm(
+        `Xoá toàn bộ hóa đơn ${invoiceNumber} gồm ${items.length} dòng hàng?\n\nTổng ${formatNumber(items.reduce((a, b) => a + (b.totalAmount || 0), 0))} đ.`,
+      )
+    )
+      return;
+
+    try {
+      const batch = writeBatch(db);
+      items.forEach((it) => batch.delete(doc(db, "revenue", it.id)));
+      await batch.commit();
+      setExpandedInvoices((prev) => prev.filter((n) => n !== invoiceNumber));
+      showNotification(`Đã xoá hóa đơn ${invoiceNumber}.`);
+    } catch (e: any) {
+      console.error(e);
+      handleFirestoreError(e, "delete", "revenue");
+      showNotification("Không xoá được hóa đơn.", "error");
+    }
   };
 
   // Error Handling Helper
@@ -3075,6 +3471,8 @@ export default function App() {
   }, [revenueData, timeFilter, filterBaseDate]);
 
   const revenueAnalytics = useMemo(() => {
+    // totalAmount luôn là doanh thu TRƯỚC VAT (xem types.ts), nên mọi con số
+    // dưới đây cùng một gốc so sánh.
     const currentRev = filteredRevenueByTime.reduce(
       (a, b) => a + b.totalAmount,
       0,
@@ -3083,11 +3481,24 @@ export default function App() {
       (a, b) => a + b.totalAmount,
       0,
     );
-    const currentQty = filteredRevenueByTime.reduce(
-      (a, b) => a + b.quantity,
+    const currentVat = filteredRevenueByTime.reduce(
+      (a, b) => a + (b.vatAmount || 0),
       0,
     );
-    const prevQty = previousRevenueByTime.reduce((a, b) => a + b.quantity, 0);
+
+    /**
+     * Sản lượng quy về LÍT. Trước đây cộng thẳng số lượng của mọi dòng rồi gắn
+     * nhãn bằng đơn vị của dòng đầu tiên — tức là cộng lon với lít vào một số
+     * và gọi nó là "sản lượng", kéo theo ARPU cũng vô nghĩa.
+     */
+    const litersOfRows = (rows: typeof filteredRevenueByTime) =>
+      rows.reduce(
+        (a, r) =>
+          a + revenueRowLiters(r, matchRevenueProduct(products, r)).liters,
+        0,
+      );
+    const currentQty = litersOfRows(filteredRevenueByTime);
+    const prevQty = litersOfRows(previousRevenueByTime);
 
     const partnerGroups: Record<string, number> = {};
     const productGroups: Record<string, number> = {};
@@ -3128,10 +3539,15 @@ export default function App() {
     const arpuGrowth = prevArpu > 0 ? ((arpu - prevArpu) / prevArpu) * 100 : 0;
 
     return {
+      /** Doanh thu TRƯỚC VAT. */
       totalRevenue: currentRev,
+      totalVat: currentVat,
+      totalAfterVat: currentRev + currentVat,
       revGrowth: growth,
+      /** Sản lượng quy về LÍT. */
       totalQuantity: currentQty,
       qtyGrowth,
+      /** Đơn giá bình quân, đồng trên một LÍT. */
       arpu,
       arpuGrowth,
       concentration,
@@ -3139,7 +3555,7 @@ export default function App() {
       productStats: sortedProducts,
       productQtyStats: sortedProductQty,
     };
-  }, [filteredRevenueByTime, previousRevenueByTime]);
+  }, [filteredRevenueByTime, previousRevenueByTime, products]);
 
   const cfoMetrics = revenueAnalytics;
 
@@ -3633,7 +4049,9 @@ export default function App() {
         unit: p.unit,
         stock: 0,
         totalLiters: 0,
-        minStock: p.minStock,
+        // Sản phẩm chưa đặt định mức riêng thì dùng ngưỡng chung, để danh sách
+        // "sắp hết hàng" hoạt động thay vì luôn rỗng như trước.
+        minStock: p.minStock ?? DEFAULT_MIN_STOCK,
       });
     });
 
@@ -3655,81 +4073,22 @@ export default function App() {
     return Array.from(invMap.values()).sort((a, b) => b.stock - a.stock);
   }, [batches, products]);
 
-  // Reconciliation Dashboard Logic
-  const reconciliationData = useMemo(() => {
-    const dataMap = new Map<
-      string,
-      {
-        productId: string;
-        productName: string;
-        exportQty: number;
-        revenueQty: number;
-        unit: string;
-        category: string;
-      }
-    >();
+  // Doi soat xuat kho <-> hoa don. Toan bo phep tinh nam o src/lib/reconcile.ts
+  // de chay thu duoc bang du lieu gia, khong phai mo app moi biet dung sai.
+  const reconciliationData = useMemo(
+    () =>
+      buildReconciliation({
+        transactions: filteredTransactionsByTime,
+        revenue: filteredRevenueByTime,
+        products,
+      }),
+    [filteredTransactionsByTime, filteredRevenueByTime, products],
+  );
 
-    // 1. Calculate physical exports (Only completed ones)
-    filteredTransactionsByTime.forEach((t) => {
-      if (t.type === "OUT" && t.status !== "in_transit") {
-        const product = products.find((p) => p.id === t.productId);
-        const entry = dataMap.get(t.productId) || {
-          productId: t.productId,
-          productName: t.productName,
-          exportQty: 0,
-          revenueQty: 0,
-          unit: product?.unit || "ĐV",
-          category: product?.category || "KHÁC",
-        };
-        entry.exportQty += t.quantity;
-        dataMap.set(t.productId, entry);
-      }
-    });
-
-    // 2. Calculate revenue quantities
-    filteredRevenueByTime.forEach((r) => {
-      const product = products.find((p) => p.name === r.productName);
-      const productId = product ? product.id : `legacy_${r.productName}`;
-
-      const entry = dataMap.get(productId) || {
-        productId,
-        productName: r.productName,
-        exportQty: 0,
-        revenueQty: 0,
-        unit: r.unit || "ĐV",
-        category: product?.category || "KHÁC",
-      };
-      entry.revenueQty += r.quantity;
-      dataMap.set(productId, entry);
-    });
-
-    return Array.from(dataMap.values())
-      .map((item) => ({
-        ...item,
-        diff: item.exportQty - item.revenueQty,
-        matchPercentage:
-          item.exportQty > 0
-            ? Math.min(100, (item.revenueQty / item.exportQty) * 100)
-            : item.revenueQty === 0
-              ? 100
-              : 0,
-      }))
-      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  }, [filteredTransactionsByTime, filteredRevenueByTime, products]);
-
-  const totalReconciliationScore = useMemo(() => {
-    if (reconciliationData.length === 0) return 100;
-    const totalDiff = reconciliationData.reduce(
-      (acc, curr) => acc + Math.abs(curr.diff),
-      0,
-    );
-    const totalExport = reconciliationData.reduce(
-      (acc, curr) => acc + curr.exportQty,
-      0,
-    );
-    if (totalExport === 0) return 100;
-    return Math.max(0, 100 - (totalDiff / totalExport) * 100);
-  }, [reconciliationData]);
+  const reconciliationSummary = useMemo(
+    () => summarizeReconciliation(reconciliationData),
+    [reconciliationData],
+  );
 
   // Derived State: Stats & Turnover
   const stats = useMemo(() => {
@@ -3763,14 +4122,17 @@ export default function App() {
       return acc + curr.stock * (product?.price || 0);
     }, 0);
 
-    const lowStockThreshold = 10;
     let lowStockItems = 0;
     let outOfStockItems = 0;
     let healthyItems = 0;
 
     inventory.forEach((i) => {
+      // Dùng đúng định mức của từng sản phẩm (đã có mặc định khi tính
+      // inventory), thay vì một con số 10 riêng ở đây — trước kia thẻ "Cảnh
+      // báo cạn kho" và danh sách "sắp hết hàng" chạy theo hai ngưỡng khác
+      // nhau nên đếm ra hai kết quả lệch nhau.
       if (i.stock <= 0) outOfStockItems++;
-      else if (i.stock < lowStockThreshold) lowStockItems++;
+      else if (i.stock < i.minStock) lowStockItems++;
       else healthyItems++;
     });
 
@@ -4932,16 +5294,18 @@ export default function App() {
             ].includes(activeTab) && (
               <div className="bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="flex bg-slate-100/50 p-1 rounded-xl sm:rounded-2xl border border-slate-100 w-full md:w-auto overflow-x-auto no-scrollbar">
-                  {[
-                    { id: "all", label: "Tất cả" },
-                    { id: "day", label: "Ngày thực tế" },
-                    { id: "week", label: "Tuần thực tế" },
-                    { id: "month", label: "Tháng thực tế" },
-                    { id: "year", label: "Năm thực tế" },
-                  ].map((f) => (
+                  {(
+                    [
+                      { id: "all", label: "Tất cả" },
+                      { id: "day", label: "Ngày thực tế" },
+                      { id: "week", label: "Tuần thực tế" },
+                      { id: "month", label: "Tháng thực tế" },
+                      { id: "year", label: "Năm thực tế" },
+                    ] as const
+                  ).map((f) => (
                     <button
                       key={f.id}
-                      onClick={() => setTimeFilter(f.id as any)}
+                      onClick={() => setTimeFilter(f.id)}
                       className={cn(
                         "flex-1 md:flex-none px-3 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
                         timeFilter === f.id
@@ -5832,14 +6196,20 @@ export default function App() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <div className="flex items-center gap-1.5 p-1.5 bg-white border border-slate-100 rounded-2xl w-fit premium-shadow">
-                      {[
-                        { id: "summary", label: "Tổng hợp", icon: Layers },
-                        { id: "in", label: "Báo cáo Nhập", icon: PlusCircle },
-                        { id: "out", label: "Báo cáo Xuất", icon: MinusCircle },
-                      ].map((st) => (
+                      {(
+                        [
+                          { id: "summary", label: "Tổng hợp", icon: Layers },
+                          { id: "in", label: "Báo cáo Nhập", icon: PlusCircle },
+                          {
+                            id: "out",
+                            label: "Báo cáo Xuất",
+                            icon: MinusCircle,
+                          },
+                        ] as const
+                      ).map((st) => (
                         <button
                           key={st.id}
-                          onClick={() => setReportSubTab(st.id as any)}
+                          onClick={() => setReportSubTab(st.id)}
                           className={cn(
                             "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
                             reportSubTab === st.id
@@ -5976,7 +6346,13 @@ export default function App() {
                                     +{formatNumber(imp.quantity)}
                                   </p>
                                   <p className="text-[9px] font-bold text-slate-400 uppercase">
-                                    {imp.unit || batchLifecycle.unit}
+                                    {/* Giao dịch không lưu đơn vị tính; đơn vị
+                                        lấy từ danh mục sản phẩm. Bản cũ đọc
+                                        imp.unit — trường không tồn tại nên
+                                        luôn rơi về nhánh sau. */}
+                                    {products.find(
+                                      (p) => p.id === imp.productId,
+                                    )?.unit || batchLifecycle.unit}
                                   </p>
                                 </div>
                               </div>
@@ -6022,7 +6398,9 @@ export default function App() {
                                     -{formatNumber(exp.quantity)}
                                   </p>
                                   <p className="text-[9px] font-bold text-slate-400 uppercase">
-                                    {exp.unit || batchLifecycle.unit}
+                                    {products.find(
+                                      (p) => p.id === exp.productId,
+                                    )?.unit || batchLifecycle.unit}
                                   </p>
                                 </div>
                               </div>
@@ -6522,10 +6900,11 @@ export default function App() {
                                       )}
                                       <div className="text-[11px] font-bold text-slate-900 font-mono flex items-center gap-2">
                                         {isGrouped && (
-                                          <Layers
-                                            className="w-3 h-3 text-amber-500"
-                                            title="Giao dịch xuất nhiều lô"
-                                          />
+                                          // Bọc trong <span> để có tooltip:
+                                          // icon Lucide không nhận prop title.
+                                          <span title="Giao dịch xuất nhiều lô">
+                                            <Layers className="w-3 h-3 text-amber-500" />
+                                          </span>
                                         )}
                                         {formatDate(t.date)}
                                       </div>
@@ -6733,7 +7112,7 @@ export default function App() {
                     <div className="space-y-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard
-                          title="Tổng Doanh thu Gộp"
+                          title="Doanh thu (trước VAT)"
                           value={formatNumber(cfoMetrics.totalRevenue)}
                           unit="VND"
                           icon={DollarSign}
@@ -6743,12 +7122,14 @@ export default function App() {
                               ? `${cfoMetrics.revGrowth >= 0 ? "+" : ""}${cfoMetrics.revGrowth.toFixed(1)}%`
                               : null
                           }
-                          subtitle={`${timeFilter !== "all" ? "So với kỳ trước" : "Tổng quan tích lũy"}`}
+                          subtitle={`VAT ${formatNumber(cfoMetrics.totalVat)} đ · sau thuế ${formatNumber(cfoMetrics.totalAfterVat)} đ`}
                         />
                         <StatCard
                           title="Sản lượng tiêu thụ"
-                          value={formatNumber(cfoMetrics.totalQuantity)}
-                          unit={filteredRevenueByTime[0]?.unit || "ĐV"}
+                          value={formatNumber(
+                            Math.round(cfoMetrics.totalQuantity),
+                          )}
+                          unit="LÍT"
                           icon={Package}
                           color="green"
                           trend={
@@ -6756,12 +7137,12 @@ export default function App() {
                               ? `${cfoMetrics.qtyGrowth >= 0 ? "+" : ""}${cfoMetrics.qtyGrowth.toFixed(1)}%`
                               : null
                           }
-                          subtitle="Năng lực cung ứng"
+                          subtitle="Đã quy đổi lon và lít về cùng lít"
                         />
                         <StatCard
-                          title="Giá trị TB / Đơn vị (ARPU)"
+                          title="Đơn giá bình quân / lít"
                           value={formatNumber(Math.round(cfoMetrics.arpu))}
-                          unit="VND"
+                          unit="đ/L"
                           icon={TrendingUp}
                           color="amber"
                           trend={
@@ -6974,7 +7355,7 @@ export default function App() {
                               <div className="flex gap-5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
                                 <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Doanh thu thực đạt{" "}
+                                  Doanh thu (trước VAT) đạt{" "}
                                   <span className="font-bold text-white underline decoration-white/20 underline-offset-4">
                                     {formatNumber(cfoMetrics.totalRevenue)} đ
                                   </span>
@@ -6998,10 +7379,10 @@ export default function App() {
                               <div className="flex gap-5">
                                 <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0" />
                                 <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Hiệu suất đơn giá (ARPU) đạt{" "}
+                                  Đơn giá bình quân đạt{" "}
                                   <span className="font-bold text-white">
                                     {formatNumber(Math.round(cfoMetrics.arpu))}{" "}
-                                    đ/ĐV
+                                    đ/lít
                                   </span>
                                   . Thế trận giá bán{" "}
                                   {cfoMetrics.arpuGrowth >= 0
@@ -7074,8 +7455,319 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Sổ chi tiết - Chế độ ẩn khi lọc "Tất cả" */}
-                    {timeFilter !== "all" && (
+                    {/* ĐỐI SOÁT XUẤT KHO ↔ HÓA ĐƠN
+                        Trả lời câu hỏi: hàng đã rời kho có ra hóa đơn đủ chưa.
+                        Hai bên ghi số theo đơn vị khác nhau nên hạ hết về lít. */}
+                    <div className="space-y-5 pt-12 border-t border-slate-100">
+                      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                        <div className="space-y-1">
+                          <h4 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                            <Layers className="w-5 h-5 text-primary" />
+                            Đối soát Xuất kho ↔ Hóa đơn
+                          </h4>
+                          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                            {periodLabel} · quy về lít · bỏ qua lệch dưới 1%
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setReconOnlyIssues((v) => !v)}
+                            className={cn(
+                              "px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all",
+                              reconOnlyIssues
+                                ? "bg-rose-50 border-rose-200 text-rose-600"
+                                : "bg-white border-slate-200 text-slate-400 hover:text-slate-600",
+                            )}
+                          >
+                            {reconOnlyIssues
+                              ? "Chỉ dòng lệch"
+                              : "Hiện tất cả dòng"}
+                          </button>
+                          <button
+                            onClick={handleExportReconciliationToExcel}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-900 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+                          >
+                            <Download className="w-3.5 h-3.5 text-primary" />
+                            Xuất đối soát
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Bốn con số chốt hạ */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card
+                          className={cn(
+                            "p-4 sm:p-5",
+                            reconciliationSummary.score >= 99
+                              ? "bg-emerald-50 border-emerald-100"
+                              : reconciliationSummary.score >= 95
+                                ? "bg-amber-50 border-amber-100"
+                                : "bg-rose-50 border-rose-100",
+                          )}
+                        >
+                          <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">
+                            Điểm khớp
+                          </p>
+                          <h3
+                            className={cn(
+                              "text-2xl sm:text-3xl font-black font-mono",
+                              reconciliationSummary.score >= 99
+                                ? "text-emerald-600"
+                                : reconciliationSummary.score >= 95
+                                  ? "text-amber-600"
+                                  : "text-rose-600",
+                            )}
+                          >
+                            {reconciliationSummary.score.toFixed(1)}
+                            <span className="text-xs font-bold ml-0.5">%</span>
+                          </h3>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                            Theo sản lượng ·{" "}
+                            {reconciliationSummary.scorableCount} SP đối soát
+                            được
+                          </p>
+                        </Card>
+
+                        <Card className="p-4 sm:p-5">
+                          <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">
+                            Nghi thiếu hóa đơn
+                          </p>
+                          <h3 className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                            {formatNumber(
+                              Math.round(
+                                reconciliationSummary.missingInvoiceLiters,
+                              ),
+                            )}
+                            <span className="text-xs font-bold text-slate-400 ml-1">
+                              L
+                            </span>
+                          </h3>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                            Đã xuất nhưng chưa thấy HĐ
+                          </p>
+                        </Card>
+
+                        <Card className="p-4 sm:p-5">
+                          <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">
+                            Dòng cần xem lại
+                          </p>
+                          <h3 className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                            {reconciliationSummary.issueCount}
+                            <span className="text-xs font-bold text-slate-400 ml-1">
+                              / {reconciliationData.length}
+                            </span>
+                          </h3>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                            Sản phẩm có sai lệch
+                          </p>
+                        </Card>
+
+                        <Card className="p-4 sm:p-5">
+                          <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">
+                            Lỗi dữ liệu
+                          </p>
+                          <h3 className="text-2xl sm:text-3xl font-black font-mono text-slate-900">
+                            {reconciliationSummary.unmatchedCount +
+                              reconciliationSummary.noCapacityCount +
+                              reconciliationSummary.unitMismatchCount}
+                          </h3>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                            {reconciliationSummary.unmatchedCount} chưa khớp DM ·{" "}
+                            {reconciliationSummary.noCapacityCount} thiếu dung
+                            tích · {reconciliationSummary.unitMismatchCount} lệch
+                            ĐVT
+                          </p>
+                        </Card>
+                      </div>
+
+                      {/* Bảng chi tiết */}
+                      <Card noPadding>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left min-w-[900px]">
+                            <thead>
+                              <tr className="bg-slate-50/50 border-b border-slate-100">
+                                <th className="py-3.5 px-5 font-black text-[9px] text-slate-400 uppercase tracking-widest">
+                                  Sản phẩm
+                                </th>
+                                <th className="py-3.5 px-4 font-black text-[9px] text-slate-400 uppercase tracking-widest text-right">
+                                  Xuất kho
+                                </th>
+                                <th className="py-3.5 px-4 font-black text-[9px] text-slate-400 uppercase tracking-widest text-right">
+                                  Hóa đơn
+                                </th>
+                                <th className="py-3.5 px-4 font-black text-[9px] text-slate-400 uppercase tracking-widest text-right">
+                                  Lệch (L)
+                                </th>
+                                <th className="py-3.5 px-4 font-black text-[9px] text-slate-400 uppercase tracking-widest text-right">
+                                  % ra HĐ
+                                </th>
+                                <th className="py-3.5 px-4 font-black text-[9px] text-slate-400 uppercase tracking-widest text-right">
+                                  Doanh thu
+                                </th>
+                                <th className="py-3.5 px-5 font-black text-[9px] text-slate-400 uppercase tracking-widest">
+                                  Trạng thái
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {(() => {
+                                const rows = reconOnlyIssues
+                                  ? reconciliationData.filter(
+                                      (r) => r.status !== "ok",
+                                    )
+                                  : reconciliationData;
+
+                                if (rows.length === 0) {
+                                  return (
+                                    <tr>
+                                      <td colSpan={7} className="py-16">
+                                        <div className="text-center space-y-3">
+                                          <CheckCircle className="w-10 h-10 text-emerald-500/30 mx-auto" />
+                                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                            {reconciliationData.length === 0
+                                              ? "Kỳ này chưa có phiếu xuất và hóa đơn để đối soát"
+                                              : "Toàn bộ sản phẩm khớp trong ngưỡng cho phép"}
+                                          </p>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
+                                return rows.map((r) => {
+                                  const tone =
+                                    r.status === "ok"
+                                      ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+                                      : r.status === "unmatched" ||
+                                          r.status === "no-capacity"
+                                        ? "text-slate-600 bg-slate-100 border-slate-200"
+                                        : r.status === "over" ||
+                                            r.status === "no-export"
+                                          ? "text-amber-600 bg-amber-50 border-amber-100"
+                                          : "text-rose-600 bg-rose-50 border-rose-100";
+
+                                  return (
+                                    <tr
+                                      key={r.key}
+                                      className="hover:bg-slate-50/60 transition-colors"
+                                    >
+                                      <td className="py-3.5 px-5">
+                                        <p className="text-[13px] font-bold text-slate-900 leading-tight">
+                                          {r.productName}
+                                        </p>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                                          {r.materialCode
+                                            ? `MÃ ${r.materialCode}`
+                                            : "CHƯA CÓ MÃ VẬT TƯ"}
+                                          {r.invoiceCount > 0 &&
+                                            ` · ${r.invoiceCount} HĐ`}
+                                          {r.unitMismatch && (
+                                            <span className="text-amber-600">
+                                              {" "}
+                                              · ĐVT LỆCH ({r.stockUnit} ↔{" "}
+                                              {r.revenueUnit})
+                                            </span>
+                                          )}
+                                        </p>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right">
+                                        <p className="font-mono text-[13px] font-bold text-slate-900">
+                                          {formatNumber(
+                                            Math.round(r.exportLiters),
+                                          )}
+                                          <span className="text-[9px] text-slate-400 ml-0.5">
+                                            L
+                                          </span>
+                                        </p>
+                                        <p className="text-[9px] font-bold text-slate-400">
+                                          {formatNumber(r.exportQty)}{" "}
+                                          {r.stockUnit}
+                                        </p>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right">
+                                        <p className="font-mono text-[13px] font-bold text-slate-900">
+                                          {formatNumber(
+                                            Math.round(r.revenueLiters),
+                                          )}
+                                          <span className="text-[9px] text-slate-400 ml-0.5">
+                                            L
+                                          </span>
+                                        </p>
+                                        <p className="text-[9px] font-bold text-slate-400">
+                                          {formatNumber(r.revenueQty)}{" "}
+                                          {r.revenueUnit || "—"}
+                                        </p>
+                                      </td>
+                                      <td
+                                        className={cn(
+                                          "py-3.5 px-4 text-right font-mono text-[13px] font-black",
+                                          Math.abs(r.diffLiters) < 0.5
+                                            ? "text-slate-300"
+                                            : r.diffLiters > 0
+                                              ? "text-rose-600"
+                                              : "text-amber-600",
+                                        )}
+                                      >
+                                        {r.diffLiters > 0 ? "+" : ""}
+                                        {formatNumber(
+                                          Math.round(r.diffLiters),
+                                        )}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right">
+                                        <p className="font-mono text-[13px] font-bold text-slate-700">
+                                          {r.exportLiters > 0
+                                            ? `${r.matchPercentage.toFixed(0)}%`
+                                            : "—"}
+                                        </p>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono text-[13px] font-bold text-slate-900">
+                                        {formatNumber(r.revenueAmount)}
+                                      </td>
+                                      <td className="py-3.5 px-5">
+                                        <span
+                                          className={cn(
+                                            "inline-block px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider whitespace-nowrap",
+                                            tone,
+                                          )}
+                                        >
+                                          {RECON_STATUS_LABEL[r.status]}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+
+                      <div className="flex items-start gap-3 bg-slate-50/60 border border-slate-100 rounded-2xl p-4">
+                        <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                          Lệch dương (đỏ) = hàng đã rời kho nhưng chưa thấy hóa
+                          đơn, tức có nguy cơ mất doanh thu. Lệch âm (vàng) = hóa
+                          đơn nhiều hơn hàng thực xuất, thường do phiếu xuất chưa
+                          nhập hoặc còn nằm ở Đơn đi đường. Dòng "Chưa khớp danh
+                          mục" là tên/mã trên hóa đơn không có trong Danh mục sản
+                          phẩm — phải sửa dữ liệu trước, vì những dòng đó không
+                          tính vào điểm khớp một cách đáng tin.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Sổ chi tiết. Khi lọc "Tất cả" thì chỉ dựng 50 hóa đơn
+                        gần nhất — trước đây khối này bị ẩn hẳn nên không có
+                        cách nào xem/sửa hóa đơn ở chế độ toàn thời gian. */}
+                    {(() => {
+                      const SHOW_ALL_LIMIT = 50;
+                      const isCapped =
+                        timeFilter === "all" &&
+                        groupedRevenue.length > SHOW_ALL_LIMIT;
+                      const visibleInvoices = isCapped
+                        ? groupedRevenue.slice(0, SHOW_ALL_LIMIT)
+                        : groupedRevenue;
+                      return (
                       <div className="space-y-4 pt-12 border-t border-slate-100">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                           <h4 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -7105,9 +7797,21 @@ export default function App() {
                           </div>
                         </div>
 
+                        {isCapped && (
+                          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                              Đang ở chế độ "Tất cả" nên chỉ hiện{" "}
+                              {SHOW_ALL_LIMIT} hóa đơn gần nhất trong tổng{" "}
+                              {groupedRevenue.length} hóa đơn. Chọn lọc theo
+                              tháng hoặc năm để xem và sửa đầy đủ.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="space-y-3">
-                          {groupedRevenue.length > 0 ? (
-                            groupedRevenue.map((invoice) => {
+                          {visibleInvoices.length > 0 ? (
+                            visibleInvoices.map((invoice) => {
                               const isExpanded = expandedInvoices.includes(
                                 invoice.invoiceNumber,
                               );
@@ -7190,6 +7894,25 @@ export default function App() {
                                             </span>
                                           </p>
                                         </div>
+                                        {/* Xoá cả tờ hóa đơn - dùng khi nạp
+                                            trùng hoặc nạp sai cả tờ. Chặn nổi
+                                            bọt để không bung/thu gọn theo. */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteInvoice(
+                                              invoice.invoiceNumber,
+                                              invoice.items,
+                                            );
+                                          }}
+                                          title="Xoá toàn bộ hóa đơn này"
+                                          className="col-span-2 md:col-span-1 flex items-center justify-center gap-1 md:w-8 h-7 rounded-lg md:rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          <span className="md:hidden text-[8px] font-black uppercase tracking-[0.2em]">
+                                            Xoá hóa đơn
+                                          </span>
+                                        </button>
                                         {invoice.invoiceNumber !== "N/A" && (
                                           <div
                                             className={cn(
@@ -7223,32 +7946,59 @@ export default function App() {
                                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {invoice.items.map((item, idx) => (
                                           <div
-                                            key={idx}
-                                            className="bg-white border border-slate-100 p-4 rounded-xl flex items-start justify-between shadow-sm"
+                                            key={item.id || idx}
+                                            className="bg-white border border-slate-100 p-4 rounded-xl shadow-sm group/item hover:border-primary/30 transition-all"
                                           >
-                                            <div className="space-y-0.5">
-                                              <p className="text-[10px] font-bold text-slate-700 line-clamp-1">
-                                                {item.productName}
-                                              </p>
-                                              <p className="text-[9px] font-medium text-slate-400">
-                                                MÃ: {item.materialCode || "N/A"}
-                                              </p>
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div className="space-y-0.5 min-w-0">
+                                                <p className="text-[10px] font-bold text-slate-700 line-clamp-1">
+                                                  {item.productName}
+                                                </p>
+                                                <p className="text-[9px] font-medium text-slate-400">
+                                                  MÃ:{" "}
+                                                  {item.materialCode || "N/A"}
+                                                </p>
+                                              </div>
+                                              <div className="text-right shrink-0">
+                                                <p className="text-[10px] font-bold text-slate-900">
+                                                  {formatNumber(item.quantity)}{" "}
+                                                  {item.unit ||
+                                                    products.find(
+                                                      (p) =>
+                                                        p.name ===
+                                                        item.productName,
+                                                    )?.unit ||
+                                                    "ĐV"}
+                                                </p>
+                                                <p className="text-[9px] font-bold text-emerald-600">
+                                                  {formatNumber(
+                                                    item.totalAmount,
+                                                  )}{" "}
+                                                  đ
+                                                </p>
+                                              </div>
                                             </div>
-                                            <div className="text-right">
-                                              <p className="text-[10px] font-bold text-slate-900">
-                                                {formatNumber(item.quantity)}{" "}
-                                                {item.unit ||
-                                                  products.find(
-                                                    (p) =>
-                                                      p.name ===
-                                                      item.productName,
-                                                  )?.unit ||
-                                                  "ĐV"}
-                                              </p>
-                                              <p className="text-[9px] font-bold text-emerald-600">
-                                                {formatNumber(item.totalAmount)}{" "}
-                                                đ
-                                              </p>
+
+                                            {/* Sửa / xoá đúng dòng này */}
+                                            <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-100">
+                                              <button
+                                                onClick={() =>
+                                                  openEditRevenue(item)
+                                                }
+                                                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-slate-50 text-slate-500 hover:bg-primary/10 hover:text-primary text-[9px] font-black uppercase tracking-widest transition-all"
+                                              >
+                                                <FileText className="w-3 h-3" />
+                                                Sửa
+                                              </button>
+                                              <button
+                                                onClick={() =>
+                                                  handleDeleteRevenueRow(item)
+                                                }
+                                                className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 text-[9px] font-black uppercase tracking-widest transition-all"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                                Xoá
+                                              </button>
                                             </div>
                                           </div>
                                         ))}
@@ -7268,7 +8018,8 @@ export default function App() {
                           )}
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </>
                 ) : (
                   <Card className="py-16 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-2 bg-slate-50/50 rounded-3xl">
@@ -8324,8 +9075,11 @@ export default function App() {
                                 />
                               </div>
                               <div className="sm:col-span-4">
-                                {(activeTab === "import" ||
-                                  newTransaction.type === "OPENING") && (
+                                {/* Khối này nằm trong nhánh activeTab !==
+                                    "import" (nhập kho dùng bảng nhập nhanh),
+                                    nên điều kiện activeTab === "import" cũ ở
+                                    đây luôn sai — đã bỏ. */}
+                                {newTransaction.type === "OPENING" && (
                                   <Input
                                     label="Số lô (Mã lô nhập)"
                                     placeholder="LOT-XXX"
@@ -8499,16 +9253,19 @@ export default function App() {
                       <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
                         Tạo sẵn giao dịch nhập kho của 5 ngày gần nhất để chạy
                         thử quy trình: nhập số → in phiếu → ký → tải ảnh duyệt.
-                        Mọi bản ghi đều mang dấu riêng nên xoá được sạch, không
-                        lẫn vào số liệu thật về sau.
+                        Kèm phiếu xuất và hóa đơn của 3 ngày gần nhất — trong đó
+                        cố ý để một sản phẩm thiếu hóa đơn, một sản phẩm chưa ra
+                        hóa đơn và một hóa đơn sai tên hàng, để xem bảng Đối soát
+                        có bắt đúng không. Mọi bản ghi đều mang dấu riêng nên xoá
+                        được sạch, không lẫn vào số liệu thật về sau.
                       </p>
                     </div>
 
                     {demoTransactionCount > 0 && (
                       <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
                         <p className="text-[11px] font-black text-amber-800">
-                          Đang có {demoTransactionCount} giao dịch thử nghiệm
-                          trong hệ thống
+                          Đang có {demoTransactionCount} bản ghi thử nghiệm
+                          (giao dịch + doanh thu) trong hệ thống
                         </p>
                       </div>
                     )}
@@ -9551,6 +10308,270 @@ export default function App() {
                     </div>
                   </form>
                 </div>
+              </div>
+            )}
+
+            {/* SỬA MỘT DÒNG DOANH THU
+                Nạp file Excel thì nhanh nhưng sai một ô là cả file sai. Form
+                này cho sửa đúng dòng cần sửa, không phải xoá sạch nạp lại. */}
+            {editingRevenue && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
+                <div
+                  className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+                  onClick={() => !revenueSaving && setEditingRevenue(null)}
+                />
+                <Card
+                  className="relative w-full max-w-3xl bg-white shadow-2xl rounded-3xl overflow-hidden"
+                  noPadding
+                >
+                  <div className="bg-slate-900 p-5 sm:p-6 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center shrink-0">
+                        <Receipt className="w-5 h-5 text-slate-900" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-white text-base sm:text-lg font-black uppercase tracking-tight">
+                          Sửa dòng doanh thu
+                        </h3>
+                        <p className="text-amber-400 text-[9px] font-black uppercase tracking-widest truncate">
+                          Số HĐ {editingRevenue.invoiceNumber || "—"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setEditingRevenue(null)}
+                      disabled={revenueSaving}
+                      className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all shrink-0 disabled:opacity-40"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-[70vh] overflow-y-auto p-4 sm:p-6 custom-scrollbar space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Input
+                        label="Ngày hóa đơn"
+                        type="date"
+                        value={revenueDraft.date || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            date: e.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Số hóa đơn"
+                        value={revenueDraft.invoiceNumber || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            invoiceNumber: e.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Mã bộ phận"
+                        value={revenueDraft.deptCode || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            deptCode: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <Input
+                      label="Đơn vị thụ hưởng"
+                      list="revenue-partner-options"
+                      value={revenueDraft.partnerName || ""}
+                      onChange={(e: any) =>
+                        setRevenueDraft((d) => ({
+                          ...d,
+                          partnerName: e.target.value,
+                        }))
+                      }
+                    />
+                    <datalist id="revenue-partner-options">
+                      {partners.map((p) => (
+                        <option key={p.id} value={p.name} />
+                      ))}
+                    </datalist>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
+                        <Input
+                          label="Tên hàng hóa"
+                          list="revenue-product-options"
+                          value={revenueDraft.productName || ""}
+                          onChange={(e: any) =>
+                            setRevenueDraft((d) => ({
+                              ...d,
+                              productName: e.target.value,
+                            }))
+                          }
+                        />
+                        <datalist id="revenue-product-options">
+                          {products.map((p) => (
+                            <option key={p.id} value={p.name} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <Input
+                        label="Mã vật tư"
+                        value={revenueDraft.materialCode || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            materialCode: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Gợi ý khớp danh mục: cho biết ngay dòng này có khớp được
+                        vào Danh mục sản phẩm hay không, vì không khớp thì bảng
+                        Đối soát sẽ xếp vào "Chưa khớp danh mục". */}
+                    {(() => {
+                      const matched = matchRevenueProduct(products, {
+                        materialCode: revenueDraft.materialCode,
+                        productName: revenueDraft.productName,
+                      });
+                      return (
+                        <div
+                          className={cn(
+                            "flex items-start gap-3 rounded-2xl p-3.5 border",
+                            matched
+                              ? "bg-emerald-50 border-emerald-200"
+                              : "bg-amber-50 border-amber-200",
+                          )}
+                        >
+                          {matched ? (
+                            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          )}
+                          <p
+                            className={cn(
+                              "text-[11px] font-bold leading-relaxed",
+                              matched ? "text-emerald-800" : "text-amber-800",
+                            )}
+                          >
+                            {matched
+                              ? `Khớp danh mục: ${matched.name} (${matched.unit}). Dòng này sẽ vào được bảng Đối soát.`
+                              : "Chưa khớp Danh mục sản phẩm. Điền đúng Mã vật tư hoặc đúng tên như trong danh mục, nếu không bảng Đối soát sẽ xếp dòng này vào nhóm cần sửa dữ liệu."}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <Input
+                        label="Đơn vị tính"
+                        value={revenueDraft.unit || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            unit: e.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Số lượng"
+                        inputMode="decimal"
+                        value={revenueDraft.quantity || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            quantity: e.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        label="Đơn giá"
+                        inputMode="decimal"
+                        value={revenueDraft.unitPrice || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            unitPrice: e.target.value,
+                          }))
+                        }
+                      />
+                      <Input
+                        label="VAT"
+                        inputMode="decimal"
+                        value={revenueDraft.vatAmount || ""}
+                        onChange={(e: any) =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            vatAmount: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                      <div className="space-y-2">
+                        <Input
+                          label="Thành tiền TRƯỚC VAT (= doanh thu)"
+                          inputMode="decimal"
+                          value={revenueDraft.totalAmount || ""}
+                          onChange={(e: any) =>
+                            setRevenueDraft((d) => ({
+                              ...d,
+                              totalAmount: e.target.value,
+                            }))
+                          }
+                        />
+                        <p className="text-[10px] font-bold text-slate-400 ml-1">
+                          Sau thuế:{" "}
+                          {formatNumber(
+                            parseExcelNumberSafe(revenueDraft.totalAmount) +
+                              parseExcelNumberSafe(revenueDraft.vatAmount),
+                          )}{" "}
+                          đ
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRevenueDraft((d) => ({
+                            ...d,
+                            totalAmount: String(
+                              Math.round(
+                                parseExcelNumberSafe(d.quantity) *
+                                  parseExcelNumberSafe(d.unitPrice),
+                              ),
+                            ),
+                          }))
+                        }
+                        className="px-4 py-3 sm:py-4 rounded-xl sm:rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 font-black text-[10px] uppercase tracking-widest transition-all"
+                      >
+                        Tính lại = Số lượng × Đơn giá
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setEditingRevenue(null)}
+                      disabled={revenueSaving}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      className="flex-[2]"
+                      loading={revenueSaving}
+                      onClick={handleSaveRevenueEdit}
+                    >
+                      Lưu dòng doanh thu
+                    </Button>
+                  </div>
+                </Card>
               </div>
             )}
           </div>
