@@ -6,11 +6,19 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  Download,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Product, Partner } from "../types";
 import { cn, formatNumber } from "../lib/utils";
+import {
+  buildBbgnLookups,
+  buildBbgnTemplateRows,
+  parseBbgnSheet,
+  type BbgnDraft,
+  type BbgnParseResult,
+} from "../lib/bbgn";
 
 /**
  * NẠP NHANH DỮ LIỆU XUẤT KHO TỪ FILE BBGN
@@ -19,52 +27,15 @@ import { cn, formatNumber } from "../lib/utils";
  * lần giao, còn các loại bia nằm ngang thành cột. Một dòng giao 5 loại bia
  * tương ứng 5 giao dịch xuất kho trong app.
  *
- * Cấu trúc file (đọc từ file thật, không phải phỏng đoán):
- *
- *   dòng tiêu đề 1 :  ... | Địa điểm | Note | BB | Ngày giao | Tên | <tổng>...
- *   dòng mã vật tư :                                              | 10168107 | 10174040 | ...
- *   dòng tên hàng  :                                              | Bia Golden Bridge ... | ...
- *   dòng dữ liệu   :  ... | BNC | BNC | đã có bbgn | 01.08.26 | NH 1901 | 432,6 | 412 | ...
- *
- * Cách dò không cứng nhắc theo số thứ tự dòng/cột, mà tìm theo dấu hiệu:
- * dòng nào có từ 3 ô mã vật tư 8 chữ số trở lên thì đó là dòng mã; các cột
- * mô tả tìm theo chữ trong tiêu đề. Nhờ vậy file tháng sau có xê dịch vài
- * dòng vẫn đọc được.
+ * File này chỉ lo GIAO DIỆN. Phép đọc file và phép dựng file mẫu nằm ở
+ * `src/lib/bbgn.ts` để chạy thử được bằng dữ liệu giả — quan trọng nhất là kiểm
+ * được rằng file mẫu tải về đọc lại được, hai thứ đó mà lệch nhau thì người
+ * dùng điền số vào mẫu rồi nạp lên sẽ nhận lỗi.
  *
  * NẠP XONG CHƯA GHI NGAY: bảng xem trước để người dùng soát rồi mới bấm tạo.
  */
 
-export interface BbgnDraft {
-  /** yyyy-MM-dd */
-  dateKey: string;
-  partnerId: string;
-  partnerName: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  /** Điểm nhận (NH 1901, Cầu Vàng...) — ghi vào ghi chú của giao dịch. */
-  outlet: string;
-  /** Cột Note trong file, chỉ giữ khi khác với địa điểm. */
-  note: string;
-}
-
-/** Dòng đọc được từ file nhưng chưa biết thuộc đơn vị nào. */
-interface PendingRow {
-  key: string;
-  rawUnit: string;
-  dateKey: string;
-  outlet: string;
-  note: string;
-  items: { productId: string; productName: string; quantity: number }[];
-}
-
-interface ParseResult {
-  sheetName: string;
-  drafts: BbgnDraft[];
-  pending: PendingRow[];
-  unknownCodes: { code: string; name: string; rows: number }[];
-  skippedRows: number;
-}
+export type { BbgnDraft };
 
 interface Props {
   products: Product[];
@@ -73,219 +44,22 @@ interface Props {
   busy: boolean;
 }
 
-/** Bỏ dấu, bỏ khoảng trắng thừa để so tên đơn vị cho khớp. */
-function normalize(s: string): string {
-  // \p{M} = dau thanh/dau mu tach ra sau khi normalize NFD
-  return String(s || "")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .replace(/đ/gi, "d")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** Đọc ô ngày: có thể là Date, số sê-ri Excel, hoặc chuỗi dd.MM.yy. */
-function parseDateCell(cell: any): string | null {
-  if (cell instanceof Date && !isNaN(+cell)) {
-    return format(cell, "yyyy-MM-dd");
-  }
-  if (typeof cell === "number" && cell > 20000 && cell < 80000) {
-    // Số sê-ri Excel tính từ 30/12/1899
-    const ms = Math.round((cell - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    return isNaN(+d) ? null : format(d, "yyyy-MM-dd");
-  }
-  const text = String(cell || "").trim();
-  const m = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-  if (!m) return null;
-  const day = +m[1];
-  const month = +m[2];
-  let year = +m[3];
-  if (year < 100) year += year < 70 ? 2000 : 1900;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function toNumber(cell: any): number {
-  if (typeof cell === "number") return cell;
-  const text = String(cell ?? "").trim();
-  if (!text) return 0;
-  // File dùng dấu phẩy thập phân ở một số ô
-  const n = Number(text.replace(/\s/g, "").replace(",", "."));
-  return isNaN(n) ? 0 : n;
-}
-
 export default function BbgnImport({
   products,
   partners,
   onCreate,
   busy,
 }: Props) {
-  const [result, setResult] = useState<ParseResult | null>(null);
+  const [result, setResult] = useState<BbgnParseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [assigned, setAssigned] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const partnerByName = useMemo(() => {
-    const m = new Map<string, Partner>();
-    partners.forEach((p) => {
-      m.set(normalize(p.name), p);
-      if (p.sapCode) m.set(normalize(p.sapCode), p);
-    });
-    return m;
-  }, [partners]);
-
-  const productByCode = useMemo(() => {
-    const m = new Map<string, Product>();
-    products.forEach((p) => {
-      if (p.materialCode) m.set(String(p.materialCode).trim(), p);
-    });
-    return m;
-  }, [products]);
-
-  /** Đọc một sheet thành các dòng nháp; trả null nếu sheet không đúng dạng. */
-  const parseSheet = (
-    rows: any[][],
-    sheetName: string,
-  ): ParseResult | null => {
-    // 1. Tìm dòng mã vật tư: dòng nào có >= 3 ô là số 8 chữ số
-    let codeRowIdx = -1;
-    const limit = Math.min(rows.length, 12);
-    for (let r = 0; r < limit; r++) {
-      const hits = (rows[r] || []).filter((c) =>
-        /^\d{8}$/.test(String(c ?? "").trim()),
-      );
-      if (hits.length >= 3) {
-        codeRowIdx = r;
-        break;
-      }
-    }
-    if (codeRowIdx < 0) return null;
-
-    const codeRow = rows[codeRowIdx] || [];
-    const nameRow = rows[codeRowIdx + 1] || [];
-    const codeCols: { col: number; code: string; name: string }[] = [];
-    codeRow.forEach((c, i) => {
-      const code = String(c ?? "").trim();
-      if (/^\d{8}$/.test(code)) {
-        codeCols.push({
-          col: i,
-          code,
-          // Bỏ ký tự BOM lẫn trong tên hàng của file gốc
-          name: String(nameRow[i] ?? "").replace(/﻿/g, "").trim(),
-        });
-      }
-    });
-
-    // 2. Tìm các cột mô tả trong những dòng phía trên
-    const findCol = (...keywords: string[]): number => {
-      for (let r = 0; r <= codeRowIdx; r++) {
-        const row = rows[r] || [];
-        for (let c = 0; c < row.length; c++) {
-          const text = normalize(String(row[c] ?? ""));
-          if (text && keywords.some((k) => text === k || text.startsWith(k))) {
-            return c;
-          }
-        }
-      }
-      return -1;
-    };
-
-    const colUnit = findCol("dia diem");
-    const colNote = findCol("note", "ghi chu");
-    const colDate = findCol("ngay giao");
-    const colOutlet = findCol("ten");
-
-    if (colDate < 0) return null;
-
-    // 3. Duyệt dữ liệu
-    const drafts: BbgnDraft[] = [];
-    const pending: PendingRow[] = [];
-    const unknown = new Map<string, { name: string; rows: number }>();
-    let skipped = 0;
-
-    for (let r = codeRowIdx + 2; r < rows.length; r++) {
-      const row = rows[r] || [];
-      const dateKey = parseDateCell(row[colDate]);
-      if (!dateKey) continue;
-
-      const rawUnit = String(colUnit >= 0 ? row[colUnit] ?? "" : "").trim();
-      const outlet = String(
-        colOutlet >= 0 ? row[colOutlet] ?? "" : "",
-      ).trim();
-      const rawNote = String(colNote >= 0 ? row[colNote] ?? "" : "").trim();
-      const note = normalize(rawNote) === normalize(rawUnit) ? "" : rawNote;
-
-      const items: {
-        productId: string;
-        productName: string;
-        quantity: number;
-      }[] = [];
-
-      for (const cc of codeCols) {
-        const qty = toNumber(row[cc.col]);
-        if (qty <= 0) continue;
-        const product = productByCode.get(cc.code);
-        if (!product) {
-          const prev = unknown.get(cc.code);
-          unknown.set(cc.code, {
-            name: cc.name,
-            rows: (prev?.rows || 0) + 1,
-          });
-          continue;
-        }
-        items.push({
-          productId: product.id,
-          productName: product.name,
-          quantity: qty,
-        });
-      }
-
-      if (!items.length) {
-        skipped++;
-        continue;
-      }
-
-      const partner = partnerByName.get(normalize(rawUnit));
-      if (partner) {
-        items.forEach((it) =>
-          drafts.push({
-            dateKey,
-            partnerId: partner.id,
-            partnerName: partner.name,
-            productId: it.productId,
-            productName: it.productName,
-            quantity: it.quantity,
-            outlet,
-            note,
-          }),
-        );
-      } else {
-        pending.push({
-          key: `r${r}`,
-          rawUnit,
-          dateKey,
-          outlet,
-          note,
-          items,
-        });
-      }
-    }
-
-    return {
-      sheetName,
-      drafts,
-      pending,
-      unknownCodes: Array.from(unknown.entries()).map(([code, v]) => ({
-        code,
-        name: v.name,
-        rows: v.rows,
-      })),
-      skippedRows: skipped,
-    };
-  };
+  const lookups = useMemo(
+    () => buildBbgnLookups(products, partners),
+    [products, partners],
+  );
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -298,7 +72,7 @@ export default function BbgnImport({
 
       // Thử từng sheet, lấy sheet cho ra nhiều dòng nhất — file của bộ phận có
       // nhiều sheet phụ (Tkho, file đc, Đơn treo) không phải bảng giao hàng.
-      let best: ParseResult | null = null;
+      let best: BbgnParseResult | null = null;
       for (const name of wb.SheetNames) {
         const rows = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[name], {
           header: 1,
@@ -306,7 +80,7 @@ export default function BbgnImport({
           defval: "",
           blankrows: true,
         });
-        const parsed = parseSheet(rows, name);
+        const parsed = parseBbgnSheet(rows, name, lookups);
         if (
           parsed &&
           (!best ||
@@ -369,6 +143,34 @@ export default function BbgnImport({
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  /**
+   * Xuất file mẫu đúng dạng bảng chéo mà hàm đọc nhận ra được.
+   *
+   * Nội dung do lib/bbgn.ts dựng từ danh mục thật (mã vật tư, tên đơn vị) nên
+   * mẫu tải về là nạp lại được ngay, không phải mẫu chép tay rồi lệch mã.
+   */
+  const downloadTemplate = () => {
+    try {
+      const tpl = buildBbgnTemplateRows(products, partners);
+      setError(null);
+
+      const ws = XLSX.utils.aoa_to_sheet(tpl.rows);
+      ws["!cols"] = tpl.colWidths;
+
+      // Hướng dẫn để ở sheet riêng: sheet này không có dòng mã vật tư nên hàm
+      // đọc bỏ qua, không sợ lẫn vào dữ liệu.
+      const guide = XLSX.utils.aoa_to_sheet(tpl.guideRows);
+      guide["!cols"] = [{ wch: 78 }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "BBGN");
+      XLSX.utils.book_append_sheet(wb, guide, "Huong dan");
+      XLSX.writeFile(wb, `Mau-BBGN-${format(new Date(), "yyyyMM")}.xlsx`);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
@@ -379,7 +181,9 @@ export default function BbgnImport({
           thành từng giao dịch xuất kho. Điểm nhận (NH 1901, Cầu Vàng...) được
           ghi vào ghi chú của giao dịch.{" "}
           <strong>Đọc xong chưa ghi ngay</strong> — anh soát bảng bên dưới rồi
-          mới bấm tạo.
+          mới bấm tạo. Chưa có file của bộ phận thì bấm{" "}
+          <strong>Tải file mẫu</strong> — mẫu dựng sẵn theo mã vật tư và đơn vị
+          trong danh mục nên điền số vào là nạp lại được ngay.
         </p>
       </div>
 
@@ -402,6 +206,13 @@ export default function BbgnImport({
             }}
           />
         </label>
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center gap-2"
+        >
+          <Download className="w-4 h-4 text-primary" /> Tải file mẫu
+        </button>
         {fileName && (
           <span className="text-[11px] font-bold text-slate-400 truncate max-w-[280px]">
             {fileName}

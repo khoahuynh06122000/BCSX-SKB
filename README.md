@@ -80,6 +80,7 @@ Firebase.
 src/App.tsx        Toàn bộ giao diện và logic nghiệp vụ (file lớn ~10.000 dòng)
 src/firebase.ts    Khởi tạo Firebase, đọc cấu hình từ biến môi trường
 src/lib/cloudinary.ts  Nén và tải ảnh lên Cloudinary
+src/lib/bbgn.ts          Đọc file BBGN dạng bảng chéo và dựng file mẫu BBGN
 src/lib/reconcile.ts     Đối soát xuất kho ↔ hóa đơn, quy đổi lít, khớp mã vật tư
 src/lib/revenueKey.ts    Khoá định danh dòng doanh thu để chống nạp trùng
 src/lib/revenueImport.ts Quyết định ghi gì / xoá gì khi nạp file doanh thu
