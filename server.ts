@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { requireUser } from "./api/_auth";
 
 dotenv.config();
 
@@ -34,6 +35,10 @@ function getGeminiClient(): GoogleGenAI {
 
 // API Routes
 app.post("/api/gemini/scan-invoice", async (req, res) => {
+  // Cung cua chan nhu ban tren Vercel, de chay tai may khong lech voi that.
+  const user = await requireUser(req, res);
+  if (!user) return;
+
   try {
     const { image } = req.body; // base64 string
 
@@ -101,7 +106,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

@@ -24,8 +24,13 @@ nhưng không tải được dữ liệu.
 | Firebase | `VITE_FIREBASE_*` | Firebase Console → Project settings → *Your apps* → SDK setup and configuration → Config |
 | Cloudinary | `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET` | Cloudinary Dashboard (cloud name) và Settings → Upload → tạo preset **Unsigned** |
 | Gemini | `GEMINI_API_KEY` | Google AI Studio. Không có tiền tố `VITE_` nên chỉ máy chủ đọc được. |
+| AI (tuỳ chọn) | `AI_ALLOWED_EMAILS` | Danh sách email được phép dùng tính năng AI, cách nhau bởi dấu phẩy. Để trống thì mọi người đã đăng nhập đều dùng được. |
 
 Sau khi thêm hoặc sửa biến, phải **Redeploy** thì thay đổi mới có hiệu lực.
+
+> `VITE_FIREBASE_API_KEY` được dùng ở **cả hai phía**: trình duyệt dùng để kết nối
+> Firebase, và hàm serverless dùng để xác minh người gọi các endpoint AI. Thiếu biến
+> này thì hai tính năng quét ảnh bằng AI sẽ báo lỗi 500.
 
 ### Phân quyền Firestore
 
@@ -64,12 +69,42 @@ Tạo `.env.local` theo mẫu, rồi `npm run dev` và mở http://localhost:300
 
 ## Đăng nhập lần đầu
 
-Tài khoản quản trị mặc định: `khoahuynh` / `123456`, mã PIN `061220`.
-**Hãy đổi mật khẩu và PIN ngay sau lần đăng nhập đầu tiên** ở mục Hồ sơ cá nhân.
+App **đăng nhập bằng Google**, không có username/password riêng — mật khẩu do Google
+quản lý, app không giữ gì cả.
 
-## Theo dõi dung lượng
+1. Bấm đăng nhập, chọn tài khoản Google.
+2. Tài khoản mới vào sẽ ở trạng thái **chờ duyệt** (`PENDING`) và chưa xem được dữ liệu.
+3. Chủ sở hữu — tài khoản có email khai trong `ownerEmail()` của
+   [`firestore.rules`](firestore.rules) — vào tab **Thiết lập** để đặt vai trò
+   OWNER / STAFF / VIEWER cho từng người.
 
-Tab **Thiết lập** có mục *Sức khỏe hệ thống · Dung lượng Firebase*: ước tính phần trăm
+Mã **PIN** là lớp khoá màn hình cho máy dùng chung, đặt trong mục Hồ sơ cá nhân. Nó
+không thay cho đăng nhập: PIN chỉ có 6 chữ số nên đừng dùng lại PIN thẻ ngân hàng.
+
+## Theo dõi hạn mức
+
+### Việc còn nợ: lượt đọc sẽ hết trước dung lượng
+
+App hiện **tải trọn** các collection mỗi lần mở (`onSnapshot` không có `limit()` hay
+`where()`), nên mỗi lần mở app tốn số lượt đọc bằng đúng tổng số tài liệu đang có. Gói
+Spark cho **50.000 lượt đọc/ngày**. Với 10.000 tài liệu thì cả nhóm chỉ mở được khoảng
+5 lần một ngày là hết hạn mức, và khi hết thì app không tải được dữ liệu.
+
+**Vì sao chưa thêm `limit()`:** tồn kho theo lô (FIFO) và tồn đầu/cuối kỳ đều duyệt
+**toàn bộ** lịch sử giao dịch. Cắt bớt dữ liệu tải về sẽ làm số tồn kho sai mà không
+báo lỗi gì — tệ hơn hẳn việc hết hạn mức đọc.
+
+**Cách sửa đúng** (là một thay đổi thiết kế, chưa làm): chốt **tồn đầu kỳ** theo tháng
+vào một collection riêng, rồi mỗi lần mở app chỉ tải tồn đầu kỳ + giao dịch của kỳ đang
+xem. Khi đó `limit()`/`where()` mới an toàn.
+
+Mục *Sức khỏe hệ thống* trong tab Thiết lập hiện số lượt đọc mỗi lần mở app và ước
+lượng còn mở được bao nhiêu lần mỗi ngày. Khi ô đó chuyển sang **"Chật"** là lúc phải
+làm việc trên, đừng đợi app trắng dữ liệu.
+
+### Dung lượng
+
+Cùng mục đó ước tính phần trăm
 dung lượng đã dùng trên 1 GB của gói Spark miễn phí, tốc độ phát sinh giao dịch và dự
 báo còn bao lâu thì đầy. Ảnh minh chứng nằm trên Cloudinary nên không chiếm dung lượng
 Firebase.

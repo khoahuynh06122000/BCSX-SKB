@@ -19,7 +19,6 @@ import {
   Calendar,
   Clock,
   User,
-  MoreVertical,
   Download,
   LogOut,
   ChevronRight,
@@ -30,8 +29,6 @@ import {
   Info,
   Menu,
   X,
-  CreditCard,
-  Droplet,
   CheckCircle,
   Truck,
   Camera,
@@ -42,13 +39,11 @@ import {
   AlertTriangle,
   DollarSign,
   HandCoins,
-  BarChart3,
   Trash2,
   RefreshCw,
   ShieldCheck,
   RotateCcw,
   Package2,
-  PackageSearch,
   FileUp,
   Beer,
   Sun,
@@ -70,11 +65,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area,
-  ComposedChart,
 } from "recharts";
 
 import {
@@ -115,11 +107,7 @@ import {
   UserProfile,
   ImportSlip,
 } from "./types";
-import {
-  INITIAL_PRODUCTS,
-  INITIAL_PARTNERS,
-  INITIAL_TRANSACTIONS,
-} from "./constants";
+import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
 import {
@@ -186,55 +174,6 @@ enum OperationType {
   WRITE = "write",
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
-}
-
-function handleFirestoreError(
-  error: unknown,
-  operationType: OperationType,
-  path: string | null,
-) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
-    },
-    operationType,
-    path,
-  };
-  console.error("Firestore Error: ", JSON.stringify(errInfo));
-
-  // Instead of throwing which crashes the component, we'll alert and log
-  const errorMessage = error instanceof Error ? error.message : String(error);
-  if (errorMessage.includes("Insufficient permissions")) {
-    alert(
-      `Lỗi phân quyền: Anh chưa có quyền thực hiện thao tác ${operationType} trên ${path || "dữ liệu"}.`,
-    );
-  }
-}
 
 // --- Components ---
 
@@ -339,6 +278,29 @@ const parseExcelNumberSafe = (val: any): number => {
  * Bằng đúng con số 10 mà thẻ "Cảnh báo cạn kho" vẫn dùng từ trước.
  */
 const DEFAULT_MIN_STOCK = 10;
+
+/**
+ * Gọi endpoint AI kèm chứng minh đăng nhập.
+ *
+ * Hai endpoint `/api/gemini/*` giờ bắt buộc có Firebase ID token (xem
+ * api/_auth.ts), nếu không sẽ trả 401. Token chỉ sống khoảng một giờ nên phải
+ * lấy mới ở mỗi lần gọi thay vì giữ lại — `getIdToken()` tự làm mới khi cần.
+ */
+async function callAiApi(path: string, body: unknown): Promise<Response> {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error("Chưa đăng nhập nên không dùng được tính năng AI.");
+  }
+  const token = await current.getIdToken();
+  return fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
 
 const formatDisplayDate = (dateStr: string) => {
   try {
@@ -668,7 +630,6 @@ export default function App() {
   const [user, setUser] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole>("PENDING");
   const isOwner = userRole === "OWNER";
-  const isAdmin = isOwner;
   /** Da dang nhap Google nhung chu so huu chua duyet. */
   const isPending = !!user && userRole === "PENDING";
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(
@@ -688,10 +649,22 @@ export default function App() {
   const [verifyingSlipCode, setVerifyingSlipCode] = useState<string | null>(
     null,
   );
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [partners, setPartners] = useState<Partner[]>(INITIAL_PARTNERS);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  /**
+   * Đối tác lấy từ Firestore. Khởi tạo RỖNG, không lấy INITIAL_PARTNERS.
+   *
+   * Trước đây khởi tạo bằng danh sách cứng nên giao diện hiện sẵn cả chục đối
+   * tác *không tồn tại trong Firestore*: chọn một trong số đó để xuất kho thì
+   * giao dịch trỏ tới `partnerId` không có thật, rồi file công nợ và bảng đối
+   * soát lệch mà không ai hiểu vì sao. Nó cũng làm khối "Danh sách Đối tác đang
+   * trống" không bao giờ hiện, tức là cái nút khôi phục nằm đó mà không ai thấy.
+   *
+   * INITIAL_PARTNERS giờ chỉ dùng cho nút khôi phục (handleRestorePartners),
+   * nơi nó được ghi thành tài liệu Firestore thật.
+   */
+  const [partners, setPartners] = useState<Partner[]>([]);
+  // Danh muc san pham hien lay cung tu constants.ts (chua co giao dien sua).
+  const [products] = useState<Product[]>(INITIAL_PRODUCTS);
   // Doanh thu la ban ghi hoa don, KHONG phai giao dich kho. Truoc day khai
   // sai thanh Transaction[] nen moi cho doc totalAmount/unit/invoiceNumber deu
   // lech kieu va TypeScript khong con bat duoc loi truong.
@@ -885,7 +858,9 @@ export default function App() {
         const data = snapshot.docs.map(
           (doc) => ({ ...doc.data(), id: doc.id }) as Transaction,
         );
-        setTransactions(data.length > 0 ? data : INITIAL_TRANSACTIONS);
+        // Firestore tra ve rong thi de rong luon - truoc day roi ve
+        // INITIAL_TRANSACTIONS nhung mang do von rong nen khong khac gi.
+        setTransactions(data);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, "transactions");
@@ -900,7 +875,9 @@ export default function App() {
         const data = snapshot.docs.map(
           (doc) => ({ ...doc.data(), id: doc.id }) as Partner,
         );
-        setPartners(data.length > 0 ? data : INITIAL_PARTNERS);
+        // Firestore rỗng thì để rỗng, đừng thay bằng danh sách cứng — đối tác
+        // hiện trên giao diện phải là đối tác có thật để chọn xong dùng được.
+        setPartners(data);
       },
       (error) => {
         handleFirestoreError(error, OperationType.GET, "partners");
@@ -1650,13 +1627,9 @@ export default function App() {
       const blob = await imgRes.blob();
       const compressed = await compressFile(blob, 1600, 1600, 0.8);
 
-      const res = await fetch("/api/gemini/verify-slip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image: compressed,
-          expected: { code, date: dateKey, rows },
-        }),
+      const res = await callAiApi("/api/gemini/verify-slip", {
+        image: compressed,
+        expected: { code, date: dateKey, rows },
       });
 
       if (!res.ok) {
@@ -1697,7 +1670,6 @@ export default function App() {
     }
   };
 
-  const sidebarOpenRef = useRef(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const revenueInputRef = useRef<HTMLInputElement>(null);
   const handleExportReportToExcel = () => {
@@ -1860,7 +1832,7 @@ export default function App() {
         let dupInFileCount = 0;
         const seenInFile = new Set<string>();
 
-        data.forEach((row, idx) => {
+        data.forEach((row) => {
           // Skip completely empty/blank rows
           const isRowEmpty =
             !row["Ngày hóa đơn"] &&
@@ -2366,90 +2338,6 @@ export default function App() {
     throw err;
   };
 
-  const handleDeleteSyncData2104 = async () => {
-    if (!isOwner) {
-      alert(
-        "Tin Tin rất tiếc, chỉ anh Khoa mới có quyền thực hiện thao tác 'dọn dẹp' này ạ.",
-      );
-      return;
-    }
-    if (
-      !window.confirm(
-        "Tin Tin sẽ xóa toàn bộ các giao dịch đã đồng bộ tự động ngày 21/04 để anh tự nạp tay nhé?",
-      )
-    )
-      return;
-
-    setLoading(true);
-    let successCount = 0;
-    let failCount = 0;
-
-    try {
-      const syncIds = [
-        "p1",
-        "p15",
-        "p2",
-        "p10",
-        "p11",
-        "p12",
-        "p16",
-        "p14",
-        "p4",
-        "p17",
-        "p5",
-      ].flatMap((pid) => [
-        `sync-in-${pid}-20260421`,
-        `sync-out-${pid}-20260421`,
-      ]);
-
-      for (const id of syncIds) {
-        try {
-          await deleteDoc(doc(db, "transactions", id));
-          successCount++;
-        } catch (err: any) {
-          console.error(`Failed to delete ${id}:`, err);
-          failCount++;
-        }
-      }
-
-      if (failCount > 0) {
-        if (successCount > 0) {
-          showNotification(
-            `Đã dọn dẹp được ${successCount} mục, nhưng có ${failCount} mục thất bại.`,
-            "error",
-          );
-        } else {
-          handleFirestoreError(
-            new Error("Missing or insufficient permissions"),
-            "delete",
-            "transactions/*",
-          );
-        }
-      } else {
-        showNotification("Đã dọn dẹp sạch sẽ dữ liệu đồng bộ cũ.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      let errorMessage = "Dọn dẹp thất bại ạ.";
-      try {
-        const parsed = JSON.parse(err.message);
-        if (parsed.error === "Missing or insufficient permissions") {
-          errorMessage =
-            "Lỗi phân quyền: Tin Tin chưa kịp cập nhật quyền xóa cho tài khoản " +
-            (auth.currentUser?.email || "của anh") +
-            ". Anh đợi 1-2 phút rồi thử lại nhé!";
-        }
-      } catch {
-        errorMessage =
-          "Dọn dẹp thất bại: " +
-          (err instanceof Error ? err.message : String(err));
-      }
-      alert(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleImportInventoryExcel = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -2766,16 +2654,6 @@ export default function App() {
   const [confirmationPhoto, setConfirmationPhoto] = useState<string>("");
   const [showLossModal, setShowLossModal] = useState(false);
 
-  const getSheetNumber = (t: Transaction) => {
-    if (!t.referenceGroupId) return "Lẻ";
-    const id = t.referenceGroupId.replace("multi-", "");
-    // If it's a timestamp, we might want to map it to a simpler number,
-    // but the user wants it to start from 1.
-    // Usually, this implies a counter in DB or based on index.
-    // For now, I'll clean the display of the ID.
-    return id;
-  };
-
   const inTransitGroups = useMemo(() => {
     const groups: Record<string, Transaction[]> = {};
     const sortedAll = [...transactions].sort(
@@ -2958,10 +2836,8 @@ export default function App() {
 
     try {
       setIsScanning(true);
-      const response = await fetch("/api/gemini/scan-invoice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Image }),
+      const response = await callAiApi("/api/gemini/scan-invoice", {
+        image: base64Image,
       });
 
       if (!response.ok) {
@@ -3347,6 +3223,40 @@ export default function App() {
     const level: "safe" | "warning" | "danger" =
       usedPercent >= 80 ? "danger" : usedPercent >= 50 ? "warning" : "safe";
 
+    /* ---- LƯỢT ĐỌC: hạn mức sẽ hết TRƯỚC dung lượng ----
+     *
+     * Gói Spark cho 50.000 lượt đọc tài liệu mỗi ngày. App đang tải TRỌN các
+     * collection mỗi lần mở (không có limit/where), nên mỗi lần mở app tốn số
+     * lượt đọc bằng đúng tổng số tài liệu đang có.
+     *
+     * Vì sao chưa thêm limit(): tồn kho theo lô (FIFO) và tồn đầu/cuối kỳ đều
+     * duyệt TOÀN BỘ lịch sử giao dịch. Cắt bớt dữ liệu tải về sẽ làm số tồn kho
+     * sai mà không báo lỗi gì — tệ hơn hẳn việc hết hạn mức đọc. Muốn cắt được
+     * thì phải chốt tồn đầu kỳ theo tháng trước, đó là một thay đổi thiết kế.
+     *
+     * Con số dưới đây để biến rủi ro vô hình thành cái nhìn thấy được: khi nó
+     * đỏ lên là lúc phải làm việc đó, đừng đợi app trắng dữ liệu mới biết.
+     */
+    const FREE_READS_PER_DAY = 50000;
+    const docsPerAppOpen =
+      transactions.length +
+      revenueData.length +
+      partners.length +
+      slips.length;
+    const opensPerDay =
+      docsPerAppOpen > 0
+        ? Math.floor(FREE_READS_PER_DAY / docsPerAppOpen)
+        : null;
+    // Dưới 20 lần mở/ngày là hẹp thật: 4-5 người, mỗi người mở vài lần là hết.
+    const readLevel: "safe" | "warning" | "danger" =
+      opensPerDay === null
+        ? "safe"
+        : opensPerDay < 20
+          ? "danger"
+          : opensPerDay < 60
+            ? "warning"
+            : "safe";
+
     return {
       usedBytes,
       usedPercent,
@@ -3358,13 +3268,17 @@ export default function App() {
       perDay,
       daysLeft,
       level,
+      docsPerAppOpen,
+      opensPerDay,
+      readLevel,
+      freeReadsPerDay: FREE_READS_PER_DAY,
       counts: {
         transactions: transactions.length,
         revenue: revenueData.length,
         partners: partners.length,
       },
     };
-  }, [transactions, revenueData, partners]);
+  }, [transactions, revenueData, partners, slips]);
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -4371,32 +4285,6 @@ export default function App() {
     }
   };
 
-  const handleDeleteAllTransactions = async () => {
-    if (!isOwner) {
-      alert("Chỉ anh Khoa mới có quyền xóa sạch dữ liệu ạ!");
-      return;
-    }
-
-    if (
-      !window.confirm(
-        "CẢNH BÁO: Tin Tin sẽ xóa TOÀN BỘ lịch sử giao dịch. Thao tác này KHÔNG THỂ HOÀN TÁC. Anh có chắc chắn không ạ?",
-      )
-    )
-      return;
-
-    setLoading(true);
-    try {
-      for (const t of transactions) {
-        await deleteDoc(doc(db, "transactions", t.id));
-      }
-      setLoading(false);
-      showNotification("Đã xóa sạch toàn bộ lịch sử giao dịch.");
-    } catch (err) {
-      setLoading(false);
-      handleFirestoreError(err, OperationType.DELETE, "transactions");
-    }
-  };
-
   const handleDeleteTransaction = async (id: string, productName: string) => {
     if (!isOwner) {
       alert("Chỉ anh Khoa mới có quyền xóa giao dịch ạ!");
@@ -4417,20 +4305,12 @@ export default function App() {
     }
   };
 
-  const isSuperAdmin = useMemo(() => {
-    return userRole === "OWNER";
-  }, [userRole]);
-
   const isAuthorizedFull = useMemo(() => {
     return userRole === "OWNER" || userRole === "STAFF";
   }, [userRole]);
 
   const canWrite = useMemo(() => {
     return userRole === "OWNER" || userRole === "STAFF";
-  }, [userRole]);
-
-  const canManageUsers = useMemo(() => {
-    return userRole === "OWNER";
   }, [userRole]);
 
   /**
@@ -9352,6 +9232,83 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* LƯỢT ĐỌC — hạn mức này thường hết trước dung lượng */}
+                    <div
+                      className={cn(
+                        "mt-4 p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
+                        storageForecast.readLevel === "danger"
+                          ? "bg-rose-50 border-rose-200"
+                          : storageForecast.readLevel === "warning"
+                            ? "bg-amber-50 border-amber-200"
+                            : "bg-slate-50 border-slate-100",
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        {storageForecast.readLevel === "safe" ? (
+                          <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertTriangle
+                            className={cn(
+                              "w-4 h-4 shrink-0 mt-0.5",
+                              storageForecast.readLevel === "danger"
+                                ? "text-rose-600"
+                                : "text-amber-600",
+                            )}
+                          />
+                        )}
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            Lượt đọc mỗi lần mở app
+                          </p>
+                          <p className="text-[11px] font-bold text-slate-500 mt-1 leading-relaxed">
+                            App tải trọn dữ liệu mỗi lần mở:{" "}
+                            <strong>
+                              {formatNumber(storageForecast.docsPerAppOpen)}
+                            </strong>{" "}
+                            lượt đọc. Hạn mức gói Spark là{" "}
+                            {formatNumber(storageForecast.freeReadsPerDay)} lượt
+                            đọc/ngày.
+                            {storageForecast.opensPerDay !== null && (
+                              <>
+                                {" "}
+                                Tức khoảng{" "}
+                                <strong>
+                                  {formatNumber(storageForecast.opensPerDay)}
+                                </strong>{" "}
+                                lần mở app mỗi ngày cho cả nhóm.
+                              </>
+                            )}
+                            {storageForecast.readLevel !== "safe" && (
+                              <>
+                                {" "}
+                                <span className="text-rose-700">
+                                  Hạn mức này sẽ hết trước dung lượng — cần
+                                  chuyển sang chốt tồn đầu kỳ theo tháng để
+                                  không phải tải cả lịch sử.
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border whitespace-nowrap self-start sm:self-auto",
+                          storageForecast.readLevel === "danger"
+                            ? "bg-white border-rose-200 text-rose-600"
+                            : storageForecast.readLevel === "warning"
+                              ? "bg-white border-amber-200 text-amber-600"
+                              : "bg-white border-slate-200 text-slate-500",
+                        )}
+                      >
+                        {storageForecast.readLevel === "danger"
+                          ? "Chật"
+                          : storageForecast.readLevel === "warning"
+                            ? "Cần theo dõi"
+                            : "Còn rộng"}
+                      </div>
+                    </div>
+
                     {/* Thanh tiến trình */}
                     <div className="space-y-2">
                       <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -9877,7 +9834,7 @@ export default function App() {
 
             {activeTab === "partners" && (
               <div className="space-y-6">
-                {isOwner && partners.length <= 1 && (
+                {isOwner && partners.length === 0 && (
                   <div className="bg-amber-50 border border-amber-200 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg">

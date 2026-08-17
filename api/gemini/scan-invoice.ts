@@ -9,6 +9,7 @@
  * chu, khong lot ra trinh duyet vi khong co tien to VITE_).
  */
 import { GoogleGenAI, Type } from '@google/genai';
+import { requireUser } from '../_auth';
 
 export const config = {
   api: {
@@ -35,6 +36,10 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Chi nguoi da dang nhap moi goi duoc - xem api/_auth.ts.
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   try {
     const { image } = req.body || {};

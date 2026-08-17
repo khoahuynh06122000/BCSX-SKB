@@ -104,10 +104,14 @@ service cloud.firestore {
         (isStaff() && resource.data.get('status', '') == 'in_transit');
     }
 
+    // Doanh thu: CHI CHU SO HUU.
+    //
+    // Truoc day mo cho VIEWER doc va STAFF ghi, khong khop voi giao dien - tab
+    // Doanh thu chi hien cho OWNER. De lech nhu vay thi lop bao ve that rong
+    // hon y dinh: nhan vien khong thay tab, nhung mo DevTools goi Firestore
+    // truc tiep la doc/ghi duoc het so doanh thu. Nay siet dung bang giao dien.
     match /revenue/{recordId} {
-      allow read: if isViewer();
-      allow create, update: if isStaff();
-      allow delete: if isOwner();
+      allow read, create, update, delete: if isOwner();
     }
 
     match /partners/{partnerId} {

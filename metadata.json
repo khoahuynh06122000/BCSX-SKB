@@ -1,6 +1,0 @@
-{
-  "name": "Bia Bà Nà - SUNCRAFT",
-  "description": "Hệ thống quản trị sản xuất và kinh doanh Bia Bà Nà (SunCraft), phân tích dữ liệu tồn kho và doanh thu chuyên sâu.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

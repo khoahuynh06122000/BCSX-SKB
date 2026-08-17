@@ -1,4 +1,4 @@
-import { Product, Partner, Transaction } from './types';
+import { Product, Partner } from './types';
 
 /**
  * Danh mục bia.
@@ -51,5 +51,3 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'SYSTEM_SYNC', sapCode: 'SYNC', name: 'Tin Tin (Hệ thống)', type: 'AGENT' },
 ];
 
-// Seed some initial transactions for the reporting
-export const INITIAL_TRANSACTIONS: Transaction[] = [];
