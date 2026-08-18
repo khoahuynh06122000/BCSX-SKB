@@ -85,6 +85,14 @@ export interface Transaction {
   status?: 'completed' | 'in_transit'; // Default: completed
   originalQuantity?: number; // Store original qty if reported as loss
   deliveryDate?: string; // Date when actually received
+  /**
+   * Mã phiếu nhập kho của LƯỢT GIAO NHẬN này, dạng `PN-YYMMDD-NN`.
+   *
+   * Chỉ giao dịch NHẬP điền tay mới có. Có mã nghĩa là số lượng này chỉ vào tồn
+   * kho khi phiếu đó đã có ảnh ký tươi — xem `src/lib/slip.ts`. Nhập từ file
+   * Excel và tồn đầu kỳ không có mã, nên vào tồn ngay.
+   */
+  slipCode?: string;
 }
 
 export interface BatchInfo {
@@ -108,46 +116,25 @@ export interface InventoryItem {
 }
 
 /**
- * PHIẾU NHẬP KHO — gộp toàn bộ giao dịch nhập trong một ngày thành một phiếu.
+ * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU.
  *
  * Chỉ lưu phần "vỏ" (trạng thái, ảnh đã ký, thời điểm in). Nội dung các dòng
- * hàng KHÔNG lưu ở đây mà suy ra từ `transactions` có type IN trong ngày —
+ * hàng KHÔNG lưu ở đây mà suy ra từ các `transactions` có cùng `slipCode` —
  * nhờ vậy sửa giao dịch thì phiếu tự khớp theo, không bị lệch hai nguồn.
  *
- * Mã phiếu dùng luôn làm khoá tài liệu, dạng `PN-YYMMDD` (ví dụ PN-260811).
+ * Mã phiếu dùng luôn làm khoá tài liệu, dạng `PN-YYMMDD-NN` (ví dụ
+ * PN-260818-02 là lượt giao thứ hai trong ngày 18/08/2026). Toàn bộ phép tính
+ * quanh mã phiếu và việc duyệt nằm ở `src/lib/slip.ts`.
+ *
+ * `signed` (đã có ảnh ký) là điều kiện để số lượng trên phiếu VÀO TỒN KHO.
  */
 export type SlipStatus = 'draft' | 'printed' | 'signed';
 
-/**
- * Kết quả AI đối soát ảnh phiếu đã ký với số liệu trong hệ thống.
- *
- * Đây là CẢNH BÁO ĐỂ NGƯỜI XEM LẠI, không phải kết luận giám định. AI có thể
- * bỏ sót sửa đổi tinh vi, hoặc báo nhầm khi ảnh mờ / chữ viết xấu.
- */
-export interface SlipVerification {
-  checkedAt: string;
-  checkedBy?: string;
-  /** ok = đã ký và số khớp · warning = lệch số hoặc nghi bị sửa · unsigned = chưa ký */
-  verdict: 'ok' | 'warning' | 'unsigned';
-  signaturePresent: boolean;
-  signedBoxes?: string[];
-  mismatchCount: number;
-  rows?: {
-    name: string;
-    expectedQuantity?: number;
-    paperQuantity?: number;
-    matched: boolean;
-  }[];
-  alterationSuspected: boolean;
-  alterationNotes?: string;
-  imageQualityNote?: string;
-}
-
 export interface ImportSlip {
-  /** = code, dạng PN-YYMMDD */
+  /** = code, dạng PN-YYMMDD-NN */
   id: string;
   code: string;
-  /** Ngày của phiếu, dạng yyyy-MM-dd */
+  /** Ngày nhập kho của phiếu, dạng yyyy-MM-dd */
   date: string;
   status: SlipStatus;
   printedAt?: string;
@@ -155,8 +142,6 @@ export interface ImportSlip {
   signedPhotoUrls?: string[];
   signedAt?: string;
   signedBy?: string;
-  /** Kết quả AI đối soát ảnh phiếu ký với số trong hệ thống. */
-  verification?: SlipVerification;
   note?: string;
   updatedAt?: string;
 }

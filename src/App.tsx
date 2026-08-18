@@ -119,6 +119,12 @@ import {
 } from "./lib/reconcile";
 import { revenueDocId } from "./lib/revenueKey";
 import {
+  approvedSlipCodes,
+  nextSlipCode,
+  pendingSlipTransactions,
+  stockTransactions,
+} from "./lib/slip";
+import {
   planRevenueImport,
   resolveRevenueImport,
   type ParsedRevenueRow,
@@ -136,7 +142,6 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  deleteField,
   onSnapshot,
   query,
   orderBy,
@@ -646,9 +651,6 @@ export default function App() {
   const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
     null,
   );
-  const [verifyingSlipCode, setVerifyingSlipCode] = useState<string | null>(
-    null,
-  );
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   /**
    * Đối tác lấy từ Firestore. Khởi tạo RỖNG, không lấy INITIAL_PARTNERS.
@@ -1090,6 +1092,14 @@ export default function App() {
    */
   const DEMO_PREFIX = "demo-";
   const DEMO_NOTE = "DỮ LIỆU THỬ NGHIỆM";
+  /**
+   * Anh "phieu da ky" cho du lieu thu.
+   *
+   * Dung anh mau cong khai cua Cloudinary chu khong tai anh that len: du lieu
+   * thu se bi xoa, khong nen de lai tep rac tren tai khoan Cloudinary.
+   */
+  const DEMO_SLIP_PHOTO =
+    "https://res.cloudinary.com/demo/image/upload/sample.jpg";
   const [demoBusy, setDemoBusy] = useState(false);
 
   const demoTransactionCount = useMemo(
@@ -1115,13 +1125,50 @@ export default function App() {
       const batch = writeBatch(db);
       let created = 0;
 
-      // 5 ngay gan nhat, moi ngay 3-5 loai bia
+      /*
+       * Ma phieu cua du lieu thu phai KHONG trung ma dang co, ke ca ma tren
+       * cac giao dich chua duoc in thanh phieu. Cong don vao mang nay sau moi
+       * lan cap de hai ngay lien tiep khong nhan cung mot ma.
+       */
+      const usedSlipCodes: string[] = [
+        ...slips.map((s) => s.code),
+        ...transactions.map((t) => t.slipCode || ""),
+      ];
+
+      // 5 ngay gan nhat, moi ngay mot luot giao 3-5 loai bia
       for (let dayBack = 4; dayBack >= 0; dayBack--) {
         const day = new Date();
         day.setDate(day.getDate() - dayBack);
         day.setHours(8 + (dayBack % 3), 15, 0, 0);
 
         const dayStamp = format(day, "ddMM");
+        const dateKey = format(day, "yyyy-MM-dd");
+        const slipCode = nextSlipCode(dateKey, usedSlipCodes);
+        usedSlipCodes.push(slipCode);
+
+        /*
+         * Bon ngay truoc da ky -> hang nam trong ton kho, du de chay thu phan
+         * xuat kho. HOM NAY co y de CHUA KY, de nhin thay ngay canh "da dien
+         * nhung chua vao ton" that su hoat dong.
+         */
+        const signed = dayBack > 0;
+        batch.set(doc(db, "slips", slipCode), {
+          id: slipCode,
+          code: slipCode,
+          date: dateKey,
+          status: signed ? "signed" : "printed",
+          printedAt: day.toISOString(),
+          ...(signed
+            ? {
+                signedPhotoUrls: [DEMO_SLIP_PHOTO],
+                signedAt: day.toISOString(),
+                signedBy: currentUserProfile?.email || user || "Demo",
+              }
+            : {}),
+          note: DEMO_NOTE,
+          updatedAt: new Date().toISOString(),
+        });
+
         const picked = [...products]
           .sort(() => Math.random() - 0.5)
           .slice(0, 3 + (dayBack % 3));
@@ -1148,6 +1195,7 @@ export default function App() {
             notes: DEMO_NOTE,
             createdBy: currentUserProfile?.name || user || "Demo",
             status: "completed",
+            slipCode,
           });
           created++;
         });
@@ -1267,10 +1315,18 @@ export default function App() {
 
     const demoTx = transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX));
     const demoRev = revenueData.filter((r) => r.id?.startsWith(DEMO_PREFIX));
-    const demoSlipDates = new Set(
-      demoTx.map((t) => format(new Date(t.date), "yyyy-MM-dd")),
+    /*
+     * Nhan dien phieu thu bang GHI CHU danh dau va bang chinh ma phieu tren
+     * cac giao dich thu — khong nhan dien theo NGAY nua. Truoc day loc theo
+     * ngay: neu ngay do co ca hang that thi nut xoa se xoa luon anh ky cua
+     * hang that, tuc la lam hang that roi khoi ton kho.
+     */
+    const demoSlipCodes = new Set(
+      demoTx.map((t) => t.slipCode).filter((c): c is string => !!c),
     );
-    const demoSlips = slips.filter((s) => demoSlipDates.has(s.date));
+    const demoSlips = slips.filter(
+      (s) => s.note === DEMO_NOTE || demoSlipCodes.has(s.code),
+    );
 
     if (demoTx.length === 0 && demoRev.length === 0 && demoSlips.length === 0) {
       showNotification("Không có dữ liệu thử nghiệm nào để xoá");
@@ -1569,9 +1625,9 @@ export default function App() {
   /**
    * Go mot anh da tai nham khoi phieu.
    *
-   * Anh ky la chung tu duyet so lieu, nen go anh la viec he trong: khi go het
-   * anh thi phieu quay ve trang thai chua duyet, va ket qua doi soat cu bi xoa
-   * (no gan voi to anh khong con nua, giu lai chi gay hieu nham).
+   * Anh ky la chung tu duyet so lieu, nen go anh la viec he trong: go het anh
+   * thi phieu quay ve chua duyet, va toan bo so luong tren phieu do RA KHOI
+   * ton kho ngay lap tuc. Chi lam khi tai nham to phieu.
    *
    * Chi xoa lien ket trong Firestore, KHONG xoa file tren Cloudinary — de con
    * dau vet neu can tra lai ve sau.
@@ -1586,87 +1642,15 @@ export default function App() {
       await updateDoc(doc(db, "slips", code), {
         signedPhotoUrls: remaining,
         status: remaining.length ? "signed" : existing.printedAt ? "printed" : "draft",
-        verification: deleteField(),
         updatedAt: new Date().toISOString(),
       });
       showNotification(
         remaining.length
           ? `Đã gỡ 1 ảnh khỏi phiếu ${code}`
-          : `Phiếu ${code} không còn ảnh ký — số liệu trở lại trạng thái chưa duyệt`,
+          : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`,
       );
     } catch (e: any) {
       alert("Không gỡ được ảnh: " + e.message);
-    }
-  };
-
-  /**
-   * Goi AI doi soat anh phieu da ky voi so lieu trong he thong.
-   *
-   * Khac voi viec quet de nhap lieu: o day ta DUA TRUOC so dung cho AI roi
-   * chi yeu cau so sanh. So sanh chac hon nhieu so voi bat AI tu doc so.
-   */
-  const handleVerifySlip = async (
-    code: string,
-    dateKey: string,
-    rows: { name: string; unit: string; batch: string; quantity: number }[],
-  ) => {
-    if (verifyingSlipCode) return;
-
-    const slip = slips.find((s) => s.code === code);
-    const photoUrl = slip?.signedPhotoUrls?.[0];
-    if (!photoUrl) {
-      alert("Phiếu này chưa có ảnh đã ký để đối soát.");
-      return;
-    }
-
-    setVerifyingSlipCode(code);
-    try {
-      // Tai anh tu Cloudinary ve roi nen lai truoc khi gui: anh chup dien
-      // thoai thuong 4-8 MB, vuot gioi han cua ham serverless.
-      const imgRes = await fetch(photoUrl);
-      const blob = await imgRes.blob();
-      const compressed = await compressFile(blob, 1600, 1600, 0.8);
-
-      const res = await callAiApi("/api/gemini/verify-slip", {
-        image: compressed,
-        expected: { code, date: dateKey, rows },
-      });
-
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(detail || `Máy chủ trả về ${res.status}`);
-      }
-
-      const data = await res.json();
-
-      const verification = {
-        checkedAt: new Date().toISOString(),
-        checkedBy: currentUserProfile?.email || user || "",
-        verdict: data.verdict || "warning",
-        signaturePresent: !!data.signaturePresent,
-        signedBoxes: data.signedBoxes || [],
-        mismatchCount: data.mismatchCount || 0,
-        rows: data.rows || [],
-        alterationSuspected: !!data.alterationSuspected,
-        alterationNotes: data.alterationNotes || "",
-        imageQualityNote: data.imageQualityNote || "",
-      };
-
-      await setDoc(
-        doc(db, "slips", code),
-        { verification, updatedAt: new Date().toISOString() },
-        { merge: true },
-      );
-
-      showNotification(
-        verification.verdict === "ok"
-          ? `Phiếu ${code}: đã ký, số liệu khớp`
-          : `Phiếu ${code}: cần xem lại`,
-      );
-    } catch (e: any) {
-      alert("Không đối soát được: " + e.message);
-    } finally {
-      setVerifyingSlipCode(null);
     }
   };
 
@@ -3312,6 +3296,35 @@ export default function App() {
     return { start, end };
   }, [timeFilter, filterBaseDate]);
 
+  /**
+   * DUYET SO LIEU BANG CHU KY GIAY
+   *
+   * Mot phieu duoc coi la DA DUYET khi da co anh to phieu ky tuoi. Trang thai
+   * nay SUY RA tu `slips`, khong luu them co nao tren tung giao dich - nho vay
+   * khong bao gio lech hai nguon, va vua tai anh ky xong la ca loat giao dich
+   * cua phieu do doi trang thai cung luc.
+   *
+   * Hang thuoc phieu chua ky thi CHUA VAO TON: khong cong vao ton kho, khong
+   * len bao cao, va khong xuat ban duoc (vi phep kiem du hang o handleAddTransaction
+   * doc `inventory`, ma `inventory` chi tinh tu `countedTransactions`).
+   */
+  const approvedSlips = useMemo(() => approvedSlipCodes(slips), [slips]);
+
+  /**
+   * Cac giao dich duoc phep tac dong den ton kho.
+   *
+   * MOI phep tinh ton phai dung danh sach nay chu khong dung `transactions`
+   * goc. Chi can mot cho dung danh sach goc la con so cho do cao hon cac cho
+   * khac ma khong co gi bao loi.
+   *
+   * Ngoai le co y: tab Lich su va thu vien anh van hien day du de nguoi dung
+   * thay duoc hang minh vua dien va biet no dang cho ky.
+   */
+  const countedTransactions = useMemo(
+    () => stockTransactions(transactions, approvedSlips),
+    [transactions, approvedSlips],
+  );
+
   const filteredTransactionsByTime = useMemo(() => {
     if (!dateRange) return transactions;
 
@@ -3323,6 +3336,12 @@ export default function App() {
       });
     });
   }, [transactions, dateRange]);
+
+  /** Ban da loc theo thoi gian VA da bo hang chua ky - dung cho thong ke, do thi. */
+  const countedTransactionsByTime = useMemo(
+    () => stockTransactions(filteredTransactionsByTime, approvedSlips),
+    [filteredTransactionsByTime, approvedSlips],
+  );
 
   const filteredRevenueByTime = useMemo(() => {
     if (timeFilter === "all") return revenueData;
@@ -3564,10 +3583,12 @@ export default function App() {
 
   // Derived State: Batches (Tracking stock per batch) - OPTIMIZED O(N)
   const batches = useMemo(() => {
-    if (!transactions.length) return [];
+    // Chi tinh tren giao dich da duyet: hang chua co anh phieu ky thi chua co
+    // trong kho, nen cung khong duoc tao ra lo hang nao de FIFO lay ra xuat.
+    if (!countedTransactions.length) return [];
 
     // Process in chronological order for correct stock history/FIFO
-    const sortedTransactions = [...transactions].sort((a, b) => {
+    const sortedTransactions = [...countedTransactions].sort((a, b) => {
       const dateA = a.date || "";
       const dateB = b.date || "";
       return dateA.localeCompare(dateB);
@@ -3634,7 +3655,7 @@ export default function App() {
       if (isNaN(timeB)) return -1;
       return timeA - timeB;
     });
-  }, [transactions, products]);
+  }, [countedTransactions, products]);
 
   // AUTO-FILL FIFO SUGGESTION
   useEffect(() => {
@@ -3691,7 +3712,10 @@ export default function App() {
     const bq = batchSearchQuery.toLowerCase().trim();
     const pq = reportPartnerSearch.toLowerCase().trim();
 
-    let filtered = filteredTransactionsByTime;
+    // Bao cao phai khop voi ton kho, nen cung bo hang chua co anh phieu ky.
+    // De lot vao day thi cot "Tong Nhap" se cao hon "Ton cuoi" mot cach khong
+    // giai thich duoc, va file Excel xuat ra cung sai theo.
+    let filtered = countedTransactionsByTime;
 
     if (bq) {
       filtered = filtered.filter((t) =>
@@ -3706,7 +3730,7 @@ export default function App() {
     }
 
     return filtered;
-  }, [filteredTransactionsByTime, batchSearchQuery, reportPartnerSearch]);
+  }, [countedTransactionsByTime, batchSearchQuery, reportPartnerSearch]);
 
   // Filter for Gallery
   const galleryMonthOptions = useMemo(() => {
@@ -3771,7 +3795,8 @@ export default function App() {
     const bq = batchSearchQuery.toLowerCase().trim();
     if (!bq || bq.length < 2) return null;
 
-    const allMatches = transactions.filter((t) =>
+    // Dung giao dich da duyet de con so "Con lai" khop voi ton kho thuc.
+    const allMatches = countedTransactions.filter((t) =>
       t.batchNumber?.toLowerCase().includes(bq),
     );
     if (allMatches.length === 0) return null;
@@ -3798,7 +3823,7 @@ export default function App() {
         products.find((p) => p.id === allMatches[0].productId)?.unit ||
         "Đơn vị",
     };
-  }, [transactions, batchSearchQuery, products]);
+  }, [countedTransactions, batchSearchQuery, products]);
 
   // Derived State: Import/Export Flow Summary
   const flowSummary = useMemo(() => {
@@ -3869,12 +3894,12 @@ export default function App() {
 
     // 2. Calculate Closing Stock (Stock at the end of period)
     const baseTransactions = batchSearchQuery.trim()
-      ? transactions.filter((t) =>
+      ? countedTransactions.filter((t) =>
           t.batchNumber
             ?.toLowerCase()
             .includes(batchSearchQuery.toLowerCase().trim()),
         )
-      : transactions;
+      : countedTransactions;
 
     baseTransactions.forEach((t) => {
       // Don't subtract from closing stock if it's still in transit
@@ -3911,45 +3936,33 @@ export default function App() {
   }, [
     filteredTransactionsForReport,
     filteredRevenueByTime,
-    transactions,
+    countedTransactions,
     products,
     dateRange,
     batchSearchQuery,
   ]);
 
-  // Use the time-filtered transactions for inventory/stats
   /**
-   * DUYET SO LIEU BANG CHU KY
+   * HANG DA DIEN NHUNG CHUA VAO TON - dang cho anh phieu ky.
    *
-   * Mot ngay duoc coi la DA DUYET khi phieu nhap cua ngay do da co anh to
-   * phieu ky tuoi. Trang thai nay SUY RA tu slips chu khong luu them co nao
-   * tren tung giao dich - nho vay khong bao gio lech hai nguon, va vua tai
-   * anh ky xong la ca loat giao dich trong ngay doi trang thai cung luc.
+   * Dem theo SO PHIEU chu khong theo so ngay: mot ngay co the giao nhieu dot,
+   * moi dot mot phieu rieng, va nguoi dung can biet con bao nhieu to phieu phai
+   * di lay chu ky.
    */
-  const approvedDates = useMemo(() => {
-    const s = new Set<string>();
-    slips.forEach((sl) => {
-      if (sl.signedPhotoUrls?.length) s.add(sl.date);
-    });
-    return s;
-  }, [slips]);
-
-  /** Cac giao dich nhap chua co chu ky duyet. */
   const pendingApproval = useMemo(() => {
-    const rows = transactions.filter(
-      (t) =>
-        (t.type === "IN" || t.type === "OPENING") &&
-        !approvedDates.has(format(new Date(t.date), "yyyy-MM-dd")),
-    );
-    const days = new Set(
-      rows.map((t) => format(new Date(t.date), "yyyy-MM-dd")),
-    );
+    const rows = pendingSlipTransactions(transactions, approvedSlips);
+    const slipCodes = new Set(rows.map((t) => t.slipCode!));
     const liters = rows.reduce((sum, t) => {
       const p = products.find((x) => x.id === t.productId);
       return sum + (t.quantity || 0) * ((p?.capacityPerUnit || 0) / 1000);
     }, 0);
-    return { count: rows.length, dayCount: days.size, liters };
-  }, [transactions, approvedDates, products]);
+    return {
+      count: rows.length,
+      slipCount: slipCodes.size,
+      codes: [...slipCodes].sort(),
+      liters,
+    };
+  }, [transactions, approvedSlips, products]);
 
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
@@ -4009,7 +4022,8 @@ export default function App() {
     let totalIn = 0;
     let totalOut = 0;
 
-    filteredTransactionsByTime.forEach((t) => {
+    // Da duyet: the "Tong nhap" phai khop voi ton kho, khong dem hang cho ky.
+    countedTransactionsByTime.forEach((t) => {
       if (t.type === "IN") {
         totalIn += t.quantity;
       } else if (
@@ -4064,7 +4078,7 @@ export default function App() {
         healthy: healthyItems,
       },
     };
-  }, [filteredTransactionsByTime, partners, inventory, products]);
+  }, [countedTransactionsByTime, partners, inventory, products]);
 
   const filteredTransactions = useMemo(() => {
     const q = historySearchQuery.toLowerCase().trim();
@@ -4095,7 +4109,7 @@ export default function App() {
 
     const prodToCat = new Map(products.map((p) => [p.name, p.category]));
 
-    filteredTransactionsByTime.forEach((t) => {
+    countedTransactionsByTime.forEach((t) => {
       if (results[t.category]) {
         if (t.type === "IN") results[t.category].Nhập += t.quantity;
         else if (t.type === "OUT" && t.status !== "in_transit")
@@ -4111,7 +4125,7 @@ export default function App() {
     });
 
     return Object.values(results);
-  }, [filteredTransactionsByTime, filteredRevenueByTime, products]);
+  }, [countedTransactionsByTime, filteredRevenueByTime, products]);
 
   const handleAddTransaction = async (type: TransactionType) => {
     const par = partners.find(
@@ -4167,6 +4181,26 @@ export default function App() {
           ? newTransaction.date
           : `${newTransaction.date}T${timestamp.split("T")[1]}`
         : timestamp;
+
+      /**
+       * MOT LUOT NHAP LA MOT PHIEU.
+       *
+       * Ca loat mat hang trong lan bam nay dung chung mot ma phieu -> in ra
+       * dung mot to giay, hai ben ky mot lan. Ngay san xuat giao nhieu dot thi
+       * moi dot mot ma (PN-260818-01, -02...), khong gop chung.
+       *
+       * Dem ma ke tiep tren CA HAI nguon: cac phieu da luu va ma phieu tren
+       * chinh cac giao dich. Chi xet `slips` la khong du, vi tai lieu phieu chi
+       * duoc tao luc bam In — giao dot thu hai truoc khi in dot mot se bi cap
+       * lai dung ma cu, roi mot to anh ky duyet luon ca hai dot.
+       */
+      const slipCode =
+        type === "IN"
+          ? nextSlipCode(format(new Date(transactionDate), "yyyy-MM-dd"), [
+              ...slips.map((s) => s.code),
+              ...transactions.map((t) => t.slipCode),
+            ])
+          : undefined;
 
       // Local copy of batches to handle multiple items in one go
       let currentBatchesLocal = batches.map((b) => ({ ...b }));
@@ -4244,6 +4278,9 @@ export default function App() {
                   : [],
             createdBy: user || "Guest",
             referenceGroupId: referenceGroupId,
+            // Chi hang nhap tay moi can chu ky. Ton dau ky khong co luot giao
+            // nhan nao de hai ben ky nen khong gan ma phieu -> vao ton ngay.
+            ...(slipCode ? { slipCode } : {}),
           };
           batch.set(doc(db, "transactions", transactionId), transaction);
         }
@@ -4254,7 +4291,10 @@ export default function App() {
       const inTransit = newTransaction.isInTransit;
 
       // Immediate state updates
-      setActiveTab(inTransit ? "in-transit" : "history");
+      // Nhap tay thi di thang sang tab Phieu nhap kho: hang chua co anh ky la
+      // chua vao ton, nen viec ke tiep luon la in phieu cho hai ben ky. Dua
+      // nguoi dung ve tab Lich su o day se de ho tuong da xong.
+      setActiveTab(slipCode ? "slips" : inTransit ? "in-transit" : "history");
       setNewTransaction({
         type: "IN",
         partnerId:
@@ -4273,7 +4313,11 @@ export default function App() {
       });
 
       setLoading(false);
-      showNotification("Hệ thống cập nhật data thành công");
+      showNotification(
+        slipCode
+          ? `Đã tạo phiếu ${slipCode} — in ra cho hai bên ký, có ảnh ký thì hàng mới vào tồn`
+          : "Hệ thống cập nhật data thành công",
+      );
     } catch (err) {
       console.error(err);
       setLoading(false);
@@ -8756,14 +8800,19 @@ export default function App() {
                         <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider">
-                            {pendingApproval.dayCount} ngày nhập chưa được duyệt
+                            {pendingApproval.slipCount} phiếu chưa vào tồn
                           </p>
                           <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
-                            {formatNumber(pendingApproval.liters)} lít đã nhập
-                            nhưng phiếu chưa có chữ ký. Sang tab{" "}
-                            <strong>Phiếu nhập</strong> để in, ký rồi tải ảnh
-                            lên — số liệu chỉ được coi là chính thức sau bước
-                            đó.
+                            {formatNumber(pendingApproval.liters)} lít đã điền
+                            nhưng <strong>chưa cộng vào tồn kho</strong> và chưa
+                            xuất bán được, vì phiếu chưa có ảnh chữ ký. Sang tab{" "}
+                            <strong>Phiếu nhập kho</strong> để in, hai bên ký
+                            rồi tải ảnh lên.
+                          </p>
+                          <p className="text-[10px] font-black text-amber-700/70 font-mono tracking-wide">
+                            {pendingApproval.codes.slice(0, 8).join(" · ")}
+                            {pendingApproval.codes.length > 8 &&
+                              ` +${pendingApproval.codes.length - 8}`}
                           </p>
                         </div>
                       </div>
@@ -9793,7 +9842,8 @@ export default function App() {
                       Phiếu nhập kho
                     </h2>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                      Gộp cả ngày một phiếu · In · Ký tươi · Chụp ảnh lưu
+                      Mỗi lượt giao một phiếu · In · Ký tươi · Chụp ảnh là vào
+                      tồn
                     </p>
                   </div>
                 </div>
@@ -9802,13 +9852,14 @@ export default function App() {
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3 mb-5">
                     <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                     <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-                      Số liệu nhập kho được kết xuất thành phiếu theo từng ngày.
-                      Cuối ngày bấm <strong>Xem &amp; in</strong>, ký tươi lên
-                      bản in, rồi đưa ảnh tờ phiếu đã ký vào đây để lưu chứng
-                      từ — <strong>Chụp ảnh</strong> nếu đang dùng điện thoại,
-                      hoặc <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản
-                      quét sẵn trên máy. Phiếu nào chưa có ảnh ký sẽ được cảnh
-                      báo ở đầu trang.
+                      Mỗi lượt sản xuất giao hàng là một phiếu riêng. Kho đếm và
+                      đối chiếu với số đã điền, khớp thì bấm{" "}
+                      <strong>Xem &amp; in</strong>, hai bên ký tươi lên bản in,
+                      rồi đưa ảnh tờ đã ký vào đúng phiếu đó —{" "}
+                      <strong>Chụp ảnh</strong> nếu đang dùng điện thoại, hoặc{" "}
+                      <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản quét
+                      sẵn. <strong>Có ảnh ký thì hàng mới vào tồn kho</strong> và
+                      mới xuất bán được; chưa ký thì số chỉ nằm chờ ở đây.
                     </p>
                   </div>
 
@@ -9825,8 +9876,6 @@ export default function App() {
                       isOwner ? handleRemoveSignedSlipPhoto : undefined
                     }
                     uploadingCode={uploadingSlipCode}
-                    onVerify={handleVerifySlip}
-                    verifyingCode={verifyingSlipCode}
                   />
                 </Card>
               </div>

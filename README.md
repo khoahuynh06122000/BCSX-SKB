@@ -29,8 +29,8 @@ nhưng không tải được dữ liệu.
 Sau khi thêm hoặc sửa biến, phải **Redeploy** thì thay đổi mới có hiệu lực.
 
 > `VITE_FIREBASE_API_KEY` được dùng ở **cả hai phía**: trình duyệt dùng để kết nối
-> Firebase, và hàm serverless dùng để xác minh người gọi các endpoint AI. Thiếu biến
-> này thì hai tính năng quét ảnh bằng AI sẽ báo lỗi 500.
+> Firebase, và hàm serverless dùng để xác minh người gọi endpoint AI. Thiếu biến
+> này thì tính năng quét phiếu chuyển bộ phận bằng AI sẽ báo lỗi 500.
 
 ### Phân quyền Firestore
 
@@ -81,6 +81,41 @@ quản lý, app không giữ gì cả.
 Mã **PIN** là lớp khoá màn hình cho máy dùng chung, đặt trong mục Hồ sơ cá nhân. Nó
 không thay cho đăng nhập: PIN chỉ có 6 chữ số nên đừng dùng lại PIN thẻ ngân hàng.
 
+## Nhập kho: có chữ ký mới vào tồn
+
+Quy trình một lượt giao nhận thành phẩm:
+
+1. **Sản xuất** làm ra thành phẩm, điền thẳng số vào tab **Nhập kho**.
+2. Hệ thống cấp ngay một **mã phiếu** cho lượt giao đó, dạng `PN-YYMMDD-NN`
+   (`PN-260818-02` = lượt giao thứ hai trong ngày 18/08/2026).
+3. **Kho** đếm, đối chiếu với số đã điền. Khớp thì sang tab **Phiếu nhập kho**,
+   bấm *Xem & in*.
+4. Hai bên ký tươi lên bản in.
+5. Chụp ảnh tờ đã ký, đưa vào đúng phiếu đó trên app.
+
+**Bước 5 là bước ghi tăng tồn kho.** Trước khi có ảnh ký, số lượng đã điền:
+
+- không cộng vào tồn kho,
+- không lên báo cáo nhập/xuất/tồn,
+- không xuất bán được (chọn để xuất sẽ báo không đủ hàng).
+
+Nó chỉ nằm chờ ở tab Phiếu nhập kho, và tab Nhập kho hiện cảnh báo vàng kèm danh
+sách mã phiếu còn thiếu chữ ký. Chữ ký giấy vì vậy là lớp kiểm soát thật: **không
+ai làm tăng tồn kho một mình được.**
+
+Gỡ hết ảnh ký khỏi một phiếu thì hàng trên phiếu đó **rời khỏi tồn kho ngay** —
+chỉ làm khi tải nhầm tờ ảnh.
+
+**Mỗi lượt giao một phiếu, không gộp cả ngày.** Một ngày giao 2–3 đợt là bình
+thường; gộp cả ngày thì một tờ ảnh ký sẽ duyệt luôn những đợt chưa ai kiểm, và
+dòng điền thêm sau khi đã ký sẽ âm thầm nhập vào phiếu đã duyệt.
+
+Hai nguồn nhập **không** cần chữ ký, vì không có lượt giao nhận nào để hai bên ký:
+tồn đầu kỳ (`OPENING`) và số nhập từ file Excel tồn kho. Hai nguồn này vào tồn ngay.
+
+Toàn bộ phép tính quanh mã phiếu và việc duyệt nằm ở
+[`src/lib/slip.ts`](src/lib/slip.ts), chạy thử được bằng dữ liệu giả.
+
 ## Theo dõi hạn mức
 
 ### Việc còn nợ: lượt đọc sẽ hết trước dung lượng
@@ -116,6 +151,7 @@ src/App.tsx        Toàn bộ giao diện và logic nghiệp vụ (file lớn ~1
 src/firebase.ts    Khởi tạo Firebase, đọc cấu hình từ biến môi trường
 src/lib/cloudinary.ts  Nén và tải ảnh lên Cloudinary
 src/lib/bbgn.ts          Đọc file BBGN dạng bảng chéo và dựng file mẫu BBGN
+src/lib/slip.ts          Mã phiếu nhập kho và điều kiện duyệt để hàng vào tồn
 src/lib/reconcile.ts     Đối soát xuất kho ↔ hóa đơn, quy đổi lít, khớp mã vật tư
 src/lib/revenueKey.ts    Khoá định danh dòng doanh thu để chống nạp trùng
 src/lib/revenueImport.ts Quyết định ghi gì / xoá gì khi nạp file doanh thu
@@ -132,5 +168,6 @@ npm run lint && npm test
 ```
 
 `lint` kiểm kiểu dữ liệu toàn bộ dự án (phải sạch, 0 lỗi). `test` chạy các phép
-tính nghiệp vụ nặng nhất — đối soát và chống trùng doanh thu — bằng dữ liệu giả,
-không cần Firebase hay mở app.
+tính nghiệp vụ nặng nhất — đối soát doanh thu, chống trùng khi nạp file, đọc file
+BBGN, và điều kiện duyệt phiếu để hàng vào tồn — bằng dữ liệu giả, không cần
+Firebase hay mở app.

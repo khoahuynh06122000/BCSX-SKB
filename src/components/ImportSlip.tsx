@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   FileText,
   Loader2,
-  ScanLine,
   Upload,
   X,
 } from "lucide-react";
@@ -16,35 +15,39 @@ import type {
   Product,
   Partner,
   ImportSlip as ImportSlipType,
-  SlipVerification,
 } from "../types";
 import { cn, formatNumber } from "../lib/utils";
+import { approvedSlipCodes, parseSlipCode } from "../lib/slip";
 
 /**
- * PHIẾU NHẬP KHO
+ * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU
  *
- * Cách làm việc mới: số liệu nhập trên hệ thống trước, cuối ngày in phiếu ra,
- * ký tươi, chụp ảnh phiếu đã ký lưu lại làm bằng chứng.
+ * Cách làm việc:
  *
- * Nội dung phiếu KHÔNG lưu riêng mà tính từ `transactions` type IN trong ngày,
- * nên sửa giao dịch thì phiếu tự khớp theo. Chỉ trạng thái và ảnh ký được lưu
- * trong collection `slips`.
+ *   Sản xuất điền số vào app → kho đếm và đối chiếu → in phiếu ra giấy → hai
+ *   bên ký tươi → chụp ảnh tờ đã ký đưa vào đây → HÀNG MỚI VÀO TỒN KHO.
+ *
+ * Chưa có ảnh ký thì số lượng chỉ nằm chờ: không cộng vào tồn, không lên báo
+ * cáo, không xuất bán được. Chữ ký giấy vì vậy là cái khoá thật chứ không phải
+ * thủ tục lưu trữ.
+ *
+ * Nội dung phiếu KHÔNG lưu riêng mà tính từ các `transactions` có cùng
+ * `slipCode`, nên sửa giao dịch thì phiếu tự khớp theo. Chỉ trạng thái và ảnh
+ * ký được lưu trong collection `slips`.
  */
 
-/** Mã phiếu theo ngày: PN-YYMMDD */
-export function slipCodeForDate(dateISO: string): string {
-  const d = new Date(dateISO);
-  return "PN-" + format(d, "yyMMdd");
-}
-
-interface DaySlip {
+interface HandoverSlip {
   code: string;
-  /** yyyy-MM-dd */
+  /** yyyy-MM-dd — ngày nhập kho, lấy từ chính mã phiếu. */
   dateKey: string;
+  /** Lượt giao thứ mấy trong ngày. */
+  seq: number;
   transactions: Transaction[];
   totalQuantity: number;
   totalLiters: number;
   meta?: ImportSlipType;
+  /** Đã có ảnh ký = đã vào tồn kho. */
+  approved: boolean;
 }
 
 interface Props {
@@ -59,13 +62,6 @@ interface Props {
   /** Gỡ một ảnh đã tải nhầm khỏi phiếu. Không truyền thì không hiện nút gỡ. */
   onRemoveSigned?: (code: string, url: string) => Promise<void>;
   uploadingCode: string | null;
-  /** Gửi ảnh phiếu đã ký cho AI đối soát với số liệu trong hệ thống. */
-  onVerify: (
-    code: string,
-    dateKey: string,
-    rows: { name: string; unit: string; batch: string; quantity: number }[],
-  ) => Promise<void>;
-  verifyingCode: string | null;
 }
 
 export default function ImportSlipPanel({
@@ -79,8 +75,6 @@ export default function ImportSlipPanel({
   onUploadSigned,
   onRemoveSigned,
   uploadingCode,
-  onVerify,
-  verifyingCode,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
@@ -91,289 +85,284 @@ export default function ImportSlipPanel({
     return m;
   }, [slips]);
 
-  /** Gộp toàn bộ giao dịch nhập theo từng ngày thành một phiếu. */
-  const daySlips = useMemo<DaySlip[]>(() => {
-    const byDay = new Map<string, Transaction[]>();
+  const approved = useMemo(() => approvedSlipCodes(slips), [slips]);
+
+  /**
+   * Gộp giao dịch theo MÃ PHIẾU, không theo ngày.
+   *
+   * Chỉ giao dịch có `slipCode` mới hiện ở đây. Tồn đầu kỳ và số nhập từ file
+   * Excel không có mã phiếu vì không có lượt giao nhận nào để hai bên ký —
+   * chúng vào tồn ngay và không cần tờ giấy nào.
+   */
+  const handoverSlips = useMemo<HandoverSlip[]>(() => {
+    const byCode = new Map<string, Transaction[]>();
 
     transactions
-      .filter((t) => t.type === "IN" || t.type === "OPENING")
+      .filter((t) => t.type === "IN" && t.slipCode)
       .forEach((t) => {
-        const dateKey = format(new Date(t.date), "yyyy-MM-dd");
-        if (!byDay.has(dateKey)) byDay.set(dateKey, []);
-        byDay.get(dateKey)!.push(t);
+        const code = t.slipCode!;
+        if (!byCode.has(code)) byCode.set(code, []);
+        byCode.get(code)!.push(t);
       });
 
-    return Array.from(byDay.entries())
-      .map(([dateKey, txs]) => {
+    return Array.from(byCode.entries())
+      .map(([code, txs]) => {
+        const parsed = parseSlipCode(code);
         const totalQuantity = txs.reduce((s, t) => s + (t.quantity || 0), 0);
         const totalLiters = txs.reduce((s, t) => {
           const p = products.find((x) => x.id === t.productId);
           const ml = p?.capacityPerUnit || 0;
           return s + (t.quantity || 0) * (ml / 1000);
         }, 0);
-        const code = slipCodeForDate(dateKey);
         return {
           code,
-          dateKey,
+          // Mã phiếu hỏng thì lấy ngày của dòng đầu tiên để vẫn hiện ra được,
+          // thà hiện sai ngày còn hơn để tờ phiếu biến mất khỏi danh sách.
+          dateKey: parsed?.dateKey || format(new Date(txs[0].date), "yyyy-MM-dd"),
+          seq: parsed?.seq || 0,
           transactions: txs.sort(
             (a, b) => +new Date(a.date) - +new Date(b.date),
           ),
           totalQuantity,
           totalLiters,
           meta: slipMetaByCode.get(code),
+          approved: approved.has(code),
         };
       })
-      .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-  }, [transactions, products, slipMetaByCode]);
+      .sort((a, b) => b.code.localeCompare(a.code));
+  }, [transactions, products, slipMetaByCode, approved]);
 
-  const missingSignature = daySlips.filter(
-    (d) => !d.meta?.signedPhotoUrls?.length,
-  );
+  const pending = handoverSlips.filter((d) => !d.approved);
+  const pendingLiters = pending.reduce((s, d) => s + d.totalLiters, 0);
 
-  const openSlip = daySlips.find((d) => d.code === openCode) || null;
+  const openSlip = handoverSlips.find((d) => d.code === openCode) || null;
 
   return (
     <div className="space-y-6">
-      {/* ---------- Đối soát: phiếu chưa có ảnh ký ---------- */}
-      {missingSignature.length > 0 && (
+      {/* ---------- Cảnh báo: phiếu chưa có ảnh ký = hàng chưa vào tồn ---------- */}
+      {pending.length > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl border border-amber-300 bg-amber-50 flex gap-3 print:hidden">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <p className="text-xs font-black text-amber-800 uppercase tracking-wider">
-              {missingSignature.length} phiếu chưa có ảnh ký
+              {pending.length} phiếu chưa vào tồn ·{" "}
+              {formatNumber(pendingLiters)} lít
             </p>
             <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
-              {missingSignature
-                .slice(0, 6)
+              Số lượng trên các phiếu này <strong>chưa cộng vào tồn kho</strong>{" "}
+              và chưa xuất bán được. In phiếu ra, hai bên ký, rồi đưa ảnh tờ đã
+              ký vào đúng phiếu đó.
+            </p>
+            <p className="text-[11px] font-black text-amber-700/70 font-mono tracking-wide">
+              {pending
+                .slice(0, 8)
                 .map((d) => d.code)
                 .join(" · ")}
-              {missingSignature.length > 6 &&
-                ` và ${missingSignature.length - 6} phiếu khác`}
+              {pending.length > 8 && ` +${pending.length - 8} phiếu nữa`}
             </p>
           </div>
         </div>
       )}
 
-      {/* ---------- Danh sách phiếu theo ngày ---------- */}
+      {/* ---------- Danh sách phiếu theo lượt giao nhận ---------- */}
       <div className="space-y-3 print:hidden">
-        {daySlips.length === 0 ? (
+        {handoverSlips.length === 0 ? (
           <p className="text-center text-xs font-bold text-slate-400 py-12">
-            Chưa có giao dịch nhập kho nào.
+            Chưa có lượt nhập kho nào. Sang tab Nhập kho điền số, hệ thống sẽ
+            tạo phiếu cho lượt giao đó.
           </p>
         ) : (
-          daySlips.map((d) => {
+          handoverSlips.map((d) => {
             const photos = d.meta?.signedPhotoUrls || [];
-            const signed = photos.length > 0;
             const printed = !!d.meta?.printedAt;
-            const hasFooter = signed || !!d.meta?.verification;
             return (
               <div key={d.code} className="space-y-0">
-              <div
-                className={cn(
-                  "p-4 rounded-2xl border border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center gap-4 justify-between",
-                  hasFooter && "rounded-b-none border-b-0",
-                )}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={cn(
-                      "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
-                      signed
-                        ? "bg-emerald-100 text-emerald-600"
-                        : "bg-slate-100 text-slate-400",
-                    )}
-                  >
-                    {signed ? (
-                      <CheckCircle2 className="w-5 h-5" />
-                    ) : (
-                      <FileText className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-900 font-mono">
-                      {d.code}
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-400">
-                      {format(new Date(d.dateKey), "dd/MM/yyyy")} ·{" "}
-                      {d.transactions.length} dòng hàng ·{" "}
-                      {formatNumber(d.totalLiters)} lít
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span
-                    className={cn(
-                      "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
-                      signed
-                        ? "bg-emerald-100 text-emerald-700"
-                        : printed
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-slate-100 text-slate-500",
-                    )}
-                  >
-                    {signed ? "Đã ký" : printed ? "Đã in" : "Nháp"}
-                  </span>
-
-                  <button
-                    onClick={() => setOpenCode(d.code)}
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-1.5"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> Xem &amp; in
-                  </button>
-
-                  {/*
-                    Hai lối đưa ảnh vào, cố ý tách riêng: thuộc tính `capture`
-                    trên điện thoại BẮT BUỘC mở camera, không cho chọn ảnh có
-                    sẵn. Người dùng máy bàn quét phiếu bằng máy scan hoặc đã
-                    chụp sẵn thì cần lối thứ hai không có `capture`.
-                  */}
-                  {canWrite && (
-                    <>
-                      <label
-                        className={cn(
-                          "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
-                          uploadingCode === d.code &&
-                            "opacity-60 pointer-events-none",
-                        )}
-                      >
-                        {uploadingCode === d.code ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Camera className="w-3.5 h-3.5" />
-                        )}
-                        Chụp ảnh
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          multiple
-                          className="hidden"
-                          disabled={uploadingCode === d.code}
-                          onChange={(e) => {
-                            if (e.target.files?.length) {
-                              onUploadSigned(d.code, d.dateKey, e.target.files);
-                            }
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-
-                      <label
-                        className={cn(
-                          "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
-                          uploadingCode === d.code &&
-                            "opacity-60 pointer-events-none",
-                        )}
-                      >
-                        {uploadingCode === d.code ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Upload className="w-3.5 h-3.5" />
-                        )}
-                        Tải ảnh lên
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          disabled={uploadingCode === d.code}
-                          onChange={(e) => {
-                            if (e.target.files?.length) {
-                              onUploadSigned(d.code, d.dateKey, e.target.files);
-                            }
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                    </>
-                  )}
-
-                  {canWrite && signed && (
-                    <button
-                      onClick={() =>
-                        onVerify(
-                          d.code,
-                          d.dateKey,
-                          d.transactions.map((t) => {
-                            const p = products.find(
-                              (x) => x.id === t.productId,
-                            );
-                            return {
-                              name: t.productName || p?.name || "",
-                              unit: p?.unit || "",
-                              batch: t.batchNumber || "",
-                              quantity: t.quantity || 0,
-                            };
-                          }),
-                        )
-                      }
-                      disabled={verifyingCode === d.code}
-                      className="px-4 py-2 rounded-xl border border-primary/40 text-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 transition-all flex items-center gap-1.5 disabled:opacity-60"
-                    >
-                      {verifyingCode === d.code ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ScanLine className="w-3.5 h-3.5" />
-                      )}
-                      Đối soát
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Dải ảnh đã lưu — để người dùng thấy ngay mình đã tải đúng tờ nào */}
-              {signed && (
                 <div
                   className={cn(
-                    "px-4 py-3 border border-slate-200 border-t-0 bg-slate-50/60 flex items-center gap-3 flex-wrap",
-                    d.meta?.verification
-                      ? "border-b-0"
-                      : "rounded-b-2xl",
+                    "p-4 rounded-2xl border bg-white flex flex-col lg:flex-row lg:items-center gap-4 justify-between",
+                    d.approved
+                      ? "border-slate-200"
+                      : "border-amber-200 bg-amber-50/30",
+                    d.approved && photos.length && "rounded-b-none border-b-0",
                   )}
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {photos.length} ảnh đã lưu
-                  </span>
-                  {photos.map((url, i) => (
-                    <div key={url + i} className="relative group">
-                      <button
-                        onClick={() => setPreviewPhoto(url)}
-                        title="Bấm để xem ảnh lớn"
-                        className="block w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white hover:border-primary transition-all"
-                      >
-                        <img
-                          src={url}
-                          alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
-                          loading="lazy"
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
-                      {canWrite && onRemoveSigned && (
-                        <button
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Gỡ ảnh này khỏi phiếu ${d.code}?\n\nẢnh là chứng từ đã ký — chỉ gỡ khi tải nhầm.`,
-                              )
-                            ) {
-                              onRemoveSigned(d.code, url);
-                            }
-                          }}
-                          title="Gỡ ảnh này"
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shadow-sm"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
+                        d.approved
+                          ? "bg-emerald-100 text-emerald-600"
+                          : "bg-amber-100 text-amber-600",
+                      )}
+                    >
+                      {d.approved ? (
+                        <CheckCircle2 className="w-5 h-5" />
+                      ) : (
+                        <FileText className="w-5 h-5" />
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-slate-900 font-mono">
+                        {d.code}
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-400">
+                        {format(new Date(d.dateKey), "dd/MM/yyyy")}
+                        {d.seq > 0 && ` · lượt ${d.seq}`} ·{" "}
+                        {d.transactions.length} dòng hàng ·{" "}
+                        {formatNumber(d.totalLiters)} lít
+                      </p>
+                    </div>
+                  </div>
 
-              {d.meta?.verification && (
-                <VerificationResult v={d.meta.verification} />
-              )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                        d.approved
+                          ? "bg-emerald-100 text-emerald-700"
+                          : printed
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-amber-100 text-amber-700",
+                      )}
+                    >
+                      {d.approved
+                        ? "Đã vào tồn"
+                        : printed
+                          ? "Đã in · chờ ký"
+                          : "Chờ in"}
+                    </span>
+
+                    <button
+                      onClick={() => setOpenCode(d.code)}
+                      className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Xem &amp; in
+                    </button>
+
+                    {/*
+                      Hai lối đưa ảnh vào, cố ý tách riêng: thuộc tính `capture`
+                      trên điện thoại BẮT BUỘC mở camera, không cho chọn ảnh có
+                      sẵn. Người dùng máy bàn quét phiếu bằng máy scan hoặc đã
+                      chụp sẵn thì cần lối thứ hai không có `capture`.
+                    */}
+                    {canWrite && (
+                      <>
+                        <label
+                          className={cn(
+                            "px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest cursor-pointer transition-all flex items-center gap-1.5",
+                            d.approved
+                              ? "border-slate-200 hover:border-primary"
+                              : "border-primary bg-primary text-white hover:brightness-110",
+                            uploadingCode === d.code &&
+                              "opacity-60 pointer-events-none",
+                          )}
+                        >
+                          {uploadingCode === d.code ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Camera className="w-3.5 h-3.5" />
+                          )}
+                          Chụp ảnh
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            multiple
+                            className="hidden"
+                            disabled={uploadingCode === d.code}
+                            onChange={(e) => {
+                              if (e.target.files?.length) {
+                                onUploadSigned(
+                                  d.code,
+                                  d.dateKey,
+                                  e.target.files,
+                                );
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+
+                        <label
+                          className={cn(
+                            "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
+                            uploadingCode === d.code &&
+                              "opacity-60 pointer-events-none",
+                          )}
+                        >
+                          {uploadingCode === d.code ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5" />
+                          )}
+                          Tải ảnh lên
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            disabled={uploadingCode === d.code}
+                            onChange={(e) => {
+                              if (e.target.files?.length) {
+                                onUploadSigned(
+                                  d.code,
+                                  d.dateKey,
+                                  e.target.files,
+                                );
+                              }
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dải ảnh đã lưu — để người dùng thấy ngay mình đã tải đúng tờ nào */}
+                {photos.length > 0 && (
+                  <div className="px-4 py-3 border border-slate-200 border-t-0 rounded-b-2xl bg-slate-50/60 flex items-center gap-3 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      {photos.length} ảnh đã lưu
+                    </span>
+                    {photos.map((url, i) => (
+                      <div key={url + i} className="relative group">
+                        <button
+                          onClick={() => setPreviewPhoto(url)}
+                          title="Bấm để xem ảnh lớn"
+                          className="block w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white hover:border-primary transition-all"
+                        >
+                          <img
+                            src={url}
+                            alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                        {canWrite && onRemoveSigned && (
+                          <button
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Gỡ ảnh này khỏi phiếu ${d.code}?\n\n` +
+                                    (photos.length === 1
+                                      ? `Đây là ảnh ký duy nhất — gỡ nó thì ${formatNumber(d.totalLiters)} lít trên phiếu sẽ RA KHỎI TỒN KHO.`
+                                      : "Ảnh là chứng từ đã ký — chỉ gỡ khi tải nhầm."),
+                                )
+                              ) {
+                                onRemoveSigned(d.code, url);
+                              }
+                            }}
+                            title="Gỡ ảnh này"
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })
@@ -435,97 +424,6 @@ export default function ImportSlipPanel({
 
 /* ========================================================================== */
 
-/** Hiển thị kết quả AI đối soát ảnh phiếu ký với số liệu trong hệ thống. */
-function VerificationResult({ v }: { v: SlipVerification }) {
-  const tone =
-    v.verdict === "ok"
-      ? {
-          box: "border-emerald-300 bg-emerald-50",
-          text: "text-emerald-800",
-          sub: "text-emerald-700/80",
-          Icon: CheckCircle2,
-        }
-      : v.verdict === "unsigned"
-        ? {
-            box: "border-slate-300 bg-slate-50",
-            text: "text-slate-700",
-            sub: "text-slate-500",
-            Icon: AlertTriangle,
-          }
-        : {
-            box: "border-rose-300 bg-rose-50",
-            text: "text-rose-800",
-            sub: "text-rose-700/80",
-            Icon: AlertTriangle,
-          };
-
-  const { Icon } = tone;
-
-  return (
-    <div
-      className={cn(
-        "p-4 rounded-2xl rounded-t-none border border-t-0 space-y-2.5 print:hidden",
-        tone.box,
-      )}
-    >
-      <div className="flex items-start gap-2.5">
-        <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", tone.text)} />
-        <div className="space-y-1 min-w-0">
-          <p className={cn("text-[11px] font-black uppercase tracking-wider", tone.text)}>
-            {v.verdict === "ok"
-              ? "Đã ký · Số liệu khớp"
-              : v.verdict === "unsigned"
-                ? "Chưa thấy chữ ký trên phiếu"
-                : v.alterationSuspected
-                  ? "Nghi có sửa số trên phiếu"
-                  : `Lệch số ở ${v.mismatchCount} dòng hàng`}
-          </p>
-
-          {v.signaturePresent && v.signedBoxes?.length ? (
-            <p className={cn("text-[11px] font-bold", tone.sub)}>
-              Đã ký ở: {v.signedBoxes.join(", ")}
-            </p>
-          ) : null}
-
-          {v.alterationSuspected && v.alterationNotes && (
-            <p className={cn("text-[11px] font-bold leading-relaxed", tone.sub)}>
-              {v.alterationNotes}
-            </p>
-          )}
-
-          {v.mismatchCount > 0 && (
-            <ul className="space-y-0.5 mt-1">
-              {(v.rows || [])
-                .filter((r) => !r.matched)
-                .map((r, i) => (
-                  <li
-                    key={i}
-                    className={cn("text-[11px] font-bold", tone.sub)}
-                  >
-                    {r.name}: hệ thống{" "}
-                    <strong>{formatNumber(r.expectedQuantity)}</strong> · trên
-                    giấy <strong>{formatNumber(r.paperQuantity)}</strong>
-                  </li>
-                ))}
-            </ul>
-          )}
-
-          {v.imageQualityNote && (
-            <p className={cn("text-[10px] font-bold italic", tone.sub)}>
-              {v.imageQualityNote}
-            </p>
-          )}
-
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest pt-1">
-            AI đối soát lúc {format(new Date(v.checkedAt), "HH:mm dd/MM/yyyy")} ·
-            Kết quả mang tính cảnh báo, cần người kiểm tra lại
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SlipPreview({
   slip,
   products,
@@ -534,7 +432,7 @@ function SlipPreview({
   onClose,
   onPrint,
 }: {
-  slip: DaySlip;
+  slip: HandoverSlip;
   products: Product[];
   partners: Partner[];
   currentUserName: string;
@@ -610,6 +508,7 @@ function SlipPreview({
               <p>
                 Số phiếu: <span className="font-bold">{slip.code}</span>
               </p>
+              {slip.seq > 0 && <p>Lượt giao thứ {slip.seq} trong ngày</p>}
             </div>
           </div>
 
@@ -703,14 +602,16 @@ function SlipPreview({
           <p className="text-[11px] mb-10">
             Tổng số dòng hàng: <strong>{rows.length}</strong>. Số liệu trên được
             kết xuất từ hệ thống quản lý kho lúc{" "}
-            {format(new Date(), "HH:mm dd/MM/yyyy")}.
+            {format(new Date(), "HH:mm dd/MM/yyyy")}. Hai bên ký xác nhận số
+            lượng thực giao; ảnh tờ phiếu đã ký được lưu vào hệ thống làm căn cứ
+            ghi tăng tồn kho.
           </p>
 
           {/* Chân ký */}
           <div className="grid grid-cols-4 gap-4 text-[11px] text-center">
             {[
-              "Người lập phiếu",
-              "Thủ kho",
+              "Bên giao (Sản xuất)",
+              "Bên nhận (Thủ kho)",
               "Kế toán",
               "Trưởng bộ phận",
             ].map((role, i) => (

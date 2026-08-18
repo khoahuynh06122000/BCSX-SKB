@@ -122,9 +122,25 @@ service cloud.firestore {
 
     // Phieu nhap kho: chi luu trang thai va anh da ky, noi dung suy ra tu
     // transactions nen khong so lech hai nguon.
+    //
+    // ANH KY LA THU LAM TANG TON KHO. Hang chi vao ton khi phieu co anh to giay
+    // da ky (xem src/lib/slip.ts), nen viec them/bot anh o day co suc nang bang
+    // viec sua truc tiep so ton.
+    //
+    // Nhan vien PHAI them duoc anh - do la viec cua kho. Nhung KHONG duoc BOT:
+    // go het anh la keo ca lo hang ra khoi ton kho. Giao dien chi hien nut go
+    // cho chu so huu, nhung giao dien khong phai lop bao ve - mo DevTools goi
+    // Firestore truc tiep la lam duoc. Dieu kien duoi day chan that: so anh sau
+    // khi sua khong duoc it hon truoc khi sua, tru khi la chu so huu.
     match /slips/{slipId} {
       allow read: if isViewer();
-      allow create, update: if isStaff();
+      allow create: if isStaff();
+      allow update: if isOwner()
+        || (
+          isStaff()
+          && request.resource.data.get('signedPhotoUrls', []).size()
+               >= resource.data.get('signedPhotoUrls', []).size()
+        );
       allow delete: if isOwner();
     }
   }
