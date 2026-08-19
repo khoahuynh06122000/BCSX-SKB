@@ -148,6 +148,17 @@ Firebase.
 
 Nằm trong tab **Doanh thu**, chỉ chủ sở hữu thấy.
 
+**Nguồn là xuất kho, không phải bảng doanh thu.** Xuất kho là gốc, doanh thu sinh
+ra từ đó — lấy từ bảng doanh thu thì thành vòng tròn. Chỉ lấy giao dịch `OUT` đã
+giao xong: hàng còn `in_transit` chưa giao xong nên chưa lên hóa đơn, còn hao hụt
+và hàng hỏng không phải bán.
+
+Tiền hiện trên màn hình chỉ là **tạm tính theo giá danh mục**, không phải giá hợp
+đồng của từng khách — xuất kho ghi hàng đi ra, không ghi bán bao nhiêu. Con số đó
+để ước lượng độ lớn cho khỏi xuất nhầm kỳ; SAP tính lại tiền và thuế theo bảng giá
+của nó. App cũng không tự đặt thuế suất: đoán thì chỉ tạo ra một con số trông có
+vẻ đúng.
+
 App **không** chạm được vào SAP: nó chạy trong trình duyệt, không mở được SAP GUI
 và không gọi được COM. Nên việc chia làm hai nửa:
 

@@ -114,9 +114,10 @@ export default function SapExportPanel({
               Xuất hóa đơn lên SAP
             </h3>
             <p className="text-[11px] font-bold text-slate-400 leading-relaxed max-w-2xl">
-              App dựng lệnh xuất và kết xuất tệp cho máy có SAP đọc. Trình duyệt
-              không chạm được vào SAP nên phần nạp số do một script trên máy làm,
-              và <strong>nút Duyệt trên SAP vẫn do anh bấm</strong>.
+              Lấy từ <strong>các lượt xuất kho đã giao xong</strong> trong kỳ. App
+              dựng lệnh và kết xuất tệp cho máy có SAP đọc — trình duyệt không
+              chạm được vào SAP nên phần nạp số do một script trên máy làm, và{" "}
+              <strong>nút Duyệt trên SAP vẫn do anh bấm</strong>.
             </p>
           </div>
         </div>
@@ -190,16 +191,20 @@ export default function SapExportPanel({
       {periodValid && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {[
-            { label: "Số dòng", value: formatNumber(summary.count) },
+            { label: "Dòng xuất kho", value: formatNumber(summary.count) },
             { label: "Khách hàng", value: formatNumber(summary.partnerCount) },
             {
-              label: "Trước thuế",
+              label: "Sản lượng",
+              value: formatNumber(summary.totalQuantity),
+            },
+            {
+              label: "Tiền tạm tính",
               value: formatNumber(summary.totalBeforeVat) + " đ",
             },
-            { label: "Thuế", value: formatNumber(summary.totalVat) + " đ" },
             {
-              label: "Sau thuế",
-              value: formatNumber(summary.totalAfterVat) + " đ",
+              label: "Thuế",
+              // 0 dòng có thuế nghĩa là để SAP tính, không phải thuế bằng 0.
+              value: summary.rowsWithVat === 0 ? "SAP tính" : formatNumber(summary.totalVat) + " đ",
             },
           ].map((s) => (
             <div
@@ -240,9 +245,18 @@ export default function SapExportPanel({
         </div>
       )}
 
+      {summary.estimatedPriceRows > 0 && (
+        <p className="text-[11px] font-bold text-slate-400 leading-relaxed">
+          <strong>Tiền chỉ là tạm tính</strong> theo giá danh mục, không phải giá
+          hợp đồng của từng khách — xuất kho ghi hàng đi ra, không ghi bán bao
+          nhiêu. Con số đó để anh ước lượng độ lớn cho khỏi xuất nhầm kỳ; SAP tính
+          lại tiền và thuế theo bảng giá của nó.
+        </p>
+      )}
+
       {periodValid && picked.rows.length === 0 && picked.skipped.length === 0 && (
         <p className="text-center text-xs font-bold text-slate-400 py-6">
-          Kỳ này chưa có dòng doanh thu nào để xuất.
+          Kỳ này chưa có lượt xuất kho nào đã giao xong để lên hóa đơn.
         </p>
       )}
 
@@ -278,7 +292,7 @@ export default function SapExportPanel({
                 </div>
                 <p className="text-[11px] font-bold text-slate-400">
                   {formatNumber(job.summary.count)} dòng ·{" "}
-                  {formatNumber(job.summary.totalBeforeVat)} đ trước thuế · tạo{" "}
+                  {formatNumber(job.summary.totalBeforeVat)} đ tạm tính · tạo{" "}
                   {job.createdAt
                     ? format(new Date(job.createdAt), "HH:mm dd/MM/yyyy")
                     : "—"}
@@ -337,7 +351,7 @@ export default function SapExportPanel({
                       onClick={() => {
                         if (
                           !window.confirm(
-                            `Xác nhận đã bấm Duyệt trên SAP cho ${formatNumber(job.summary.count)} dòng, ${formatNumber(job.summary.totalBeforeVat)} đ trước thuế?\n\nSau bước này lệnh chốt lại, không huỷ được — vì hóa đơn ngoài SAP không biến mất theo trạng thái trong app.`,
+                            `Xác nhận đã bấm Duyệt trên SAP cho ${formatNumber(job.summary.count)} dòng xuất kho (${formatNumber(job.summary.totalBeforeVat)} đ tạm tính)?\n\nSau bước này lệnh chốt lại, không huỷ được — vì hóa đơn ngoài SAP không biến mất theo trạng thái trong app.`,
                           )
                         )
                           return;

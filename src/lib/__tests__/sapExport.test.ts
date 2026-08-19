@@ -5,17 +5,18 @@
  * la phat hanh hai hoa don cho cung mot lan ban, sua bang bien ban voi co quan
  * thue chu khong bam Undo duoc.
  */
-import type { RevenueRecord } from "../../types";
+import type { Product, Transaction } from "../../types";
 import {
   alreadySentIds,
+  billableTransactions,
   buildSapJobFile,
   canTransition,
   isJobOpen,
   pickRowsForPeriod,
-  revenueToSapRow,
   sapJobFileName,
   sapJobId,
   summarizeSapRows,
+  transactionToSapRow,
   type SapJobStatus,
   type SapSourceRow,
 } from "../sapExport";
@@ -213,37 +214,84 @@ eq(
   "f2",
 );
 
-console.log("\n9. Chuyen dong doanh thu sang dong cho xuat");
-const rev: RevenueRecord = {
-  id: "rev-1",
+console.log("\n9. Dong xuat kho nao duoc len hoa don");
+const tx = (over: Partial<Transaction>): Transaction => ({
+  id: over.id || "t1",
   date: "2026-08-14T00:00:00.000Z",
+  type: "OUT",
+  productId: "P1",
   productName: "Bia hoi Ba Na",
+  category: "Lít",
+  quantity: 20,
+  partnerId: "BNC",
+  partnerName: "Nha hang BNC",
+  createdBy: "test",
+  ...over,
+});
+
+const all: Transaction[] = [
+  tx({ id: "ok1" }),
+  tx({ id: "ok2", status: "completed" }),
+  tx({ id: "dangdi", status: "in_transit" }),
+  tx({ id: "nhap", type: "IN" }),
+  tx({ id: "daudky", type: "OPENING" }),
+  tx({ id: "haohut", type: "LOSS" }),
+  tx({ id: "hong", type: "DAMAGE" }),
+];
+eq(
+  "chi xuat kho da giao xong",
+  billableTransactions(all).map((t) => t.id),
+  ["ok1", "ok2"],
+);
+// Hang dang tren duong chua giao xong: xuat hoa don truoc la xuat cho viec chua
+// hoan thanh.
+eq(
+  "hang dang van chuyen bi loai",
+  billableTransactions(all).some((t) => t.id === "dangdi"),
+  false,
+);
+
+console.log("\n10. Chuyen dong xuat kho sang dong cho xuat hoa don");
+const prod: Product = {
+  id: "P1",
+  name: "Bia hoi Ba Na",
   materialCode: "10168107",
-  partnerName: "BNC",
-  quantity: 500,
-  unitPrice: 25000,
-  totalAmount: 12500000,
-  amountBeforeVat: 12500000,
-  vatAmount: 1250000,
-  amountAfterVat: 13750000,
-  invoiceNumber: "C26TKB#00000093",
+  category: "Lít",
+  unit: "Bom",
+  price: 600000,
+  capacityPerUnit: 20000,
 };
-const mapped = revenueToSapRow(rev);
-eq("giu khoa dong goc", mapped.id, "rev-1");
-eq("lay tien TRUOC thue", mapped.amountBeforeVat, 12500000);
-eq("giu so hoa don co san", mapped.invoiceNumber, "C26TKB#00000093");
-// Dong cu chua tach thue: totalAmount van la tien truoc thue theo dung dinh
-// nghia trong types.ts, nen lay lam tien truoc thue la dung.
+const mapped = transactionToSapRow(tx({ id: "x1", quantity: 20 }), prod);
+eq("giu khoa dong goc", mapped.id, "x1");
+eq("lay ma vat tu tu danh muc", mapped.materialCode, "10168107");
+eq("lay don vi tu danh muc", mapped.unit, "Bom");
+eq("giu nguyen so luong theo don vi kho", mapped.quantity, 20);
+eq("tien truoc thue = so luong x don gia", mapped.amountBeforeVat, 12000000);
+eq("danh dau don gia la tam tinh", mapped.priceEstimated, true);
+eq("khong tu dat thue", mapped.vatAmount, undefined);
+eq("giu so lo", transactionToSapRow(tx({ batchNumber: "LOT-1408-H" }), prod).batchNumber, "LOT-1408-H");
+
+// Khong tim thay san pham trong danh muc: khong duoc no ra NaN, va phai lo ra
+// la thieu ma vat tu de bi chan truoc khi xuat.
+const noProd = transactionToSapRow(tx({ id: "x2" }), undefined);
+eq("khong co san pham -> don gia 0", noProd.unitPrice, 0);
+eq("khong co san pham -> tien 0 chu khong NaN", noProd.amountBeforeVat, 0);
+eq("khong co san pham -> thieu ma vat tu", noProd.materialCode, undefined);
 eq(
-  "dong chua co amountBeforeVat -> lay totalAmount",
-  revenueToSapRow({ ...rev, amountBeforeVat: undefined }).amountBeforeVat,
-  12500000,
+  "va bi dem vao dong thieu ma vat tu",
+  summarizeSapRows([noProd]).missingMaterialCode,
+  1,
 );
-eq(
-  "khong co tien nao -> 0 chu khong phai NaN",
-  revenueToSapRow({ ...rev, amountBeforeVat: undefined, totalAmount: undefined as any }).amountBeforeVat,
-  0,
-);
+
+console.log("\n11. Cong so khi de SAP tinh thue");
+const outSum = summarizeSapRows([
+  transactionToSapRow(tx({ id: "s1", quantity: 10 }), prod),
+  transactionToSapRow(tx({ id: "s2", quantity: 5 }), prod),
+]);
+eq("khong dong nao co thue", outSum.rowsWithVat, 0);
+eq("moi dong deu la don gia tam tinh", outSum.estimatedPriceRows, 2);
+eq("tien truoc thue cong dung", outSum.totalBeforeVat, 9000000);
+eq("thue = 0 vi de SAP tinh", outSum.totalVat, 0);
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

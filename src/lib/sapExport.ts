@@ -19,7 +19,7 @@
  * app rồi chờ Vercel build lại.
  */
 
-import type { RevenueRecord } from "../types";
+import type { Product, Transaction } from "../types";
 import { stableHash } from "./revenueKey";
 
 /**
@@ -87,9 +87,9 @@ export function canTransition(from: SapJobStatus, to: SapJobStatus): boolean {
 /**
  * MỘT DÒNG CẦN LÊN HÓA ĐƠN.
  *
- * Cố ý là kiểu riêng, không dùng thẳng `RevenueRecord`: nguồn dữ liệu để xuất
- * hóa đơn còn chưa chốt (doanh thu hay xuất kho). Đổi nguồn thì chỉ viết thêm
- * một hàm chuyển sang kiểu này, không phải sửa gì phía sau.
+ * Nguồn là XUẤT KHO: xuất kho là gốc, doanh thu sinh ra từ đó. Cố ý vẫn là kiểu
+ * riêng chứ không dùng thẳng `Transaction`, để chỗ nào phía sau cũng chỉ biết
+ * đúng những trường cần cho hóa đơn.
  */
 export interface SapSourceRow {
   /** Khoá của dòng gốc — dùng để không xuất trùng. */
@@ -102,33 +102,67 @@ export interface SapSourceRow {
   partnerId?: string;
   unit?: string;
   quantity: number;
+  /** Số lô, để tra lại được lô nào đã lên hóa đơn nào. */
+  batchNumber?: string;
   unitPrice: number;
   /** Tiền TRƯỚC thuế. */
   amountBeforeVat: number;
   vatAmount?: number;
   amountAfterVat?: number;
-  /** Số hóa đơn đã có sẵn trên dòng gốc, nếu có. */
-  invoiceNumber?: string;
+  /**
+   * Đơn giá chỉ là giá danh mục trong `constants.ts`, KHÔNG phải giá hợp đồng
+   * của khách này.
+   *
+   * Xuất kho không mang giá bán: nó ghi hàng đi ra, không ghi bán bao nhiêu.
+   * Nên tiền ở đây là để người xem ước lượng độ lớn cho khỏi xuất nhầm kỳ, chứ
+   * không phải số để lên hóa đơn. SAP có bảng giá riêng và tự tính lại.
+   */
+  priceEstimated?: boolean;
 }
 
-/** Chuyển một dòng doanh thu sang dòng chờ xuất hóa đơn. */
-export function revenueToSapRow(r: RevenueRecord): SapSourceRow {
-  const beforeVat = r.amountBeforeVat ?? r.totalAmount ?? 0;
+/**
+ * Chuyển một dòng xuất kho sang dòng chờ xuất hóa đơn.
+ *
+ * Số lượng giữ nguyên đơn vị của kho (bom / thùng / két) kèm tên đơn vị, chưa
+ * quy đổi: chưa biết SAP nhận đơn vị nào. Quy đổi sớm rồi SAP lại nhận đơn vị
+ * gốc thì sai số lượng mà không có gì báo — chờ tệp mẫu rồi quy đổi một lần cho
+ * đúng.
+ */
+export function transactionToSapRow(
+  t: Transaction,
+  product?: Product,
+): SapSourceRow {
+  const unitPrice = product?.price || 0;
+  const quantity = t.quantity || 0;
   return {
-    id: r.id,
-    date: r.date,
-    productName: r.productName,
-    materialCode: r.materialCode,
-    partnerName: r.partnerName,
-    partnerId: r.partnerId,
-    unit: r.unit,
-    quantity: r.quantity ?? 0,
-    unitPrice: r.unitPrice ?? 0,
-    amountBeforeVat: beforeVat,
-    vatAmount: r.vatAmount,
-    amountAfterVat: r.amountAfterVat,
-    invoiceNumber: r.invoiceNumber,
+    id: t.id,
+    date: t.date,
+    productName: t.productName || product?.name || "",
+    materialCode: product?.materialCode,
+    partnerName: t.partnerName,
+    partnerId: t.partnerId,
+    unit: product?.unit,
+    quantity,
+    batchNumber: t.batchNumber,
+    unitPrice,
+    amountBeforeVat: quantity * unitPrice,
+    // Thuế để SAP tính: thuế suất phụ thuộc mặt hàng và thời kỳ, app đoán thì
+    // chỉ tạo ra một con số trông có vẻ đúng.
+    priceEstimated: true,
   };
+}
+
+/**
+ * Các dòng xuất kho được phép lên hóa đơn.
+ *
+ * Chỉ `OUT`, và bỏ hàng còn `in_transit`: hàng đang trên đường chưa giao xong,
+ * xuất hóa đơn trước là xuất cho việc chưa hoàn thành. Hao hụt và hàng hỏng
+ * (`LOSS`, `DAMAGE`) không phải bán, nên cũng không lên hóa đơn.
+ */
+export function billableTransactions(transactions: Transaction[]): Transaction[] {
+  return transactions.filter(
+    (t) => t.type === "OUT" && t.status !== "in_transit",
+  );
 }
 
 /** Phần của một lệnh xuất mà phép tính ở đây cần biết. */
@@ -225,6 +259,10 @@ export interface SapJobSummary {
   partnerCount: number;
   /** Dòng thiếu mã vật tư — SAP không nhận được, phải sửa trước khi xuất. */
   missingMaterialCode: number;
+  /** Số dòng có thuế thật; 0 nghĩa là để SAP tính thuế. */
+  rowsWithVat: number;
+  /** Số dòng dùng đơn giá tạm tính theo giá danh mục. */
+  estimatedPriceRows: number;
 }
 
 /**
@@ -240,6 +278,8 @@ export function summarizeSapRows(rows: SapSourceRow[]): SapJobSummary {
   let totalAfterVat = 0;
   let totalQuantity = 0;
   let missingMaterialCode = 0;
+  let rowsWithVat = 0;
+  let estimatedPriceRows = 0;
   const partners = new Set<string>();
 
   rows.forEach((r) => {
@@ -251,6 +291,8 @@ export function summarizeSapRows(rows: SapSourceRow[]): SapJobSummary {
     totalQuantity += r.quantity || 0;
     partners.add(r.partnerId || r.partnerName || "");
     if (!r.materialCode?.trim()) missingMaterialCode++;
+    if (r.vatAmount !== undefined) rowsWithVat++;
+    if (r.priceEstimated) estimatedPriceRows++;
   });
 
   return {
@@ -261,6 +303,8 @@ export function summarizeSapRows(rows: SapSourceRow[]): SapJobSummary {
     totalQuantity,
     partnerCount: partners.size,
     missingMaterialCode,
+    rowsWithVat,
+    estimatedPriceRows,
   };
 }
 

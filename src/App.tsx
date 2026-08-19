@@ -125,9 +125,10 @@ import {
   stockTransactions,
 } from "./lib/slip";
 import {
+  billableTransactions,
   buildSapJobFile,
   canTransition,
-  revenueToSapRow,
+  transactionToSapRow,
   sapJobFileName,
   sapJobId,
   summarizeSapRows,
@@ -1693,14 +1694,16 @@ export default function App() {
   /**
    * Cac dong co the len hoa don.
    *
-   * Hien lay tu doanh thu vi tinh nang nay nam trong tab Doanh thu. Neu nguon
-   * dung phai la xuat kho (giao dich OUT) thi doi o DUNG CHO NAY, phan con lai
-   * khong phai sua: `SapSourceRow` la kieu chung, khong dinh vao doanh thu.
+   * Nguon la XUAT KHO chu khong phai bang doanh thu: xuat kho la goc, doanh thu
+   * sinh ra tu do. Lay tu bang doanh thu thi thanh vong tron - doanh thu la ket
+   * qua cua viec xuat hoa don, khong phai dau vao.
    */
-  const sapSourceRows = useMemo<SapSourceRow[]>(
-    () => revenueData.map(revenueToSapRow),
-    [revenueData],
-  );
+  const sapSourceRows = useMemo<SapSourceRow[]>(() => {
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    return billableTransactions(transactions).map((t) =>
+      transactionToSapRow(t, productMap.get(t.productId)),
+    );
+  }, [transactions, products]);
 
   /** Tai tep .json cho script tren may doc. */
   const downloadSapJobFile = (job: SapJob) => {
@@ -1767,9 +1770,9 @@ export default function App() {
     if (
       !window.confirm(
         `Tạo lệnh xuất hóa đơn cho kỳ ${from} → ${to}?\n\n` +
-          `${formatNumber(summary.count)} dòng · ${formatNumber(summary.partnerCount)} khách hàng\n` +
-          `Trước thuế: ${formatNumber(summary.totalBeforeVat)} đ\n` +
-          `Sau thuế:   ${formatNumber(summary.totalAfterVat)} đ\n\n` +
+          `${formatNumber(summary.count)} dòng xuất kho · ${formatNumber(summary.partnerCount)} khách hàng\n` +
+          `Tiền tạm tính theo giá danh mục: ${formatNumber(summary.totalBeforeVat)} đ\n` +
+          `(SAP tính lại theo giá hợp đồng và tự tính thuế)\n\n` +
           `App chỉ tạo lệnh và tải tệp về máy. Việc nạp lên SAP và bấm Duyệt vẫn do anh làm.`,
       )
     )
