@@ -122,6 +122,7 @@ import {
   approvedSlipCodes,
   nextSlipCode,
   pendingSlipTransactions,
+  pendingStockByProduct,
   stockTransactions,
 } from "./lib/slip";
 import {
@@ -4163,6 +4164,12 @@ export default function App() {
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
 
+    // Hàng đã điền nhưng chưa có ảnh ký, tách theo mặt hàng. Chỉ để HIỂN THỊ:
+    // nó không đi vào `stock`, không đi vào `totalLiters`, không đi vào cảnh
+    // báo mức thấp — cộng vào bất kỳ chỗ nào trong số đó là bỏ mất lớp khoá
+    // chữ ký mà không có gì báo lỗi.
+    const pendingByProduct = pendingStockByProduct(transactions, approvedSlips);
+
     // 1. Initialize for all products
     products.forEach((p) => {
       invMap.set(p.id, {
@@ -4175,6 +4182,7 @@ export default function App() {
         // Sản phẩm chưa đặt định mức riêng thì dùng ngưỡng chung, để danh sách
         // "sắp hết hàng" hoạt động thay vì luôn rỗng như trước.
         minStock: p.minStock ?? DEFAULT_MIN_STOCK,
+        pendingStock: pendingByProduct.get(p.id) || 0,
       });
     });
 
@@ -4193,8 +4201,13 @@ export default function App() {
       }
     });
 
-    return Array.from(invMap.values()).sort((a, b) => b.stock - a.stock);
-  }, [batches, products]);
+    // Xếp theo tồn CỘNG phần chờ ký — chỉ để xếp chỗ, không hiện ra thành số
+    // nào. Xếp theo mỗi `stock` thì mặt hàng vừa nhập cả nghìn lon mà chưa ký
+    // sẽ nằm đáy bảng, đúng lúc người ta cần nhìn thấy nó nhất.
+    return Array.from(invMap.values()).sort(
+      (a, b) => b.stock + b.pendingStock - (a.stock + a.pendingStock),
+    );
+  }, [batches, products, transactions, approvedSlips]);
 
   // Doi soat xuat kho <-> hoa don. Toan bo phep tinh nam o src/lib/reconcile.ts
   // de chay thu duoc bang du lieu gia, khong phai mo app moi biet dung sai.
@@ -6117,6 +6130,12 @@ export default function App() {
                           <th className="font-bold text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right">
                             Tồn kho
                           </th>
+                          <th
+                            className="font-bold text-[9px] sm:text-[10px] text-amber-600 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right"
+                            title="Đã điền vào app nhưng chưa có ảnh phiếu ký. Chưa cộng vào tồn kho và chưa xuất bán được."
+                          >
+                            Chờ ký
+                          </th>
                           <th className="font-bold text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right">
                             Phòng kho
                           </th>
@@ -6158,6 +6177,23 @@ export default function App() {
                             </td>
                             <td className="py-3 sm:py-4 px-3 sm:px-6 font-mono text-right text-sm sm:text-lg font-black text-slate-900">
                               {formatNumber(item.stock)}
+                            </td>
+                            {/*
+                              Cot "cho ky": so da dien nhung chua co anh phieu
+                              ky. Co dau + de doc ra ngay la "them ngoai ton",
+                              khong phai mot phan cua con so ben trai.
+                            */}
+                            <td className="py-3 sm:py-4 px-3 sm:px-6 font-mono text-right text-sm sm:text-lg font-black">
+                              {item.pendingStock > 0 ? (
+                                <span
+                                  className="text-amber-600"
+                                  title="Chưa vào tồn — cần ảnh phiếu ký"
+                                >
+                                  +{formatNumber(item.pendingStock)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
                             </td>
                             <td className="py-3 sm:py-4 px-3 sm:px-6 font-mono text-right text-sm sm:text-lg font-black text-primary">
                               {formatNumber(item.totalLiters)}

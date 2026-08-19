@@ -12,6 +12,7 @@ import {
   nextSlipCode,
   parseSlipCode,
   pendingSlipTransactions,
+  pendingStockByProduct,
   slipPrefixForDate,
   stockTransactions,
 } from "../slip";
@@ -225,6 +226,50 @@ eq(
   "phieu bi go het anh -> hang roi khoi ton",
   isCountedInStock(tx({ slipCode: "PN-260818-01" }), approved3),
   false,
+);
+
+
+console.log("\n10. So luong dang cho ky, tach theo tung mat hang");
+const nhieuMatHang: Transaction[] = [
+  // Phieu 01 da ky -> khong duoc coi la dang cho
+  tx({ id: "c1", slipCode: "PN-260818-01", productId: "P1", quantity: 500 }),
+  // Phieu 02 chua ky: hai dong cung mat hang phai cong lai
+  tx({ id: "c2", slipCode: "PN-260818-02", productId: "P1", quantity: 900 }),
+  tx({ id: "c3", slipCode: "PN-260818-02", productId: "P1", quantity: 100 }),
+  // ... va mot mat hang khac phai dung rieng
+  tx({ id: "c4", slipCode: "PN-260818-02", productId: "P2", quantity: 40 }),
+  // Dong xuat khong can chu ky nen khong bao gio nam trong muc cho
+  tx({ id: "c5", type: "OUT", slipCode: undefined, productId: "P1", quantity: 200 }),
+];
+const cho = pendingStockByProduct(nhieuMatHang, approved);
+eq("cong dung hai dong cung mat hang", cho.get("P1"), 1000);
+eq("mat hang khac dung rieng", cho.get("P2"), 40);
+eq("chi co hai mat hang dang cho", [...cho.keys()].sort(), ["P1", "P2"]);
+eq(
+  "so cho ky KHONG cong vao ton: ton van la 500 - 200",
+  stockTransactions(nhieuMatHang, approved).reduce(
+    (s, t) => s + (t.type === "OUT" ? -t.quantity : t.quantity),
+    0,
+  ),
+  300,
+);
+
+console.log("\n11. Ky xong thi mat hang roi khoi muc cho");
+const choSauKhiKy = pendingStockByProduct(nhieuMatHang, approved2);
+eq("khong con mat hang nao cho ky", choSauKhiKy.size, 0);
+eq("hoi mat hang cu -> khong co so", choSauKhiKy.get("P1"), undefined);
+
+console.log("\n12. Truong hop bien");
+eq("danh sach rong -> map rong", pendingStockByProduct([], approved).size, 0);
+eq(
+  "dong thieu ma mat hang thi bo qua, khong tao khoa rong",
+  [
+    ...pendingStockByProduct(
+      [tx({ id: "d1", slipCode: "PN-260818-02", productId: "", quantity: 70 })],
+      approved,
+    ).keys(),
+  ],
+  [],
 );
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);

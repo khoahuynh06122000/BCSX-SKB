@@ -106,6 +106,28 @@ ai làm tăng tồn kho một mình được.**
 Gỡ hết ảnh ký khỏi một phiếu thì hàng trên phiếu đó **rời khỏi tồn kho ngay** —
 chỉ làm khi tải nhầm tờ ảnh.
 
+### Cột "Chờ ký" trong tab Tồn kho
+
+Chưa vào tồn không có nghĩa là không nhìn thấy. Bảng tồn kho có cột **Chờ ký**
+tách theo từng mặt hàng, hiện số đã điền mà chưa có ảnh ký, dạng `+1.000`. Điền
+xong là con số hiện lên ngay trên máy mọi người — dữ liệu chạy realtime qua
+`onSnapshot`, không phải bấm tải lại.
+
+Dấu `+` là cố ý: nó nằm **ngoài** con số tồn kho bên trái, không phải một phần
+của con số đó. Hai cột không bao giờ được cộng lại:
+
+| Cột | Nghĩa | Xuất bán được không |
+|---|---|---|
+| Tồn kho | Đã có chữ ký, chính thức | Được |
+| Chờ ký | Đã điền, đang đợi ảnh phiếu ký | **Không** |
+
+Cảnh báo *mức thấp* vẫn chỉ tính trên cột Tồn kho: hàng chưa ký thì chưa bán
+được, nên nó không cứu được tình trạng sắp hết hàng.
+
+Bảng xếp theo tổng hai cột, nên mặt hàng vừa nhập một lô lớn mà chưa ký sẽ nổi
+lên đầu bảng thay vì nằm đáy — đúng lúc cần đi lấy chữ ký nhất. Phép tính ở
+`pendingStockByProduct()` trong [`src/lib/slip.ts`](src/lib/slip.ts).
+
 **Mỗi lượt giao một phiếu, không gộp cả ngày.** Một ngày giao 2–3 đợt là bình
 thường; gộp cả ngày thì một tờ ảnh ký sẽ duyệt luôn những đợt chưa ai kiểm, và
 dòng điền thêm sau khi đã ký sẽ âm thầm nhập vào phiếu đã duyệt.

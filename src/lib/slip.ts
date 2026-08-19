@@ -149,3 +149,24 @@ export function pendingSlipTransactions(
 ): Transaction[] {
   return transactions.filter((t) => !isCountedInStock(t, approved));
 }
+
+/**
+ * Số lượng đang chờ ảnh ký, tách theo từng mặt hàng.
+ *
+ * Dùng cho cột "chờ ký" trên màn hình tồn kho: hàng đã điền thì thấy ngay,
+ * nhưng vẫn nằm ngoài tồn chính thức cho tới khi có chữ ký.
+ *
+ * Cố ý trả về Map riêng thay vì cộng thẳng vào tồn: chỉ cần một chỗ trót cộng
+ * hai số này lại là mất luôn lớp kiểm soát, mà không có gì báo lỗi.
+ */
+export function pendingStockByProduct(
+  transactions: Transaction[],
+  approved: Set<string>,
+): Map<string, number> {
+  const m = new Map<string, number>();
+  pendingSlipTransactions(transactions, approved).forEach((t) => {
+    if (!t.productId) return;
+    m.set(t.productId, (m.get(t.productId) || 0) + (t.quantity || 0));
+  });
+  return m;
+}

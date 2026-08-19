@@ -113,6 +113,13 @@ export interface InventoryItem {
   stock: number;
   totalLiters: number;
   minStock: number;
+  /**
+   * Số đã điền nhưng chưa có ảnh phiếu ký — CHƯA nằm trong `stock`.
+   *
+   * Để riêng chứ không cộng vào `stock`: cộng vào là mất lớp kiểm soát chữ ký.
+   * Chỉ dùng để hiển thị cho thấy hàng vừa nhập, không dùng cho phép tính nào.
+   */
+  pendingStock: number;
 }
 
 /**
