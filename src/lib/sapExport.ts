@@ -20,7 +20,7 @@
  */
 
 import type { Product, Transaction } from "../types";
-import { stableHash } from "./revenueKey";
+import { stableHash } from "./hash";
 
 /**
  * Vòng đời một lệnh xuất.
@@ -313,7 +313,7 @@ export function summarizeSapRows(rows: SapSourceRow[]): SapJobSummary {
  *
  * Nhờ vậy bấm hai lần liên tiếp không tạo hai lệnh: lần thứ hai ghi vào đúng
  * tài liệu cũ. Đây là cùng một cách chống trùng đã dùng cho việc nạp file
- * doanh thu — xem `revenueDocId`.
+ * doanh thu.
  */
 export function sapJobId(sourceIds: string[]): string {
   return "sap-" + stableHash([...sourceIds].sort().join("|"));

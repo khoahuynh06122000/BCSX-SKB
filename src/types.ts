@@ -183,4 +183,16 @@ export interface RevenueRecord {
   partnerName: string;
   partnerId?: string;
   deptCode?: string;
+  /** Thuế tiêu thụ đặc biệt đã bóc ra khỏi thành tiền. */
+  exciseTax?: number;
+  /** Thành tiền sau khi bóc thuế TTĐB — số ghi vào tài khoản 511. */
+  revenue511?: number;
+  /**
+   * Dòng xuất kho đã sinh ra dòng doanh thu này.
+   *
+   * Doanh thu là số TÍNH RA từ xuất kho, không phải dữ liệu nạp vào, nên luôn
+   * tra ngược được về lần giao hàng gốc. Xem `src/lib/revenueFromStock.ts`.
+   */
+  sourceTransactionId?: string;
+  batchNumber?: string;
 }
