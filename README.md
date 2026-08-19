@@ -144,6 +144,42 @@ dung lượng đã dùng trên 1 GB của gói Spark miễn phí, tốc độ ph
 báo còn bao lâu thì đầy. Ảnh minh chứng nằm trên Cloudinary nên không chiếm dung lượng
 Firebase.
 
+## Xuất hóa đơn lên SAP (đang dựng)
+
+Nằm trong tab **Doanh thu**, chỉ chủ sở hữu thấy.
+
+App **không** chạm được vào SAP: nó chạy trong trình duyệt, không mở được SAP GUI
+và không gọi được COM. Nên việc chia làm hai nửa:
+
+| Ở đâu | Làm gì |
+|---|---|
+| App (tab Doanh thu) | Chọn kỳ → dựng **lệnh xuất** → kết xuất tệp `.json` về máy |
+| Máy có SAP | Script đọc tệp đó, nạp lên SAP, **dừng trước nút Duyệt** |
+| App | Chủ sở hữu xác nhận đã duyệt xong, hoặc ghi lại lỗi |
+
+Ba điều cố ý làm như vậy:
+
+**Không lưu mật khẩu SAP ở đâu cả.** Người dùng tự đăng nhập SAP như mọi ngày,
+script gắn vào phiên đang mở qua SAP GUI Scripting. Không có mật khẩu nào được lưu
+nên không có mật khẩu nào lộ được.
+
+**Máy chạy script không có quyền vào Firestore.** Nó chỉ đọc tệp `.json` tải về.
+Cấp quyền Firestore cho máy nghĩa là phải giữ khoá tài khoản dịch vụ — thêm một bí
+mật nữa phải quản, và khoá đó ghi được mọi collection. Đổi lại: trạng thái "đã
+duyệt" phải bấm tay trong app, script chưa tự báo về được.
+
+**Nút Duyệt không tự động.** Hóa đơn đã phát hành là đã lên cơ quan thuế, hủy phải
+làm biên bản — nên bước đó do người bấm, app chỉ ghi ai xác nhận và lúc nào.
+
+Chống xuất trùng: khoá lệnh suy ra từ chính tập dòng trong lệnh, nên bấm hai lần
+không tạo hai lệnh; và dòng đã nằm trong một lệnh còn hiệu lực thì không được chọn
+lại. Xuất trùng là phát hành hai hóa đơn cho cùng một lần bán. Phép tính ở
+[`src/lib/sapExport.ts`](src/lib/sapExport.ts).
+
+**Còn thiếu để chạy được:** một tệp mẫu thật đang nạp vào SAP, để vào thư mục
+[`sap-mau/`](sap-mau/README.md) — đã chặn không cho commit vì chứa dữ liệu khách
+hàng — và kết quả kiểm tra xem SAP GUI Scripting đã được bật chưa.
+
 ## Kiến trúc thư mục
 
 ```
@@ -152,6 +188,8 @@ src/firebase.ts    Khởi tạo Firebase, đọc cấu hình từ biến môi tr
 src/lib/cloudinary.ts  Nén và tải ảnh lên Cloudinary
 src/lib/bbgn.ts          Đọc file BBGN dạng bảng chéo và dựng file mẫu BBGN
 src/lib/slip.ts          Mã phiếu nhập kho và điều kiện duyệt để hàng vào tồn
+src/lib/sapExport.ts     Lệnh xuất hóa đơn lên SAP: chọn kỳ, chống xuất trùng
+sap-mau/                 Nơi để tệp mẫu SAP (không commit — chứa dữ liệu khách)
 src/lib/reconcile.ts     Đối soát xuất kho ↔ hóa đơn, quy đổi lít, khớp mã vật tư
 src/lib/revenueKey.ts    Khoá định danh dòng doanh thu để chống nạp trùng
 src/lib/revenueImport.ts Quyết định ghi gì / xoá gì khi nạp file doanh thu

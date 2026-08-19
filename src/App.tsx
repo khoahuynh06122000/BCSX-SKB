@@ -125,6 +125,19 @@ import {
   stockTransactions,
 } from "./lib/slip";
 import {
+  buildSapJobFile,
+  canTransition,
+  revenueToSapRow,
+  sapJobFileName,
+  sapJobId,
+  summarizeSapRows,
+  SAP_JOB_STATUS_LABEL,
+  type SapJob,
+  type SapJobStatus,
+  type SapSourceRow,
+} from "./lib/sapExport";
+import SapExportPanel from "./components/SapExport";
+import {
   planRevenueImport,
   resolveRevenueImport,
   type ParsedRevenueRow,
@@ -651,6 +664,8 @@ export default function App() {
   const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
     null,
   );
+  const [sapJobs, setSapJobs] = useState<SapJob[]>([]);
+  const [sapBusy, setSapBusy] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   /**
    * Đối tác lấy từ Firestore. Khởi tạo RỖNG, không lấy INITIAL_PARTNERS.
@@ -929,12 +944,31 @@ export default function App() {
       });
     }
 
+    // Lenh xuat hoa don SAP: chi CHU SO HUU. Rules cung chi cho OWNER doc, nen
+    // dang ky cho ca STAFF se chi sinh loi permission-denied trong console chu
+    // khong duoc gi.
+    let unsubSapJobs = () => {};
+    if (userRole === "OWNER") {
+      unsubSapJobs = onSnapshot(
+        collection(db, "sap_jobs"),
+        (snapshot) => {
+          setSapJobs(
+            snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as SapJob),
+          );
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, "sap_jobs");
+        },
+      );
+    }
+
     return () => {
       unsubTransactions();
       unsubPartners();
       unsubRevenue();
       unsubSlips();
       unsubUsers();
+      unsubSapJobs();
     };
   }, [user, userRole]);
 
@@ -1651,6 +1685,165 @@ export default function App() {
       );
     } catch (e: any) {
       alert("Không gỡ được ảnh: " + e.message);
+    }
+  };
+
+  /* ---------------- Xuat hoa don len SAP ---------------- */
+
+  /**
+   * Cac dong co the len hoa don.
+   *
+   * Hien lay tu doanh thu vi tinh nang nay nam trong tab Doanh thu. Neu nguon
+   * dung phai la xuat kho (giao dich OUT) thi doi o DUNG CHO NAY, phan con lai
+   * khong phai sua: `SapSourceRow` la kieu chung, khong dinh vao doanh thu.
+   */
+  const sapSourceRows = useMemo<SapSourceRow[]>(
+    () => revenueData.map(revenueToSapRow),
+    [revenueData],
+  );
+
+  /** Tai tep .json cho script tren may doc. */
+  const downloadSapJobFile = (job: SapJob) => {
+    const byId = new Map(sapSourceRows.map((r) => [r.id, r]));
+    const rows = job.sourceIds
+      .map((id) => byId.get(id))
+      .filter((r): r is SapSourceRow => !!r);
+
+    if (rows.length !== job.sourceIds.length) {
+      // Dong goc bi xoa sau khi tao lenh. Van cho tai phan con lai, nhung phai
+      // noi ro, vi tep thieu dong thi hoa don xuat ra cung thieu.
+      const missing = job.sourceIds.length - rows.length;
+      if (
+        !window.confirm(
+          `${missing} dòng trong lệnh này không còn trong dữ liệu doanh thu (đã bị xoá hoặc sửa khoá).\n\nTệp tải về sẽ THIẾU ${missing} dòng so với lúc tạo lệnh. Vẫn tải?`,
+        )
+      )
+        return;
+    }
+
+    const file = buildSapJobFile({
+      jobId: job.id,
+      createdAt: job.createdAt,
+      createdBy: job.createdBy,
+      from: job.period.from,
+      to: job.period.to,
+      rows,
+    });
+
+    const blob = new Blob([JSON.stringify(file, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = job.fileName || sapJobFileName(job.id, job.period.from, job.period.to);
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Tao mot lenh xuat.
+   *
+   * Khoa tai lieu suy ra tu chinh tap dong (xem sapJobId) nen bam hai lan lien
+   * tiep khong tao hai lenh — lan thu hai ghi vao dung tai lieu cu. Neu de
+   * Firestore tu sinh khoa thi mot cai bam doi se thanh hai lenh, va hai lenh do
+   * cung xuat mot tap dong ra hai bo hoa don.
+   */
+  const handleCreateSapJob = async (
+    from: string,
+    to: string,
+    rows: SapSourceRow[],
+  ) => {
+    if (!isOwner || sapBusy || rows.length === 0) return;
+
+    const summary = summarizeSapRows(rows);
+    if (summary.missingMaterialCode > 0) {
+      alert(
+        `${summary.missingMaterialCode} dòng thiếu mã vật tư. SAP khớp mặt hàng bằng mã chứ không bằng tên, nên phải sửa trước khi xuất.`,
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Tạo lệnh xuất hóa đơn cho kỳ ${from} → ${to}?\n\n` +
+          `${formatNumber(summary.count)} dòng · ${formatNumber(summary.partnerCount)} khách hàng\n` +
+          `Trước thuế: ${formatNumber(summary.totalBeforeVat)} đ\n` +
+          `Sau thuế:   ${formatNumber(summary.totalAfterVat)} đ\n\n` +
+          `App chỉ tạo lệnh và tải tệp về máy. Việc nạp lên SAP và bấm Duyệt vẫn do anh làm.`,
+      )
+    )
+      return;
+
+    setSapBusy(true);
+    try {
+      const sourceIds = rows.map((r) => r.id);
+      const id = sapJobId(sourceIds);
+      const now = new Date().toISOString();
+      const job: SapJob = {
+        id,
+        status: "queued",
+        createdAt: now,
+        createdBy: currentUserProfile?.email || user || "",
+        updatedAt: now,
+        period: { from, to },
+        sourceIds,
+        summary,
+        fileName: sapJobFileName(id, from, to),
+      };
+
+      await setDoc(doc(db, "sap_jobs", id), job);
+      downloadSapJobFile(job);
+      showNotification(
+        `Đã tạo lệnh ${formatNumber(summary.count)} dòng và tải tệp về máy`,
+      );
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, "sap_jobs");
+      alert("Không tạo được lệnh xuất: " + e.message);
+    } finally {
+      setSapBusy(false);
+    }
+  };
+
+  /**
+   * Doi trang thai mot lenh xuat.
+   *
+   * Chan bang canTransition chu khong tin vao viec giao dien co hien nut hay
+   * khong: nut co the bam nhanh hai lan, hoac hai nguoi mo cung mot man hinh.
+   */
+  const handleChangeSapJobStatus = async (
+    job: SapJob,
+    next: SapJobStatus,
+    note?: string,
+  ) => {
+    if (!isOwner || sapBusy) return;
+
+    if (!canTransition(job.status, next)) {
+      alert(
+        `Không chuyển được lệnh này từ "${job.status}" sang "${next}". Có thể ai đó vừa cập nhật, thử tải lại trang.`,
+      );
+      return;
+    }
+
+    setSapBusy(true);
+    try {
+      const patch: Record<string, unknown> = {
+        status: next,
+        updatedAt: new Date().toISOString(),
+      };
+      if (note !== undefined) patch.note = note;
+      if (next === "done") {
+        patch.approvedBy = currentUserProfile?.email || user || "";
+        patch.approvedAt = new Date().toISOString();
+      }
+
+      await updateDoc(doc(db, "sap_jobs", job.id), patch);
+      showNotification(`Lệnh xuất: ${SAP_JOB_STATUS_LABEL[next]}`);
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, "sap_jobs");
+      alert("Không cập nhật được lệnh: " + e.message);
+    } finally {
+      setSapBusy(false);
     }
   };
 
@@ -7029,6 +7222,21 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/*
+                  XUAT HOA DON LEN SAP.
+                  De ngay dau tab, tren ca phan phan tich: day la viec phai lam
+                  hang ky, con phan phan tich la thu de xem.
+                */}
+                <SapExportPanel
+                  rows={sapSourceRows}
+                  jobs={sapJobs}
+                  canRun={isOwner}
+                  busy={sapBusy}
+                  onCreate={handleCreateSapJob}
+                  onDownload={downloadSapJobFile}
+                  onChangeStatus={handleChangeSapJobStatus}
+                />
 
                 {revenueData.length > 0 ? (
                   <>

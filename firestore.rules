@@ -114,6 +114,19 @@ service cloud.firestore {
       allow read, create, update, delete: if isOwner();
     }
 
+    // Lenh xuat hoa don len SAP: CHI CHU SO HUU, khop voi tab Doanh thu.
+    //
+    // Khong cap quyen cho may chay script: script doc tep .json tai ve chu khong
+    // doc Firestore. Lam cach kia thi phai cap khoa tai khoan dich vu cho may -
+    // them mot bi mat nua phai quan, va khoa do ghi duoc MOI collection.
+    //
+    // Khong cho xoa: mot lenh da xuat hoa don la dau vet phai giu. Muon bo thi
+    // chuyen trang thai sang 'cancelled', van con thay ai huy va vi sao.
+    match /sap_jobs/{jobId} {
+      allow read, create, update: if isOwner();
+      allow delete: if false;
+    }
+
     match /partners/{partnerId} {
       allow read: if isViewer();
       allow create, update: if isStaff();

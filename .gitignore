@@ -9,3 +9,7 @@ coverage/
 
 # Cấu hình Firebase cũ (nay đọc từ biến môi trường VITE_FIREBASE_*)
 firebase-applet-config.json
+
+# Tep mau SAP: chua ten khach hang, ma so thue, so tien - khong day len GitHub
+sap-mau/*
+!sap-mau/README.md
