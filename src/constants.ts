@@ -14,7 +14,7 @@ import { Product, Partner } from './types';
  * ĐVT trong danh sách bộ phận chứ không suy từ tên.
  */
 export const INITIAL_PRODUCTS: Product[] = [
-  { id: 'p12', name: 'Bia Eclipse Plaza Dry Hop Wheat 330ml VN', materialCode: '10191539', category: 'Lít', unit: 'Lít', price: 54000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p12', name: 'Bia Eclipse Plaza Dry Hop Wheat VN', materialCode: '10191539', category: 'Lít', unit: 'Lít', price: 54000, conversionFactor: 1, capacityPerUnit: 1000 },
   { id: 'p1', name: 'Bia Golden Bridge Helles Lager', materialCode: '10168107', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
   { id: 'p4', name: 'Bia Golden Bridge Helles Lager lon330ml', materialCode: '10168110', category: 'Lon', unit: 'Lon', price: 15833, conversionFactor: 1, capacityPerUnit: 330 },
   { id: 'p11', name: 'Bia Helios Wheat Lager', materialCode: '10191541', category: 'Lít', unit: 'Lít', price: 53000, conversionFactor: 1, capacityPerUnit: 1000 },
