@@ -223,20 +223,41 @@ export function parseTkhoXuat(
       }
     }
   }
-  if (hRow < 1) return empty;
+  if (hRow < 0) return empty;
 
   const rNgay = rows[hRow] || [];
   const rDiem = rows[hRow + 1] || [];
-  const rSection = rows[hRow - 1] || [];
+  // Bảng rút gọn không có hàng mốc phía trên tiêu đề.
+  const rSection = hRow > 0 ? rows[hRow - 1] || [] : [];
 
-  // --- Chỗ bắt đầu phần XUẤT KHO --------------------------------------
-  // Sheet có cả phần Nhập kho ở bên trái. Lấy nhầm phần đó là ghi hàng nhập
-  // thành hàng xuất — tồn kho sai gấp đôi theo hai chiều ngược nhau.
+  /*
+   * CHỖ BẮT ĐẦU PHẦN XUẤT KHO — dò theo hai cách, không đòi cả hai.
+   *
+   * Sheet "T Kho" đầy đủ có cả phần Nhập kho ở bên trái, ngăn nhau bằng ô mốc
+   * "Xuất kho". Lấy nhầm phần đó là ghi hàng nhập thành hàng xuất — tồn kho sai
+   * gấp đôi theo hai chiều ngược nhau. Nên có mốc thì tin mốc.
+   *
+   * Nhưng bảng xuất kho rút gọn thì không có mốc nào, chỉ có mã / tên / ĐVT rồi
+   * tới thẳng các cột ngày. Khi đó lấy cột đầu tiên mà hàng ngày đọc ra được
+   * một ngày đầy đủ.
+   *
+   * Cách hai an toàn cả với sheet đầy đủ: hàng ngày bên phần Nhập kho chỉ ghi
+   * số thứ tự ngày ("1", "2", "3"), không phải "01.08.26", nên không bao giờ
+   * đọc ra ngày và không bao giờ bị nhận nhầm làm chỗ bắt đầu.
+   */
   let start = -1;
   for (let c = 0; c < rSection.length; c++) {
     if (key(rSection[c]) === "xuatkho") {
       start = c;
       break;
+    }
+  }
+  if (start < 0) {
+    for (let c = codeCol + 1; c < rNgay.length; c++) {
+      if (parseTkhoDate(rNgay[c])) {
+        start = c;
+        break;
+      }
     }
   }
   if (start < 0) return empty;

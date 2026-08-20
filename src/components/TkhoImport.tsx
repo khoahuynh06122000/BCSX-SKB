@@ -59,8 +59,37 @@ interface Props {
   busy: boolean;
 }
 
-/** Sheet nào là sheet tồn kho tháng — tên viết lệch hoa thường giữa các tháng. */
-const laSheetTkho = (ten: string) => /t\s*kho/i.test(ten);
+/**
+ * Sheet nào dùng được — thử ĐỌC chứ không đoán theo tên.
+ *
+ * Trước đây lọc theo tên chứa "T Kho". Nhưng bộ phận còn gửi bảng xuất kho rút
+ * gọn để trong sheet tên "Sheet1", và lọc theo tên thì app báo "tệp này không
+ * có sheet T Kho nào" trong khi dữ liệu đọc được hoàn toàn bình thường.
+ *
+ * Nên cứ thử đọc từng sheet: đọc ra được dòng nào, hoặc ra được điểm bán chưa
+ * gán, thì đó là bảng xuất kho.
+ */
+function timSheetDungDuoc(
+  wb: XLSX.WorkBook,
+  products: Product[],
+  bang: Map<string, DiemBanEntry>,
+): string[] {
+  return wb.SheetNames.filter((n) => {
+    const ws = wb.Sheets[n];
+    if (!ws) return false;
+    try {
+      const rows = XLSX.utils.sheet_to_json<any[]>(ws, {
+        header: 1,
+        raw: true,
+        defval: null,
+      });
+      const r = parseTkhoXuat(rows, n, products, bang);
+      return r.drafts.length > 0 || r.unknownOutlets.length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
 
 export default function TkhoImport({
   products,
@@ -133,12 +162,14 @@ export default function TkhoImport({
     reader.onload = (ev) => {
       try {
         const wb = XLSX.read(ev.target?.result, { type: "binary" });
-        const ds = wb.SheetNames.filter(laSheetTkho);
+        const ds = timSheetDungDuoc(wb, products, bangDiemBan);
         if (!ds.length) {
           setBook(null);
           setSheetNames([]);
           setError(
-            `Tệp này không có sheet "T Kho" nào. Các sheet đang có: ${wb.SheetNames.join(", ")}`,
+            `Không sheet nào trong tệp đọc ra được bảng xuất kho. ` +
+              `Bảng cần có ô "MÃ HÀNG", một hàng ngày dạng 01.08.26 và hàng ` +
+              `điểm bán ngay dưới đó.\n\nCác sheet đang có: ${wb.SheetNames.join(", ")}`,
           );
           return;
         }

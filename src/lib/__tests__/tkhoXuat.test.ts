@@ -277,5 +277,52 @@ eq(
   0,
 );
 
+/*
+ * BANG XUAT KHO RUT GON - dung hinh dang tep "nhap file a Dan":
+ *   khong co moc "Nhập Kho" / "Xuất kho"
+ *   khong co cot Tổng Nhập / Tổng Xuất / Tồn Đầu
+ *   hang tieu de nam ngay DONG DAU TIEN, "MÃ HÀNG" o cot 0
+ */
+const bangRutGon: any[][] = [
+  ["MÃ HÀNG", "TÊN HÀNG", "Ngày", "10.08.26", null, "11.08.26"],
+  [null, null, "Điểm bán", "NH 1901", "MFV", "NH 1901"],
+  ["10168107", "Bia Golden Bridge helles Lager 20lít/bom", "lít", 206, 120, 140.6],
+  ["10168110", "Bia Golden Bridge Helles Lager 330ml", "lon", null, 72, null],
+];
+
+console.log("\n15. Bang xuat kho rut gon (khong co moc Xuat kho)");
+const rg = parseTkhoXuat(bangRutGon, "Sheet1", products);
+eq("van doc duoc du dong", rg.drafts.length, 4);
+eq("tieu de o dong dau tien van nhan ra", rg.dateRange, {
+  from: "2026-08-10",
+  to: "2026-08-11",
+});
+eq(
+  "tong so luong dung",
+  Math.round(rg.drafts.reduce((s, d) => s + d.quantity, 0) * 10) / 10,
+  538.6,
+);
+eq("khong con diem ban la", rg.unknownOutlets.length, 0);
+eq("khong co ma la", rg.unknownCodes.length, 0);
+eq(
+  "ngay van lan sang phai",
+  rg.drafts.filter((d) => d.outlet === "MFV").map((d) => d.dateKey),
+  ["2026-08-10", "2026-08-10"],
+);
+eq(
+  "khong co phan nhap thi khong tao gi",
+  parseTkhoNhap(bangRutGon, "Sheet1", products).drafts.length,
+  0,
+);
+
+console.log("\n16. Do chỗ bắt đầu KHONG duoc lan sang vung Nhap kho");
+eq(
+  "sheet day du van bat dau dung cho co moc",
+  parseTkhoXuat(sheet, "T Kho T8", products).drafts.every(
+    (d) => d.quantity !== 999 && d.quantity !== 888 && d.quantity !== 300,
+  ),
+  true,
+);
+
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);
