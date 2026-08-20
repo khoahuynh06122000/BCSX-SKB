@@ -1,0 +1,172 @@
+/**
+ * Chay thu viec doc phan Xuat kho trong sheet "T Kho".
+ *
+ * Phep tinh de sai nhat o day: NGAY LAN SANG PHAI. Ngay chi ghi o cot dau moi
+ * nhom, bo buoc lan thi ca tram giao dich roi vao mot ngay duy nhat ma khong
+ * bao loi gi - tong van dung, chi ngay la sai.
+ */
+import type { Product } from "../../types";
+import {
+  parseTkhoDate,
+  parseTkhoXuat,
+  toTkhoNumber,
+} from "../tkhoXuat";
+
+let pass = 0;
+let fail = 0;
+const eq = (name: string, a: any, b: any) => {
+  if (JSON.stringify(a) === JSON.stringify(b)) {
+    pass++;
+    console.log(`  OK   ${name}`);
+  } else {
+    fail++;
+    console.log(
+      `  FAIL ${name}: duoc ${JSON.stringify(a)}, mong ${JSON.stringify(b)}`,
+    );
+  }
+};
+
+const products: Product[] = [
+  {
+    id: "p1",
+    name: "Bia hoi",
+    materialCode: "10168107",
+    category: "Lít",
+    unit: "Lít",
+    price: 45000,
+    conversionFactor: 1,
+    capacityPerUnit: 1000,
+  },
+  {
+    id: "p4",
+    name: "Bia lon",
+    materialCode: "10168110",
+    category: "Lon",
+    unit: "Lon",
+    price: 15833,
+    conversionFactor: 1,
+    capacityPerUnit: 330,
+  },
+];
+
+console.log("\n1. Doc ngay o hang tieu de");
+eq("dang chuan dd.MM.yy", parseTkhoDate("01.08.26"), "2026-08-01");
+eq("thua dau cham (co that trong file T8)", parseTkhoDate("17..08.26"), "2026-08-17");
+eq("dang gach cheo", parseTkhoDate("5/8/2026"), "2026-08-05");
+eq("nam du 4 chu so", parseTkhoDate("31.12.2026"), "2026-12-31");
+eq("o rong -> null", parseTkhoDate(""), null);
+eq("chu -> null", parseTkhoDate("Tổng Xuất"), null);
+eq("ngay 32 -> null", parseTkhoDate("32.08.26"), null);
+eq("thang 13 -> null", parseTkhoDate("01.13.26"), null);
+
+console.log("\n2. Doc so");
+eq("so that", toTkhoNumber(432.6), 432.6);
+eq("rac dau phay dong bi cat", toTkhoNumber(2719.2000000000003), 2719.2);
+eq("chuoi kieu Viet", toTkhoNumber("1.234,5"), 1234.5);
+eq("so am trong ngoac", toTkhoNumber("(1.500)"), -1500);
+eq("o rong -> 0", toTkhoNumber(""), 0);
+eq("null -> 0", toTkhoNumber(null), 0);
+eq("chu -> 0 chu khong NaN", toTkhoNumber("khong co"), 0);
+
+/*
+ * Sheet gia, dung dung hinh dang that:
+ *   dong 0: tieu de thang
+ *   dong 1: moc "Nhập Kho" va "Xuất kho"
+ *   dong 2: "MÃ HÀNG" + hang NGAY
+ *   dong 3: hang DIEM BAN + "Tổng Xuất"
+ *   dong 4+: du lieu
+ *
+ * Cot 0..4 la phan Nhap kho (co so that, de kiem rang parser KHONG lay).
+ * Cot 5.. la phan Xuat kho.
+ */
+const sheet: any[][] = [
+  ["XUẤT HÀNG THÁNG 08 /2026"],
+  [null, null, null, "Nhập Kho", null, "Xuất kho"],
+  ["STT", "MÃ HÀNG", "TÊN HÀNG", "1", "2", "01.08.26", null, "02.08.26", null, "Cộng"],
+  [null, null, null, null, "Tổng Xuất", "NH 1901", "Điểm lạ", "NH 1901", "MFV", null],
+  [1, "10168107", "Bia hoi", 999, 300, 100, 50, 200, 25, 12345],
+  [2, "10168110", "Bia lon", 888, 60, 60, null, null, null, 999],
+  [3, "99999999", "Bia khong co trong danh muc", 0, 0, 70, null, null, null, 0],
+];
+
+console.log("\n3. Dung giao dich tu bang cheo");
+const r = parseTkhoXuat(sheet, "T Kho T8", products);
+eq("so giao dich", r.drafts.length, 4);
+eq(
+  "khong lay cot ben phan Nhap kho",
+  r.drafts.every((d) => d.quantity !== 999 && d.quantity !== 888),
+  true,
+);
+eq("khoang ngay", r.dateRange, { from: "2026-08-01", to: "2026-08-02" });
+
+console.log("\n4. Ngay lan sang phai");
+const ngay1 = r.drafts.filter((d) => d.dateKey === "2026-08-01");
+const ngay2 = r.drafts.filter((d) => d.dateKey === "2026-08-02");
+eq("ngay 01/08 co 2 dong", ngay1.length, 2);
+eq(
+  "cot khong ghi ngay van thuoc 02/08",
+  ngay2.map((d) => d.outlet).sort(),
+  ["MFV", "NH 1901"],
+);
+
+console.log("\n5. Gan diem ban -> doi tac va ghi chu");
+const nh1901 = r.drafts.find((d) => d.outlet === "NH 1901")!;
+eq("NH 1901 -> BNC", nh1901.partnerId, "AD0103");
+eq("NH 1901 khong co ghi chu", nh1901.note, "");
+const mfv = r.drafts.find((d) => d.outlet === "MFV")!;
+eq("MFV -> FV", mfv.partnerId, "AC0107");
+eq("giu nguyen ten diem ban de tra nguoc", mfv.outlet, "MFV");
+eq("so luong giu nguyen", mfv.quantity, 25);
+
+console.log("\n6. Diem ban chua gan thi KHONG tao giao dich");
+eq("co bao ra", r.unknownOutlets.length, 1);
+eq("dung ten", r.unknownOutlets[0].ten, "Điểm lạ");
+eq("kem so luong de biet anh huong bao nhieu", r.unknownOutlets[0].soLuong, 50);
+eq(
+  "khong lot vao danh sach giao dich",
+  r.drafts.some((d) => d.outlet === "Điểm lạ"),
+  false,
+);
+
+console.log("\n7. Ma vat tu la");
+eq("co bao ra", r.unknownCodes.length, 1);
+eq("dung ma", r.unknownCodes[0].code, "99999999");
+eq("kem so luong", r.unknownCodes[0].soLuong, 70);
+eq(
+  "khong tao giao dich cho ma la",
+  r.drafts.some((d) => d.productId === ""),
+  false,
+);
+
+console.log("\n8. Doi chieu voi cot Tong Xuat cua chinh sheet");
+const check = r.totalChecks.find((t) => t.code === "10168107");
+eq("bat duoc cho lech", !!check, true);
+eq("cong dung tu bang cheo", check!.tuBangCheo, 375);
+eq("doc dung cot tong", check!.tuCotTong, 300);
+eq("bao dung so lech", check!.lech, 75);
+eq(
+  "ma khop thi khong bao",
+  r.totalChecks.some((t) => t.code === "10168110"),
+  false,
+);
+
+console.log("\n9. Truong hop bien");
+eq(
+  "sheet rong -> khong no",
+  parseTkhoXuat([], "rong", products).drafts.length,
+  0,
+);
+eq(
+  "sheet khong co o MA HANG -> tra ve rong",
+  parseTkhoXuat([["linh tinh"]], "la", products).drafts.length,
+  0,
+);
+const khongCoXuat = parseTkhoXuat(
+  [[], [null, null, null, "Nhập Kho"], ["STT", "MÃ HÀNG", "TÊN HÀNG", "1"], [], [1, "10168107", "Bia hoi", 500]],
+  "chi co nhap",
+  products,
+);
+eq("sheet khong co phan Xuat kho -> khong tao gi", khongCoXuat.drafts.length, 0);
+
+console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
+process.exit(fail > 0 ? 1 : 0);
