@@ -3727,7 +3727,20 @@ export default function App() {
       const entry = summaryMap.get(t.productId);
       if (entry) {
         const price = Number(productPriceMap.get(t.productId) || 0);
-        if (t.type === "IN" || t.type === "OPENING") {
+        /*
+         * TỒN ĐẦU KỲ KHÔNG PHẢI HÀNG NHẬP TRONG KỲ.
+         *
+         * `OPENING` là số dư mang sang, không phải một lần nhập hàng. Cộng nó
+         * vào cột "Tổng nhập" thì cột "Tồn đầu" — vốn tính ngược ra bằng
+         * closing − in + out — sẽ ra 0, và người đọc báo cáo thấy kỳ này nhập
+         * nhiều hơn thực tế đúng bằng số dư đầu kỳ.
+         *
+         * Nó VẪN nằm trong tồn cuối (xem phép tính closingStock bên dưới) vì
+         * đó là hàng có thật trong kho.
+         */
+        if (t.type === "OPENING") {
+          // không tính vào nhập trong kỳ
+        } else if (t.type === "IN") {
           entry.in += Number(t.quantity || 0);
           entry.inValue += Number(t.quantity || 0) * price;
         } else {
