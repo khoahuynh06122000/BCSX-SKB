@@ -166,6 +166,7 @@ import BulkImportGrid from "./components/BulkImportGrid";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
+import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import type { BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 
@@ -1430,6 +1431,95 @@ export default function App() {
   /* ---------------- Nap nhanh xuat kho tu file BBGN ---------------- */
 
   /**
+   * Ghi TỒN ĐẦU KỲ và HÀNG NHẬP đọc được từ sheet "T Kho".
+   *
+   * Phải chạy TRƯỚC phần xuất trong cùng một lượt: xuất trừ tồn theo lô, mà lô
+   * chỉ sinh ra từ giao dịch nhập. Nạp mỗi phần xuất thì mọi dòng đều báo vượt
+   * tồn — đúng cảnh gặp khi dữ liệu vừa bị dọn sạch.
+   *
+   * Hai loại này CỐ Ý không cần chữ ký (không gán `slipCode`): tồn đầu kỳ là số
+   * khai lúc dựng sổ, còn số nhập từ file là việc đồng bộ số liệu — cả hai đều
+   * không có lượt giao nhận nào để hai bên ký. Xem `src/lib/slip.ts`.
+   *
+   * Khoá cũng suy từ nội dung như phần xuất, nên nạp lại cùng một sheet là ghi
+   * đè chứ không cộng thêm.
+   */
+  const handleCreateNhapFromTkho = async (
+    drafts: TkhoNhapDraft[],
+  ): Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]> => {
+    if (!drafts.length) return [];
+
+    const khoa = (d: TkhoNhapDraft) =>
+      "tkho-" +
+      stableHash([d.dateKey, d.type, d.productId].join("|"));
+
+    const prefixes = new Set(drafts.map((d) => khoa(d)));
+    const canXoa = transactions.filter((t) =>
+      [...prefixes].some((p) => t.id === p),
+    );
+
+    const CHUNK = 400;
+    let batch = writeBatch(db);
+    let opCount = 0;
+    const nhaCungCap =
+      partners.find((p) => p.type === "SUPPLIER") || partners[0];
+
+    for (const t of canXoa) {
+      batch.delete(doc(db, "transactions", t.id));
+      opCount++;
+      if (opCount >= CHUNK) {
+        await batch.commit();
+        batch = writeBatch(db);
+        opCount = 0;
+      }
+    }
+
+    const loMoi: { productId: string; batchNumber: string; quantity: number; date: string }[] = [];
+
+    for (const d of drafts) {
+      const product = products.find((p) => p.id === d.productId);
+      if (!product) continue;
+      const id = khoa(d);
+      const date = `${d.dateKey}T07:00:00.000Z`;
+      const transaction: Transaction = {
+        id,
+        date,
+        type: d.type,
+        productId: product.id,
+        productName: product.name,
+        category: product.category,
+        quantity: d.quantity,
+        partnerId: nhaCungCap?.id || "",
+        partnerName: nhaCungCap?.name || "",
+        notes:
+          d.type === "OPENING"
+            ? "Tồn đầu kỳ · nạp từ file BBGN"
+            : "Nhập kho · nạp từ file BBGN",
+        batchNumber: d.batchNumber,
+        evidencePhotoUrls: [],
+        createdBy: user || "Guest",
+        status: "completed",
+      };
+      batch.set(doc(db, "transactions", id), transaction);
+      loMoi.push({
+        productId: product.id,
+        batchNumber: d.batchNumber,
+        quantity: d.quantity,
+        date,
+      });
+      opCount++;
+      if (opCount >= CHUNK) {
+        await batch.commit();
+        batch = writeBatch(db);
+        opCount = 0;
+      }
+    }
+
+    if (opCount > 0) await batch.commit();
+    return loMoi;
+  };
+
+  /**
    * Lưu phần gán điểm bán để tháng sau khỏi gán lại.
    *
    * Khoá tài liệu là TÊN ĐÃ CHUẨN HOÁ, không phải khoá tự sinh: gán lại cùng
@@ -1470,7 +1560,11 @@ export default function App() {
    * Dat status 'completed' (khong phai 'in_transit') vi file BBGN la bien ban
    * giao nhan DA KY — hang da toi noi roi.
    */
-  const handleCreateFromBbgn = async (drafts: BbgnDraft[]) => {
+  const handleCreateFromBbgn = async (
+    drafts: BbgnDraft[],
+    /** Lô nhập vừa ghi trong cùng lần chạy, FIFO phải thấy chúng. */
+    loMoi: { productId: string; batchNumber: string; quantity: number; date: string }[] = [],
+  ) => {
     if (!drafts.length || loading) return;
 
     // Đếm trước số dòng của lần nạp trước sẽ bị ghi đè, để người bấm biết đây
@@ -1504,6 +1598,32 @@ export default function App() {
     try {
       // Ban sao ton theo lo de FIFO "nhin thay" phan da bi tru trong cung lan chay
       const localBatches = batches.map((b) => ({ ...b }));
+
+      /*
+       * Ghép lô vừa nhập trong CÙNG lần chạy vào bản sao tồn theo lô.
+       *
+       * Không chờ được Firestore bắn dữ liệu về: tồn theo lô suy từ state, mà
+       * state chỉ đổi ở lần dựng lại sau. Nếu chỉ dựa vào nó thì nạp cả tháng
+       * trong một lượt sẽ thấy tồn bằng 0 và báo vượt tồn toàn bộ.
+       */
+      loMoi.forEach((lo) => {
+        const co = localBatches.find(
+          (bb) => bb.batchNumber === lo.batchNumber && bb.productId === lo.productId,
+        );
+        if (co) co.stock += lo.quantity;
+        else {
+          const sp = products.find((pp) => pp.id === lo.productId);
+          localBatches.push({
+            batchNumber: lo.batchNumber,
+            productId: lo.productId,
+            productName: sp?.name || lo.productId,
+            category: sp?.category || "Lít",
+            stock: lo.quantity,
+            importDate: lo.date,
+          });
+        }
+      });
+      localBatches.sort((x, y) => (x.importDate || "").localeCompare(y.importDate || ""));
       const groupIds = new Map<string, string>();
       let seq = 0;
       let shortfall = 0;
@@ -8159,6 +8279,7 @@ export default function App() {
                       partners={partners}
                       diemBanOverrides={diemBanOverrides}
                       onSaveDiemBan={handleSaveDiemBan}
+                      onCreateNhap={handleCreateNhapFromTkho}
                       onCreate={handleCreateFromBbgn}
                       busy={loading}
                     />

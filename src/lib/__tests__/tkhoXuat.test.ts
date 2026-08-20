@@ -12,6 +12,7 @@ import {
   toTkhoNumber,
 } from "../tkhoXuat";
 import { buildDiemBanLookup, lookupDiemBan } from "../diemBan";
+import { parseTkhoNhap } from "../tkhoXuat";
 
 let pass = 0;
 let fail = 0;
@@ -191,6 +192,89 @@ eq(
   "khop khong phan biet hoa thuong / dau thua",
   lookupDiemBan("nh   1901", de)?.partnerId,
   "AC0107",
+);
+
+/*
+ * Sheet gia cho phan NHAP, dung dung bo tri that:
+ *   moc "Nhập Kho" o cot 7, "Xuất kho" o cot 11
+ *   cot 4/5/6 = Tổng Nhập / Tổng Xuất / Tồn Đầu
+ *   cot 7..9  = ngay 1,2,3 (chi ghi SO NGAY, khong ghi ngay day du)
+ */
+const sheetNhap: any[][] = [
+  ["XUẤT HÀNG THÁNG 08 /2026"],
+  [null, null, null, null, null, null, null, "Nhập Kho", null, null, null, "Xuất kho"],
+  ["STT", "MÃ HÀNG", "TÊN HÀNG", "Ngày", null, null, null, "1", "2", "3", null, "01.08.26", null, "Cộng"],
+  [null, null, null, "Điểm bán", "Tổng Nhập", "Tổng Xuất", "Tồn Đầu", null, null, null, null, "NH 1901", "MFV", null],
+  [1, "10168107", "Bia hoi", null, 500, 0, 100, 200, 300, null, null, 50, 25, null],
+  [2, "10168110", "Bia lon", null, 999, 0, 0, 60, null, null, null, null, null, null],
+];
+
+console.log("\n12. Doc ton dau ky va hang nhap");
+const n = parseTkhoNhap(sheetNhap, "T Kho T8", products);
+eq("suy ra dung thang tu hang ngay ben Xuat kho", n.thang, {
+  nam: 2026,
+  thang: 8,
+});
+eq("mot dong ton dau", n.tonDauCount, 1);
+eq("hai dong nhap", n.nhapCount, 3);
+
+const td = n.drafts.find((d) => d.type === "OPENING")!;
+eq("ton dau dung so luong", td.quantity, 100);
+eq("ton dau ghi vao ngay dau thang", td.dateKey, "2026-08-01");
+eq("ton dau co so lo rieng", td.batchNumber, "TONDAU-0826");
+
+const nk = n.drafts.filter((d) => d.type === "IN" && d.productId === "p1");
+eq("so ngay doi thanh ngay day du", nk.map((d) => d.dateKey), [
+  "2026-08-01",
+  "2026-08-02",
+]);
+eq("so lo theo ngay nhap", nk.map((d) => d.batchNumber), [
+  "NK-010826",
+  "NK-020826",
+]);
+eq("so luong dung", nk.map((d) => d.quantity), [200, 300]);
+eq(
+  "moi dong nhap deu co so lo — thieu lo la FIFO khong thay hang",
+  n.drafts.every((d) => !!d.batchNumber),
+  true,
+);
+eq("ton dau bang 0 thi khong tao dong", n.drafts.filter((d) => d.type === "OPENING").length, 1);
+
+console.log("\n13. Doi chieu cot Tong Nhap");
+eq("ma khop thi khong bao", n.totalChecks.some((t) => t.code === "10168107"), false);
+const lechNhap = n.totalChecks.find((t) => t.code === "10168110");
+eq("ma lech thi bao ra", !!lechNhap, true);
+eq("cong dung tu cac cot ngay", lechNhap!.tuBangCheo, 60);
+eq("doc dung cot tong", lechNhap!.tuCotTong, 999);
+
+console.log("\n14. Khong co phan nhap thi khong tao gi");
+const chiCoXuat: any[][] = [
+  ["XUẤT HÀNG THÁNG 08 /2026"],
+  [null, null, null, null, null, "Xuất kho"],
+  ["STT", "MÃ HÀNG", "TÊN HÀNG", "Ngày", null, "01.08.26"],
+  [null, null, null, "Điểm bán", "Tổng Xuất", "NH 1901"],
+  [1, "10168107", "Bia hoi", null, 50, 50],
+];
+eq(
+  "sheet khong co moc Nhap Kho",
+  parseTkhoNhap(chiCoXuat, "T Kho T8", products).drafts.length,
+  0,
+);
+eq("sheet rong", parseTkhoNhap([], "rong", products).drafts.length, 0);
+eq(
+  "sheet khong doc duoc thang thi khong doan bua",
+  parseTkhoNhap(
+    [
+      [],
+      [null, null, null, "Nhập Kho"],
+      ["STT", "MÃ HÀNG", "TÊN HÀNG", "1"],
+      [null, null, null, "Tồn Đầu"],
+      [1, "10168107", "Bia hoi", 500],
+    ],
+    "khong co ngay",
+    products,
+  ).drafts.length,
+  0,
 );
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);

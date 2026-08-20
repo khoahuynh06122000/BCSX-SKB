@@ -74,6 +74,40 @@ export interface TkhoTotalCheck {
   lech: number;
 }
 
+/**
+ * Một dòng NHẬP dựng từ sheet: tồn đầu kỳ hoặc hàng nhập trong tháng.
+ *
+ * Nhập không có đối tác trong sheet — hàng từ nhà máy về, không phải mua của
+ * ai. Nơi gọi gán đối tác nhà cung cấp.
+ */
+export interface TkhoNhapDraft {
+  /** yyyy-MM-dd */
+  dateKey: string;
+  type: "OPENING" | "IN";
+  productId: string;
+  productName: string;
+  quantity: number;
+  /**
+   * Số lô, sinh theo ngày nhập.
+   *
+   * BẮT BUỘC phải có: phép tính tồn theo lô bỏ qua mọi giao dịch không có số
+   * lô, nên nhập mà thiếu lô thì hàng không vào tồn theo lô, và mọi dòng xuất
+   * sau đó đều bị báo vượt tồn.
+   */
+  batchNumber: string;
+}
+
+export interface TkhoNhapResult {
+  sheetName: string;
+  drafts: TkhoNhapDraft[];
+  /** Tháng của sheet, suy từ hàng ngày bên phần Xuất kho. */
+  thang: { nam: number; thang: number } | null;
+  /** Đối chiếu với cột "Tổng Nhập" mà chính sheet tự cộng. */
+  totalChecks: TkhoTotalCheck[];
+  tonDauCount: number;
+  nhapCount: number;
+}
+
 export interface TkhoParseResult {
   sheetName: string;
   drafts: TkhoDraft[];
@@ -330,4 +364,160 @@ export function parseTkhoXuat(
     oThieuNgay,
     dateRange: ds.length ? { from: ds[0], to: ds[ds.length - 1] } : null,
   };
+}
+
+/**
+ * Đọc phần TỒN ĐẦU và NHẬP KHO của cùng sheet.
+ *
+ * Cấu trúc phần nhập đơn giản hơn phần xuất vì không có chiều điểm bán — hàng
+ * từ nhà máy về, không phải mua của ai:
+ *
+ *   Tổng Nhập | Tổng Xuất | Tồn Đầu | 1 | 2 | 3 | ...   <- số ngày trong tháng
+ *     17.116,8|         0 |  1.749,8|1644,9|2719,2| ...
+ *
+ * Hàng ngày ở đây chỉ ghi SỐ THỨ TỰ NGÀY chứ không ghi ngày đầy đủ, nên tháng
+ * và năm phải lấy từ hàng ngày bên phần Xuất kho ("01.08.26").
+ *
+ * Vì sao phải đọc phần này: giao dịch xuất trừ tồn theo lô, mà lô chỉ sinh ra
+ * từ giao dịch nhập. Chỉ nạp phần xuất thì mọi dòng đều báo vượt tồn.
+ */
+export function parseTkhoNhap(
+  rows: any[][],
+  sheetName: string,
+  products: Product[],
+): TkhoNhapResult {
+  const empty: TkhoNhapResult = {
+    sheetName,
+    drafts: [],
+    thang: null,
+    totalChecks: [],
+    tonDauCount: 0,
+    nhapCount: 0,
+  };
+
+  let hRow = -1;
+  let codeCol = -1;
+  for (let r = 0; r < Math.min(rows.length, 12) && hRow < 0; r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      if (key(row[c]) === "mahang") {
+        hRow = r;
+        codeCol = c;
+        break;
+      }
+    }
+  }
+  if (hRow < 1) return empty;
+
+  const rNgay = rows[hRow] || [];
+  const rDiem = rows[hRow + 1] || [];
+  const rSection = rows[hRow - 1] || [];
+
+  // Tháng lấy từ ngày đầu tiên bên phần Xuất kho — phần nhập chỉ có số ngày.
+  let thang: { nam: number; thang: number } | null = null;
+  for (let c = 0; c < rNgay.length; c++) {
+    const d = parseTkhoDate(rNgay[c]);
+    if (d) {
+      thang = { nam: Number(d.slice(0, 4)), thang: Number(d.slice(5, 7)) };
+      break;
+    }
+  }
+  if (!thang) return empty;
+
+  // Vùng nhập nằm giữa mốc "Nhập Kho" và mốc "Xuất kho"
+  let nhapStart = -1;
+  let nhapEnd = rSection.length;
+  for (let c = 0; c < rSection.length; c++) {
+    const k = key(rSection[c]);
+    if (k === "nhapkho" && nhapStart < 0) nhapStart = c;
+    if (k === "xuatkho" && nhapStart >= 0) {
+      nhapEnd = c;
+      break;
+    }
+  }
+  if (nhapStart < 0) return empty;
+
+  let colTongNhap = -1;
+  let colTonDau = -1;
+  for (let c = 0; c < rDiem.length; c++) {
+    const k = key(rDiem[c]);
+    if (k === "tongnhap") colTongNhap = c;
+    if (k === "tondau") colTonDau = c;
+  }
+
+  const byCode = new Map<string, Product>();
+  products.forEach((p) => {
+    if (p.materialCode) byCode.set(S(p.materialCode), p);
+  });
+
+  const hai = (n: number) => String(n).padStart(2, "0");
+  const ngayCuaCot = (c: number): string | null => {
+    const n = Number(S(rNgay[c]));
+    if (!Number.isInteger(n) || n < 1 || n > 31) return null;
+    return `${thang!.nam}-${hai(thang!.thang)}-${hai(n)}`;
+  };
+  const ngayDauThang = `${thang.nam}-${hai(thang.thang)}-01`;
+
+  const drafts: TkhoNhapDraft[] = [];
+  const totalChecks: TkhoTotalCheck[] = [];
+  let tonDauCount = 0;
+  let nhapCount = 0;
+
+  for (let r = hRow + 2; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const code = S(row[codeCol]);
+    if (!/^\d{6,}$/.test(code)) continue;
+    const product = byCode.get(code);
+    if (!product) continue;
+
+    // --- Tồn đầu kỳ ---
+    if (colTonDau >= 0) {
+      const q = toTkhoNumber(row[colTonDau]);
+      if (q > 0) {
+        drafts.push({
+          dateKey: ngayDauThang,
+          type: "OPENING",
+          productId: product.id,
+          productName: product.name,
+          quantity: q,
+          batchNumber: `TONDAU-${hai(thang.thang)}${String(thang.nam).slice(2)}`,
+        });
+        tonDauCount++;
+      }
+    }
+
+    // --- Nhập theo ngày ---
+    let tongNhap = 0;
+    for (let c = nhapStart; c < nhapEnd; c++) {
+      const q = toTkhoNumber(row[c]);
+      if (q <= 0) continue;
+      const dateKey = ngayCuaCot(c);
+      if (!dateKey) continue;
+      tongNhap += q;
+      drafts.push({
+        dateKey,
+        type: "IN",
+        productId: product.id,
+        productName: product.name,
+        quantity: q,
+        batchNumber: `NK-${dateKey.slice(8)}${hai(thang.thang)}${String(thang.nam).slice(2)}`,
+      });
+      nhapCount++;
+    }
+
+    if (colTongNhap >= 0 && tongNhap > 0) {
+      const tuCotTong = toTkhoNumber(row[colTongNhap]);
+      const lech = Math.round((tongNhap - tuCotTong) * 100) / 100;
+      if (Math.abs(lech) > 1) {
+        totalChecks.push({
+          code,
+          tuBangCheo: Math.round(tongNhap * 100) / 100,
+          tuCotTong,
+          lech,
+        });
+      }
+    }
+  }
+
+  return { sheetName, drafts, thang, totalChecks, tonDauCount, nhapCount };
 }

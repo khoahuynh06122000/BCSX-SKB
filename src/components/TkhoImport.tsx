@@ -15,7 +15,13 @@ import {
   buildDiemBanLookup,
   type DiemBanEntry,
 } from "../lib/diemBan";
-import { parseTkhoXuat, type TkhoParseResult } from "../lib/tkhoXuat";
+import {
+  parseTkhoNhap,
+  parseTkhoXuat,
+  type TkhoNhapDraft,
+  type TkhoNhapResult,
+  type TkhoParseResult,
+} from "../lib/tkhoXuat";
 
 /**
  * NẠP XUẤT KHO TỪ FILE BBGN CỦA BỘ PHẬN
@@ -42,8 +48,13 @@ interface Props {
   /** Phần gán điểm bán đã lưu, ghép đè lên bảng gán sẵn trong code. */
   diemBanOverrides: DiemBanEntry[];
   onSaveDiemBan: (entries: DiemBanEntry[]) => Promise<void>;
+  /** Ghi tồn đầu kỳ + hàng nhập, trả về các lô vừa tạo cho FIFO của phần xuất. */
+  onCreateNhap: (
+    drafts: TkhoNhapDraft[],
+  ) => Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]>;
   onCreate: (
     drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string }[],
+    loMoi?: { productId: string; batchNumber: string; quantity: number; date: string }[],
   ) => Promise<void>;
   busy: boolean;
 }
@@ -56,6 +67,7 @@ export default function TkhoImport({
   partners,
   diemBanOverrides,
   onSaveDiemBan,
+  onCreateNhap,
   onCreate,
   busy,
 }: Props) {
@@ -64,6 +76,7 @@ export default function TkhoImport({
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [sheet, setSheet] = useState("");
   const [result, setResult] = useState<TkhoParseResult | null>(null);
+  const [nhap, setNhap] = useState<TkhoNhapResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Gán tạm trên màn hình: khoá chuẩn hoá -> { partnerId, note }. */
   const [gan, setGan] = useState<Record<string, { partnerId: string; note: string }>>({});
@@ -98,6 +111,7 @@ export default function TkhoImport({
     });
     const r = parseTkhoXuat(rows, ten, products, bangDiemBan);
     setResult(r);
+    setNhap(parseTkhoNhap(rows, ten, products));
     if (!r.drafts.length && !r.unknownOutlets.length) {
       setError(
         `Sheet "${ten}" không đọc được phần Xuất kho. Kiểm tra xem sheet có ô "MÃ HÀNG" và ô "Xuất kho" ở hàng tiêu đề không.`,
@@ -174,6 +188,14 @@ export default function TkhoImport({
     (s, d) => s + d.quantity,
     0,
   );
+  const tongTonDau = (nhap?.drafts ?? [])
+    .filter((d) => d.type === "OPENING")
+    .reduce((s, d) => s + d.quantity, 0);
+  const tongNhap = (nhap?.drafts ?? [])
+    .filter((d) => d.type === "IN")
+    .reduce((s, d) => s + d.quantity, 0);
+  const tonCuoi =
+    Math.round((tongTonDau + tongNhap - tongSoLuong) * 100) / 100;
   const theoGhiChu = useMemo(() => {
     const m = new Map<string, number>();
     (result?.drafts ?? []).forEach((d) => {
@@ -183,15 +205,26 @@ export default function TkhoImport({
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [result]);
 
+  /*
+   * Ghi theo đúng thứ tự nghiệp vụ: tồn đầu kỳ và hàng nhập TRƯỚC, hàng xuất
+   * SAU. Xuất trừ tồn theo lô, mà lô chỉ sinh ra từ nhập — làm ngược thì mọi
+   * dòng xuất đều báo vượt tồn.
+   *
+   * Các lô vừa tạo được chuyển thẳng sang phần xuất, không chờ Firestore bắn
+   * dữ liệu về: trong cùng một lượt chạy thì state chưa kịp đổi.
+   */
   const taoGiaoDich = async () => {
     if (!result?.drafts.length) return;
+    const loMoi = nhap?.drafts.length ? await onCreateNhap(nhap.drafts) : [];
     await onCreate(
       result.drafts.map((d) => ({
         ...d,
         partnerName: partnerById.get(d.partnerId)?.name || d.partnerId,
       })),
+      loMoi,
     );
     setResult(null);
+    setNhap(null);
     setBook(null);
     setFileName("");
     setSheetNames([]);
@@ -416,6 +449,48 @@ export default function TkhoImport({
               </span>
             ))}
           </div>
+
+          {/*
+            Tồn đầu kỳ và hàng nhập cũng lấy từ chính sheet này. Không có chúng
+            thì mọi dòng xuất đều báo vượt tồn — lô chỉ sinh ra từ nhập.
+          */}
+          {nhap && nhap.drafts.length > 0 && (
+            <div className="px-5 py-3 border-b border-slate-100 bg-blue-50/40">
+              <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">
+                Ghi trước phần nhập
+              </p>
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                <span className="text-[11px] font-bold text-slate-500">
+                  Tồn đầu kỳ:{" "}
+                  <span className="text-slate-900">
+                    {nhap.tonDauCount} dòng · {formatNumber(tongTonDau)}
+                  </span>
+                </span>
+                <span className="text-[11px] font-bold text-slate-500">
+                  Nhập trong kỳ:{" "}
+                  <span className="text-slate-900">
+                    {nhap.nhapCount} dòng · {formatNumber(tongNhap)}
+                  </span>
+                </span>
+                <span className="text-[11px] font-bold text-slate-500">
+                  Tồn cuối dự tính:{" "}
+                  <span
+                    className={cn(
+                      tonCuoi < 0 ? "text-rose-600" : "text-emerald-700",
+                    )}
+                  >
+                    {formatNumber(tonCuoi)}
+                  </span>
+                </span>
+              </div>
+              {tonCuoi < 0 && (
+                <p className="text-[11px] font-bold text-rose-600 mt-1">
+                  Tồn cuối âm — sheet này xuất nhiều hơn tồn đầu cộng nhập. Kiểm
+                  lại trước khi ghi.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="max-h-72 overflow-y-auto">
             <table className="w-full text-left text-[11px]">
