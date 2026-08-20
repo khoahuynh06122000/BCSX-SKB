@@ -20,7 +20,11 @@ export const INITIAL_PRODUCTS: Product[] = [
   { id: 'p15', name: 'Bia Lunar Castle Dry hop Pale Ale', materialCode: '10174040', category: 'Lít', unit: 'Lít', price: 55000, conversionFactor: 1, capacityPerUnit: 1000 },
   { id: 'p18', name: 'Bia Rosa Garden Light Lager', materialCode: '10218490', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
   // Chua tim thay ma vat tu trong file cong no — tam de trong, bo sung sau.
+  //
+  // Thieu ma thi van nhap/xuat kho binh thuong, chi la KHONG len duoc hoa don
+  // va KHONG khop duoc khi nap file BBGN (file khop bang ma, khong bang ten).
   { id: 'p16', name: 'Bia Time Gate Light Lager', category: 'Lít', unit: 'Lít', price: 45000, conversionFactor: 1, capacityPerUnit: 1000 },
+  { id: 'p19', name: 'Bia Eclipse Dry Hop Pale Ale', category: 'Lít', unit: 'Lít', price: 54000, conversionFactor: 1, capacityPerUnit: 1000 },
   { id: 'p17', name: 'Bia Lunar Castle Dry hop Pale Ale 330ml', materialCode: '10174039', category: 'Lon', unit: 'Lon', price: 17500, conversionFactor: 1, capacityPerUnit: 330 },
 ];
 
