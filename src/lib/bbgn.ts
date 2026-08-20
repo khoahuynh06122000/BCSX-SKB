@@ -22,6 +22,11 @@
  * tìm theo chữ trong tiêu đề. Nhờ vậy file tháng sau có xê dịch vài dòng vẫn
  * đọc được.
  *
+ * TẠM CHƯA DÙNG. Màn hình nạp nay đọc thẳng tệp gốc của bộ phận qua
+ * `tkhoXuat.ts` — bỏ được bước chuyển tệp về khuôn mẫu, mà chép tay là chỗ
+ * sinh sai số. Giữ lại nguyên bộ đọc này cùng 46 test phòng khi bộ phận gửi
+ * lại file dạng bảng chéo cũ.
+ *
  * Tách khỏi component để chạy thử được: file mẫu do `buildBbgnTemplateRows`
  * dựng ra phải đọc lại được bằng `parseBbgnSheet` — hai thứ này mà lệch nhau
  * thì người dùng tải mẫu về, điền số, nạp lên và nhận lỗi.

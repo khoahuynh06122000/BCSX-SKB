@@ -11,6 +11,7 @@ import {
   parseTkhoXuat,
   toTkhoNumber,
 } from "../tkhoXuat";
+import { buildDiemBanLookup, lookupDiemBan } from "../diemBan";
 
 let pass = 0;
 let fail = 0;
@@ -167,6 +168,30 @@ const khongCoXuat = parseTkhoXuat(
   products,
 );
 eq("sheet khong co phan Xuat kho -> khong tao gi", khongCoXuat.drafts.length, 0);
+
+console.log("\n10. Gan them diem ban ngoai bang goc");
+const bangThem = buildDiemBanLookup([
+  { ten: "Điểm lạ", partnerId: "AC0107", note: "Ngoại giao" },
+]);
+const r2 = parseTkhoXuat(sheet, "T Kho T8", products, bangThem);
+eq("khong con diem ban nao chua gan", r2.unknownOutlets.length, 0);
+eq("co them giao dich cho diem vua gan", r2.drafts.length, 5);
+const la = r2.drafts.find((d) => d.outlet === "Điểm lạ")!;
+eq("gan dung doi tac", la.partnerId, "AC0107");
+eq("ghi chu di theo", la.note, "Ngoại giao");
+eq("so luong dung", la.quantity, 50);
+
+console.log("\n11. Gan them DE LEN bang goc khi trung ten");
+const de = buildDiemBanLookup([
+  { ten: "NH 1901", partnerId: "AC0107", note: "doi roi" },
+]);
+eq("lay ban gan them", lookupDiemBan("NH 1901", de)?.partnerId, "AC0107");
+eq("bang goc van nguyen", lookupDiemBan("NH 1901")?.partnerId, "AD0103");
+eq(
+  "khop khong phan biet hoa thuong / dau thua",
+  lookupDiemBan("nh   1901", de)?.partnerId,
+  "AC0107",
+);
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

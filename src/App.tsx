@@ -163,7 +163,10 @@ import {
 import ImportSlipPanel from "./components/ImportSlip";
 import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
-import BbgnImport, { type BbgnDraft } from "./components/BbgnImport";
+import TkhoImport from "./components/TkhoImport";
+import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
+import { stableHash } from "./lib/hash";
+import type { BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 
 /**
@@ -722,6 +725,15 @@ export default function App() {
   // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
   const [expandedInvoices, setExpandedInvoices] = useState<string[]>([]);
 
+  /**
+   * Phần gán điểm bán do người dùng thêm, lưu ở collection `diem_ban`.
+   *
+   * Bảng gán sẵn trong code chỉ phủ tháng 8. Mỗi tháng bộ phận lại mở điểm bán
+   * mới — T5, T6, T7 mỗi tháng gần 30 tên lạ. Không lưu lại thì tháng nào cũng
+   * phải gán lại từ đầu.
+   */
+  const [diemBanOverrides, setDiemBanOverrides] = useState<DiemBanEntry[]>([]);
+
 
 
   const [isScanning, setIsScanning] = useState(false);
@@ -904,6 +916,25 @@ export default function App() {
       },
     );
 
+    /*
+     * Bảng gán điểm bán -> đối tác.
+     *
+     * Nhỏ (vài chục tài liệu) nên tải trọn không đáng kể, và phải có SẴN trước
+     * khi người dùng chọn tệp: thiếu nó thì mọi điểm bán đã gán tháng trước lại
+     * hiện ra như chưa gán.
+     */
+    const unsubDiemBan = onSnapshot(
+      collection(db, "diem_ban"),
+      (snapshot) => {
+        setDiemBanOverrides(
+          snapshot.docs.map((d) => d.data() as DiemBanEntry),
+        );
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, "diem_ban");
+      },
+    );
+
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
@@ -936,6 +967,7 @@ export default function App() {
       unsubTransactions();
       unsubPartners();
       unsubSlips();
+      unsubDiemBan();
       unsubUsers();
       unsubSapJobs();
     };
@@ -1398,6 +1430,36 @@ export default function App() {
   /* ---------------- Nap nhanh xuat kho tu file BBGN ---------------- */
 
   /**
+   * Lưu phần gán điểm bán để tháng sau khỏi gán lại.
+   *
+   * Khoá tài liệu là TÊN ĐÃ CHUẨN HOÁ, không phải khoá tự sinh: gán lại cùng
+   * một điểm bán thì ghi đè lên chính nó, không đẻ ra bản thứ hai trỏ tới hai
+   * đối tác khác nhau.
+   */
+  const handleSaveDiemBan = async (entries: DiemBanEntry[]) => {
+    if (!entries.length) return;
+    try {
+      const batch = writeBatch(db);
+      entries.forEach((e) => {
+        const key = normalizeDiemBan(e.ten);
+        if (!key) return;
+        batch.set(doc(db, "diem_ban", key), {
+          ten: e.ten,
+          partnerId: e.partnerId,
+          note: e.note || "",
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUserProfile?.email || user || "",
+        });
+      });
+      await batch.commit();
+      showNotification(`Đã lưu ${entries.length} điểm bán`);
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, "diem_ban");
+      alert("Không lưu được bảng gán điểm bán: " + e.message);
+    }
+  };
+
+  /**
    * Ghi hang loat giao dich xuat kho doc duoc tu file BBGN cua bo phan.
    *
    * Van chay qua FIFO nhu nhap tay tung dong, khong di duong tat: neu bo qua
@@ -1410,9 +1472,29 @@ export default function App() {
    */
   const handleCreateFromBbgn = async (drafts: BbgnDraft[]) => {
     if (!drafts.length || loading) return;
+
+    // Đếm trước số dòng của lần nạp trước sẽ bị ghi đè, để người bấm biết đây
+    // là nạp lại hay nạp mới — con số này là khác biệt giữa "cộng thêm" và
+    // "thay thế", và nhầm chỗ đó là tồn kho sai gấp đôi.
+    const daCoTruoc = transactions.filter((t) =>
+      drafts.some((d) =>
+        t.id?.startsWith(
+          "bbgn-" +
+            stableHash(
+              [d.dateKey, d.partnerId, d.productId, d.outlet || ""].join("|"),
+            ) +
+            "-",
+        ),
+      ),
+    ).length;
+
     if (
       !window.confirm(
-        `Tạo ${drafts.length} giao dịch xuất kho từ file BBGN?\n\nSố lượng sẽ trừ vào tồn kho theo nguyên tắc lô nhập trước xuất trước.`,
+        `Tạo ${drafts.length} giao dịch xuất kho từ file BBGN?\n\n` +
+          `Số lượng sẽ trừ vào tồn kho theo nguyên tắc lô nhập trước xuất trước.\n\n` +
+          (daCoTruoc
+            ? `${daCoTruoc} dòng của lần nạp trước sẽ được GHI ĐÈ, không cộng thêm.`
+            : `Chưa có dòng nào của kỳ này trên hệ thống.`),
       )
     ) {
       return;
@@ -1422,15 +1504,52 @@ export default function App() {
     try {
       // Ban sao ton theo lo de FIFO "nhin thay" phan da bi tru trong cung lan chay
       const localBatches = batches.map((b) => ({ ...b }));
-      const stamp = Date.now();
       const groupIds = new Map<string, string>();
       let seq = 0;
       let shortfall = 0;
+
+      /*
+       * KHOA GIAO DICH SUY TU NOI DUNG, KHONG TU Date.now().
+       *
+       * Ban cu dat khoa la `bbgn-${Date.now()}-${seq}`, nen nap lai dung mot
+       * tep la sinh ra mot bo giao dich hoan toan moi: ton kho bi tru hai lan,
+       * va vi doanh thu nay sinh tu xuat kho nen doanh thu cung nhan doi.
+       *
+       * Sheet "T Kho" bao dam moi (ngay, diem ban, mat hang) chi co MOT o, nen
+       * bon truong duoi day la du de dinh danh mot lan xuat. Nap lai cung tep
+       * thi ghi de len chinh no.
+       */
+      const khoaGoc = (d: BbgnDraft) =>
+        "bbgn-" +
+        stableHash(
+          [d.dateKey, d.partnerId, d.productId, d.outlet || ""].join("|"),
+        );
+
+      /*
+       * Doi khi tep duoc sua lai roi nap de. Mot lan xuat co the tach thanh so
+       * lo khac lan truoc (3 lo -> 2 lo), va dong lo thu ba cua lan truoc se
+       * nam lai lam ton kho bi tru thua. Nen phai don sach cac dong cu cua
+       * chinh nhung lan xuat sap ghi, truoc khi ghi.
+       */
+      const prefixes = new Set(drafts.map((d) => khoaGoc(d) + "-"));
+      const canXoa = transactions.filter((t) =>
+        [...prefixes].some((p) => t.id?.startsWith(p)),
+      );
 
       // Firestore gioi han 500 thao tac moi batch — chia lo de khong vuot
       const CHUNK = 400;
       let batch = writeBatch(db);
       let opCount = 0;
+
+      for (const t of canXoa) {
+        batch.delete(doc(db, "transactions", t.id));
+        opCount++;
+        if (opCount >= CHUNK) {
+          await batch.commit();
+          batch = writeBatch(db);
+          opCount = 0;
+        }
+      }
 
       for (const d of drafts) {
         const product = products.find((p) => p.id === d.productId);
@@ -1438,7 +1557,7 @@ export default function App() {
 
         const groupKey = `${d.dateKey}|${d.partnerId}`;
         if (!groupIds.has(groupKey)) {
-          groupIds.set(groupKey, `multi-${stamp}-${groupIds.size}`);
+          groupIds.set(groupKey, "multi-" + stableHash(groupKey));
         }
         const referenceGroupId = groupIds.get(groupKey)!;
 
@@ -1458,7 +1577,8 @@ export default function App() {
           const alloc = allocations[i];
           if (alloc.batchNumber === "VUOT_DINH_MUC") shortfall++;
 
-          const id = `bbgn-${stamp}-${seq++}`;
+          const id = `${khoaGoc(d)}-${i}`;
+          seq++;
           const transaction: Transaction = {
             id,
             date: `${d.dateKey}T08:00:00.000Z`,
@@ -6921,7 +7041,10 @@ export default function App() {
                                   <span className="font-bold text-white underline decoration-white/20 underline-offset-4">
                                     {formatNumber(cfoMetrics.totalRevenue)} đ
                                   </span>
-                                  , biến động{" "}
+                                   +
+           +
+          (canXoa.length
+            ? \n            : ), biến động{" "}
                                   <span
                                     className={cn(
                                       "font-bold",
@@ -8022,12 +8145,20 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Nap nhanh ca thang tu file BBGN cua bo phan */}
+                {/*
+                  Nạp cả tháng từ TỆP GỐC của bộ phận.
+
+                  Trước đây phải chuyển tệp về khuôn tệp mẫu rồi mới nạp được —
+                  một bước chép tay ở giữa, và chép tay là chỗ sinh sai số.
+                  Nay đọc thẳng sheet "T Kho" trong tệp gốc.
+                */}
                 {activeTab === "export" && canWrite && (
-                  <Card title="Nạp nhanh từ file BBGN">
-                    <BbgnImport
+                  <Card title="Nạp xuất kho từ file BBGN">
+                    <TkhoImport
                       products={products}
                       partners={partners}
+                      diemBanOverrides={diemBanOverrides}
+                      onSaveDiemBan={handleSaveDiemBan}
                       onCreate={handleCreateFromBbgn}
                       busy={loading}
                     />

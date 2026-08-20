@@ -99,11 +99,36 @@ export function normalizeDiemBan(s: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-const BANG = new Map<string, DiemBanEntry>(
-  DIEM_BAN.map((e) => [normalizeDiemBan(e.ten), e]),
-);
+/**
+ * Dựng bảng tra, ghép bảng gốc với những gán thêm sau này.
+ *
+ * Mỗi tháng bộ phận lại mở điểm bán mới — T5, T6, T7 mỗi tháng phát sinh gần
+ * 30 tên chưa có trong bảng gốc. Nếu mỗi lần đều phải sửa code thì việc nạp
+ * file dừng lại chờ người viết code, nên gán thêm được lưu trong app và ghép
+ * vào đây.
+ *
+ * Gán thêm ĐÈ LÊN bảng gốc khi trùng khoá: bảng gốc chỉ là điểm khởi đầu, còn
+ * người dùng mới là bên biết điểm bán nào thuộc đối tác nào.
+ */
+export function buildDiemBanLookup(
+  overrides: DiemBanEntry[] = [],
+): Map<string, DiemBanEntry> {
+  const m = new Map<string, DiemBanEntry>();
+  DIEM_BAN.forEach((e) => m.set(normalizeDiemBan(e.ten), e));
+  overrides.forEach((e) => {
+    const k = normalizeDiemBan(e.ten);
+    if (k) m.set(k, e);
+  });
+  return m;
+}
+
+/** Bảng chỉ gồm phần gán sẵn trong code — dùng khi chưa tải được phần gán thêm. */
+export const DIEM_BAN_MAC_DINH = buildDiemBanLookup();
 
 /** Tra một tên điểm bán. Trả null nếu chưa gán — nơi gọi phải hiện ra để hỏi. */
-export function lookupDiemBan(ten: string): DiemBanEntry | null {
-  return BANG.get(normalizeDiemBan(ten)) ?? null;
+export function lookupDiemBan(
+  ten: string,
+  bang: Map<string, DiemBanEntry> = DIEM_BAN_MAC_DINH,
+): DiemBanEntry | null {
+  return bang.get(normalizeDiemBan(ten)) ?? null;
 }

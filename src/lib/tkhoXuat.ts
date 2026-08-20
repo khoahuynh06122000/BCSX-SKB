@@ -29,7 +29,7 @@
  */
 
 import type { Product } from "../types";
-import { lookupDiemBan } from "./diemBan";
+import { lookupDiemBan, type DiemBanEntry } from "./diemBan";
 
 /**
  * Một giao dịch xuất kho dựng từ một ô của bảng.
@@ -163,6 +163,8 @@ export function parseTkhoXuat(
   rows: any[][],
   sheetName: string,
   products: Product[],
+  /** Bảng gán điểm bán. Bỏ trống thì dùng bảng gán sẵn trong code. */
+  bangDiemBan?: Map<string, DiemBanEntry>,
 ): TkhoParseResult {
   const empty: TkhoParseResult = {
     sheetName,
@@ -275,7 +277,7 @@ export function parseTkhoXuat(
       }
 
       const tenDiem = S(rDiem[c]);
-      const diem = lookupDiemBan(tenDiem);
+      const diem = lookupDiemBan(tenDiem, bangDiemBan);
       if (!diem) {
         const k = key(tenDiem) || "(trong)";
         const e = unknownOutlets.get(k) || { ten: tenDiem, soO: 0, soLuong: 0 };

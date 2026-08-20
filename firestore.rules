@@ -127,6 +127,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /*
+     * Bảng gán điểm bán -> đối tác, dùng khi nạp xuất kho từ file BBGN.
+     *
+     * Khoá tài liệu là tên điểm bán đã chuẩn hoá, nên gán lại cùng một điểm bán
+     * là ghi đè lên chính nó. Không cho xoá: xoá một dòng gán làm hàng của điểm
+     * đó âm thầm rơi khỏi lần nạp sau, mà không có gì báo.
+     */
+    match /diem_ban/{key} {
+      allow read: if isViewer();
+      allow create, update: if isStaff();
+      allow delete: if false;
+    }
+
     match /partners/{partnerId} {
       allow read: if isViewer();
       allow create, update: if isStaff();
