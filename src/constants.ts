@@ -27,8 +27,25 @@ export const INITIAL_PRODUCTS: Product[] = [
   { id: 'p14', name: 'BNC_ Bia Tail 20 lít/ bom', materialCode: '10224742', category: 'Lít', unit: 'Lít', price: 47000, conversionFactor: 1, capacityPerUnit: 1000 },
 ];
 
+/**
+ * Đơn vị nhận bia — chốt theo danh sách bộ phận gửi 20/08/2026.
+ *
+ * BNC ĐƯỢC CHIA LÀM BA MỤC. Cả ba cùng mã SAP `AD0103` vì với SAP thì đó vẫn là
+ * một khách hàng; chia ở đây là để phân loại theo BẢN CHẤT của lần xuất:
+ *
+ *   BNC · Chi phí nội bộ  — bia cho các quán trong khu (NH 1901, NH PLAZA,
+ *                           Lễ Hội Bia, Cầu Vàng…). Chiếm 65% sản lượng.
+ *   BNC · Ngoại giao      — hàng đối ngoại, biếu tặng.
+ *   BNC · HTKD            — điểm hợp tác kinh doanh (El Fresco, Mini Mart).
+ *
+ * Ba mục phủ trọn BNC, không còn mục "BNC" trơn: mọi điểm bán thuộc BNC đều
+ * rơi vào đúng một trong ba. Nhờ vậy nhìn giao dịch là biết ngay lần xuất đó có
+ * phải bán ra ngoài hay không, thay vì phải đọc ghi chú.
+ */
 export const INITIAL_PARTNERS: Partner[] = [
+  // Nhà máy — nguồn hàng nhập, không phải đơn vị nhận.
   { id: 'SKB-BNC', sapCode: 'SKB-BNC', name: 'SKB-BNC', type: 'SUPPLIER' },
+
   { id: 'AD0104', sapCode: 'AD0104', name: 'APC', type: 'AGENT' },
   { id: 'AC0118', sapCode: 'AC0118', name: 'BNG', type: 'AGENT' },
   { id: 'AC0132', sapCode: 'AC0132', name: 'Capella', type: 'AGENT' },
@@ -39,10 +56,15 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AC0129', sapCode: 'AC0129', name: 'CCP', type: 'AGENT' },
   { id: 'AC0105', sapCode: 'AC0105', name: 'PVD', type: 'AGENT' },
   { id: 'AD0114', sapCode: 'AD0114', name: 'Hà Nam', type: 'AGENT' },
-  { id: 'AD0103', sapCode: 'AD0103', name: 'BNC', type: 'AGENT' },
+
+  // BNC — ba mục, cùng mã SAP AD0103
+  { id: 'AD0103-NB', sapCode: 'AD0103', name: 'BNC · Chi phí nội bộ', type: 'AGENT' },
+  { id: 'AD0103-NG', sapCode: 'AD0103', name: 'BNC · Ngoại giao', type: 'AGENT' },
+  { id: 'AD0103-HTKD', sapCode: 'AD0103', name: 'BNC · HTKD', type: 'AGENT' },
+
   { id: 'AC0128', sapCode: 'AC0128', name: 'OHL', type: 'AGENT' },
   { id: 'AC0102', sapCode: 'AC0102', name: 'MGS', type: 'AGENT' },
-  { id: 'AD0101', sapCode: 'AD0101', name: 'Cát Bà', type: 'AGENT' },
+  { id: 'AD0101', sapCode: 'AD0101', name: 'Cát bà', type: 'AGENT' },
   { id: 'AB0117', sapCode: 'AB0117', name: 'SHD', type: 'AGENT' },
   { id: 'AB0125', sapCode: 'AB0125', name: 'PQC', type: 'AGENT' },
   { id: 'AC0130', sapCode: 'AC0130', name: 'Serena', type: 'AGENT' },
@@ -50,6 +72,8 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AD0100', sapCode: 'AD0100', name: 'HLS', type: 'AGENT' },
   { id: 'AD0115', sapCode: 'AD0115', name: 'SVT', type: 'AGENT' },
   { id: 'AD0112', sapCode: 'AD0112', name: 'FSS', type: 'AGENT' },
-  { id: 'Ngiao', sapCode: '', name: 'Khách ngoại giao', type: 'AGENT' },
+  { id: 'AA0100', sapCode: 'AA0100', name: 'SAIR', type: 'AGENT' },
+
+  // Đối tác hệ thống, không phải đơn vị nhận hàng thật.
   { id: 'SYSTEM_SYNC', sapCode: 'SYNC', name: 'Tin Tin (Hệ thống)', type: 'AGENT' },
 ];
