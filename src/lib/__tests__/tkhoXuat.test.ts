@@ -113,8 +113,8 @@ eq(
 
 console.log("\n5. Gan diem ban -> doi tac va ghi chu");
 const nh1901 = r.drafts.find((d) => d.outlet === "NH 1901")!;
-eq("NH 1901 -> BNC noi bo", nh1901.partnerId, "AD0103-NB");
-eq("ghi chu di theo muc", nh1901.note, "Nội bộ");
+eq("NH 1901 -> bo phan 1901 cua BNC", nh1901.partnerId, "AD0103-1901");
+eq("ghi chu di theo bo phan", nh1901.note, "1901");
 const mfv = r.drafts.find((d) => d.outlet === "MFV")!;
 eq("MFV -> FV", mfv.partnerId, "AC0107");
 eq("giu nguyen ten diem ban de tra nguoc", mfv.outlet, "MFV");
@@ -187,7 +187,7 @@ const de = buildDiemBanLookup([
   { ten: "NH 1901", partnerId: "AC0107", note: "doi roi" },
 ]);
 eq("lay ban gan them", lookupDiemBan("NH 1901", de)?.partnerId, "AC0107");
-eq("bang goc van nguyen", lookupDiemBan("NH 1901")?.partnerId, "AD0103-NB");
+eq("bang goc van nguyen", lookupDiemBan("NH 1901")?.partnerId, "AD0103-1901");
 eq(
   "khop khong phan biet hoa thuong / dau thua",
   lookupDiemBan("nh   1901", de)?.partnerId,

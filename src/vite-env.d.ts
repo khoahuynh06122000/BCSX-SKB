@@ -18,3 +18,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Mã commit của bản đang chạy, đóng vào lúc build. Xem vite.config.ts. */
+declare const __BUILD_ID__: string;

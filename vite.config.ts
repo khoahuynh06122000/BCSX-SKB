@@ -9,6 +9,18 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      /*
+       * DAU HIEU PHIEN BAN, dong vao luc build.
+       *
+       * Nhieu lan sua giao dien roi khong biet app dang chay ban nao: Vercel
+       * chua build xong, build hong, hay trinh duyet con giu ban cu. Dan ma
+       * commit vao man hinh thi doi chieu duoc trong mot giay, khong phai doan.
+       *
+       * Tren Vercel lay tu VERCEL_GIT_COMMIT_SHA; chay tai may thi ghi 'local'.
+       */
+      __BUILD_ID__: JSON.stringify(
+        (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || 'local',
+      ),
     },
     resolve: {
       alias: {

@@ -30,21 +30,25 @@ export const INITIAL_PRODUCTS: Product[] = [
 /**
  * Đơn vị nhận bia — chốt theo danh sách bộ phận gửi 20/08/2026.
  *
- * BNC ĐƯỢC CHIA LÀM BỐN MỤC. Cả bốn cùng mã SAP `AD0103` vì với SAP thì đó vẫn
- * là một khách hàng; chia ở đây là để phân loại theo BẢN CHẤT của lần xuất:
+ * BNC ĐƯỢC CHIA LÀM 20 BỘ PHẬN, theo danh mục bộ phận gửi ngày 22/08/2026.
+ * Cả 20 cùng mã SAP `AD0103` vì với SAP thì đó vẫn là một khách hàng; chia ở
+ * đây để biết bia đi tới đâu trong khu:
  *
- *   BNC · Nội bộ        — bia cho các quán trong khu (NH 1901, NH PLAZA,
- *                         Lễ Hội Bia, Cầu Vàng…). Chiếm 65% sản lượng.
- *   BNC · Ngoại giao    — hàng đối ngoại, biếu tặng.
- *   BNC · HTKD          — điểm hợp tác kinh doanh (El Fresco, Mini Mart).
- *   BNC · Chi phí khác  — phần không thuộc ba mục trên.
+ *   17 điểm bán       — 1901, Plaza, Lễ Hội Bia, 4 Mùa, Kavkaz, Taiga, Hội An,
+ *                       Cổng Thành 1, Sunbun Vạn Hoa, Cầu Vàng, Ga 10,
+ *                       Rosa Gà Rán, B8, Lâu Đài, Bulgogi, Arapang, Gastrobup
+ *   BNC · Ngoại giao  — hàng đối ngoại, biếu tặng
+ *   BNC · HTKD        — điểm hợp tác kinh doanh (El Fresco, Mini Mart)
+ *   BNC · Chi phí khác — phần không thuộc các bộ phận trên
  *
- * Bốn mục phủ trọn BNC, không còn mục "BNC" trơn: mọi lần xuất cho BNC đều rơi
- * vào đúng một trong bốn. Nhờ vậy nhìn giao dịch là biết ngay lần xuất đó có
- * phải bán ra ngoài hay không, thay vì phải đọc ghi chú.
+ * Trước đây 17 điểm bán trên bị gom hết vào một mục "Nội bộ" — nhìn báo cáo
+ * chỉ thấy một dòng 53.026 lít mà không biết quán nào uống bao nhiêu. Tách ra
+ * thì mỗi điểm bán là một dòng riêng.
  *
- * Bốn mục cố ý xếp liền nhau trong mảng để trong ô chọn đơn vị chúng nằm cạnh
- * nhau — danh sách hiện theo đúng thứ tự khai ở đây.
+ * Không còn mục "BNC" trơn: mọi lần xuất cho BNC đều thuộc đúng một bộ phận.
+ *
+ * Cả 20 cố ý xếp liền nhau trong mảng — ô chọn đơn vị gộp chúng thành một dòng
+ * "BNC" đặt đúng vị trí này, rồi hiện bộ phận thành các nút bên dưới.
  */
 export const INITIAL_PARTNERS: Partner[] = [
   // Nhà máy — nguồn hàng nhập, không phải đơn vị nhận.
@@ -61,10 +65,26 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AC0105', sapCode: 'AC0105', name: 'PVD', type: 'AGENT' },
   { id: 'AD0114', sapCode: 'AD0114', name: 'Hà Nam', type: 'AGENT' },
 
-  // BNC — bốn mục, cùng mã SAP AD0103
+  // BNC — 20 bộ phận, cùng mã SAP AD0103. Thứ tự theo danh mục bộ phận gửi.
+  { id: 'AD0103-1901', sapCode: 'AD0103', name: 'BNC · 1901', type: 'AGENT' },
+  { id: 'AD0103-PLAZA', sapCode: 'AD0103', name: 'BNC · Plaza', type: 'AGENT' },
+  { id: 'AD0103-LHB', sapCode: 'AD0103', name: 'BNC · Lễ Hội Bia', type: 'AGENT' },
+  { id: 'AD0103-4M', sapCode: 'AD0103', name: 'BNC · 4 Mùa', type: 'AGENT' },
+  { id: 'AD0103-KAV', sapCode: 'AD0103', name: 'BNC · Kavkaz', type: 'AGENT' },
+  { id: 'AD0103-TAIGA', sapCode: 'AD0103', name: 'BNC · Taiga', type: 'AGENT' },
+  { id: 'AD0103-HOIAN', sapCode: 'AD0103', name: 'BNC · Hội An', type: 'AGENT' },
+  { id: 'AD0103-CT1', sapCode: 'AD0103', name: 'BNC · Cổng Thành 1', type: 'AGENT' },
+  { id: 'AD0103-SBVH', sapCode: 'AD0103', name: 'BNC · Sunbun Vạn Hoa', type: 'AGENT' },
+  { id: 'AD0103-CV', sapCode: 'AD0103', name: 'BNC · Cầu Vàng', type: 'AGENT' },
+  { id: 'AD0103-GA10', sapCode: 'AD0103', name: 'BNC · Ga 10', type: 'AGENT' },
+  { id: 'AD0103-ROSA', sapCode: 'AD0103', name: 'BNC · Rosa Gà Rán', type: 'AGENT' },
+  { id: 'AD0103-B8', sapCode: 'AD0103', name: 'BNC · B8', type: 'AGENT' },
+  { id: 'AD0103-LAUDAI', sapCode: 'AD0103', name: 'BNC · Lâu Đài', type: 'AGENT' },
+  { id: 'AD0103-BULGOGI', sapCode: 'AD0103', name: 'BNC · Bulgogi', type: 'AGENT' },
+  { id: 'AD0103-ARAPANG', sapCode: 'AD0103', name: 'BNC · Arapang', type: 'AGENT' },
+  { id: 'AD0103-GASTRO', sapCode: 'AD0103', name: 'BNC · Gastrobup', type: 'AGENT' },
   { id: 'AD0103-NG', sapCode: 'AD0103', name: 'BNC · Ngoại giao', type: 'AGENT' },
   { id: 'AD0103-HTKD', sapCode: 'AD0103', name: 'BNC · HTKD', type: 'AGENT' },
-  { id: 'AD0103-NB', sapCode: 'AD0103', name: 'BNC · Nội bộ', type: 'AGENT' },
   { id: 'AD0103-CPK', sapCode: 'AD0103', name: 'BNC · Chi phí khác', type: 'AGENT' },
 
   { id: 'AC0128', sapCode: 'AC0128', name: 'OHL', type: 'AGENT' },

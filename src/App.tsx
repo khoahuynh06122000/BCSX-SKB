@@ -5014,6 +5014,18 @@ export default function App() {
                 <p className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1 sm:mt-2">
                   SUNCRAFT BREWERY
                 </p>
+                {/*
+                  Ma commit cua ban dang chay. Sua giao dien nhieu lan roi
+                  khong biet app dang la ban nao — Vercel chua build xong,
+                  build hong, hay trinh duyet con giu ban cu. Doi chieu ma nay
+                  voi commit moi nhat la biet ngay, khong phai doan.
+                */}
+                <p
+                  className="text-[8px] font-mono font-bold text-slate-300 mt-0.5"
+                  title="Mã commit của bản đang chạy"
+                >
+                  build {__BUILD_ID__}
+                </p>
               </div>
             </div>
           </div>
@@ -8555,7 +8567,7 @@ export default function App() {
                               hoặc tưởng là cùng một ô; bốn nút thì thấy hết
                               lựa chọn cùng lúc và bấm một lần là xong.
                             */}
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
                               {partners
                                 .filter((p) => laBoPhanBNC(p.id))
                                 .map((p) => {
@@ -8572,7 +8584,7 @@ export default function App() {
                                         })
                                       }
                                       className={cn(
-                                        "px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider border transition-all text-left",
+                                        "px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide border transition-all text-left leading-tight",
                                         dangChon
                                           ? "bg-slate-900 text-white border-slate-900 shadow-lg"
                                           : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
