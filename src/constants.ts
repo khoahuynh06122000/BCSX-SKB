@@ -30,17 +30,21 @@ export const INITIAL_PRODUCTS: Product[] = [
 /**
  * Đơn vị nhận bia — chốt theo danh sách bộ phận gửi 20/08/2026.
  *
- * BNC ĐƯỢC CHIA LÀM BA MỤC. Cả ba cùng mã SAP `AD0103` vì với SAP thì đó vẫn là
- * một khách hàng; chia ở đây là để phân loại theo BẢN CHẤT của lần xuất:
+ * BNC ĐƯỢC CHIA LÀM BỐN MỤC. Cả bốn cùng mã SAP `AD0103` vì với SAP thì đó vẫn
+ * là một khách hàng; chia ở đây là để phân loại theo BẢN CHẤT của lần xuất:
  *
- *   BNC · Chi phí nội bộ  — bia cho các quán trong khu (NH 1901, NH PLAZA,
- *                           Lễ Hội Bia, Cầu Vàng…). Chiếm 65% sản lượng.
- *   BNC · Ngoại giao      — hàng đối ngoại, biếu tặng.
- *   BNC · HTKD            — điểm hợp tác kinh doanh (El Fresco, Mini Mart).
+ *   BNC · Nội bộ        — bia cho các quán trong khu (NH 1901, NH PLAZA,
+ *                         Lễ Hội Bia, Cầu Vàng…). Chiếm 65% sản lượng.
+ *   BNC · Ngoại giao    — hàng đối ngoại, biếu tặng.
+ *   BNC · HTKD          — điểm hợp tác kinh doanh (El Fresco, Mini Mart).
+ *   BNC · Chi phí khác  — phần không thuộc ba mục trên.
  *
- * Ba mục phủ trọn BNC, không còn mục "BNC" trơn: mọi điểm bán thuộc BNC đều
- * rơi vào đúng một trong ba. Nhờ vậy nhìn giao dịch là biết ngay lần xuất đó có
+ * Bốn mục phủ trọn BNC, không còn mục "BNC" trơn: mọi lần xuất cho BNC đều rơi
+ * vào đúng một trong bốn. Nhờ vậy nhìn giao dịch là biết ngay lần xuất đó có
  * phải bán ra ngoài hay không, thay vì phải đọc ghi chú.
+ *
+ * Bốn mục cố ý xếp liền nhau trong mảng để trong ô chọn đơn vị chúng nằm cạnh
+ * nhau — danh sách hiện theo đúng thứ tự khai ở đây.
  */
 export const INITIAL_PARTNERS: Partner[] = [
   // Nhà máy — nguồn hàng nhập, không phải đơn vị nhận.
@@ -57,10 +61,11 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AC0105', sapCode: 'AC0105', name: 'PVD', type: 'AGENT' },
   { id: 'AD0114', sapCode: 'AD0114', name: 'Hà Nam', type: 'AGENT' },
 
-  // BNC — ba mục, cùng mã SAP AD0103
-  { id: 'AD0103-NB', sapCode: 'AD0103', name: 'BNC · Chi phí nội bộ', type: 'AGENT' },
+  // BNC — bốn mục, cùng mã SAP AD0103
   { id: 'AD0103-NG', sapCode: 'AD0103', name: 'BNC · Ngoại giao', type: 'AGENT' },
   { id: 'AD0103-HTKD', sapCode: 'AD0103', name: 'BNC · HTKD', type: 'AGENT' },
+  { id: 'AD0103-NB', sapCode: 'AD0103', name: 'BNC · Nội bộ', type: 'AGENT' },
+  { id: 'AD0103-CPK', sapCode: 'AD0103', name: 'BNC · Chi phí khác', type: 'AGENT' },
 
   { id: 'AC0128', sapCode: 'AC0128', name: 'OHL', type: 'AGENT' },
   { id: 'AC0102', sapCode: 'AC0102', name: 'MGS', type: 'AGENT' },

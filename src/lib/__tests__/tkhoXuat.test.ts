@@ -113,8 +113,8 @@ eq(
 
 console.log("\n5. Gan diem ban -> doi tac va ghi chu");
 const nh1901 = r.drafts.find((d) => d.outlet === "NH 1901")!;
-eq("NH 1901 -> BNC chi phi noi bo", nh1901.partnerId, "AD0103-NB");
-eq("ghi chu di theo muc", nh1901.note, "Chi phí nội bộ");
+eq("NH 1901 -> BNC noi bo", nh1901.partnerId, "AD0103-NB");
+eq("ghi chu di theo muc", nh1901.note, "Nội bộ");
 const mfv = r.drafts.find((d) => d.outlet === "MFV")!;
 eq("MFV -> FV", mfv.partnerId, "AC0107");
 eq("giu nguyen ten diem ban de tra nguoc", mfv.outlet, "MFV");
