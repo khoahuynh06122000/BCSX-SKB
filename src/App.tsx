@@ -2422,12 +2422,15 @@ export default function App() {
     quantity: number;
     batchNumber: string;
     /**
-     * Lít hao hụt do làm tròn keg — chỉ dùng cho BNC · Ngoại giao.
+     * Lượng bia hao hụt của lần xuất này — KHÔNG ghi vào công nợ.
      *
-     * Một keg bia hơi giao thực tế 20,6 lít nhưng biên bản công nợ ghi tròn
-     * 20 lít; 0,6 lít còn lại là hao hụt của mình. Số này ghi thành một giao
-     * dịch `LOSS` riêng: tồn kho giảm đúng phần đã đi ra, còn công nợ vẫn giữ
-     * số làm tròn.
+     * Hàng ra khỏi kho gồm hai phần: phần ghi công nợ cho đối tác, và phần hao
+     * hụt mình chịu. Trường hợp thường gặp nhất là làm tròn keg — một keg bia
+     * hơi giao thực tế 20,6 lít nhưng biên bản ghi tròn 20 lít, 0,6 lít còn
+     * lại là hao hụt.
+     *
+     * Ghi thành giao dịch `LOSS` riêng: tồn kho trừ cả hai phần, còn công nợ
+     * và hóa đơn chỉ lấy phần trên.
      *
      * Cố ý ĐIỀN TAY chứ không tự tính: số keg thật chỉ người giao biết, và
      * không phải lần nào cũng tròn keg.
@@ -2435,9 +2438,7 @@ export default function App() {
     lossQuantity?: number;
   }
 
-  /** Đơn vị nào áp dụng hao hụt làm tròn keg. */
-  const CO_HAO_HUT_KEG = "AD0103-NG";
-  /** Một keg giao thực tế 20,6 L, ghi công nợ 20 L. */
+  /** Một keg bia hơi giao thực tế 20,6 L nhưng biên bản ghi tròn 20 L. */
   const LIT_MOI_KEG_THUC = 20.6;
   const LIT_MOI_KEG_GHI = 20;
 
@@ -4141,12 +4142,12 @@ export default function App() {
           }
 
           /*
-           * HAO HỤT LÀM TRÒN KEG — ghi thành giao dịch RIÊNG, loại `LOSS`.
+           * HAO HỤT — ghi thành giao dịch RIÊNG, loại `LOSS`.
            *
            * Vì sao không cộng thẳng vào dòng xuất: dòng xuất là số lên công nợ
-           * và lên hóa đơn. Cộng 0,6 lít/keg vào đó là xuất hóa đơn cho phần
+           * và lên hóa đơn. Cộng phần hao hụt vào đó là xuất hóa đơn cho phần
            * mình không thu tiền. Tách riêng thì tồn kho giảm đúng phần đã đi
-           * ra thật, còn công nợ giữ số làm tròn.
+           * ra thật, còn công nợ giữ đúng số đã thống nhất với đối tác.
            *
            * Cũng đi qua FIFO trên CÙNG bản sao tồn theo lô: có số lô thật thì
            * tồn theo lô mới trừ được — phép tính tồn theo lô bỏ qua mọi giao
@@ -4157,7 +4158,7 @@ export default function App() {
            * thu, nên không phải làm gì thêm ở hai chỗ đó.
            */
           const hao = Number(item.lossQuantity) || 0;
-          if (newTransaction.partnerId === CO_HAO_HUT_KEG && hao > 0) {
+          if (hao > 0) {
             const haoAlloc = getFIFOAllocations(p.id, hao, currentBatchesLocal);
             for (let k = 0; k < haoAlloc.length; k++) {
               const al = haoAlloc[k];
@@ -4172,7 +4173,7 @@ export default function App() {
                 quantity: al.quantity,
                 partnerId: par?.id || "",
                 partnerName: par?.name || "",
-                notes: `Hao hụt làm tròn keg (giao ${LIT_MOI_KEG_THUC} L, ghi ${LIT_MOI_KEG_GHI} L)`,
+                notes: (`Hao hụt — không ghi công nợ · ${newTransaction.notes}`).trim().replace(/ · $/, ""),
                 batchNumber: al.batchNumber,
                 evidencePhotoUrls: [],
                 createdBy: user || "Guest",
@@ -8663,63 +8664,62 @@ export default function App() {
                                 />
                               </div>
                               {/*
-                                HAO HỤT LÀM TRÒN KEG — chỉ hiện với BNC Ngoại
-                                giao, vì chỉ nhóm đó ghi công nợ tròn 20 lít
-                                trong khi giao thực tế 20,6 lít mỗi keg.
+                                HAO HỤT — hiện cho MỌI đối tác khi xuất kho tay.
+                                Không hiện ở phần nạp file: ở đó số liệu đến từ
+                                sheet, không có ai ngồi đó để biết hao hụt thật.
 
-                                Để người dùng ĐIỀN TAY, chỉ gợi ý số. Số keg
-                                thật chỉ người giao biết, và không phải lần nào
-                                cũng tròn keg — tự áp là ghi hao hụt cho một
-                                lượng hàng chưa chắc có thật.
+                                Để người dùng ĐIỀN TAY, app chỉ gợi ý. Với hàng
+                                bom thì gợi ý theo 0,6 lít/keg — số keg thật chỉ
+                                người giao biết, và không phải lần nào cũng tròn
+                                keg, nên tự áp là ghi hao hụt cho một lượng hàng
+                                chưa chắc có thật.
                               */}
-                              {activeTab === "export" &&
-                                newTransaction.partnerId === CO_HAO_HUT_KEG &&
-                                products.find((p) => p.id === item.productId)
-                                  ?.category === "Lít" && (
-                                  <div className="sm:col-span-12">
-                                    <Input
-                                      label="Hao hụt do làm tròn keg (lít)"
-                                      type="number"
-                                      placeholder="0"
-                                      value={
-                                        item.lossQuantity
-                                          ? item.lossQuantity
-                                          : ""
-                                      }
-                                      onChange={(e: any) =>
-                                        updateTransactionItem(index, {
-                                          lossQuantity: Number(e.target.value),
-                                        })
-                                      }
-                                    />
-                                    <p className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
-                                      {item.quantity > 0
-                                        ? (() => {
-                                            const keg =
-                                              item.quantity / LIT_MOI_KEG_GHI;
-                                            const goiY =
-                                              Math.round(
-                                                keg *
-                                                  (LIT_MOI_KEG_THUC -
-                                                    LIT_MOI_KEG_GHI) *
-                                                  100,
-                                              ) / 100;
-                                            const tron =
-                                              Math.abs(keg - Math.round(keg)) <
-                                              0.005;
-                                            return tron
-                                              ? `${item.quantity} lít = ${Math.round(keg)} keg → gợi ý hao hụt ${formatNumber(goiY)} lít (0,6 lít/keg).`
-                                              : `${item.quantity} lít không chia tròn 20 nên không suy ra được số keg — anh tự điền phần hao hụt.`;
-                                          })()
-                                        : "Điền số lượng xuất trước, app sẽ gợi ý phần hao hụt."}
-                                    </p>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
-                                      Ghi thành một dòng hao hụt riêng: tồn kho
-                                      trừ cả phần này, còn công nợ vẫn giữ số
-                                      làm tròn ở trên.
-                                    </p>
-                                  </div>
-                                )}
+                              {activeTab === "export" && (
+                                <div className="sm:col-span-12">
+                                  <Input
+                                    label="Hao hụt — không ghi công nợ"
+                                    type="number"
+                                    placeholder="0"
+                                    value={
+                                      item.lossQuantity ? item.lossQuantity : ""
+                                    }
+                                    onChange={(e: any) =>
+                                      updateTransactionItem(index, {
+                                        lossQuantity: Number(e.target.value),
+                                      })
+                                    }
+                                  />
+                                  <p className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
+                                    {(() => {
+                                      const sp = products.find(
+                                        (p) => p.id === item.productId,
+                                      );
+                                      if (!item.quantity)
+                                        return "Điền số lượng xuất trước, app sẽ gợi ý phần hao hụt.";
+                                      if (sp?.category !== "Lít")
+                                        return "Hàng lon không có keg nên không gợi ý được — điền nếu thực tế có hao hụt.";
+                                      const keg =
+                                        item.quantity / LIT_MOI_KEG_GHI;
+                                      const goiY =
+                                        Math.round(
+                                          keg *
+                                            (LIT_MOI_KEG_THUC -
+                                              LIT_MOI_KEG_GHI) *
+                                            100,
+                                        ) / 100;
+                                      return Math.abs(keg - Math.round(keg)) <
+                                        0.005
+                                        ? `${formatNumber(item.quantity)} lít = ${Math.round(keg)} keg → gợi ý hao hụt ${formatNumber(goiY)} lít (0,6 lít/keg).`
+                                        : `${formatNumber(item.quantity)} lít không chia tròn 20 nên không suy ra được số keg — anh tự điền.`;
+                                    })()}
+                                  </p>
+                                  <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
+                                    Ghi thành một dòng hao hụt riêng: tồn kho
+                                    trừ cả phần này, còn công nợ và hóa đơn chỉ
+                                    lấy số lượng ở trên.
+                                  </p>
+                                </div>
+                              )}
                               <div className="sm:col-span-4">
                                 {/* Khối này nằm trong nhánh activeTab !==
                                     "import" (nhập kho dùng bảng nhập nhanh),
