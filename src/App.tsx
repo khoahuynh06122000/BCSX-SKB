@@ -1428,6 +1428,52 @@ export default function App() {
     }
   };
 
+  /**
+   * ĐỒNG BỘ DANH MỤC ĐƠN VỊ TỪ CODE VÀO FIRESTORE.
+   *
+   * Danh mục đơn vị sống ở Firestore, còn `INITIAL_PARTNERS` trong code là bản
+   * chuẩn. Sửa code mà không ghi xuống thì app hiện đơn vị không có thật, và
+   * mã bộ phận SAP tra ra rỗng khi kết xuất file công nợ.
+   *
+   * Chỉ GHI THÊM và GHI ĐÈ, không xoá gì: đơn vị cũ có thể đang được giao dịch
+   * đã lưu trỏ tới, xoá đi là báo cáo mất tên đối tác mà không có gì báo. Đơn
+   * vị lạ còn lại thì liệt kê ra để người dùng tự quyết.
+   */
+  const handleSyncPartners = async () => {
+    if (!isOwner) {
+      alert("Chỉ chủ sở hữu mới cập nhật được danh mục đơn vị ạ!");
+      return;
+    }
+    const la = partners.filter(
+      (p) => !INITIAL_PARTNERS.some((q) => q.id === p.id),
+    );
+    if (
+      !window.confirm(
+        `Cập nhật ${INITIAL_PARTNERS.length} đơn vị từ danh mục chuẩn vào hệ thống?\n\n` +
+          `${donViThieu.length} đơn vị còn thiếu sẽ được thêm.\n` +
+          (la.length
+            ? `${la.length} đơn vị không có trong danh mục chuẩn sẽ được GIỮ NGUYÊN: ${la.map((p) => p.name).join(", ")}`
+            : `Không có đơn vị lạ nào.`),
+      )
+    )
+      return;
+
+    setLoading(true);
+    try {
+      const batch = writeBatch(db);
+      INITIAL_PARTNERS.forEach((p) => batch.set(doc(db, "partners", p.id), p));
+      await batch.commit();
+      showNotification(
+        `Đã cập nhật ${INITIAL_PARTNERS.length} đơn vị vào hệ thống`,
+      );
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, "partners");
+      alert("Không cập nhật được danh mục đơn vị: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /* ---------------- Nap nhanh xuat kho tu file BBGN ---------------- */
 
   /**
@@ -2450,9 +2496,43 @@ export default function App() {
    * tồn tại trong ô chọn, và phép kiểm trước khi lưu chặn nó lại. Cố ý không
    * mặc định sẵn một bộ phận: đoán sai là ghi sản lượng vào nhóm sai.
    */
-  const NHOM_BNC = "AD0103";
-  /** Bốn bộ phận của BNC đều mang khoá dạng AD0103-XX. */
+  const NHOM_BNC = "__BNC__";
+  /** Các bộ phận của BNC đều mang khoá dạng AD0103-XX. */
   const laBoPhanBNC = (id: string) => id.startsWith("AD0103-");
+
+  /**
+   * DANH MỤC ĐƠN VỊ DÙNG CHO Ô CHỌN — ghép code với Firestore, CODE ƯU TIÊN.
+   *
+   * `partners` đọc từ Firestore, còn `INITIAL_PARTNERS` trong code chỉ là bản
+   * mồi cho nút khôi phục. Hai bên vì vậy trôi xa nhau: thêm 20 bộ phận của BNC
+   * vào code mà Firestore không có thì ô chọn hiện "BNC" nhưng bên dưới không
+   * có bộ phận nào để bấm — đúng lỗi đã gặp.
+   *
+   * Ghép ở đây để giao diện dùng được ngay, không phải chờ đồng bộ. Nhưng đơn
+   * vị chỉ có trong code thì CHƯA có tài liệu Firestore, nên mã bộ phận SAP tra
+   * ra rỗng ở file công nợ — vì thế bên dưới có cảnh báo kèm nút đồng bộ, chứ
+   * không im lặng.
+   */
+  const donVi = useMemo(() => {
+    const trongCode = new Set(INITIAL_PARTNERS.map((p) => p.id));
+    return [
+      ...INITIAL_PARTNERS,
+      ...partners.filter(
+        (p) =>
+          !trongCode.has(p.id) &&
+          // Bỏ đơn vị "BNC" trơn còn sót trong Firestore: nay BNC đã tách
+          // thành các bộ phận AD0103-*, để cả hai thì ô chọn có hai dòng BNC
+          // và không ai biết chọn dòng nào.
+          p.id !== "AD0103",
+      ),
+    ];
+  }, [partners]);
+
+  /** Đơn vị có trong code mà Firestore chưa có — cần bấm đồng bộ. */
+  const donViThieu = useMemo(
+    () => INITIAL_PARTNERS.filter((p) => !partners.some((q) => q.id === p.id)),
+    [partners],
+  );
 
   const [newTransaction, setNewTransaction] = useState<{
     type: TransactionType;
@@ -8502,7 +8582,7 @@ export default function App() {
                             vi chia nho.
                           */
                           options={(() => {
-                            const ds = partners.filter((p) =>
+                            const ds = donVi.filter((p) =>
                               activeTab === "import"
                                 ? p.type === "SUPPLIER"
                                 : p.type !== "SUPPLIER",
@@ -8568,7 +8648,7 @@ export default function App() {
                               lựa chọn cùng lúc và bấm một lần là xong.
                             */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
-                              {partners
+                              {donVi
                                 .filter((p) => laBoPhanBNC(p.id))
                                 .map((p) => {
                                   const dangChon =
@@ -8599,6 +8679,33 @@ export default function App() {
                               <p className="text-[10px] font-bold text-amber-700">
                                 Chưa chọn bộ phận — chưa lưu được.
                               </p>
+                            )}
+
+                            {/*
+                              Danh muc trong Firestore chua co du don vi cua
+                              code. Van bam chon duoc, nhung ma bo phan SAP se
+                              tra ra rong khi ket xuat cong no — nen phai noi
+                              ra, kem nut sua ngay tai cho.
+                            */}
+                            {donViThieu.length > 0 && (
+                              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+                                <p className="text-[10px] font-bold text-rose-700 leading-relaxed">
+                                  Danh mục đơn vị trong hệ thống thiếu{" "}
+                                  {donViThieu.length} mục so với danh mục chuẩn.
+                                  Chọn vẫn được, nhưng mã bộ phận SAP sẽ trống
+                                  khi kết xuất công nợ.
+                                </p>
+                                {isOwner && (
+                                  <button
+                                    type="button"
+                                    onClick={handleSyncPartners}
+                                    disabled={loading}
+                                    className="px-4 py-2 rounded-lg bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-40"
+                                  >
+                                    Cập nhật danh mục đơn vị
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
