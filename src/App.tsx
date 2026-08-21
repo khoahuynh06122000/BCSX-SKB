@@ -2025,6 +2025,7 @@ export default function App() {
         "Tồn đầu": item.openingStock,
         "Tổng Nhập": item.in,
         "Tổng Xuất": item.out,
+        "Hao hụt": item.loss,
         "Tồn cuối": item.closingStock,
         "Giá trị Nhập": item.inValue,
         "Giá trị Xuất": item.outValue,
@@ -3719,6 +3720,8 @@ export default function App() {
         unit: string;
         openingStock: number;
         closingStock: number;
+        /** Phần hao hụt, đã nằm trong . Tách ra chỉ để hiện thành cột riêng. */
+        loss: number;
       }
     >();
 
@@ -3734,6 +3737,7 @@ export default function App() {
         unit: p.unit,
         openingStock: 0,
         closingStock: 0,
+        loss: 0,
       });
     });
 
@@ -3765,6 +3769,15 @@ export default function App() {
         } else {
           entry.out += Number(t.quantity || 0);
           entry.outValue += Number(t.quantity || 0) * price;
+          /*
+           * Hao hụt VẪN nằm trong `out` — phép tính tồn đầu (closing − in +
+           * out) dựa vào đó. Đếm riêng thêm một lượt để hiện thành cột, vì
+           * gộp vào "Tổng xuất" thì không ai biết trong đó có bao nhiêu là
+           * hàng mình mất.
+           */
+          if (t.type === "LOSS" || t.type === "DAMAGE") {
+            entry.loss += Number(t.quantity || 0);
+          }
         }
       }
     });
@@ -6645,6 +6658,15 @@ export default function App() {
                               <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
                                 Xuất
                               </th>
+                              {/*
+                                Hao hut tach thanh cot rieng. Gop vao "Xuat"
+                                thi khong ai biet trong do bao nhieu la hang
+                                minh mat - va cung khong kiem duoc rang hao
+                                hut da ghi hay chua.
+                              */}
+                              <th className="font-bold text-[10px] text-amber-600 uppercase tracking-widest py-4 px-6 text-right">
+                                Hao hụt
+                              </th>
                               <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
                                 Tồn cuối
                               </th>
@@ -6676,6 +6698,15 @@ export default function App() {
                                   </td>
                                   <td className="py-4 px-6 font-mono text-right text-xs font-bold text-rose-500">
                                     {formatNumber(item.out)}
+                                  </td>
+                                  <td className="py-4 px-6 font-mono text-right text-xs font-bold">
+                                    {item.loss > 0 ? (
+                                      <span className="text-amber-600">
+                                        {formatNumber(item.loss)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
                                   </td>
                                   <td className="py-4 px-6 font-mono text-right text-xs font-black text-slate-900">
                                     {formatNumber(item.closingStock)}
