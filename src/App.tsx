@@ -2443,6 +2443,17 @@ export default function App() {
   const LIT_MOI_KEG_THUC = 20.6;
   const LIT_MOI_KEG_GHI = 20;
 
+  /**
+   * Giá trị tạm cho ô chọn đơn vị khi mới chọn BNC mà chưa chọn bộ phận.
+   *
+   * KHÔNG phải một đối tác thật — không có tài liệu nào mang khoá này. Nó chỉ
+   * tồn tại trong ô chọn, và phép kiểm trước khi lưu chặn nó lại. Cố ý không
+   * mặc định sẵn một bộ phận: đoán sai là ghi sản lượng vào nhóm sai.
+   */
+  const NHOM_BNC = "AD0103";
+  /** Bốn bộ phận của BNC đều mang khoá dạng AD0103-XX. */
+  const laBoPhanBNC = (id: string) => id.startsWith("AD0103-");
+
   const [newTransaction, setNewTransaction] = useState<{
     type: TransactionType;
     partnerId: string;
@@ -4033,6 +4044,17 @@ export default function App() {
     );
 
     // Global Validation
+    //
+    // NHOM_BNC là giá trị tạm của ô chọn, không phải đối tác thật — nên
+    // `partners.find` không tìm ra và nhánh dưới đây chặn lại. Nói rõ thiếu gì
+    // thay vì "chưa chọn đối tác", vì người dùng đã chọn BNC rồi.
+    if (newTransaction.partnerId === NHOM_BNC) {
+      alert(
+        "BNC có bốn bộ phận: Ngoại giao, HTKD, Nội bộ, Chi phí khác.\n\nChọn đúng một bộ phận ở ô ngay dưới rồi lưu lại nhé.",
+      );
+      return;
+    }
+
     if (!par && type !== "OPENING") {
       alert("Vui lòng chọn đối tác!");
       return;
@@ -8460,25 +8482,82 @@ export default function App() {
                               ? "Nhà cung cấp"
                               : "Đơn vị nhận (Đối tác)"
                           }
-                          options={partners
-                            .filter((p) =>
-                              activeTab === "import"
-                                ? p.type === "SUPPLIER"
-                                : p.type !== "SUPPLIER",
-                            )
-                            .map((p) => ({
-                              value: p.id,
-                              label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
-                            }))}
-                          value={newTransaction.partnerId}
+                          /*
+                            BNC gom bon bo phan nhung trong o nay chi hien MOT
+                            dong "BNC". Chon no thi moi hien o thu hai de chon
+                            bo phan. Truoc day bon bo phan nam phang thanh bon
+                            dong trong cung o, khong ai nhan ra day la mot don
+                            vi chia nho.
+                          */
+                          options={[
+                            ...partners
+                              .filter((p) =>
+                                activeTab === "import"
+                                  ? p.type === "SUPPLIER"
+                                  : p.type !== "SUPPLIER",
+                              )
+                              .filter((p) => !laBoPhanBNC(p.id))
+                              .map((p) => ({
+                                value: p.id,
+                                label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
+                              })),
+                            ...(activeTab === "import"
+                              ? []
+                              : [{ value: NHOM_BNC, label: "BNC [AD0103]" }]),
+                          ]}
+                          value={
+                            laBoPhanBNC(newTransaction.partnerId) ||
+                            newTransaction.partnerId === NHOM_BNC
+                              ? NHOM_BNC
+                              : newTransaction.partnerId
+                          }
                           onChange={(e: any) =>
                             setNewTransaction({
                               ...newTransaction,
+                              // Chon BNC thi chua biet bo phan nao -> de o thu
+                              // hai quyet dinh. Khong doan mot bo phan mac dinh:
+                              // doan sai la ghi san luong vao nhom sai.
                               partnerId: e.target.value,
                             })
                           }
                         />
                       )}
+
+                      {/*
+                        O THU HAI — chi hien khi da chon BNC.
+                        Bat buoc chon: BNC khong con muc "tron" nao, moi lan
+                        xuat cho BNC deu phai thuoc dung mot bo phan.
+                      */}
+                      {activeTab !== "import" &&
+                        (newTransaction.partnerId === NHOM_BNC ||
+                          laBoPhanBNC(newTransaction.partnerId)) && (
+                          <div className="mt-4">
+                            <Select
+                              label="Bộ phận của BNC"
+                              options={[
+                                { value: NHOM_BNC, label: "— chọn bộ phận —" },
+                                ...partners
+                                  .filter((p) => laBoPhanBNC(p.id))
+                                  .map((p) => ({
+                                    value: p.id,
+                                    label: p.name.replace(/^BNC · /, ""),
+                                  })),
+                              ]}
+                              value={newTransaction.partnerId}
+                              onChange={(e: any) =>
+                                setNewTransaction({
+                                  ...newTransaction,
+                                  partnerId: e.target.value,
+                                })
+                              }
+                            />
+                            {newTransaction.partnerId === NHOM_BNC && (
+                              <p className="text-[10px] font-bold text-amber-700 mt-1.5">
+                                Chưa chọn bộ phận — chưa lưu được.
+                              </p>
+                            )}
+                          </div>
+                        )}
                     </div>
 
                     {/*
