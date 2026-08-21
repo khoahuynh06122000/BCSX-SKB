@@ -8489,22 +8489,36 @@ export default function App() {
                             dong trong cung o, khong ai nhan ra day la mot don
                             vi chia nho.
                           */
-                          options={[
-                            ...partners
-                              .filter((p) =>
-                                activeTab === "import"
-                                  ? p.type === "SUPPLIER"
-                                  : p.type !== "SUPPLIER",
-                              )
-                              .filter((p) => !laBoPhanBNC(p.id))
-                              .map((p) => ({
+                          options={(() => {
+                            const ds = partners.filter((p) =>
+                              activeTab === "import"
+                                ? p.type === "SUPPLIER"
+                                : p.type !== "SUPPLIER",
+                            );
+                            const out: { value: string; label: string }[] = [];
+                            let daChenBNC = false;
+                            for (const p of ds) {
+                              if (laBoPhanBNC(p.id)) {
+                                // Bốn bộ phận gộp thành MỘT dòng "BNC", chèn
+                                // đúng chỗ chúng đứng trong danh mục. Nối vào
+                                // cuối thì BNC rơi xuống đáy danh sách 23 dòng,
+                                // phải cuộn hết mới thấy.
+                                if (!daChenBNC) {
+                                  out.push({
+                                    value: NHOM_BNC,
+                                    label: "BNC [AD0103]",
+                                  });
+                                  daChenBNC = true;
+                                }
+                                continue;
+                              }
+                              out.push({
                                 value: p.id,
                                 label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
-                              })),
-                            ...(activeTab === "import"
-                              ? []
-                              : [{ value: NHOM_BNC, label: "BNC [AD0103]" }]),
-                          ]}
+                              });
+                            }
+                            return out;
+                          })()}
                           value={
                             laBoPhanBNC(newTransaction.partnerId) ||
                             newTransaction.partnerId === NHOM_BNC
@@ -8531,28 +8545,46 @@ export default function App() {
                       {activeTab !== "import" &&
                         (newTransaction.partnerId === NHOM_BNC ||
                           laBoPhanBNC(newTransaction.partnerId)) && (
-                          <div className="mt-4">
-                            <Select
-                              label="Bộ phận của BNC"
-                              options={[
-                                { value: NHOM_BNC, label: "— chọn bộ phận —" },
-                                ...partners
-                                  .filter((p) => laBoPhanBNC(p.id))
-                                  .map((p) => ({
-                                    value: p.id,
-                                    label: p.name.replace(/^BNC · /, ""),
-                                  })),
-                              ]}
-                              value={newTransaction.partnerId}
-                              onChange={(e: any) =>
-                                setNewTransaction({
-                                  ...newTransaction,
-                                  partnerId: e.target.value,
-                                })
-                              }
-                            />
+                          <div className="mt-4 space-y-2">
+                            <label className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
+                              Bộ phận của BNC
+                            </label>
+                            {/*
+                              Bốn NÚT thay cho một ô chọn nữa. Ô chọn thứ hai
+                              nằm ngay dưới ô chọn thứ nhất thì rất dễ bấm nhầm
+                              hoặc tưởng là cùng một ô; bốn nút thì thấy hết
+                              lựa chọn cùng lúc và bấm một lần là xong.
+                            */}
+                            <div className="grid grid-cols-2 gap-2">
+                              {partners
+                                .filter((p) => laBoPhanBNC(p.id))
+                                .map((p) => {
+                                  const dangChon =
+                                    newTransaction.partnerId === p.id;
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() =>
+                                        setNewTransaction({
+                                          ...newTransaction,
+                                          partnerId: p.id,
+                                        })
+                                      }
+                                      className={cn(
+                                        "px-4 py-3 rounded-xl text-xs font-black uppercase tracking-wider border transition-all text-left",
+                                        dangChon
+                                          ? "bg-slate-900 text-white border-slate-900 shadow-lg"
+                                          : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                                      )}
+                                    >
+                                      {p.name.replace(/^BNC · /, "")}
+                                    </button>
+                                  );
+                                })}
+                            </div>
                             {newTransaction.partnerId === NHOM_BNC && (
-                              <p className="text-[10px] font-bold text-amber-700 mt-1.5">
+                              <p className="text-[10px] font-bold text-amber-700">
                                 Chưa chọn bộ phận — chưa lưu được.
                               </p>
                             )}
