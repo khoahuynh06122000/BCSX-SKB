@@ -2258,13 +2258,35 @@ export default function App() {
       !!err?.message?.includes("Missing or insufficient permissions");
 
     if (thieuQuyen) {
+      /*
+       * NÓI LUÔN VAI TRÒ ĐANG CÓ. Chỉ thiếu chi tiết đó thôi là hai nguyên
+       * nhân hoàn toàn khác nhau nhìn giống hệt nhau, và phải đoán mò:
+       *
+       *   vai trò VIEWER/PENDING → chưa được cấp quyền, sửa trong mục Người dùng
+       *   vai trò STAFF/OWNER    → lẽ ra ghi được, nên vướng ở firestore.rules
+       *
+       * Người dùng chụp màn hình gửi lên là biết ngay phải làm gì.
+       */
+      const nhanVaiTro: Record<string, string> = {
+        OWNER: "OWNER (toàn quyền)",
+        STAFF: "STAFF (nhập/xuất kho)",
+        VIEWER: "VIEWER (chỉ xem)",
+        PENDING: "PENDING (chờ duyệt)",
+      };
+      const duocGhi = userRole === "OWNER" || userRole === "STAFF";
       return (
         `Tài khoản ${auth.currentUser?.email || "này"} chưa đủ quyền ${viec}` +
         `${path ? ` mục "${path}"` : ""}.\n\n` +
-        "Vừa được đổi vai trò thì đăng xuất rồi đăng nhập lại.\n\n" +
-        "Nếu vẫn vậy: chủ sở hữu vào Firebase Console → Firestore Database → " +
-        "tab Rules, dán lại nội dung tệp firestore.rules mới nhất rồi bấm " +
-        "Publish."
+        `Vai trò hiện tại: ${nhanVaiTro[userRole] || userRole}\n\n` +
+        (duocGhi
+          ? "Vai trò này lẽ ra ghi được, nên vướng ở phân quyền của máy chủ.\n\n" +
+            "Chủ sở hữu vào Firebase Console → Firestore Database → tab Rules, " +
+            "dán lại nội dung tệp firestore.rules mới nhất rồi bấm Publish. " +
+            "Xong thì đăng xuất rồi đăng nhập lại."
+          : "Vai trò này không được ghi dữ liệu.\n\n" +
+            "Chủ sở hữu vào mục Người dùng, đổi tài khoản này thành STAFF " +
+            "(nhập/xuất kho) hoặc OWNER (toàn quyền). Đổi xong thì đăng xuất " +
+            "rồi đăng nhập lại.")
       );
     }
 
@@ -4507,32 +4529,46 @@ export default function App() {
       {
         id: "operations",
         title: "Nhập · Xuất",
-        items: [
-          {
-            id: "import",
-            label: "Nhập kho",
-            icon: PlusCircle,
-            color: "#10b981",
-          },
-          {
-            id: "slips",
-            label: "Phiếu nhập",
-            icon: FileText,
-            color: "#0ea5e9",
-          },
-          {
-            id: "export",
-            label: "Xuất kho",
-            icon: MinusCircle,
-            color: "#f97316",
-          },
-          {
-            id: "in-transit",
-            label: "Đơn đi đường",
-            icon: Truck,
-            color: "#fbbf24",
-          },
-        ],
+        /*
+         * CHỈ NGƯỜI ĐƯỢC GHI MỚI THẤY NHÓM NÀY.
+         *
+         * Trước đây nhóm này không xét vai trò, nên người VIEWER vẫn mở được
+         * màn hình nhập kho, điền hết số lượng, số lô, rồi bấm lưu — và bị máy
+         * chủ từ chối ở bước cuối. Bắt người ta làm xong hết mới nói "không có
+         * quyền" là tệ hơn hẳn việc không cho vào từ đầu.
+         *
+         * Đây đúng là kiểu lệch giữa giao diện và luật phân quyền mà
+         * firestore.rules đã cảnh báo, chỉ khác chiều: lần này giao diện hứa
+         * rộng hơn luật cho phép.
+         */
+        items: canWrite
+          ? [
+              {
+                id: "import",
+                label: "Nhập kho",
+                icon: PlusCircle,
+                color: "#10b981",
+              },
+              {
+                id: "slips",
+                label: "Phiếu nhập",
+                icon: FileText,
+                color: "#0ea5e9",
+              },
+              {
+                id: "export",
+                label: "Xuất kho",
+                icon: MinusCircle,
+                color: "#f97316",
+              },
+              {
+                id: "in-transit",
+                label: "Đơn đi đường",
+                icon: Truck,
+                color: "#fbbf24",
+              },
+            ]
+          : [],
       },
       {
         id: "reports",
@@ -8529,7 +8565,24 @@ export default function App() {
               </div>
             )}
 
-            {(activeTab === "import" || activeTab === "export") && (
+            {/* Ẩn menu thôi chưa đủ: tab có thể đang mở sẵn từ trước khi vai
+                trò bị hạ. Chặn cả ở đây để không bao giờ hiện ra một biểu mẫu
+                mà bấm lưu chắc chắn hỏng. */}
+            {(activeTab === "import" || activeTab === "export") && !canWrite && (
+              <div className="max-w-lg mx-auto text-center py-20 space-y-3">
+                <ShieldCheck className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="text-sm font-black text-slate-900">
+                  Tài khoản này chỉ được xem
+                </p>
+                <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
+                  Nhập kho và xuất kho cần vai trò STAFF hoặc OWNER. Nhờ chủ sở
+                  hữu vào mục Người dùng cấp quyền, rồi đăng xuất và đăng nhập
+                  lại.
+                </p>
+              </div>
+            )}
+
+            {(activeTab === "import" || activeTab === "export") && canWrite && (
               <div className="max-w-4xl mx-auto space-y-6">
                 <div className="text-center space-y-2 mb-8">
                   <div
