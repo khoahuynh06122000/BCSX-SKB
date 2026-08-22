@@ -61,6 +61,27 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
     const ds: Muc[] = [];
     const u = auth.currentUser;
 
+    /*
+     * MÃ BUILD VÀ THIẾT BỊ ĐỨNG ĐẦU BẢNG.
+     *
+     * Cùng một tài khoản mà máy tính chạy được còn điện thoại thì không, lý do
+     * hay gặp nhất chẳng phải phân quyền: điện thoại đang giữ bản cũ trong bộ
+     * nhớ đệm, nhất là khi đã ghim ra màn hình chính. So mã build hai máy là
+     * loại được khả năng đó trong ba giây.
+     */
+    ds.push({ ten: "Mã build", giaTri: __BUILD_ID__, tot: null });
+    ds.push({
+      ten: "Thiết bị",
+      giaTri: /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
+        ? "điện thoại / máy tính bảng"
+        : "máy tính",
+      tot: null,
+    });
+    ds.push({
+      ten: "Mạng",
+      giaTri: navigator.onLine ? "đang nối" : "MẤT MẠNG",
+      tot: navigator.onLine,
+    });
     ds.push({ ten: "Email", giaTri: u?.email || "(chưa đăng nhập)", tot: !!u });
     ds.push({ ten: "UID", giaTri: u?.uid || "—", tot: !!u });
     ds.push({
@@ -109,17 +130,37 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       tot: vaiTroTrongApp === "OWNER" || vaiTroTrongApp === "STAFF",
     });
 
+    /*
+     * ĐỌC THẬT VÀ ĐẾM SỐ BẢN GHI.
+     *
+     * "Không lên data" trên điện thoại mà máy tính vẫn chạy thì phải biết là
+     * đọc bị TỪ CHỐI, hay đọc được nhưng RỖNG, hay đọc quá lâu rồi bỏ cuộc —
+     * ba việc hoàn toàn khác nhau. Đếm được bao nhiêu bản ghi và mất bao lâu
+     * thì trả lời hết cả ba, và chạy trên hai máy rồi so là ra ngay.
+     */
     let docDuoc = false;
-    try {
-      await getDocs(collection(db, "partners"));
-      docDuoc = true;
-      ds.push({ ten: "Thử đọc dữ liệu", giaTri: "được", tot: true });
-    } catch (e: any) {
-      ds.push({
-        ten: "Thử đọc dữ liệu",
-        giaTri: "BỊ TỪ CHỐI — " + (e?.code || "lỗi"),
-        tot: false,
-      });
+    let soGiaoDich = -1;
+    for (const ten of ["transactions", "partners"] as const) {
+      const batDau = performance.now();
+      try {
+        const snap = await getDocs(collection(db, ten));
+        const ms = Math.round(performance.now() - batDau);
+        if (ten === "transactions") {
+          docDuoc = true;
+          soGiaoDich = snap.docs.length;
+        }
+        ds.push({
+          ten: `Đọc ${ten}`,
+          giaTri: `${snap.docs.length} bản ghi · ${ms}ms`,
+          tot: snap.docs.length > 0,
+        });
+      } catch (e: any) {
+        ds.push({
+          ten: `Đọc ${ten}`,
+          giaTri: "BỊ TỪ CHỐI — " + (e?.code || e?.message || "lỗi"),
+          tot: false,
+        });
+      }
     }
 
     // Kết luận: chỉ nói một việc cần làm, không liệt kê hết khả năng.
@@ -142,9 +183,13 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       setKetLuan(
         `Vai trò là ${vaiTroMayChu} mà đọc còn bị từ chối, nghĩa là phân quyền trên máy chủ chưa đúng. Chủ sở hữu dán lại firestore.rules — nhớ chọn đúng cơ sở dữ liệu "${firestoreDatabaseId}" ở đầu tab Rules — rồi bấm Publish.`,
       );
+    } else if (soGiaoDich === 0) {
+      setKetLuan(
+        `Vai trò là ${vaiTroMayChu}, đọc được nhưng sổ giao dịch đang RỖNG (0 bản ghi). Không phải lỗi quyền cũng không phải lỗi máy này — trên cơ sở dữ liệu "${firestoreDatabaseId}" thật sự chưa có giao dịch nào. Nếu máy khác lại thấy có, nghĩa là hai máy đang nối vào hai cơ sở dữ liệu khác nhau: so lại dòng Project và Cơ sở dữ liệu ở trên.`,
+      );
     } else {
       setKetLuan(
-        `Vai trò là ${vaiTroMayChu} và đọc được bình thường. Nếu vẫn không lưu được thì phân quyền ghi trên máy chủ còn là bản cũ: chủ sở hữu vào Firebase Console → Firestore Database, chọn đúng cơ sở dữ liệu "${firestoreDatabaseId}", vào tab Rules dán lại firestore.rules mới nhất rồi bấm Publish.`,
+        `Vai trò là ${vaiTroMayChu}, đọc được ${soGiaoDich} giao dịch — phần đọc dữ liệu bình thường. Nếu vẫn không lưu được thì phân quyền GHI trên máy chủ còn là bản cũ: chủ sở hữu vào Firebase Console → Firestore Database, chọn đúng cơ sở dữ liệu "${firestoreDatabaseId}", vào tab Rules dán lại firestore.rules mới nhất rồi bấm Publish.`,
       );
     }
 

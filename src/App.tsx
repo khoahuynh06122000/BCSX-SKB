@@ -150,6 +150,7 @@ import {
   query,
   orderBy,
   getDocFromServer,
+  getDoc,
   getDocs,
   writeBatch,
 } from "./firebase";
@@ -637,6 +638,13 @@ export default function App() {
   // duyet de tu nang minh len OWNER.
   const [user, setUser] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole>("PENDING");
+  /**
+   * Đọc hồ sơ hỏng — KHÁC hẳn với "chưa được duyệt".
+   *
+   * Giữ riêng một trạng thái để không bao giờ lẫn hai việc: không biết vai trò
+   * thì phải nói là không biết, chứ hạ người ta xuống PENDING là báo sai.
+   */
+  const [loiHoSo, setLoiHoSo] = useState("");
   const isOwner = userRole === "OWNER";
   /** Da dang nhap Google nhung chu so huu chua duyet. */
   const isPending = !!user && userRole === "PENDING";
@@ -815,7 +823,31 @@ export default function App() {
 
       try {
         const ref = doc(db, "users", uid);
-        const snap = await getDocFromServer(ref);
+
+        /*
+         * ĐỌC HỒ SƠ: MÁY CHỦ TRƯỚC, BẢN ĐỆM SAU.
+         *
+         * `getDocFromServer` bắt buộc phải đi ra mạng, KHÔNG có đường lùi về
+         * bản đệm. Trên điện thoại sóng yếu hoặc 4G chập chờn — đúng cảnh dùng
+         * app ngoài kho — lệnh này hỏng thường xuyên, trong khi cùng tài khoản
+         * đó trên máy tính nối wifi thì chạy ngon.
+         *
+         * Bản trước hỏng là rơi thẳng vào nhánh bắt lỗi rồi ĐẶT VAI TRÒ THÀNH
+         * PENDING. Người đang là quản trị bỗng thành tài khoản chờ duyệt: mất
+         * hết tab, không lên dữ liệu, mà lỗi thì chỉ nằm im trong console. Suy
+         * ra một vai trò thấp hơn từ một lần mạng hỏng là đoán bừa về quyền —
+         * thà nói không đọc được còn hơn.
+         *
+         * Nay hỏng thì thử tiếp bản đệm trong máy (`getDoc`). Vẫn hỏng thì báo
+         * ra màn hình cho người dùng thử lại, không tự hạ vai trò của ai.
+         */
+        let snap;
+        try {
+          snap = await getDocFromServer(ref);
+        } catch (loiMang) {
+          console.warn("Doc ho so tu may chu that bai, thu ban dem:", loiMang);
+          snap = await getDoc(ref);
+        }
 
         if (!snap.exists()) {
           // Lan dau dang nhap: tao ho so cho duyet.
@@ -841,9 +873,18 @@ export default function App() {
             emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING",
           );
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Khong doc duoc ho so nguoi dung:", err);
-        setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
+        if (emailLower === OWNER_EMAIL) {
+          // Chủ sở hữu gốc nhận diện bằng email nên không cần hồ sơ.
+          setUserRole("OWNER");
+        } else {
+          setLoiHoSo(
+            err?.code === "permission-denied"
+              ? "Máy chủ từ chối đọc hồ sơ của tài khoản này."
+              : "Không tải được hồ sơ người dùng. Mạng đang chập chờn.",
+          );
+        }
       } finally {
         setLoading(false);
       }
@@ -4844,6 +4885,46 @@ export default function App() {
    * lop bao ve that: quy tac Firestore moi la thu chan that su - nguoi chua
    * duyet co goi thang vao co so du lieu cung khong doc duoc gi.
    */
+  // Đứng TRƯỚC màn hình chờ duyệt: chưa đọc được hồ sơ thì chưa biết người này
+  // đang chờ duyệt hay đã là quản trị, nói bừa cái nào cũng sai.
+  if (user && loiHoSo) {
+    return (
+      <div className="min-h-screen bg-bg-main flex items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 premium-shadow text-center space-y-6">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-100 flex items-center justify-center">
+            <AlertTriangle className="w-8 h-8 text-rose-600" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">
+              Chưa xác định được quyền
+            </h2>
+            <p className="text-xs font-bold text-slate-500 leading-relaxed">
+              {loiHoSo}
+              <br />
+              <br />
+              Vai trò của bạn KHÔNG bị thay đổi. Kiểm tra sóng rồi thử lại.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="w-4 h-4" /> Thử lại
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" /> Đăng xuất
+            </Button>
+          </div>
+          <div className="text-left">
+            <KiemTraQuyen vaiTroTrongApp={userRole} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isPending) {
     return (
       <div className="min-h-screen bg-bg-main flex items-center justify-center p-6 font-sans">
