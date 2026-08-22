@@ -9801,7 +9801,9 @@ export default function App() {
                   <DebtExport
                     transactions={transactions}
                     products={products}
-                    partners={partners}
+                    /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
+                       ma thieu ma BP la hoa don sai khach. */
+                    partners={donVi}
                   />
                 </Card>
               </div>
