@@ -886,7 +886,10 @@ export default function App() {
         setTransactions(data);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, "transactions");
+        showNotification(
+          handleFirestoreError(error, OperationType.GET, "transactions"),
+          "error",
+        );
       },
     );
 
@@ -903,7 +906,10 @@ export default function App() {
         setPartners(data);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, "partners");
+        showNotification(
+          handleFirestoreError(error, OperationType.GET, "partners"),
+          "error",
+        );
       },
     );
 
@@ -921,7 +927,10 @@ export default function App() {
         );
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, "slips");
+        showNotification(
+          handleFirestoreError(error, OperationType.GET, "slips"),
+          "error",
+        );
       },
     );
 
@@ -940,7 +949,10 @@ export default function App() {
         );
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, "diem_ban");
+        showNotification(
+          handleFirestoreError(error, OperationType.GET, "diem_ban"),
+          "error",
+        );
       },
     );
 
@@ -967,7 +979,10 @@ export default function App() {
           );
         },
         (error) => {
-          handleFirestoreError(error, OperationType.GET, "sap_jobs");
+          showNotification(
+            handleFirestoreError(error, OperationType.GET, "sap_jobs"),
+            "error",
+          );
         },
       );
     }
@@ -1475,8 +1490,7 @@ export default function App() {
         `Đã cập nhật ${INITIAL_PARTNERS.length} đơn vị vào hệ thống`,
       );
     } catch (e: any) {
-      handleFirestoreError(e, OperationType.WRITE, "partners");
-      alert("Không cập nhật được danh mục đơn vị: " + e.message);
+      alert(handleFirestoreError(e, OperationType.WRITE, "partners"));
     } finally {
       setLoading(false);
     }
@@ -1598,8 +1612,7 @@ export default function App() {
       await batch.commit();
       showNotification(`Đã lưu ${entries.length} điểm bán`);
     } catch (e: any) {
-      handleFirestoreError(e, OperationType.WRITE, "diem_ban");
-      alert("Không lưu được bảng gán điểm bán: " + e.message);
+      alert(handleFirestoreError(e, OperationType.WRITE, "diem_ban"));
     }
   };
 
@@ -2016,8 +2029,7 @@ export default function App() {
         `Đã tạo lệnh ${formatNumber(summary.count)} dòng và tải tệp về máy`,
       );
     } catch (e: any) {
-      handleFirestoreError(e, OperationType.WRITE, "sap_jobs");
-      alert("Không tạo được lệnh xuất: " + e.message);
+      alert(handleFirestoreError(e, OperationType.WRITE, "sap_jobs"));
     } finally {
       setSapBusy(false);
     }
@@ -2058,8 +2070,7 @@ export default function App() {
       await updateDoc(doc(db, "sap_jobs", job.id), patch);
       showNotification(`Lệnh xuất: ${SAP_JOB_STATUS_LABEL[next]}`);
     } catch (e: any) {
-      handleFirestoreError(e, OperationType.WRITE, "sap_jobs");
-      alert("Không cập nhật được lệnh: " + e.message);
+      alert(handleFirestoreError(e, OperationType.WRITE, "sap_jobs"));
     } finally {
       setSapBusy(false);
     }
@@ -2201,33 +2212,67 @@ export default function App() {
   };
 
   // Error Handling Helper
+  /** Tên việc đang làm, để ghép vào câu báo lỗi cho người đọc hiểu. */
+  const TEN_VIEC: Record<string, string> = {
+    create: "tạo",
+    update: "sửa",
+    delete: "xóa",
+    list: "xem danh sách",
+    get: "đọc",
+    write: "lưu",
+  };
+
+  /**
+   * Diễn giải lỗi Firestore thành câu người dùng đọc được.
+   *
+   * TRẢ VỀ một chuỗi và KHÔNG BAO GIỜ NÉM.
+   *
+   * Bản trước ném một Error mới ngay BÊN TRONG nhánh bắt lỗi. Mà mọi nơi gọi
+   * hàm này đều đang ở trong `catch` hoặc trong hàm báo lỗi của `onSnapshot`,
+   * và ngay dưới lời gọi là dòng `alert(...)` hay `showNotification(...)` —
+   * cú ném làm những dòng đó KHÔNG BAO GIỜ CHẠY. Kết quả: người dùng bấm nút,
+   * không lưu được gì, và màn hình tuyệt đối im lặng. Không thông báo, không
+   * gợi ý, không biết hỏi ai. Đúng cái cảnh "bấm mà không thấy gì xảy ra".
+   *
+   * Lỗi thiếu quyền phải nói thẳng là THIẾU QUYỀN, không được gói vào câu
+   * "kiểm tra lại kết nối" — đổ cho đường truyền thì người dùng đi khởi động
+   * lại wifi, còn nguyên nhân thật nằm ở phân quyền thì không ai đụng tới.
+   */
   const handleFirestoreError = (
     err: any,
     operation: "create" | "update" | "delete" | "list" | "get" | "write",
     path: string | null = null,
-  ) => {
-    console.error(`Firestore Error [${operation}]:`, err);
-    if (err?.message?.includes("Missing or insufficient permissions")) {
-      const errorInfo = {
-        error: "Missing or insufficient permissions",
-        operationType: operation,
-        path: path,
-        authInfo: {
-          userId: auth.currentUser?.uid || "unknown",
-          email: auth.currentUser?.email || "unknown",
-          emailVerified: auth.currentUser?.emailVerified || false,
-          isAnonymous: auth.currentUser?.isAnonymous || false,
-          providerInfo:
-            auth.currentUser?.providerData.map((p) => ({
-              providerId: p.providerId,
-              displayName: p.displayName || "",
-              email: p.email || "",
-            })) || [],
-        },
-      };
-      throw new Error(JSON.stringify(errorInfo));
+  ): string => {
+    const ma = err?.code || "";
+    const viec = TEN_VIEC[operation] || operation;
+    console.error(`Firestore [${operation}] ${path ?? ""}`, {
+      code: ma,
+      message: err?.message,
+      uid: auth.currentUser?.uid || "(chưa đăng nhập)",
+      email: auth.currentUser?.email || "(không rõ)",
+      emailVerified: auth.currentUser?.emailVerified ?? false,
+    });
+
+    const thieuQuyen =
+      ma === "permission-denied" ||
+      !!err?.message?.includes("Missing or insufficient permissions");
+
+    if (thieuQuyen) {
+      return (
+        `Tài khoản ${auth.currentUser?.email || "này"} chưa đủ quyền ${viec}` +
+        `${path ? ` mục "${path}"` : ""}.\n\n` +
+        "Vừa được đổi vai trò thì đăng xuất rồi đăng nhập lại.\n\n" +
+        "Nếu vẫn vậy: chủ sở hữu vào Firebase Console → Firestore Database → " +
+        "tab Rules, dán lại nội dung tệp firestore.rules mới nhất rồi bấm " +
+        "Publish."
+      );
     }
-    throw err;
+
+    if (ma === "unavailable" || ma === "deadline-exceeded") {
+      return `Không kết nối được máy chủ nên chưa ${viec} được. Kiểm tra mạng rồi thử lại.`;
+    }
+
+    return `Không ${viec} được: ${err?.message || "lỗi không rõ"}`;
   };
 
   const handleImportInventoryExcel = async (
@@ -2680,10 +2725,12 @@ export default function App() {
         });
       })
       .catch((err) => {
-        handleFirestoreError(
-          err,
-          OperationType.WRITE,
-          `partners/${newPartner.id}`,
+        alert(
+          handleFirestoreError(
+            err,
+            OperationType.WRITE,
+            `partners/${newPartner.id}`,
+          ),
         );
       });
   };
@@ -4391,13 +4438,11 @@ export default function App() {
           : "Hệ thống cập nhật data thành công",
       );
     } catch (err) {
-      console.error(err);
       setLoading(false);
-      handleFirestoreError(err, OperationType.WRITE, "transactions");
-      showNotification(
-        "Lỗi khi lưu giao dịch. Anh kiểm tra lại kết nối nhé!",
-        "error",
-      );
+      // `alert` chứ không phải thông báo tự tắt: lưu hỏng là việc chưa xong,
+      // người dùng phải đọc rồi mới đi tiếp. Thông báo 3 giây trôi qua trong
+      // lúc họ đang nhìn chỗ khác thì coi như không có.
+      alert(handleFirestoreError(err, OperationType.WRITE, "transactions"));
     }
   };
 
@@ -4417,7 +4462,9 @@ export default function App() {
       await deleteDoc(doc(db, "transactions", id));
       showNotification("Đã xóa giao dịch thành công");
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`);
+      alert(
+        handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`),
+      );
     }
   };
 
@@ -9539,6 +9586,26 @@ export default function App() {
                                         onChange={async (e) => {
                                           const newRole = e.target
                                             .value as UserRole;
+                                          /*
+                                            Vai tro OWNER chi co hieu luc that
+                                            khi firestore.rules moi da duoc
+                                            Publish. Voi ban rules cu, isStaff()
+                                            doi dung chu 'STAFF', nen dat ai do
+                                            len OWNER lai LAY MAT sach quyen doc
+                                            va ghi cua ho - man hinh trong tron,
+                                            bam gi cung khong duoc. Hoi truoc
+                                            con hon de ho ngoi do khong hieu vi
+                                            sao.
+                                          */
+                                          if (
+                                            newRole === "OWNER" &&
+                                            !window.confirm(
+                                              `Cấp toàn quyền cho ${profile.email}?\n\nHọ sẽ làm được mọi thứ như chủ sở hữu: xem doanh thu, duyệt người dùng, xóa giao dịch.\n\nQUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa dán lại firestore.rules trong Firebase Console thì người này sẽ MẤT HẾT quyền thay vì được thêm.`,
+                                            )
+                                          ) {
+                                            e.target.value = profile.role;
+                                            return;
+                                          }
                                           try {
                                             await updateDoc(
                                               doc(db, "users", profile.uid),
