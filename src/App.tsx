@@ -165,6 +165,7 @@ import ImportSlipPanel from "./components/ImportSlip";
 import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
+import ChuyenAnhCu from "./components/ChuyenAnhCu";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
@@ -9397,6 +9398,11 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+
+                {/* Dọn ảnh base64 còn kẹt từ bản app đầu tiên. */}
+                <Card title="Kho ảnh">
+                  <ChuyenAnhCu transactions={transactions} slips={slips} />
+                </Card>
 
                 {/* DỮ LIỆU THỬ NGHIỆM — dùng khi app chưa đưa vào vận hành */}
                 <Card title="Dữ liệu thử nghiệm">
