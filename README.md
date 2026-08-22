@@ -49,14 +49,23 @@ các bản đã publish. Bấm vào một mốc thời gian là mở bản đó 
 gõ hay dán đều không ăn. Bấm mốc trên cùng (bản hiện hành) để quay lại ô soạn
 thảo sửa được.
 
-**Không dán được thì đẩy bằng dòng lệnh.** Mở Terminal ngay trong thư mục dự án:
+**Không dán được thì đẩy bằng dòng lệnh.** Bấm đôi chuột vào
+[`day-rules.cmd`](day-rules.cmd) trong thư mục dự án, rồi gõ mã project khi
+được hỏi. Tệp đó đăng nhập Firebase và đẩy `firestore.rules` lên.
+
+Dùng `.cmd` chứ không phải `.ps1` là có lý do: trên máy công ty, PowerShell chặn
+chạy script, nên gõ `npx` trong PowerShell sẽ báo *"npx.ps1 cannot be loaded …
+running scripts is disabled on this system"*. Tệp `.cmd` chạy bằng `cmd.exe` nên
+không dính rào đó, và không phải sửa thiết lập bảo mật nào của máy.
+
+Muốn tự gõ trong PowerShell thì thêm đuôi `.cmd` vào lệnh:
 
 ```bash
-npx firebase-tools login
+npx.cmd --yes firebase-tools login
 ```
 
 ```bash
-npx firebase-tools deploy --only firestore:rules
+npx.cmd --yes firebase-tools deploy --only firestore:rules --project <MÃ_PROJECT>
 ```
 
 Cấu hình ở [`firebase.json`](firebase.json) — nếu *Cơ sở dữ liệu* khác
