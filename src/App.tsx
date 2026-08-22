@@ -163,6 +163,7 @@ import {
 import ImportSlipPanel from "./components/ImportSlip";
 import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
+import KiemTraQuyen from "./components/KiemTraQuyen";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
@@ -4884,6 +4885,12 @@ export default function App() {
               <LogOut className="w-4 h-4" /> Đăng xuất
             </Button>
           </div>
+
+          {/* Người bị chặn ở màn hình này cũng cần biết vì sao — có khi vai trò
+              đã được cấp rồi mà hồ sơ lại nằm ở một UID khác. */}
+          <div className="text-left">
+            <KiemTraQuyen vaiTroTrongApp={userRole} />
+          </div>
         </div>
       </div>
     );
@@ -5119,6 +5126,10 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+
+                {/* Ai cũng bấm được, kể cả người chỉ xem — đúng ra người bị
+                    chặn mới là người cần nó nhất. */}
+                <KiemTraQuyen vaiTroTrongApp={userRole} />
               </div>
             </div>
           </div>

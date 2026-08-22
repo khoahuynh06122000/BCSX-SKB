@@ -36,7 +36,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const firestoreDatabaseId =
+export const firestoreDatabaseId =
   import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)';
 
 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
@@ -52,6 +52,8 @@ const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 }, firestoreDatabaseId);
+
+export const firebaseProjectId = firebaseConfig.projectId as string;
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
