@@ -5,8 +5,23 @@
 
 export type Category = 'Lon' | 'Lít' | 'Chai';
 export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
-/** PENDING = đã đăng nhập Google nhưng chủ sở hữu chưa duyệt. */
-export type UserRole = 'OWNER' | 'STAFF' | 'VIEWER' | 'PENDING';
+/**
+ * Vai trò người dùng.
+ *
+ * PENDING = đã đăng nhập Google nhưng chủ sở hữu chưa duyệt. Đây là cánh cửa
+ * thật của hệ thống: tài khoản Google nào cũng đăng nhập được, nhưng PENDING
+ * thì không đọc ghi được gì cho tới khi được duyệt.
+ *
+ * KE_TOAN = kế toán, làm được mọi việc nghiệp vụ kể cả THAO TÁC DOANH THU
+ * (tạo lệnh xuất hóa đơn lên SAP, dọn số liệu). Các vai trò còn lại vẫn XEM
+ * được doanh thu — số liệu kinh doanh thì cả bộ phận cùng nhìn — nhưng không
+ * đụng vào được, vì phát hành hóa đơn là việc có hậu quả pháp lý.
+ *
+ * Đổi vai trò người dùng thì vẫn chỉ chủ sở hữu làm được, kể cả kế toán: mở
+ * ra thì người vừa được duyệt lại đi duyệt người khác, cánh cửa duy nhất còn
+ * lại tự nó mở toang.
+ */
+export type UserRole = 'OWNER' | 'KE_TOAN' | 'STAFF' | 'VIEWER' | 'PENDING';
 
 /**
  * Hồ sơ người dùng, lưu ở collection `users`, khoá là Firebase Auth UID.

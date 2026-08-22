@@ -112,7 +112,8 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
           ds.push({
             ten: "Vai trò máy chủ đang lưu",
             giaTri: vaiTroMayChu,
-            tot: vaiTroMayChu === "OWNER" || vaiTroMayChu === "STAFF",
+            // Được duyệt là dùng được; chỉ PENDING mới bị chặn.
+            tot: vaiTroMayChu !== "PENDING",
           });
         }
       } catch (e: any) {
@@ -127,7 +128,7 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
     ds.push({
       ten: "Vai trò app đang dùng",
       giaTri: vaiTroTrongApp,
-      tot: vaiTroTrongApp === "OWNER" || vaiTroTrongApp === "STAFF",
+      tot: vaiTroTrongApp !== "PENDING",
     });
 
     /*
@@ -164,7 +165,7 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
     }
 
     // Kết luận: chỉ nói một việc cần làm, không liệt kê hết khả năng.
-    const duQuyen = vaiTroMayChu === "OWNER" || vaiTroMayChu === "STAFF";
+    const duQuyen = !!vaiTroMayChu && vaiTroMayChu !== "PENDING";
     if (!u) {
       setKetLuan("Chưa đăng nhập.");
     } else if (!vaiTroMayChu) {
@@ -173,7 +174,7 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       );
     } else if (!duQuyen) {
       setKetLuan(
-        `Vai trò máy chủ đang lưu là ${vaiTroMayChu} — vai trò này không được ghi dữ liệu. Chủ sở hữu vào mục Người dùng đổi thành STAFF hoặc OWNER, rồi đăng xuất và đăng nhập lại.`,
+        `Vai trò máy chủ đang lưu là ${vaiTroMayChu} — tài khoản chưa được duyệt nên không đọc ghi được gì. Chủ sở hữu vào mục Người dùng duyệt tài khoản này, rồi đăng xuất và đăng nhập lại.`,
       );
     } else if (!u.emailVerified && vaiTroMayChu === "OWNER") {
       setKetLuan(

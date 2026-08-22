@@ -2345,11 +2345,12 @@ export default function App() {
        */
       const nhanVaiTro: Record<string, string> = {
         OWNER: "OWNER (toàn quyền)",
+        KE_TOAN: "KẾ TOÁN (làm được mọi việc)",
         STAFF: "STAFF (nhập/xuất kho)",
         VIEWER: "VIEWER (chỉ xem)",
         PENDING: "PENDING (chờ duyệt)",
       };
-      const duocGhi = userRole === "OWNER" || userRole === "STAFF";
+      const duocGhi = userRole !== "PENDING";
       return (
         `Tài khoản ${auth.currentUser?.email || "này"} chưa đủ quyền ${viec}` +
         `${path ? ` mục "${path}"` : ""}.\n\n` +
@@ -2360,9 +2361,8 @@ export default function App() {
             "dán lại nội dung tệp firestore.rules mới nhất rồi bấm Publish. " +
             "Xong thì đăng xuất rồi đăng nhập lại."
           : "Vai trò này không được ghi dữ liệu.\n\n" +
-            "Chủ sở hữu vào mục Người dùng, đổi tài khoản này thành STAFF " +
-            "(nhập/xuất kho) hoặc OWNER (toàn quyền). Đổi xong thì đăng xuất " +
-            "rồi đăng nhập lại.")
+            "Chủ sở hữu vào mục Người dùng duyệt tài khoản này (chọn KẾ TOÁN " +
+            "nếu cần làm mọi việc). Đổi xong thì đăng xuất rồi đăng nhập lại.")
       );
     }
 
@@ -2834,10 +2834,8 @@ export default function App() {
   };
 
   const handleDeleteInTransitGroup = async (group: Transaction[]) => {
-    if (userRole !== "OWNER" && userRole !== "STAFF") {
-      alert(
-        "Chỉ anh Khoa hoặc nhân viên vận hành mới có quyền xóa phiếu đi đường ạ!",
-      );
+    if (!daDuocDuyet) {
+      alert("Tài khoản chưa được duyệt nên chưa thao tác được.");
       return;
     }
     if (
@@ -4563,13 +4561,40 @@ export default function App() {
     }
   };
 
-  const isAuthorizedFull = useMemo(() => {
-    return userRole === "OWNER" || userRole === "STAFF";
-  }, [userRole]);
+  /**
+   * ĐÃ ĐƯỢC DUYỆT LÀ DÙNG ĐƯỢC TOÀN BỘ PHÂN HỆ.
+   *
+   * Trước chia ba mức: VIEWER chỉ xem, STAFF ghi được kho, OWNER thêm doanh
+   * thu. Nay chủ sở hữu quyết định bỏ phân cấp — vào được app thì dùng hết
+   * chức năng, vì hai lớp đăng nhập Google + mã PIN đã đủ chặn người ngoài.
+   *
+   * Cửa thật sự còn lại là BƯỚC DUYỆT: tài khoản Google nào cũng đăng nhập
+   * được, nhưng vào thì ở trạng thái PENDING và không đọc ghi được gì cho tới
+   * khi chủ sở hữu bấm duyệt.
+   *
+   * Phải khớp đúng với `isApproved()` trong firestore.rules. Lệch bên nào cũng
+   * sinh lỗi: luật chặt hơn giao diện thì người dùng làm xong mới bị từ chối;
+   * luật rộng hơn giao diện thì mở DevTools là làm được thứ màn hình không cho.
+   */
+  const daDuocDuyet = useMemo(() => userRole !== "PENDING", [userRole]);
 
-  const canWrite = useMemo(() => {
-    return userRole === "OWNER" || userRole === "STAFF";
-  }, [userRole]);
+  const isAuthorizedFull = daDuocDuyet;
+  const canWrite = daDuocDuyet;
+
+  /**
+   * Ai được THAO TÁC doanh thu.
+   *
+   * Xem thì cả bộ phận cùng xem — số liệu kinh doanh không phải bí mật với
+   * người trong nhà. Nhưng tạo lệnh xuất hóa đơn lên SAP và dọn số liệu thì
+   * chỉ kế toán: hóa đơn đã phát hành là đã lên cơ quan thuế, huỷ phải làm
+   * biên bản. Chủ sở hữu cũng nằm trong nhóm này.
+   *
+   * Phải khớp đúng `isAccountant()` trong firestore.rules.
+   */
+  const laKeToan = useMemo(
+    () => userRole === "OWNER" || userRole === "KE_TOAN",
+    [userRole],
+  );
 
   /**
    * Menu bên trái, chia theo NHÓM CÔNG VIỆC thay vì một danh sách dài.
@@ -4654,28 +4679,20 @@ export default function App() {
             icon: TrendingUp,
             color: "#f43f5e",
           },
-          // Công nợ: người làm số để xuất hóa đơn, không mở cho VIEWER
-          ...(isOwnerRole || userRole === "STAFF"
-            ? [
-                {
-                  id: "debt",
-                  label: "Công nợ · Hóa đơn",
-                  icon: Receipt,
-                  color: "#14b8a6",
-                },
-              ]
-            : []),
-          // Doanh thu: CHỈ CHỦ SỞ HỮU
-          ...(isOwnerRole
-            ? [
-                {
-                  id: "revenue-mgmt",
-                  label: "Doanh thu",
-                  icon: FileSpreadsheet,
-                  color: "#8b5cf6",
-                },
-              ]
-            : []),
+          {
+            id: "debt",
+            label: "Công nợ · Hóa đơn",
+            icon: Receipt,
+            color: "#14b8a6",
+          },
+          // Doanh thu: ai cũng XEM được; riêng thao tác thì chỉ kế toán,
+          // chặn ở trong tab chứ không chặn ở menu.
+          {
+            id: "revenue-mgmt",
+            label: "Doanh thu",
+            icon: FileSpreadsheet,
+            color: "#8b5cf6",
+          },
         ],
       },
       {
@@ -5204,11 +5221,13 @@ export default function App() {
                       <p className="text-sm font-bold text-slate-900">
                         {userRole === "OWNER"
                           ? "Thẩm quyền tối cao"
-                          : userRole === "STAFF"
-                            ? "Chuyên viên Vận hành"
-                            : userRole === "VIEWER"
-                              ? "Người xem phân tích"
-                              : "Chờ phê duyệt"}
+                          : userRole === "KE_TOAN"
+                            ? "Kế toán"
+                            : userRole === "STAFF"
+                              ? "Chuyên viên Vận hành"
+                              : userRole === "VIEWER"
+                                ? "Người xem phân tích"
+                                : "Chờ phê duyệt"}
                       </p>
                     </div>
                     <div
@@ -5415,9 +5434,11 @@ export default function App() {
                     <p className="text-[11px] font-semibold text-slate-400 truncate">
                       {userRole === "OWNER"
                         ? "Chủ sở hữu"
-                        : userRole === "STAFF"
-                          ? "Vận hành"
-                          : "Chỉ xem"}
+                        : userRole === "KE_TOAN"
+                          ? "Kế toán"
+                          : userRole === "STAFF"
+                            ? "Vận hành"
+                            : "Chỉ xem"}
                     </p>
                   </div>
                 </div>
@@ -7313,7 +7334,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "revenue-mgmt" && userRole === "OWNER" && (
+            {activeTab === "revenue-mgmt" && daDuocDuyet && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="space-y-1">
@@ -7325,6 +7346,8 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-2">
+                    {/* Xuất Excel chỉ đọc số rồi tải về máy, không đụng gì tới
+                        dữ liệu — nên ai xem được thì tải được. */}
                     <button
                       className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
                       onClick={handleExportRevenueToExcel}
@@ -7334,15 +7357,16 @@ export default function App() {
                     </button>
                     {/*
                       Nút dùng MỘT LẦN: dọn số doanh thu cũ nạp từ file Excel.
-                      Giữ ở đây thay vì xoá hẳn để anh bấm khi đã xem xong số
-                      mới; bấm rồi thì có thể gỡ nút này đi.
+                      Xoá dữ liệu nên chỉ kế toán thấy.
                     */}
-                    <button
-                      className="flex items-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-rose-200 hover:scale-105 active:scale-95 transition-all"
-                      onClick={clearOldRevenueDocs}
-                    >
-                      <Trash2 className="w-4 h-4" /> Dọn số cũ
-                    </button>
+                    {laKeToan && (
+                      <button
+                        className="flex items-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-rose-200 hover:scale-105 active:scale-95 transition-all"
+                        onClick={clearOldRevenueDocs}
+                      >
+                        <Trash2 className="w-4 h-4" /> Dọn số cũ
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -7354,7 +7378,7 @@ export default function App() {
                 <SapExportPanel
                   rows={sapSourceRows}
                   jobs={sapJobs}
-                  canRun={isOwner}
+                  canRun={laKeToan}
                   busy={sapBusy}
                   onCreate={handleCreateSapJob}
                   onDownload={downloadSapJobFile}
@@ -8181,9 +8205,9 @@ export default function App() {
                                       Xác nhận cả phiếu
                                     </button>
 
-                                    {/* Delete Button for Owner/Staff */}
-                                    {(userRole === "OWNER" ||
-                                      userRole === "STAFF") && (
+                                    {/* Phiếu đi đường chưa vào sổ tồn kho nên
+                                        ai đã được duyệt cũng xoá được. */}
+                                    {daDuocDuyet && (
                                       <button
                                         onClick={() =>
                                           handleDeleteInTransitGroup(group)
@@ -9779,9 +9803,10 @@ export default function App() {
                                             sao.
                                           */
                                           if (
-                                            newRole === "OWNER" &&
+                                            (newRole === "OWNER" ||
+                                              newRole === "KE_TOAN") &&
                                             !window.confirm(
-                                              `Cấp toàn quyền cho ${profile.email}?\n\nHọ sẽ làm được mọi thứ như chủ sở hữu: xem doanh thu, duyệt người dùng, xóa giao dịch.\n\nQUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa dán lại firestore.rules trong Firebase Console thì người này sẽ MẤT HẾT quyền thay vì được thêm.`,
+                                              `Cấp quyền ${newRole === "OWNER" ? "toàn quyền" : "kế toán"} cho ${profile.email}?\n\n${newRole === "OWNER" ? "Họ làm được mọi thứ như chủ sở hữu, kể cả duyệt người dùng và xóa dữ liệu." : "Họ làm được mọi việc nghiệp vụ, kể cả thao tác doanh thu và tạo lệnh xuất hóa đơn lên SAP. Không duyệt được người dùng."}\n\nQUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa dán lại firestore.rules trong Firebase Console thì người này sẽ MẤT HẾT quyền thay vì được thêm.`,
                                             )
                                           ) {
                                             e.target.value = profile.role;
@@ -9823,6 +9848,9 @@ export default function App() {
                                         </option>
                                         <option value="STAFF">
                                           STAFF — Nhập/xuất kho
+                                        </option>
+                                        <option value="KE_TOAN">
+                                          KẾ TOÁN — Làm được mọi việc
                                         </option>
                                         <option value="OWNER">
                                           OWNER — Toàn quyền, như chủ sở hữu
@@ -10068,7 +10096,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "debt" && isAuthorizedFull && (
+            {activeTab === "debt" && daDuocDuyet && (
               <div className="space-y-6">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-black text-slate-900 tracking-tight">
