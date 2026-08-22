@@ -3674,9 +3674,9 @@ export default function App() {
   // Default supplier for import
   useEffect(() => {
     if (activeTab === "import") {
-      const skb = partners.find(
-        (p) => p.id === "SKB-BNC" || p.name === "SKB-BNC",
-      );
+      // Nhà máy nguồn hàng cũng lấy từ danh mục ghép: Firestore thiếu
+      // SKB-BNC là cả tab nhập kho không chọn được nguồn.
+      const skb = donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC");
       if (skb && newTransaction.partnerId !== skb.id) {
         setNewTransaction((prev) => ({
           ...prev,
@@ -4091,10 +4091,10 @@ export default function App() {
 
       if (basicMatch) return true;
 
-      const partner = partners.find((p) => p.id === t.partnerId);
+      const partner = donVi.find((p) => p.id === t.partnerId);
       return partner?.sapCode?.toLowerCase().includes(q);
     });
-  }, [filteredTransactionsByTime, historySearchQuery, partners]);
+  }, [filteredTransactionsByTime, historySearchQuery, donVi]);
 
   const chartData = useMemo(() => {
     const categories: Category[] = ["Lon", "Lít", "Chai"];
@@ -4127,18 +4127,27 @@ export default function App() {
   }, [countedTransactionsByTime, filteredRevenueByTime, products]);
 
   const handleAddTransaction = async (type: TransactionType) => {
-    const par = partners.find(
+    /*
+     * Tra trên `donVi` (danh mục GHÉP) chứ không tra trên `partners`.
+     *
+     * Ô chọn hiện danh mục ghép, nên chọn được cả đơn vị mới chỉ có trong code
+     * mà Firestore chưa có — 20 bộ phận BNC, SAIR. Tra ngược lại trên
+     * `partners` thì không thấy, và người dùng nhận thông báo "Vui lòng chọn
+     * đối tác" ngay sau khi vừa chọn xong. Chọn được thì phải lưu được: hai
+     * bên phải đọc cùng một danh sách, không thì lại lệch lần nữa.
+     */
+    const par = donVi.find(
       (partner) => partner.id === newTransaction.partnerId,
     );
 
     // Global Validation
     //
-    // NHOM_BNC là giá trị tạm của ô chọn, không phải đối tác thật — nên
-    // `partners.find` không tìm ra và nhánh dưới đây chặn lại. Nói rõ thiếu gì
-    // thay vì "chưa chọn đối tác", vì người dùng đã chọn BNC rồi.
+    // NHOM_BNC là giá trị tạm của ô chọn, không phải đối tác thật — nên phép
+    // tra bên trên không thấy và nhánh dưới đây chặn lại. Nói rõ thiếu gì thay
+    // vì "chưa chọn đối tác", vì người dùng đã chọn BNC rồi.
     if (newTransaction.partnerId === NHOM_BNC) {
       alert(
-        "BNC có bốn bộ phận: Ngoại giao, HTKD, Nội bộ, Chi phí khác.\n\nChọn đúng một bộ phận ở ô ngay dưới rồi lưu lại nhé.",
+        "Chưa chọn bộ phận của BNC.\n\nBấm đúng một bộ phận trong danh sách ngay dưới ô chọn đơn vị rồi lưu lại nhé.",
       );
       return;
     }
@@ -4354,9 +4363,8 @@ export default function App() {
       setNewTransaction({
         type: "IN",
         partnerId:
-          partners.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC")
-            ?.id ||
-          partners[0]?.id ||
+          donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC")?.id ||
+          donVi[0]?.id ||
           "",
         notes: "",
         evidencePhotoUrl: "",
