@@ -646,6 +646,29 @@ export default function App() {
    * thì phải nói là không biết, chứ hạ người ta xuống PENDING là báo sai.
    */
   const [loiHoSo, setLoiHoSo] = useState("");
+
+  /**
+   * Những kho dữ liệu đang không đọc được, gom vào MỘT chỗ.
+   *
+   * Trước đây mỗi kho hỏng là một thông báo đỏ bật lên riêng. Phân quyền máy
+   * chủ cũ thì cả năm kho cùng hỏng — năm thông báo chồng nhau, che mất màn
+   * hình, mà nội dung na ná nhau. Nói một lần, kèm tên từng kho, là đủ.
+   *
+   * Đọc được thì tự xoá khỏi danh sách, nên dán lại phân quyền xong là dải
+   * cảnh báo biến mất mà không phải tải lại trang.
+   */
+  const [loiDoc, setLoiDoc] = useState<Record<string, string>>({});
+  const ghiNhanLoiDoc = (kho: string, loi: string | null) =>
+    setLoiDoc((truoc) => {
+      if (loi === null) {
+        if (!(kho in truoc)) return truoc;
+        const sau = { ...truoc };
+        delete sau[kho];
+        return sau;
+      }
+      if (truoc[kho] === loi) return truoc;
+      return { ...truoc, [kho]: loi };
+    });
   const isOwner = userRole === "OWNER";
   /** Da dang nhap Google nhung chu so huu chua duyet. */
   const isPending = !!user && userRole === "PENDING";
@@ -927,11 +950,12 @@ export default function App() {
         // Firestore tra ve rong thi de rong luon - truoc day roi ve
         // INITIAL_TRANSACTIONS nhung mang do von rong nen khong khac gi.
         setTransactions(data);
+        ghiNhanLoiDoc("transactions", null);
       },
       (error) => {
-        showNotification(
+        ghiNhanLoiDoc(
+          "transactions",
           handleFirestoreError(error, OperationType.GET, "transactions"),
-          "error",
         );
       },
     );
@@ -947,11 +971,12 @@ export default function App() {
         // Firestore rỗng thì để rỗng, đừng thay bằng danh sách cứng — đối tác
         // hiện trên giao diện phải là đối tác có thật để chọn xong dùng được.
         setPartners(data);
+        ghiNhanLoiDoc("partners", null);
       },
       (error) => {
-        showNotification(
+        ghiNhanLoiDoc(
+          "partners",
           handleFirestoreError(error, OperationType.GET, "partners"),
-          "error",
         );
       },
     );
@@ -968,11 +993,12 @@ export default function App() {
         setSlips(
           snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as ImportSlip),
         );
+        ghiNhanLoiDoc("slips", null);
       },
       (error) => {
-        showNotification(
+        ghiNhanLoiDoc(
+          "slips",
           handleFirestoreError(error, OperationType.GET, "slips"),
-          "error",
         );
       },
     );
@@ -990,11 +1016,12 @@ export default function App() {
         setDiemBanOverrides(
           snapshot.docs.map((d) => d.data() as DiemBanEntry),
         );
+        ghiNhanLoiDoc("diem_ban", null);
       },
       (error) => {
-        showNotification(
+        ghiNhanLoiDoc(
+          "diem_ban",
           handleFirestoreError(error, OperationType.GET, "diem_ban"),
-          "error",
         );
       },
     );
@@ -1013,18 +1040,20 @@ export default function App() {
     // dang ky cho ca STAFF se chi sinh loi permission-denied trong console chu
     // khong duoc gi.
     let unsubSapJobs = () => {};
-    if (userRole === "OWNER") {
+    // Kế toán cũng theo dõi lệnh xuất hóa đơn, không riêng chủ sở hữu.
+    if (userRole === "OWNER" || userRole === "KE_TOAN") {
       unsubSapJobs = onSnapshot(
         collection(db, "sap_jobs"),
         (snapshot) => {
           setSapJobs(
             snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as SapJob),
           );
+          ghiNhanLoiDoc("sap_jobs", null);
         },
         (error) => {
-          showNotification(
+          ghiNhanLoiDoc(
+            "sap_jobs",
             handleFirestoreError(error, OperationType.GET, "sap_jobs"),
-            "error",
           );
         },
       );
@@ -5519,6 +5548,27 @@ export default function App() {
             key={activeTab}
             className="max-w-7xl mx-auto space-y-4 sm:space-y-8 pb-24"
           >
+            {/*
+              MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
+              Đặt ngay đầu vùng nội dung để không bỏ sót, nhưng gọn một dòng
+              chứ không phải thông báo đỏ toàn màn hình — số liệu đọc được vẫn
+              dùng bình thường trong lúc chờ sửa phân quyền.
+            */}
+            {Object.keys(loiDoc).length > 0 && (
+              <div className="p-3 rounded-2xl border border-rose-200 bg-rose-50 flex gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-[11px] font-black text-rose-800 uppercase tracking-wider">
+                    Không đọc được {Object.keys(loiDoc).length} kho dữ liệu:{" "}
+                    {Object.keys(loiDoc).join(", ")}
+                  </p>
+                  <p className="text-[11px] font-bold text-rose-700/90 leading-relaxed">
+                    {Object.values(loiDoc)[0]}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Global Filter Bar for Analytical Tabs */}
             {[
               "dashboard",
