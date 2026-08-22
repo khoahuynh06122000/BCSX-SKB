@@ -1,0 +1,25 @@
+{
+  "_ghi_chu": [
+    "Tep nay CHI dung de day firestore.rules len may chu bang dong lenh, khi",
+    "khong dan duoc trong Firebase Console.",
+    "",
+    "Cach chay (mo Terminal ngay trong thu muc du an):",
+    "  npx firebase-tools login",
+    "  npx firebase-tools deploy --only firestore:rules --project <MA_PROJECT>",
+    "",
+    "MA_PROJECT va TEN_DATABASE lay o dau: mo app, vao muc Tai khoan, bam",
+    "'Kiem tra quyen'. Hai dong 'Project' va 'Co so du lieu' chinh la hai gia",
+    "tri can dien.",
+    "",
+    "QUAN TRONG - Firebase cho phep nhieu co so du lieu trong mot project, va",
+    "moi cai co bo rules RIENG. Day nham database thi publish bao nhieu lan",
+    "cung khong co tac dung. Neu 'Co so du lieu' hien ra KHAC '(default)' thi",
+    "sua truong \"database\" ben duoi cho dung ten do."
+  ],
+  "firestore": [
+    {
+      "database": "(default)",
+      "rules": "firestore.rules"
+    }
+  ]
+}

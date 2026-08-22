@@ -35,8 +35,32 @@ Sau khi thêm hoặc sửa biến, phải **Redeploy** thì thay đổi mới c�
 ### Phân quyền Firestore
 
 Quy tắc bảo mật nằm ở [`firestore.rules`](firestore.rules). Dán nội dung file này vào
-Firebase Console → **Firestore Database → Rules → Publish** thì phân quyền
-OWNER / STAFF / VIEWER mới có hiệu lực.
+Firebase Console → **Firestore Database → Rules → Publish** thì phân quyền mới
+có hiệu lực.
+
+**Đúng cơ sở dữ liệu.** Một project Firebase có thể chứa nhiều cơ sở dữ liệu, và
+mỗi cái có bộ rules **riêng**. Dán nhầm cái khác thì Publish bao nhiêu lần cũng
+không có tác dụng. Mở app → mục **Tài khoản** → bấm **Kiểm tra quyền**: hai dòng
+*Project* và *Cơ sở dữ liệu* cho biết app đang nối vào đâu. Ô chọn cơ sở dữ liệu
+nằm ngay cạnh chữ "Database" ở đầu trang Console.
+
+**Đang xem lịch sử thì không sửa được.** Cột bên trái trang Rules là danh sách
+các bản đã publish. Bấm vào một mốc thời gian là mở bản đó ở chế độ **chỉ đọc** —
+gõ hay dán đều không ăn. Bấm mốc trên cùng (bản hiện hành) để quay lại ô soạn
+thảo sửa được.
+
+**Không dán được thì đẩy bằng dòng lệnh.** Mở Terminal ngay trong thư mục dự án:
+
+```bash
+npx firebase-tools login
+```
+
+```bash
+npx firebase-tools deploy --only firestore:rules
+```
+
+Cấu hình ở [`firebase.json`](firebase.json) — nếu *Cơ sở dữ liệu* khác
+`(default)` thì sửa trường `database` trong đó cho khớp trước khi chạy.
 
 ---
 
