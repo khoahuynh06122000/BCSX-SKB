@@ -1484,10 +1484,7 @@ export default function App() {
       setLoading(false);
       showNotification("Khôi phục danh sách Đối tác thành công");
     } catch (error) {
-      console.error("Restore Partners Error:", error);
-      alert(
-        "Có lỗi khi khôi phục đối tác. Anh kiểm tra lại kết nối mạng hoặc phân quyền nhé.",
-      );
+      alert(handleFirestoreError(error, OperationType.WRITE, "partners"));
     } finally {
       setLoading(false);
     }
@@ -1852,8 +1849,7 @@ export default function App() {
       }
       setActiveTab("history");
     } catch (e: any) {
-      console.error("Nap BBGN that bai:", e);
-      alert("Không ghi được dữ liệu BBGN: " + (e?.message || e));
+      alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
     } finally {
       setLoading(false);
     }
@@ -1879,8 +1875,19 @@ export default function App() {
         { merge: true },
       );
     } catch (e) {
-      console.error("Khong ghi duoc trang thai in:", e);
-      // Khong chan viec in: ghi trang thai that bai thi van cho in binh thuong
+      /*
+       * KHÔNG chặn việc in — giấy vẫn phải ra để hai bên ký. Nhưng PHẢI nói.
+       *
+       * Bản trước chỉ ghi vào console rồi thôi. Người dùng in xong, tưởng hệ
+       * thống đã biết phiếu này đang chờ ký, trong khi Firestore chưa nhận gì
+       * cả. Việc âm thầm không lưu được mà vẫn để người ta đi tiếp là kiểu sai
+       * khó lần ra nhất.
+       */
+      showNotification(
+        `In được nhưng CHƯA ghi được trạng thái phiếu ${code}. ` +
+          handleFirestoreError(e, OperationType.WRITE, "slips"),
+        "error",
+      );
     }
   };
 
@@ -1892,15 +1899,38 @@ export default function App() {
   ) => {
     if (uploadingSlipCode) return;
     setUploadingSlipCode(code);
+
+    /*
+     * HAI BƯỚC, HAI NHÁNH BẮT LỖI RIÊNG.
+     *
+     * Bước 1 đẩy ảnh lên Cloudinary, bước 2 ghi liên kết vào Firestore. Trước
+     * đây cả hai nằm chung một `try` và mọi lỗi đều báo "Không tải được ảnh
+     * phiếu" — kể cả khi ảnh đã lên Cloudinary thành công và chỉ có bước ghi
+     * Firestore bị từ chối quyền. Hai sự cố khác hẳn nhau, cách xử lý cũng
+     * khác hẳn, mà lại đọc ra cùng một câu.
+     *
+     * Đây là bước DUYỆT SỐ LIỆU: có ảnh ký thì hàng mới vào tồn kho. Ghi hỏng
+     * mà báo mơ hồ thì người dùng tưởng đã duyệt xong.
+     */
+    let urls: string[];
     try {
-      const urls: string[] = [];
+      urls = [];
       for (const file of Array.from(files)) {
         // Nen truoc khi day len: anh dien thoai 4-8 MB deu ve vai tram KB,
         // van du net doc chu so viet tay ma tiet kiem dung luong Cloudinary.
         const compressed = await compressFile(file, 2000, 2000, 0.85);
         urls.push(await uploadToCloudinary(compressed));
       }
+    } catch (e: any) {
+      setUploadingSlipCode(null);
+      alert(
+        "Không tải được ảnh lên kho ảnh (Cloudinary): " +
+          (e?.message || "lỗi không rõ"),
+      );
+      return;
+    }
 
+    try {
       const existing = slips.find((s) => s.code === code);
       const merged = [...(existing?.signedPhotoUrls || []), ...urls];
 
@@ -1919,9 +1949,12 @@ export default function App() {
         { merge: true },
       );
 
-      showNotification(`Đã lưu ảnh phiếu ${code}`);
+      showNotification(`Đã lưu ảnh phiếu ${code} — hàng đã vào tồn kho`);
     } catch (e: any) {
-      alert("Không tải được ảnh phiếu: " + e.message);
+      alert(
+        `Ảnh đã lên kho ảnh nhưng CHƯA ghi được vào phiếu ${code}, nên hàng chưa vào tồn kho.\n\n` +
+          handleFirestoreError(e, OperationType.WRITE, "slips"),
+      );
     } finally {
       setUploadingSlipCode(null);
     }
@@ -1955,7 +1988,7 @@ export default function App() {
           : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`,
       );
     } catch (e: any) {
-      alert("Không gỡ được ảnh: " + e.message);
+      alert(handleFirestoreError(e, OperationType.WRITE, "slips"));
     }
   };
 
@@ -2822,8 +2855,9 @@ export default function App() {
       await batch.commit();
       showNotification("Đã xóa đơn đi đường thành công!");
     } catch (err) {
-      console.error("Lỗi xóa đơn đi đường:", err);
-      showNotification("Không thể xóa đơn. Vui lòng thử lại!", "error");
+      alert(
+        handleFirestoreError(err, OperationType.DELETE, "transactions"),
+      );
     } finally {
       setLoading(false);
     }
@@ -2862,8 +2896,7 @@ export default function App() {
         `Đã khôi phục ${trxsToRevert.length} bản ghi về trạng thái Đang đi đường!`,
       );
     } catch (err) {
-      console.error(err);
-      showNotification("Lỗi khi khôi phục dữ liệu", "error");
+      alert(handleFirestoreError(err, OperationType.WRITE, "transactions"));
     } finally {
       setLoading(false);
     }
@@ -3197,11 +3230,7 @@ export default function App() {
       setConfirmationPhotos([]);
       setConfirmationPhoto("");
     } catch (err) {
-      console.error("Lỗi hoàn tất đơn đi đường:", err);
-      showNotification(
-        "Không thể hoàn tất đơn hàng. Anh kiểm tra lại nhé!",
-        "error",
-      );
+      alert(handleFirestoreError(err, OperationType.WRITE, "transactions"));
     } finally {
       setLoading(false);
     }
@@ -3223,8 +3252,9 @@ export default function App() {
         setPartners(partners.filter((p) => p.id !== id));
         showNotification("Đã xóa đối tác.", "success");
       } catch (err) {
-        console.error("Lỗi xóa đối tác:", err);
-        showNotification("Không thể xóa đối tác. Anh thử lại nhé!", "error");
+        alert(
+          handleFirestoreError(err, OperationType.DELETE, `partners/${id}`),
+        );
       }
     }
   };
