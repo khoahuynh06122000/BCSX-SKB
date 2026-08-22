@@ -34,8 +34,27 @@ service cloud.firestore {
       return request.auth.token.get('email_verified', false);
     }
 
-    function isOwner() {
+    // Chu so huu GOC - xac dinh bang email trong ID token do Google cap, khong
+    // the gia mao. Day la tai khoan khong bao gio bi khoa ra ngoai duoc.
+    function isBootstrapOwner() {
       return isSignedIn() && emailVerified() && email() == ownerEmail();
+    }
+
+    // Chu so huu = chu so huu goc, HOAC nguoi duoc dat vai tro OWNER trong
+    // users/{uid}.
+    //
+    // Doc vai tro tu tai lieu nguoi dung nghe giong dung cai loi ban cu mac
+    // phai, nhung KHAC HAN o mot diem quyet dinh: users/{uid} khong phai tai
+    // lieu chinh nguoi dung ghi duoc vai tro. Xem lai luat ben duoi:
+    //   - create bat buoc role == 'PENDING'
+    //   - update cua chinh minh chi cham duoc pinHash/pinUpdatedAt va bat buoc
+    //     giu nguyen role
+    // Nen chi chu so huu moi nang vai tro cho nguoi khac duoc. Ban cu doc tu
+    // user_sessions/{uid} - tai lieu ma ai cung tu ghi de len duoc - do moi la
+    // cho hong.
+    function isOwner() {
+      return isBootstrapOwner() ||
+        (isSignedIn() && emailVerified() && role() == 'OWNER');
     }
 
     function hasProfile() {
@@ -77,7 +96,19 @@ service cloud.firestore {
       // chinh minh, va vai tro bat buoc giu nguyen. Nho dieu kien
       // affectedKeys().hasOnly(...) nen khong the loi dung viec dat PIN de
       // tu nang quyen len OWNER.
-      allow update: if isOwner()
+      //
+      // Mot chu so huu KHONG ha duoc vai tro cua chu so huu GOC. Gio co nhieu
+      // hon mot chu so huu, thieu cau nay thi nguoi duoc cap quyen co the ha
+      // quyen nguoi da cap cho minh - va neu do la nguoi cuoi cung con quyen
+      // thi khong ai vao lai duoc nua. Chu so huu goc thi luon vao duoc, vi
+      // quyen cua ho tinh theo email chu khong theo tai lieu nay.
+      allow update: if (
+          isOwner()
+          && !(
+            resource.data.get('email', '') == ownerEmail()
+            && request.resource.data.get('role', '') != 'OWNER'
+          )
+        )
         || (
           isSignedIn()
           && request.auth.uid == uid
@@ -86,7 +117,9 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
         );
 
-      allow delete: if isOwner();
+      // Cung ly do tren: khong xoa duoc ho so cua chu so huu goc.
+      allow delete: if isOwner()
+        && resource.data.get('email', '') != ownerEmail();
     }
 
     // -------------------------------------------------------------------------

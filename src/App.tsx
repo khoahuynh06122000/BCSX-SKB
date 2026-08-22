@@ -171,8 +171,16 @@ import type { BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 
 /**
- * Email chu so huu he thong. CHI tai khoan Google nay moi duyet duoc nguoi
- * dung moi va co toan quyen.
+ * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
+ *
+ * Day KHONG con la chu so huu duy nhat: chu so huu goc dat vai tro OWNER cho
+ * nguoi khac trong muc Nguoi dung, va nguoi do co dung nhung quyen nhu minh.
+ * Vai tro OWNER cap kieu do luu o users/{uid} va co hieu luc that - xem
+ * isOwner() trong firestore.rules.
+ *
+ * Rieng tai khoan nay thi khong ai ha quyen hay xoa duoc (chan ca o giao dien
+ * lan o firestore.rules), de khong bao gio xay ra canh het sach nguoi co quyen
+ * duyet nguoi dung.
  *
  * Gia tri nay phai trung voi ownerEmail() trong firestore.rules - do moi la
  * noi thuc su chan quyen; khai bao o day chi de giao dien hien dung.
@@ -9467,7 +9475,10 @@ export default function App() {
                                 : (a.email || "").localeCompare(b.email || ""),
                           )
                           .map((profile) => {
-                            const isSelf = profile.email === OWNER_EMAIL;
+                            // Chu so huu goc: khong hien o chon vai tro, vi
+                            // khong ai duoc ha quyen tai khoan nay.
+                            const laChuSoHuuGoc =
+                              profile.email === OWNER_EMAIL;
                             return (
                               <div
                                 key={profile.uid}
@@ -9488,9 +9499,9 @@ export default function App() {
                                   <div className="min-w-0">
                                     <p className="text-sm font-black text-slate-900 truncate">
                                       {profile.name || "Chưa đặt tên"}
-                                      {isSelf && (
+                                      {laChuSoHuuGoc && (
                                         <span className="ml-2 text-[9px] font-black text-amber-600 uppercase tracking-widest">
-                                          Chủ sở hữu
+                                          Chủ sở hữu gốc
                                         </span>
                                       )}
                                     </p>
@@ -9501,7 +9512,7 @@ export default function App() {
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {isSelf ? (
+                                  {laChuSoHuuGoc ? (
                                     <span className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest">
                                       Toàn quyền
                                     </span>
@@ -9519,7 +9530,13 @@ export default function App() {
                                                 role: newRole,
                                                 updatedAt:
                                                   new Date().toISOString(),
-                                                approvedBy: OWNER_EMAIL,
+                                                // Ai bam duyet thi ghi ten
+                                                // nguoi do - gio co the la
+                                                // chu so huu thu hai.
+                                                approvedBy:
+                                                  currentUserProfile?.email ||
+                                                  user ||
+                                                  OWNER_EMAIL,
                                               },
                                             );
                                             showNotification(
@@ -9544,7 +9561,7 @@ export default function App() {
                                           STAFF — Nhập/xuất kho
                                         </option>
                                         <option value="OWNER">
-                                          OWNER — Toàn quyền
+                                          OWNER — Toàn quyền, như chủ sở hữu
                                         </option>
                                       </select>
 
