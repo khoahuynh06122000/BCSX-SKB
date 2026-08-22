@@ -21,6 +21,17 @@ import { cn, formatNumber } from "../lib/utils";
  *
  * Số lô do bộ phận tự điền vì nó gắn với đợt sản xuất. Có ô "số lô chung"
  * để điền một lần cho cả phiếu khi cùng một đợt.
+ *
+ * SỐ LÔ CHUNG TỰ CÓ HIỆU LỰC, không phải bấm nút nào.
+ *
+ * Bản trước bắt bấm "Áp dụng", mà nút đó lại tự khoá khi chưa dòng nào có số
+ * lượng. Người dùng gõ số lô chung trước rồi mới điền số lượng — thứ tự rất
+ * tự nhiên — thì bấm không được, điền số lượng xong lại quên bấm lại, và lúc
+ * lưu bị chặn với thông báo "bắt buộc nhập Mã lô" dù màn hình đang hiện số lô
+ * rành rành. Nút im lặng vô hiệu hoá là cái bẫy, nên bỏ hẳn.
+ *
+ * Nay số lô chung là GIÁ TRỊ MẶC ĐỊNH: dòng nào không tự điền số lô riêng thì
+ * lấy theo nó. Dòng nào điền riêng thì số riêng thắng.
  */
 
 export interface BulkRow {
@@ -63,26 +74,38 @@ export default function BulkImportGrid({
   const [importNote, setImportNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** Số lô thật sự dùng cho một dòng: số riêng thắng, không có thì lấy chung. */
+  const soLoHieuLuc = (r: BulkRow, chung: string = commonBatch) =>
+    (r.batchNumber || "").trim() || chung.trim();
+
+  /*
+   * Báo lên form cha ĐÃ GỘP số lô chung vào từng dòng.
+   *
+   * Gộp ở đây chứ không gộp lúc lưu: form cha chỉ nhìn thấy `items`, nên nếu
+   * để nó tự đoán thì phép kiểm "thiếu mã lô" bên đó sẽ chặn nhầm những dòng
+   * mà màn hình đang hiện số lô rõ ràng.
+   */
+  const phatLen = (next: Record<string, BulkRow>, chung: string) => {
+    onChange(
+      Object.values(next)
+        .filter((r) => r.quantity && r.quantity > 0)
+        .map((r) => ({ ...r, batchNumber: soLoHieuLuc(r, chung) })),
+    );
+  };
+
   const push = (next: Record<string, BulkRow>) => {
     setRows(next);
-    onChange(
-      Object.values(next).filter((r) => r.quantity && r.quantity > 0),
-    );
+    phatLen(next, commonBatch);
   };
 
   const update = (productId: string, patch: Partial<BulkRow>) => {
     push({ ...rows, [productId]: { ...rows[productId], ...patch } });
   };
 
-  const applyCommonBatch = () => {
-    if (!commonBatch.trim()) return;
-    const next = { ...rows };
-    Object.values(next).forEach((r) => {
-      if (r.quantity > 0) {
-        next[r.productId] = { ...r, batchNumber: commonBatch.trim() };
-      }
-    });
-    push(next);
+  /** Sửa số lô chung thì phát lại ngay, không chờ ai bấm gì. */
+  const doiSoLoChung = (giaTri: string) => {
+    setCommonBatch(giaTri);
+    phatLen(rows, giaTri);
   };
 
   const clearAll = () => {
@@ -92,7 +115,10 @@ export default function BulkImportGrid({
     });
     setCommonBatch("");
     setImportNote("");
-    push(next);
+    // Không dùng push(): nó đọc `commonBatch` của lượt vẽ cũ, vừa xoá xong mà
+    // vẫn gộp lại số lô vừa bỏ.
+    setRows(next);
+    phatLen(next, "");
   };
 
   const visibleProducts = useMemo(() => {
@@ -231,27 +257,26 @@ export default function BulkImportGrid({
         </div>
       )}
 
-      {/* Số lô chung */}
-      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center gap-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <Layers className="w-4 h-4 text-amber-600" />
-          <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
-            Số lô chung
-          </span>
+      {/* Số lô chung — tự có hiệu lực, không cần bấm nút nào */}
+      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <Layers className="w-4 h-4 text-amber-600" />
+            <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
+              Số lô chung
+            </span>
+          </div>
+          <input
+            value={commonBatch}
+            onChange={(e) => doiSoLoChung(e.target.value)}
+            placeholder="Cả phiếu cùng một đợt sản xuất thì điền một lần ở đây"
+            className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-all"
+          />
         </div>
-        <input
-          value={commonBatch}
-          onChange={(e) => setCommonBatch(e.target.value)}
-          placeholder="Nhập số lô rồi bấm Áp dụng nếu cả phiếu cùng một đợt sản xuất"
-          className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-all"
-        />
-        <button
-          onClick={applyCommonBatch}
-          disabled={!commonBatch.trim() || filledCount === 0}
-          className="px-4 py-2 rounded-xl bg-amber-500 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all disabled:opacity-40 shrink-0"
-        >
-          Áp dụng
-        </button>
+        <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+          Tự điền cho mọi dòng có số lượng mà chưa có số lô riêng. Dòng nào cần
+          lô khác thì gõ thẳng vào ô Số lô của dòng đó — số riêng thắng.
+        </p>
       </div>
 
       {/* Bảng danh mục */}
@@ -284,7 +309,10 @@ export default function BulkImportGrid({
                 const stock =
                   inventory.find((i) => i.productId === p.id)?.stock || 0;
                 const active = row.quantity > 0;
-                const missingBatch = active && !row.batchNumber.trim();
+                // Chỉ đỏ khi thật sự không có số lô nào — kể cả số lô chung.
+                const missingBatch = active && !soLoHieuLuc(row);
+                const theoSoLoChung =
+                  active && !(row.batchNumber || "").trim() && !!commonBatch.trim();
 
                 return (
                   <tr
@@ -338,12 +366,20 @@ export default function BulkImportGrid({
                         onChange={(e) =>
                           update(p.id, { batchNumber: e.target.value })
                         }
-                        placeholder={active ? "Bắt buộc" : "—"}
+                        placeholder={
+                          theoSoLoChung
+                            ? commonBatch.trim()
+                            : active
+                              ? "Bắt buộc"
+                              : "—"
+                        }
                         className={cn(
                           "w-full px-3 py-2 bg-white border rounded-lg text-sm font-bold outline-none transition-all",
                           missingBatch
                             ? "border-rose-300 focus:border-rose-500 placeholder:text-rose-400"
-                            : "border-slate-200 focus:border-primary",
+                            : theoSoLoChung
+                              ? "border-amber-200 focus:border-primary placeholder:text-amber-600"
+                              : "border-slate-200 focus:border-primary",
                         )}
                       />
                     </td>

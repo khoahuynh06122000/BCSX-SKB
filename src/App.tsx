@@ -4167,10 +4167,18 @@ export default function App() {
     }
 
     if (type === "IN") {
-      const missingBatch = validItems.find((item) => !item.batchNumber?.trim());
-      if (missingBatch) {
+      // Nói rõ THIẾU Ở MẶT HÀNG NÀO. Bảng nhập có hơn chục dòng; câu "thiếu mã
+      // lô" trống không bắt người dùng tự dò từng dòng để tìm ô còn trắng.
+      const thieuLo = validItems
+        .filter((item) => !item.batchNumber?.trim())
+        .map(
+          (item) =>
+            products.find((p) => p.id === item.productId)?.name ||
+            item.productId,
+        );
+      if (thieuLo.length > 0) {
         alert(
-          "Tin Tin từ chối: Anh/Chị bắt buộc phải nhập Mã lô cho tất cả mặt hàng khi thực hiện nhập kho ạ!",
+          `Chưa có số lô cho ${thieuLo.length} mặt hàng:\n\n· ${thieuLo.join("\n· ")}\n\nĐiền vào ô Số lô của từng dòng, hoặc điền một lần ở ô "Số lô chung" phía trên bảng.`,
         );
         return;
       }
