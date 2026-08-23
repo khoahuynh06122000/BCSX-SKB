@@ -20,6 +20,14 @@ import {
 } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
 import { taoWorkbookCongNo } from "../lib/congNoExcel";
+import {
+  CAU_HINH_MAC_DINH,
+  dungTepSap,
+  kiemCanChungTu,
+  type CauHinhSap,
+  type DongHangSap,
+} from "../lib/sapTemplate";
+import { taoWorkbookTemplateSap } from "../lib/sapTemplateExcel";
 import { cn, formatNumber } from "../lib/utils";
 
 /**
@@ -282,6 +290,52 @@ export default function DebtExport({
       /* không lưu được thì kế toán tự điền */
     }
   };
+
+  /* -------- Tệp TEMPLATE để xuất hóa đơn trên hệ thống khác -------- */
+
+  const [ngayChungTu, setNgayChungTu] = useState(() =>
+    format(new Date(), "yyyy-MM-dd"),
+  );
+  const [cauHinhSap, setCauHinhSap] = useState<CauHinhSap>(CAU_HINH_MAC_DINH);
+  const [moCauHinh, setMoCauHinh] = useState(false);
+
+  /*
+   * Dòng hàng cho tệp TEMPLATE, lấy thẳng từ bảng Chốt.
+   *
+   * Không tính lại tiền: bảng Chốt đã là số đi phát hành hóa đơn, nên hai tệp
+   * bắt buộc phải khớp nhau từng đồng. Tính lại ở đây là mở đường cho hai con
+   * số khác nhau cùng nói về một lần bán.
+   */
+  const tepSap = useMemo(() => {
+    const dong: DongHangSap[] = bang.dong.map((r) => ({
+      khoaDot: r.ngayGiaoBia,
+      maBp: r.maBp,
+      donVi: r.donVi,
+      tenHangHoa: r.tenHangHoa,
+      dvt: r.dvt,
+      soLuong: r.soLuong,
+      thanhTien: r.thanhTienSkb,
+    }));
+    return dungTepSap({ dong, ngayChungTu, cauHinh: cauHinhSap });
+  }, [bang.dong, ngayChungTu, cauHinhSap]);
+
+  const taiTepSap = () => {
+    if (!tepSap.oDong.length) return;
+    const lech = kiemCanChungTu(tepSap);
+    if (lech.length) {
+      alert(
+        `Có ${lech.length} chứng từ không cân (Nợ khác Có). Không tải xuống để tránh hệ thống bên kia từ chối cả tệp.`,
+      );
+      return;
+    }
+    XLSX.writeFile(
+      taoWorkbookTemplateSap(tepSap),
+      `TEMPLATE xuat hoa don ${ngayChungTu}.xlsx`,
+    );
+  };
+
+  const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
+    setCauHinhSap((c) => ({ ...c, [truong]: giaTri }));
 
   const tien = (n: number) => formatNumber(Math.round(n));
   const nghiemTrong = (loai: string) =>
@@ -776,6 +830,185 @@ export default function DebtExport({
           </div>
         </div>
       )}
+
+      {/* ----- Tệp TEMPLATE để xuất hóa đơn trên hệ thống khác ----- */}
+      {tepSap.oDong.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Tệp TEMPLATE xuất hóa đơn · {tepSap.tong.soChungTu} chứng từ ·{" "}
+              {tepSap.oDong.length} dòng
+            </p>
+            <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+              Tệp bút toán đúng khuôn mẫu bộ phận gửi, để nạp lên hệ thống kế
+              toán. Mỗi <strong>đợt × đơn vị</strong> là một chứng từ: một dòng
+              Nợ phải thu, mỗi mặt hàng một dòng doanh thu, và một dòng thuế
+              GTGT. Số lấy thẳng từ bảng Chốt ở trên nên hai tệp luôn khớp nhau.
+            </p>
+          </div>
+
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="block">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  Ngày chứng từ
+                </span>
+                <input
+                  type="date"
+                  value={ngayChungTu}
+                  onChange={(e) => setNgayChungTu(e.target.value)}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                />
+                <span className="block text-[9px] font-bold text-slate-400 mt-1">
+                  Ngày hạch toán, không phải ngày giao bia
+                </span>
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  Tiêu đề chứng từ
+                </span>
+                <input
+                  value={cauHinhSap.tieuDeChungTu}
+                  onChange={(e) => suaCauHinh("tieuDeChungTu", e.target.value)}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900 font-mono"
+                />
+                <span className="block text-[9px] font-bold text-slate-400 mt-1">
+                  Nối thêm tên đơn vị: {cauHinhSap.tieuDeChungTu}BNC
+                </span>
+              </label>
+            </div>
+
+            <button
+              onClick={() => setMoCauHinh(!moCauHinh)}
+              className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
+            >
+              {moCauHinh ? "Ẩn" : "Sửa"} mã cố định (tài khoản, mã thuế, công ty)
+            </button>
+
+            {moCauHinh && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                {(
+                  [
+                    ["docType", "Doc. type"],
+                    ["compCode", "Comp. Code"],
+                    ["currency", "Currency"],
+                    ["businessPlace", "Business Place"],
+                    ["taxCode", "Tax Code"],
+                    ["paymentTerm", "Payment Term"],
+                    ["profitCenter", "Profit Center"],
+                    ["taiKhoanPhaiThu", "TK phải thu"],
+                    ["taiKhoanDoanhThu", "TK doanh thu"],
+                    ["taiKhoanThue", "TK thuế GTGT"],
+                  ] as [keyof CauHinhSap, string][]
+                ).map(([k, nhan]) => (
+                  <label key={k} className="block">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                      {nhan}
+                    </span>
+                    <input
+                      value={cauHinhSap[k]}
+                      onChange={(e) => suaCauHinh(k, e.target.value)}
+                      className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold font-mono text-slate-900"
+                    />
+                  </label>
+                ))}
+                {/* Chú thích ở sheet 1 ghi TO2 còn tệp mẫu ghi O2 — nói ra chứ
+                    không tự chọn hộ. */}
+                <p className="col-span-2 sm:col-span-4 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
+                  Mã thuế: tệp mẫu ghi <strong>O2</strong>, còn chú thích ở
+                  sheet 1 ghi <strong>TO2</strong>. Em để mặc định theo tệp mẫu
+                  vì đó là tệp đã dùng được — anh xem lại rồi sửa nếu cần.
+                </p>
+              </div>
+            )}
+
+            {/* Bảng tóm tắt từng chứng từ để soát trước khi tải. */}
+            <div className="rounded-xl border border-slate-200 overflow-x-auto">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {[
+                      "Chứng từ",
+                      "Mã BP",
+                      "Mặt hàng",
+                      "Trước thuế",
+                      "VAT",
+                      "Tổng cộng",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tepSap.chungTu.map((x, i) => (
+                    <tr
+                      key={`${x.maBp}-${i}`}
+                      className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
+                    >
+                      <td className="px-3 py-1.5 text-slate-900 font-mono text-[10px]">
+                        {x.tieuDe}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-slate-400">
+                        {x.maBp}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {x.soDongHang}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {tien(x.truocThue)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {tien(x.vat)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                        {tien(x.tongCong)}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-slate-200 text-[11px] font-black text-slate-900 bg-slate-50">
+                    <td className="px-3 py-1.5" colSpan={3}>
+                      Tổng
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {tien(tepSap.tong.truocThue)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {tien(tepSap.tong.vat)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {tien(tepSap.tong.tongCong)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {tepSap.vuotDoDai.length > 0 && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                  {tepSap.vuotDoDai.length} tên hàng dài hơn 25 ký tự, mà cột
+                  Header Text khai C(25). Tệp mẫu của anh cũng vậy và vẫn dùng
+                  được nên em giữ nguyên, không cắt.
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={taiTepSap}
+              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" /> Tải tệp TEMPLATE (
+              {tepSap.tong.soChungTu} chứng từ)
+            </button>
+          </div>
+        </div>
+      )}
+
 
       <button
         onClick={handleDownload}
