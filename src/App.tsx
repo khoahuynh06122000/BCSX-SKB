@@ -6,6 +6,7 @@
 import React, { useState, useMemo, useEffect, ReactNode, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
+  Building2,
   LayoutDashboard,
   PlusCircle,
   MinusCircle,
@@ -173,6 +174,7 @@ import { stableHash } from "./lib/hash";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
+import DonBNC from "./components/DonBNC";
 
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
@@ -4831,6 +4833,14 @@ export default function App() {
             label: "Công nợ · Hóa đơn",
             icon: Receipt,
             color: "#14b8a6",
+          },
+          // BNC nhận phần lớn sản lượng mà hóa đơn chỉ có một dòng, nên cần
+          // một chỗ riêng nhìn xuống từng bộ phận.
+          {
+            id: "bnc",
+            label: "Đơn BNC",
+            icon: Building2,
+            color: "#0284c7",
           },
           // Doanh thu: ai cũng XEM được; riêng thao tác thì chỉ kế toán,
           // chặn ở trong tab chứ không chặn ở menu.
@@ -10357,6 +10367,27 @@ export default function App() {
                 </Card>
               </div>
             )}
+
+            {activeTab === "bnc" && daDuocDuyet && (
+              <div className="space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                    Đơn BNC
+                  </h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Bia đi tới bộ phận nào trong khu · trạng thái từng đơn
+                  </p>
+                </div>
+                <Card>
+                  <DonBNC
+                    transactions={transactions}
+                    products={products}
+                    partners={donVi}
+                  />
+                </Card>
+              </div>
+            )}
+
 
             {activeTab === "slips" && (
               <div className="space-y-6">
