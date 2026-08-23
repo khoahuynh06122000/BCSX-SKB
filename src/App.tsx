@@ -8671,8 +8671,9 @@ export default function App() {
                             },
                           ) && (
                             <div className="space-y-3">
-                              <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1">
-                                Lý do hao hụt (Bắt buộc nếu có chênh lệch)
+                              <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1 block leading-snug">
+                                Lý do hao hụt
+                                <span className="text-rose-500"> *</span>
                               </label>
                               <textarea
                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none text-sm font-medium min-h-[80px]"
@@ -8696,30 +8697,37 @@ export default function App() {
                           )}
 
                           <div className="space-y-3">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1">
-                              Minh chứng thực tế (Ảnh chụp/Tải lên - Bắt buộc)
+                            {/* Nhãn ngắn lại: bản trước dài quá nên trên điện
+                                thoại vắt xuống dòng thứ hai còn trơ mỗi chữ
+                                "BUỘC)". */}
+                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1 block">
+                              Ảnh minh chứng
+                              <span className="text-rose-500"> *</span>
                             </label>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-emerald-200 rounded-3xl bg-emerald-50/40 hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group relative overflow-hidden">
+                            {/*
+                              BA NÚT NHỎ LẠI, XẾP NGANG.
+                              Chúng chỉ là chỗ bấm một lần rồi thôi; chiếm ba
+                              khối lớn chồng lên nhau thì đẩy ảnh minh chứng
+                              xuống tận đáy, phải cuộn mới thấy. Chỗ cần rộng
+                              là ẢNH, để đối chiếu chữ viết tay với số lượng ở
+                              trên.
+                            */}
+                            <div className="grid grid-cols-3 gap-2">
+                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/40 hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group relative overflow-hidden min-h-[76px]">
                                 {isScanning ? (
-                                  <div className="flex flex-col items-center gap-2">
-                                    <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-                                    <span className="text-[10px] font-black text-emerald-600 uppercase animate-pulse">
-                                      Tin đang đọc phiếu...
+                                  <div className="flex flex-col items-center gap-1.5">
+                                    <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
+                                    <span className="text-[9px] font-black text-emerald-600 uppercase animate-pulse text-center leading-tight">
+                                      Đang đọc...
                                     </span>
                                   </div>
                                 ) : (
                                   <>
-                                    <Sun className="w-8 h-8 text-emerald-500 group-hover:scale-110 transition-transform" />
-                                    <div className="text-center">
-                                      <span className="text-[11px] font-black text-emerald-600 uppercase block tracking-tighter">
-                                        QUÉT PHIẾU BẰNG TIN
-                                      </span>
-                                      <span className="text-[8px] font-bold text-slate-400 uppercase block leading-none mt-1">
-                                        (Tự động điền số lượng)
-                                      </span>
-                                    </div>
+                                    <Sun className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
+                                    <span className="text-[9px] font-black text-emerald-600 uppercase text-center leading-tight tracking-tight">
+                                      Quét bằng Tin
+                                    </span>
                                   </>
                                 )}
                                 <input
@@ -8778,10 +8786,10 @@ export default function App() {
                                   }}
                                 />
                               </label>
-                              <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-200 rounded-3xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group">
-                                <Camera className="w-8 h-8 text-slate-300 group-hover:text-primary transition-colors" />
-                                <span className="text-[11px] font-black text-slate-400 uppercase group-hover:text-primary tracking-tighter">
-                                  Chụp ảnh thêm
+                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[76px]">
+                                <Camera className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-primary text-center leading-tight tracking-tight">
+                                  Chụp thêm
                                 </span>
                                 <input
                                   type="file"
@@ -8821,9 +8829,9 @@ export default function App() {
                                   }}
                                 />
                               </label>
-                              <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-200 rounded-3xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group">
-                                <ImageIcon className="w-8 h-8 text-slate-300 group-hover:text-emerald-500 transition-colors" />
-                                <span className="text-[11px] font-black text-slate-400 uppercase group-hover:text-emerald-500 tracking-tighter">
+                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group min-h-[76px]">
+                                <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-emerald-500 text-center leading-tight tracking-tight">
                                   Chọn từ máy
                                 </span>
                                 <input
@@ -8865,36 +8873,55 @@ export default function App() {
                               </label>
                             </div>
 
+                            {/*
+                              ẢNH TO, KHÔNG CẮT, MỖI TẤM MỘT HÀNG.
+                              Đây là tờ biên bản viết tay: người dùng phải đọc
+                              được con số trên đó rồi dò với số lượng ở phần
+                              trên. Bản trước cắt vuông và xếp bốn tấm một hàng
+                              — thành ra chỉ thấy giữa tờ giấy, chữ số nằm ở mép
+                              bị cắt mất.
+
+                              `object-contain` giữ nguyên tỉ lệ nên không mất
+                              góc nào của tờ phiếu.
+                            */}
                             {confirmationPhotos.length > 0 && (
-                              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+                              <div className="space-y-3 mt-4">
                                 {confirmationPhotos.map((photo, idx) => (
                                   <div
                                     key={idx}
-                                    className="relative aspect-square rounded-xl overflow-hidden group"
+                                    className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100"
                                   >
                                     <img
                                       src={photo}
-                                      alt={`Evidence ${idx}`}
-                                      className="w-full h-full object-cover"
+                                      alt={`Ảnh minh chứng ${idx + 1}`}
+                                      className="w-full max-h-[60vh] object-contain"
                                     />
-                                    <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                                      <button
-                                        onClick={() => {
-                                          const updated =
-                                            confirmationPhotos.filter(
-                                              (_, i) => i !== idx,
-                                            );
-                                          setConfirmationPhotos(updated);
-                                          if (idx === 0)
-                                            setConfirmationPhoto(
-                                              updated[0] || "",
-                                            );
-                                        }}
-                                        className="p-2 bg-rose-500 text-white rounded-full shadow-lg"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
+                                    <span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-900/70 text-white text-[9px] font-black uppercase tracking-widest">
+                                      Ảnh {idx + 1}/{confirmationPhotos.length}
+                                    </span>
+                                    {/*
+                                      Nút xóa LUÔN HIỆN. Bản trước chỉ hiện khi
+                                      rê chuột — trên điện thoại không có rê
+                                      chuột, nên tải nhầm ảnh là không gỡ ra
+                                      được bằng cách nào cả.
+                                    */}
+                                    <button
+                                      onClick={() => {
+                                        const updated =
+                                          confirmationPhotos.filter(
+                                            (_, i) => i !== idx,
+                                          );
+                                        setConfirmationPhotos(updated);
+                                        if (idx === 0)
+                                          setConfirmationPhoto(
+                                            updated[0] || "",
+                                          );
+                                      }}
+                                      className="absolute top-2 right-2 p-2.5 bg-rose-500 text-white rounded-xl shadow-lg active:scale-90 transition-transform"
+                                      aria-label={`Xóa ảnh ${idx + 1}`}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 ))}
                               </div>
