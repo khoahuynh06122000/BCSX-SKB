@@ -2883,6 +2883,29 @@ export default function App() {
   const [actualReceivedQtyMap, setActualReceivedQtyMap] = useState<
     Record<string, number>
   >({});
+  /**
+   * Chữ người dùng đang gõ trong ô "Thực nhận", giữ nguyên chưa diễn giải.
+   *
+   * Phải tách khỏi `actualReceivedQtyMap` (số đã diễn giải) vì hai thứ khác
+   * nhau trong lúc đang gõ: gõ dở "144," thì chưa ra số nào, mà ép về số ngay
+   * thì con trỏ nhảy và dấu phẩy vừa gõ biến mất.
+   *
+   * VÌ SAO KHÔNG DÙNG `type="number"` NỮA: bàn phím số tiếng Việt trên Android
+   * cho dấu PHẨY. Gõ "144,2" vào ô số thì trình duyệt coi là không hợp lệ và
+   * trả về chuỗi rỗng — app đọc ra 0, ghi nhận đã nhận 0 lít và toàn bộ 144,2
+   * lít thành hao hụt. Không một cảnh báo nào.
+   */
+  const [soThucNhanText, setSoThucNhanText] = useState<Record<string, string>>(
+    {},
+  );
+
+  /** "144,2" và "144.2" đều là 144,2. Rỗng hoặc gõ dở thì trả null. */
+  const docSoThapPhan = (v: string): number | null => {
+    const s = String(v ?? "").trim().replace(/\s/g, "").replace(",", ".");
+    if (!s || s === "." || s === "-") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? parseFloat(n.toFixed(4)) : null;
+  };
   const [lossReason, setLossReason] = useState<string>("");
   const [confirmationPhotos, setConfirmationPhotos] = useState<string[]>([]);
   const [confirmationPhoto, setConfirmationPhoto] = useState<string>("");
@@ -3360,6 +3383,7 @@ export default function App() {
       setMatchedProductIds(new Set());
       setScannedInvoiceDate(null);
       setActualReceivedQtyMap({});
+      setSoThucNhanText({});
       setLossReason("");
       setConfirmationPhotos([]);
       setConfirmationPhoto("");
@@ -8390,22 +8414,28 @@ export default function App() {
                 {showLossModal &&
                   selectedInTransitGroup &&
                   selectedInTransitGroup.length > 0 && (
-                    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
                       <div
                         onClick={() => setShowLossModal(false)}
                         className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
                       />
-                      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-8 pb-4 border-b border-slate-100">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-xl font-black text-slate-900 uppercase">
+                      {/*
+                        Trên điện thoại: dán sát đáy, cao gần hết màn hình,
+                        không có lề hai bên. Lề 16px cộng bo góc lớn của bản
+                        trước ăn mất khoảng 40px bề ngang — trên máy 375px thì
+                        đó là hơn một phần mười, đủ để tên bia bị cắt.
+                      */}
+                      <div className="relative w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+                        <div className="p-4 sm:p-8 sm:pb-4 border-b border-slate-100">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-base sm:text-xl font-black text-slate-900 uppercase leading-tight">
                                 {selectedInTransitIds.length > 1
                                   ? "XÁC NHẬN HÀNG LOẠT"
                                   : "XÁC NHẬN CẢ PHIẾU GIAO HÀNG"}
                               </h3>
-                              <div className="flex items-center gap-2 mt-1">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest break-all">
                                   {selectedInTransitIds.length > 1
                                     ? `Đang chọn ${selectedInTransitIds.length} mã phiếu khác nhau`
                                     : `Mã phiếu hệ thống: ${selectedInTransitGroup[0].referenceGroupId?.replace("multi-", "") || "Cá lẻ"}`}
@@ -8435,7 +8465,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="p-8 pt-4 space-y-6 overflow-y-auto">
+                        <div className="p-4 sm:p-8 sm:pt-4 space-y-5 sm:space-y-6 overflow-y-auto">
                           <div className="space-y-4">
                             {(() => {
                               const groupedItems =
@@ -8476,22 +8506,38 @@ export default function App() {
                                       return (
                                         <div
                                           key={item.productId}
-                                          className={`p-5 rounded-3xl border-2 transition-all ${isMatched ? "bg-emerald-50/50 border-emerald-500/20" : "bg-slate-50 border-transparent opacity-60"}`}
+                                          className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 transition-all ${isMatched ? "bg-emerald-50/50 border-emerald-500/20" : "bg-slate-50 border-transparent opacity-60"}`}
                                         >
-                                          <div className="flex justify-between items-start mb-3">
-                                            <div className="flex items-center gap-3">
+                                          {/*
+                                            Trên điện thoại xếp DỌC: tên bia
+                                            một dòng riêng chiếm hết bề ngang,
+                                            nút bấm xuống dòng dưới. Xếp ngang
+                                            như bản trước thì nút "Loại bỏ"
+                                            chiếm mất một phần ba bề ngang và
+                                            tên bia bị cắt còn "Bia Wings
+                                            Dark…" — người tải ảnh không đọc
+                                            được mình đang xác nhận mặt hàng
+                                            nào.
+                                          */}
+                                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2.5 mb-3">
+                                            <div className="flex items-start gap-3 min-w-0">
                                               <div
-                                                className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${isMatched ? "bg-white border-emerald-100" : "bg-slate-100 border-slate-200"}`}
+                                                className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-2xl flex items-center justify-center border ${isMatched ? "bg-white border-emerald-100" : "bg-slate-100 border-slate-200"}`}
                                               >
                                                 <Package2
                                                   className={`w-5 h-5 ${isMatched ? "text-emerald-500" : "text-slate-400"}`}
                                                 />
                                               </div>
-                                              <div>
-                                                <div className="text-sm font-black text-slate-900 line-clamp-1">
+                                              <div className="min-w-0 flex-1">
+                                                {/* Cho xuống dòng thay vì cắt
+                                                    chữ: tên bia dài là bình
+                                                    thường, mà cắt đi thì hai
+                                                    loại khác nhau nhìn giống
+                                                    hệt nhau. */}
+                                                <div className="text-[13px] sm:text-sm font-black text-slate-900 leading-snug break-words">
                                                   {item.productName}
                                                 </div>
-                                                <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
                                                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
                                                     Xuất:{" "}
                                                     {formatNumber(
@@ -8500,7 +8546,7 @@ export default function App() {
                                                     đơn vị
                                                   </div>
                                                   {isMatched && (
-                                                    <span className="flex items-center gap-1 text-[8px] px-1.5 py-0.5 bg-emerald-500 text-white font-black rounded-full uppercase">
+                                                    <span className="flex items-center gap-1 text-[8px] px-1.5 py-0.5 bg-emerald-500 text-white font-black rounded-full uppercase shrink-0">
                                                       <CheckCircle className="w-2 h-2" />
                                                       ĐÃ KHỚP
                                                     </span>
@@ -8538,7 +8584,7 @@ export default function App() {
                                                   );
                                                 }
                                               }}
-                                              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase transition-all ${isMatched ? "bg-rose-100 text-rose-500 hover:bg-rose-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
+                                              className={`w-full sm:w-auto shrink-0 px-3 py-2.5 sm:py-1.5 rounded-xl text-[10px] sm:text-[9px] font-black uppercase transition-all ${isMatched ? "bg-rose-100 text-rose-500 hover:bg-rose-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
                                             >
                                               {isMatched
                                                 ? "Loại bỏ"
@@ -8557,19 +8603,44 @@ export default function App() {
                                                   THỰC NHẬN TRÊN PHIẾU
                                                 </label>
                                                 <div className="flex items-center gap-2 font-mono">
+                                                  {/*
+                                                    `text` + `inputMode="decimal"`:
+                                                    vẫn ra bàn phím số trên
+                                                    điện thoại, nhưng nhận được
+                                                    cả dấu phẩy. Ô `type=number`
+                                                    coi "144,2" là không hợp lệ
+                                                    và trả chuỗi rỗng — app đọc
+                                                    ra 0 rồi ghi cả 144,2 lít
+                                                    thành hao hụt.
+                                                  */}
                                                   <input
-                                                    type="number"
-                                                    step="any"
-                                                    className="flex-1 px-4 py-2 bg-white border-2 border-emerald-500/20 rounded-xl text-sm font-black focus:border-emerald-500 outline-none transition-all"
-                                                    value={currentQty}
-                                                    onChange={(e) =>
-                                                      setActualReceivedQtyMap({
-                                                        ...actualReceivedQtyMap,
-                                                        [item.productId]: parseFloat(Number(e.target.value).toFixed(4)),
-                                                      })
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    className="flex-1 min-w-0 px-4 py-2.5 sm:py-2 bg-white border-2 border-emerald-500/20 rounded-xl text-base sm:text-sm font-black focus:border-emerald-500 outline-none transition-all"
+                                                    value={
+                                                      soThucNhanText[
+                                                        item.productId
+                                                      ] ?? String(currentQty)
                                                     }
+                                                    onChange={(e) => {
+                                                      const chu = e.target.value;
+                                                      setSoThucNhanText({
+                                                        ...soThucNhanText,
+                                                        [item.productId]: chu,
+                                                      });
+                                                      const so =
+                                                        docSoThapPhan(chu);
+                                                      // Gõ dở thì giữ nguyên số
+                                                      // cũ, đừng nhảy về 0.
+                                                      if (so !== null) {
+                                                        setActualReceivedQtyMap({
+                                                          ...actualReceivedQtyMap,
+                                                          [item.productId]: so,
+                                                        });
+                                                      }
+                                                    }}
                                                   />
-                                                  <span className="text-[10px] font-black text-slate-400 uppercase">
+                                                  <span className="text-[10px] font-black text-slate-400 uppercase shrink-0">
                                                     {product?.unit || "đơn vị"}
                                                   </span>
                                                 </div>
@@ -8831,7 +8902,9 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="p-8 pt-4 border-t border-slate-100 bg-slate-50/30 flex gap-3">
+                        {/* Chân hộp thoại: chừa thêm đệm dưới cho thanh điều hướng của điện
+                            thoại, không thì nút Xác nhận nằm sát mép và bấm hay trượt. */}
+                        <div className="p-4 pb-5 sm:p-8 sm:pt-4 border-t border-slate-100 bg-slate-50/30 flex gap-3">
                           <Button
                             variant="outline"
                             className="flex-1"
