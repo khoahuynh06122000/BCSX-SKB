@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   Download,
   Receipt,
@@ -20,6 +19,9 @@ import {
 } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
 import { taoWorkbookCongNo } from "../lib/congNoExcel";
+// Ghi bang XLSXDep chu khong phai `xlsx`: dung `xlsx` thi workbook da gan dinh
+// dang van bi ghi ra trang tron, vi ban cong dong khong ghi thuoc tinh `s`.
+import { XLSXDep } from "../lib/excelDep";
 import {
   CAU_HINH_MAC_DINH,
   dungTepSap,
@@ -282,7 +284,7 @@ export default function DebtExport({
 
     const wb = taoWorkbookCongNo(bang, matHang, donVi);
     const dauKy = dot.reduce((a, d) => (d.tuNgay < a ? d.tuNgay : a), dot[0].tuNgay);
-    XLSX.writeFile(wb, `Cong no ${format(new Date(dauKy + "T00:00:00"), "MM.yyyy")}.xlsx`);
+    XLSXDep.writeFile(wb, `Cong no ${format(new Date(dauKy + "T00:00:00"), "MM.yyyy")}.xlsx`);
     // Số hóa đơn kế tiếp nhớ lại cho lần sau, khỏi phải tra sổ.
     try {
       localStorage.setItem(KHOA_LUU_SO, String(bang.soHoaDonTiepTheo));
@@ -328,7 +330,7 @@ export default function DebtExport({
       );
       return;
     }
-    XLSX.writeFile(
+    XLSXDep.writeFile(
       taoWorkbookTemplateSap(tepSap),
       `TEMPLATE xuat hoa don ${ngayChungTu}.xlsx`,
     );

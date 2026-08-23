@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   Building2,
   Calendar,
@@ -11,6 +10,7 @@ import {
 import { format } from "date-fns";
 import type { Partner, Product, Transaction } from "../types";
 import { dungBangBNC, laBoPhanBNC } from "../lib/bnc";
+import { taoSheetDep, XLSXDep } from "../lib/excelDep";
 import { cn, formatNumber } from "../lib/utils";
 
 /**
@@ -67,48 +67,115 @@ export default function DonBNC({ transactions, products, partners }: Props) {
 
   const taiExcel = () => {
     if (!bang.don.length) return;
-    const wb = XLSX.utils.book_new();
+    const wb = XLSXDep.utils.book_new();
+    const lam1 = (n: number) => Math.round(n * 10) / 10;
 
-    const wsBoPhan = XLSX.utils.json_to_sheet(
-      bang.theoBoPhan.map((o, i) => ({
-        STT: i + 1,
-        "Bộ phận": o.boPhan,
-        "Số đơn": o.soDon,
-        "Lít hơi": o.soLuongLit,
-        Lon: o.soLuongLon,
-        "Lít quy đổi": Math.round(o.litQuyDoi * 10) / 10,
-        "Hao hụt (lít)": Math.round(o.haoHut * 10) / 10,
-        "Đơn chưa xong": o.donChuaXong,
-        "Lần nhận cuối": o.lanCuoi,
-      })),
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: [
+          "ĐƠN BNC — THEO BỘ PHẬN",
+          `Từ ${tuNgay || "đầu"} đến ${denNgay || "nay"} · ${bang.tong.soDon} đơn`,
+        ],
+        tieuDe: [
+          "STT",
+          "Bộ phận",
+          "Số đơn",
+          "Lít hơi",
+          "Lon",
+          "Lít quy đổi",
+          "Hao hụt (lít)",
+          "Đơn chưa xong",
+          "Lần nhận cuối",
+        ],
+        cot: [
+          { rong: 6, kieu: "giua" },
+          { rong: 26 },
+          { rong: 10, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 10, kieu: "so" },
+          { rong: 14, kieu: "so" },
+          { rong: 14, kieu: "so" },
+          { rong: 15, kieu: "so" },
+          { rong: 15, kieu: "giua" },
+        ],
+        hang: bang.theoBoPhan.map((o, i) => [
+          i + 1,
+          o.boPhan,
+          o.soDon,
+          lam1(o.soLuongLit),
+          o.soLuongLon,
+          lam1(o.litQuyDoi),
+          lam1(o.haoHut),
+          o.donChuaXong,
+          o.lanCuoi,
+        ]),
+        dongTong: [
+          "",
+          "TỔNG CỘNG",
+          bang.tong.soDon,
+          lam1(bang.tong.soLuongLit),
+          bang.tong.soLuongLon,
+          lam1(bang.tong.litQuyDoi),
+          lam1(bang.tong.haoHut),
+          bang.tong.donChuaXong,
+          "",
+        ],
+      }),
+      "Theo bộ phận",
     );
-    wsBoPhan["!cols"] = [5, 24, 9, 11, 9, 13, 14, 15, 15].map((w) => ({
-      wch: w,
-    }));
-    XLSX.utils.book_append_sheet(wb, wsBoPhan, "Theo bộ phận");
 
-    const wsDon = XLSX.utils.json_to_sheet(
-      bang.don.map((d, i) => ({
-        STT: i + 1,
-        Ngày: d.ngay,
-        "Bộ phận": d.boPhan,
-        "Số mặt hàng": d.soMatHang,
-        "Lít hơi": d.soLuongLit,
-        Lon: d.soLuongLon,
-        "Lít quy đổi": Math.round(d.litQuyDoi * 10) / 10,
-        "Hao hụt": Math.round(d.haoHut * 10) / 10,
-        "Trạng thái":
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: [
+          "ĐƠN BNC — TỪNG ĐƠN",
+          `Từ ${tuNgay || "đầu"} đến ${denNgay || "nay"}`,
+        ],
+        tieuDe: [
+          "STT",
+          "Ngày",
+          "Bộ phận",
+          "Mặt hàng",
+          "Lít hơi",
+          "Lon",
+          "Lít quy đổi",
+          "Hao hụt",
+          "Trạng thái",
+          "Có ảnh",
+          "Ghi chú",
+        ],
+        cot: [
+          { rong: 6, kieu: "giua" },
+          { rong: 12, kieu: "giua" },
+          { rong: 26 },
+          { rong: 11, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 10, kieu: "so" },
+          { rong: 13, kieu: "so" },
+          { rong: 11, kieu: "so" },
+          { rong: 16, kieu: "giua" },
+          { rong: 9, kieu: "giua" },
+          { rong: 44 },
+        ],
+        hang: bang.don.map((d, i) => [
+          i + 1,
+          d.ngay,
+          d.boPhan,
+          d.soMatHang,
+          lam1(d.soLuongLit),
+          d.soLuongLon,
+          lam1(d.litQuyDoi),
+          lam1(d.haoHut),
           d.trangThai === "di_duong" ? "Đang đi đường" : "Đã ghi nhận",
-        "Có ảnh": d.coAnh ? "Có" : "Chưa",
-        "Ghi chú": d.ghiChu,
-      })),
+          d.coAnh ? "Có" : "Chưa",
+          d.ghiChu,
+        ]),
+      }),
+      "Từng đơn",
     );
-    wsDon["!cols"] = [5, 12, 24, 13, 11, 9, 13, 10, 16, 9, 44].map((w) => ({
-      wch: w,
-    }));
-    XLSX.utils.book_append_sheet(wb, wsDon, "Từng đơn");
 
-    XLSX.writeFile(wb, `Don BNC ${tuNgay} den ${denNgay}.xlsx`);
+    XLSXDep.writeFile(wb, `Don BNC ${tuNgay} den ${denNgay}.xlsx`);
   };
 
   const so = (n: number) => formatNumber(Math.round(n * 10) / 10);

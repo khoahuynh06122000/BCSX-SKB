@@ -168,6 +168,7 @@ import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
 import { dungAnhThuVien, type AnhThuVien } from "./lib/thuVienAnh";
+import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
@@ -2346,25 +2347,78 @@ export default function App() {
   };
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  /*
+   * Xuất báo cáo ra Excel — dùng `taoSheetDep` để có kẻ ô, tô màu, bề rộng cột
+   * và dòng tổng. Trước đây dùng `json_to_sheet` trơn nên tệp tải về trắng
+   * trơn, cột hẹp tới mức số tiền hiện thành `####`.
+   *
+   * Số đưa vào là SỐ THẬT, không tự định dạng thành chuỗi "1.234.567": chuỗi
+   * thì Excel không cộng, không lọc, không sắp xếp được.
+   */
   const handleExportReportToExcel = () => {
-    let exportData: any[] = [];
     let sheetName = "Report";
+    let bang: BangDep;
 
     if (reportSubTab === "summary") {
-      exportData = flowSummary.map((item) => ({
-        "Sản phẩm": item.productName,
-        "Mã SP": item.id,
-        "Quy cách": item.category,
-        "Đơn vị": item.unit,
-        "Tồn đầu": item.openingStock,
-        "Tổng Nhập": item.in,
-        "Tổng Xuất": item.out,
-        "Hao hụt": item.loss,
-        "Tồn cuối": item.closingStock,
-        "Giá trị Nhập": item.inValue,
-        "Giá trị Xuất": item.outValue,
-      }));
-      sheetName = "Tong_Hop_Kho";
+      const tieuDe = [
+        "Sản phẩm",
+        "Quy cách",
+        "Đơn vị",
+        "Tồn đầu",
+        "Tổng nhập",
+        "Tổng xuất",
+        "Hao hụt",
+        "Tồn cuối",
+        "Giá trị nhập",
+        "Giá trị xuất",
+      ];
+      const hang = flowSummary.map((item) => [
+        item.productName,
+        item.category,
+        item.unit,
+        item.openingStock,
+        item.in,
+        item.out,
+        item.loss,
+        item.closingStock,
+        item.inValue,
+        item.outValue,
+      ]);
+      const cong = (i: number) =>
+        hang.reduce((s, h) => s + (Number(h[i]) || 0), 0);
+      bang = {
+        tieuDeTren: [
+          "BÁO CÁO NHẬP XUẤT TỒN",
+          `Kỳ: ${timeFilter === "all" ? "Tất cả" : timeFilter} · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
+        ],
+        tieuDe,
+        cot: [
+          { rong: 38 },
+          { rong: 10, kieu: "giua" },
+          { rong: 9, kieu: "giua" },
+          { rong: 12, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 11, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 16, kieu: "tien" },
+          { rong: 16, kieu: "tien" },
+        ],
+        hang,
+        dongTong: [
+          "TỔNG CỘNG",
+          "",
+          "",
+          cong(3),
+          cong(4),
+          cong(5),
+          cong(6),
+          cong(7),
+          cong(8),
+          cong(9),
+        ],
+      };
+      sheetName = "Tong hop kho";
     } else {
       const typeLabel = reportSubTab === "in" ? "Nhap" : "Xuat";
       const targets = filteredTransactionsForReport.filter((t) => {
@@ -2378,24 +2432,59 @@ export default function App() {
         return;
       }
 
-      exportData = targets.map((t) => ({
-        Ngày: format(parseISO(t.date), "dd/MM/yyyy"),
-        Loại: t.type,
-        "Sản phẩm": t.productName,
-        "Số lượng": t.quantity,
-        "Đối tác": t.partnerName,
-        "Ghi chú": t.notes || "",
-        "Số lô": t.batchNumber || "",
-      }));
-      sheetName = `Bao_cao_${typeLabel}`;
+      const tieuDe = [
+        "Ngày",
+        "Loại",
+        "Sản phẩm",
+        "Số lượng",
+        "Đối tác",
+        "Số lô",
+        "Ghi chú",
+      ];
+      const hang = targets.map((t) => [
+        format(parseISO(t.date), "dd/MM/yyyy"),
+        t.type,
+        t.productName,
+        t.quantity,
+        t.partnerName,
+        t.batchNumber || "",
+        t.notes || "",
+      ]);
+      bang = {
+        tieuDeTren: [
+          `BÁO CÁO ${reportSubTab === "in" ? "NHẬP KHO" : "XUẤT KHO"}`,
+          `${targets.length} dòng · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
+        ],
+        tieuDe,
+        cot: [
+          { rong: 12, kieu: "giua" },
+          { rong: 10, kieu: "giua" },
+          { rong: 38 },
+          { rong: 12, kieu: "so" },
+          { rong: 24 },
+          { rong: 16 },
+          { rong: 44 },
+        ],
+        hang,
+        dongTong: [
+          "TỔNG CỘNG",
+          "",
+          "",
+          hang.reduce((s, h) => s + (Number(h[3]) || 0), 0),
+          "",
+          "",
+          "",
+        ],
+      };
+      sheetName = `Bao cao ${typeLabel}`;
     }
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
-    const fileName = `${sheetName}_${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    const wb = XLSXDep.utils.book_new();
+    XLSXDep.utils.book_append_sheet(wb, taoSheetDep(bang), sheetName);
+    XLSXDep.writeFile(
+      wb,
+      `${sheetName} ${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`,
+    );
   };
 
   /**
@@ -2454,30 +2543,83 @@ export default function App() {
       return;
     }
 
-    const exportData = filteredRevenueByTime.map((r) => ({
+    const tieuDe = [
+      "Ngày xuất hóa đơn",
+      "Số hóa đơn",
+      "Đơn vị thụ hưởng",
+      "Mã vật tư",
+      "Tên hàng hóa",
+      "ĐVT",
+      "Số lượng",
+      "Đơn giá",
+      "Thành tiền",
+      "VAT",
+      "Thành tiền sau thuế",
+      "Mã BP",
+    ];
+    const hang = filteredRevenueByTime.map((r) => [
       // parseDateSafe thay cho parseISO: dòng nào ngày không đúng chuẩn ISO thì
       // parseISO trả Invalid Date và format() ném lỗi, mất cả file xuất.
-      "Ngày xuất hoá đơn": format(parseDateSafe(r.date), "dd/MM/yyyy"),
-      "Số hóa đơn": r.invoiceNumber,
-      "Đơn vị thụ hưởng": r.partnerName,
-      "Mã vật tư": r.materialCode,
-      "Tên hàng hóa": r.productName,
-      "Đơn vị tính": r.unit,
-      "Số lượng": r.quantity,
-      "SKB - TLD": r.unitPrice,
-      "Thành tiền": r.amountBeforeVat ?? r.totalAmount,
-      VAT: r.vatAmount ?? 0,
-      "Thành tiền sau thuế":
-        r.amountAfterVat ?? (r.totalAmount || 0) + (r.vatAmount || 0),
-      "Mã BP": r.deptCode,
-    }));
+      format(parseDateSafe(r.date), "dd/MM/yyyy"),
+      r.invoiceNumber || "",
+      r.partnerName,
+      r.materialCode || "",
+      r.productName,
+      r.unit || "",
+      r.quantity,
+      r.unitPrice,
+      r.amountBeforeVat ?? r.totalAmount,
+      r.vatAmount ?? 0,
+      r.amountAfterVat ?? (r.totalAmount || 0) + (r.vatAmount || 0),
+      r.deptCode || "",
+    ]);
+    const cong = (i: number) => hang.reduce((s, h) => s + (Number(h[i]) || 0), 0);
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Revenue");
-
-    const fileName = `Bao_cao_Doanh_thu_${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`;
-    XLSX.writeFile(wb, fileName);
+    const wb = XLSXDep.utils.book_new();
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: [
+          "BÁO CÁO DOANH THU",
+          `${hang.length} dòng · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
+        ],
+        tieuDe,
+        cot: [
+          { rong: 15, kieu: "giua" },
+          { rong: 20 },
+          { rong: 24 },
+          { rong: 13, kieu: "giua" },
+          { rong: 38 },
+          { rong: 7, kieu: "giua" },
+          { rong: 12, kieu: "so" },
+          { rong: 12, kieu: "tien" },
+          { rong: 17, kieu: "tien" },
+          { rong: 15, kieu: "tien" },
+          { rong: 19, kieu: "tien" },
+          { rong: 10, kieu: "giua" },
+        ],
+        hang,
+        dongTong: [
+          "TỔNG CỘNG",
+          "",
+          "",
+          "",
+          "",
+          "",
+          cong(6),
+          "",
+          cong(8),
+          cong(9),
+          cong(10),
+          "",
+        ],
+      }),
+      "Doanh thu",
+    );
+    XLSXDep.writeFile(
+      wb,
+      `Bao cao doanh thu ${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`,
+    );
   };
 
   // Error Handling Helper

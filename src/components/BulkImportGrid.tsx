@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Product, InventoryItem } from "../types";
 import { cn, formatNumber } from "../lib/utils";
+import { MAU, taoSheetDep, XLSXDep } from "../lib/excelDep";
 
 /**
  * BẢNG NHẬP NHANH CẢ DANH MỤC
@@ -136,17 +137,39 @@ export default function BulkImportGrid({
   /* ---------------- Excel ---------------- */
 
   const downloadTemplate = () => {
-    const data = products.map((p) => ({
-      "Tên sản phẩm": p.name,
-      "Đơn vị": p.unit,
-      "Số lượng": "",
-      "Số lô": "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [{ wch: 42 }, { wch: 10 }, { wch: 12 }, { wch: 18 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Nhap kho");
-    XLSX.writeFile(wb, "Mau-nhap-kho.xlsx");
+    /*
+     * Tệp mẫu để bộ phận điền tay rồi nạp lại. Ô "Số lượng" và "Số lô" bỏ
+     * trống, tô vàng để nhìn là biết chỗ nào phải điền — mẫu trắng trơn thì
+     * người nhận không biết được phép sửa cột nào.
+     */
+    const hang = products.map((p) => [p.name, p.unit, "", ""]);
+
+    /*
+     * CỐ Ý KHÔNG có dòng tiêu đề phụ phía trên.
+     *
+     * `handleUpload` bên dưới đọc bằng `sheet_to_json`, vốn coi HÀNG ĐẦU TIÊN
+     * là tên cột. Thêm một dòng tên báo cáo ở trên cho đẹp thì tệp mẫu này nạp
+     * lại không ra dòng nào — đẹp mà không dùng được thì tệ hơn xấu.
+     */
+    const ws = taoSheetDep({
+      tieuDe: ["Tên sản phẩm", "Đơn vị", "Số lượng", "Số lô"],
+      cot: [{ rong: 42 }, { rong: 10, kieu: "giua" }, { rong: 14, kieu: "so" }, { rong: 20 }],
+      hang,
+    });
+
+    // Tô vàng hai cột cần điền để mắt bắt được ngay.
+    for (let i = 0; i < hang.length; i++) {
+      const r = i + 1;
+      for (const c of [2, 3]) {
+        const dc = XLSXDep.utils.encode_cell({ c, r });
+        const o = ws[dc];
+        if (o) o.s = { ...o.s, fill: { patternType: "solid", fgColor: { rgb: MAU.canhBao } } };
+      }
+    }
+
+    const wb = XLSXDep.utils.book_new();
+    XLSXDep.utils.book_append_sheet(wb, ws, "Nhap kho");
+    XLSXDep.writeFile(wb, "Mau-nhap-kho.xlsx");
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
