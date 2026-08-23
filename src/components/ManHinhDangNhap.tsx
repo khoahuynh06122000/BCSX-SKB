@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
+import LonXoay from "./LonXoay";
 
 /**
  * MÀN HÌNH ĐĂNG NHẬP
@@ -57,6 +58,13 @@ const MAU_BIA: Record<LoaiBia, { dam: string; nhat: string; bot: string }> = {
   caubang: { dam: "#a8541a", nhat: "#f0a92c", bot: "#fff1d6" },
   laudai: { dam: "#b98f2a", nhat: "#f7dc7a", bot: "#f4fbf8" },
   atlas: { dam: "#241606", nhat: "#6b4415", bot: "#e8d5b0" },
+};
+
+/** Tên loại theo mã, cho phần mô tả ảnh. */
+const TEN_BIA: Record<LoaiBia, string> = {
+  caubang: "Cầu Vàng",
+  laudai: "Lâu Đài Mặt Trăng",
+  atlas: "Sức Mạnh Atlas",
 };
 
 /** Tên lớp CSS đổi màu nền. Cầu Vàng là mặc định nên không cần lớp riêng. */
@@ -286,17 +294,8 @@ export default function ManHinhDangNhap({
     laudai: false,
     atlas: false,
   });
-  /**
-   * Loại ĐANG HIỆN trên màn hình, chạy sau `loai` đúng nửa nhịp xoay.
-   *
-   * Tách khỏi `loai` để đổi ảnh vào đúng lúc lon quay ngang, gần như không
-   * nhìn thấy mặt lon — đổi ngay lúc bấm thì thấy ảnh nhảy khựng một cái.
-   */
-  const [loaiHien, setLoaiHien] = useState<LoaiBia>("caubang");
-  const [dangXoay, setDangXoay] = useState(false);
   /** Vòng luân phiên tự động, người dùng tự bấm chọn thì dừng. */
   const [tuDong, setTuDong] = useState(true);
-  const lanDau = useRef(true);
   const nenRef = useRef<HTMLDivElement>(null);
   const lyRef = useRef<HTMLDivElement>(null);
   const lopTruocRef = useRef<HTMLDivElement>(null);
@@ -324,30 +323,6 @@ export default function ManHinhDangNhap({
     return () => window.clearInterval(id);
   }, [tuDong]);
 
-  /*
-   * Đổi loại thì quay lon một vòng, thay ảnh vào giữa cú quay.
-   *
-   * Chỉ phụ thuộc `loai` chứ không phụ thuộc `loaiHien`: thêm `loaiHien` vào
-   * thì effect chạy lại ngay sau khi thay ảnh, và phần dọn dẹp sẽ hủy mất hẹn
-   * giờ tắt hiệu ứng, lon kẹt lại giữa cú quay.
-   */
-  useEffect(() => {
-    if (lanDau.current) {
-      lanDau.current = false;
-      return;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setLoaiHien(loai);
-      return;
-    }
-    setDangXoay(true);
-    const giua = window.setTimeout(() => setLoaiHien(loai), 330);
-    const xong = window.setTimeout(() => setDangXoay(false), 680);
-    return () => {
-      window.clearTimeout(giua);
-      window.clearTimeout(xong);
-    };
-  }, [loai]);
 
   /** Bọt bia bay lên: sinh liên tục rồi tự dọn khi bay hết màn hình. */
   useEffect(() => {
@@ -577,25 +552,24 @@ export default function ManHinhDangNhap({
           className="dn-ly h-[58vh] max-h-[560px] w-auto"
           style={{ aspectRatio: "280 / 400" }}
         >
-          {/* Ba lớp lồng nhau, mỗi lớp một chuyển động: hiện lên, lắc, quay khi
-              đổi loại. Phải tách vì hoạt ảnh CSS đè transform đặt bằng style —
-              gộp lại là mất phần nghiêng theo con trỏ mà vòng rAF ghi vào
-              `.dn-ly`. Xem chú thích trong index.css. */}
+          {/* Hai lớp lồng nhau: lớp ngoài hiện lên lúc vào trang, lớp trong
+              lắc không ngừng. Phải tách vì hoạt ảnh CSS đè transform đặt bằng
+              style — gộp lại là mất phần nghiêng theo con trỏ mà vòng rAF ghi
+              vào `.dn-ly`. Xem chú thích trong index.css. */}
           <div className="dn-vao">
             <div className="dn-lac">
-              <div className={`dn-xoay ${dangXoay ? "dn-dang-xoay" : ""}`}>
-                {anhHong[loaiHien] ? (
-                  <LyBia loai={loaiHien} />
-                ) : (
-                  <img
-                    src={ANH_LON[loaiHien]}
-                    alt={`Lon ${BIA.find((b) => b.id === loaiHien)?.ten ?? ""}`}
-                    className="h-full w-full object-contain"
-                    style={{ filter: "drop-shadow(0 30px 60px rgba(0,0,0,0.55))" }}
-                    onError={() => setAnhHong((t) => ({ ...t, [loaiHien]: true }))}
-                  />
-                )}
-              </div>
+              {anhHong[loai] ? (
+                <LyBia loai={loai} />
+              ) : (
+                <LonXoay
+                  anh={ANH_LON}
+                  loai={loai}
+                  ten={TEN_BIA}
+                  onLoiAnh={(id) =>
+                    setAnhHong((t) => ({ ...t, [id as LoaiBia]: true }))
+                  }
+                />
+              )}
             </div>
           </div>
         </div>
