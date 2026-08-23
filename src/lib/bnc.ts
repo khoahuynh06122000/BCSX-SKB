@@ -47,6 +47,14 @@ export interface DonBNC {
   /** `di_duong` = chờ ảnh biên bản; `hoan_tat` = đã ghi nhận. */
   trangThai: "di_duong" | "hoan_tat";
   coAnh: boolean;
+  /**
+   * Ảnh biên bản giao nhận của đơn, gộp từ mọi dòng trong đơn và bỏ trùng.
+   *
+   * Một đơn có nhiều mặt hàng, mà ảnh biên bản thì gắn vào TỪNG DÒNG giao dịch
+   * — cùng một tờ biên bản được gắn lặp lại cho cả loạt dòng. Không bỏ trùng
+   * thì bấm xem một đơn năm mặt hàng lại thấy đúng một tấm ảnh lặp năm lần.
+   */
+  anh: string[];
   /** Ghi chú của dòng đầu — mang thông tin chuyến, điểm nhận. */
   ghiChu: string;
 }
@@ -157,6 +165,7 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
         // xong hết thì chưa xong, gọi là hoàn tất là báo thừa.
         trangThai: "hoan_tat",
         coAnh: false,
+        anh: [],
         ghiChu: t.notes || "",
       };
       gom.set(khoa, d);
@@ -172,12 +181,11 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
     else d.soLuongLit += sl;
     d.litQuyDoi += lit;
     if (t.status === "in_transit") d.trangThai = "di_duong";
-    if (
-      (t.evidencePhotoUrls && t.evidencePhotoUrls.length > 0) ||
-      !!t.evidencePhotoUrl
-    ) {
-      d.coAnh = true;
-    }
+    [t.evidencePhotoUrl, ...(t.evidencePhotoUrls || [])].forEach((u) => {
+      const url = String(u ?? "").trim();
+      if (url && !d!.anh.includes(url)) d!.anh.push(url);
+    });
+    d.coAnh = d.anh.length > 0;
   });
 
   const don = Array.from(gom.values()).sort(

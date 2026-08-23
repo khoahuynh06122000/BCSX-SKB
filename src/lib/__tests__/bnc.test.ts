@@ -223,5 +223,74 @@ eq(
   0,
 );
 
+// ------------------------------------------------------------ anh bien ban
+{
+  /*
+   * Anh bien ban gan vao TUNG DONG giao dich, ma mot don co nhieu mat hang nen
+   * cung mot to bien ban bi gan lap lai. Gom len don thi phai bo trung, khong
+   * thi bam xem mot don nam mat hang lai thay dung mot tam lap nam lan.
+   */
+  const b2 = dungBangBNC({
+    transactions: [
+      tx({
+        referenceGroupId: "gX",
+        quantity: 10,
+        evidencePhotoUrl: "u1",
+        evidencePhotoUrls: ["u1", "u2"],
+      }),
+      tx({
+        referenceGroupId: "gX",
+        quantity: 20,
+        productId: "lon",
+        category: "Lon",
+        // Cung to bien ban do, gan lai cho dong thu hai.
+        evidencePhotoUrls: ["u1"],
+      }),
+      tx({
+        referenceGroupId: "gX",
+        quantity: 5,
+        // Dong nay co them mot tam rieng.
+        evidencePhotoUrls: ["u3"],
+      }),
+    ],
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    tenBoPhan: ten,
+  });
+  const d = b2.don[0];
+  eq("gom du ba tam anh khac nhau", d.anh, ["u1", "u2", "u3"]);
+  eq("khong lap tam trung", d.anh.length, 3);
+  eq("co anh", d.coAnh, true);
+
+  // Don khong co anh nao thi mang rong, khong phai undefined.
+  const b3 = dungBangBNC({
+    transactions: [tx({ referenceGroupId: "gY", quantity: 10 })],
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    tenBoPhan: ten,
+  });
+  eq("khong co anh thi mang rong", b3.don[0].anh, []);
+  eq("coAnh = false", b3.don[0].coAnh, false);
+
+  // Dong hao hut khong mang anh cua rieng no vao don.
+  const b4 = dungBangBNC({
+    transactions: [
+      tx({ referenceGroupId: "gZ", quantity: 10, evidencePhotoUrls: ["a1"] }),
+      tx({ referenceGroupId: "gZ", type: "LOSS", quantity: 1, evidencePhotoUrls: ["bo-qua"] }),
+    ],
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    tenBoPhan: ten,
+  });
+  eq("dong hao hut khong gop anh", b4.don[0].anh, ["a1"]);
+}
+
+
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

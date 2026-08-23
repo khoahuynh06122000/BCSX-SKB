@@ -6,10 +6,12 @@ import {
   Truck,
   AlertTriangle,
   CheckCircle2,
+  Image as ImageIcon,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Partner, Product, Transaction } from "../types";
-import { dungBangBNC, laBoPhanBNC } from "../lib/bnc";
+import { dungBangBNC, laBoPhanBNC, type DonBNC as DonBNCType } from "../lib/bnc";
 import { taoSheetDep, XLSXDep } from "../lib/excelDep";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -40,6 +42,8 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   );
   const [denNgay, setDenNgay] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [boPhan, setBoPhan] = useState("");
+  /** Đơn đang mở khung xem ảnh biên bản; `null` là đang đóng. */
+  const [donDangXem, setDonDangXem] = useState<DonBNCType | null>(null);
 
   const dsBoPhan = useMemo(
     () => partners.filter((p) => laBoPhanBNC(p.id)),
@@ -390,6 +394,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
                     "Lít hơi",
                     "Lon",
                     "Trạng thái",
+                    "Biên bản",
                     "Ghi chú",
                   ].map((h) => (
                     <th
@@ -444,6 +449,21 @@ export default function DonBNC({ transactions, products, partners }: Props) {
                         )}
                       </span>
                     </td>
+                    <td className="px-3 py-1.5">
+                      {d.anh.length > 0 ? (
+                        <button
+                          onClick={() => setDonDangXem(d)}
+                          className="px-2 py-1 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:brightness-125 inline-flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-3 h-3" />
+                          Xem {d.anh.length}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-300">
+                          —
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 max-w-xs truncate">
                       {d.ghiChu}
                     </td>
@@ -455,6 +475,90 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         </div>
       )}
 
+      {/*
+        KHUNG XEM ẢNH BIÊN BẢN.
+
+        Ảnh to, giữ nguyên tỉ lệ, mỗi tấm một hàng — đây là tờ giấy viết tay,
+        người xem phải đọc được con số trên đó rồi dò với số lượng của đơn.
+        Cắt vuông cho gọn thì chữ số ở mép tờ giấy mất luôn.
+
+        Đầu khung ghi lại ngày, bộ phận và số lượng của chính đơn đó, để đối
+        chiếu ngay tại chỗ mà không phải nhớ hay cuộn về bảng.
+      */}
+      {donDangXem && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div
+            onClick={() => setDonDangXem(null)}
+            className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm"
+          />
+          <div className="relative w-full max-w-3xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-black text-slate-900 uppercase leading-tight">
+                  Biên bản giao nhận
+                </h3>
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                  {donDangXem.ngay} · {donDangXem.boPhan}
+                </p>
+                <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                  {donDangXem.soMatHang} mặt hàng ·{" "}
+                  {donDangXem.soLuongLit > 0
+                    ? `${so(donDangXem.soLuongLit)} lít`
+                    : ""}
+                  {donDangXem.soLuongLit > 0 && donDangXem.soLuongLon > 0
+                    ? " · "
+                    : ""}
+                  {donDangXem.soLuongLon > 0
+                    ? `${formatNumber(donDangXem.soLuongLon)} lon`
+                    : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setDonDangXem(null)}
+                className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 shrink-0"
+                aria-label="Đóng"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 overflow-y-auto">
+              {donDangXem.ghiChu && (
+                <p className="text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-100 rounded-xl p-3 leading-relaxed">
+                  {donDangXem.ghiChu}
+                </p>
+              )}
+              {donDangXem.anh.map((url, i) => (
+                <div
+                  key={url}
+                  className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100"
+                >
+                  <img
+                    src={url}
+                    alt={`Biên bản ${i + 1}`}
+                    /* KHÔNG dùng loading="lazy": người ta bấm mở khung này ra
+                       đúng là để xem ảnh ngay, hoãn tải chẳng được gì mà thêm
+                       một đường hỏng — đã gặp cảnh ảnh không bao giờ tải. */
+                    className="w-full max-h-[70vh] object-contain"
+                  />
+                  <span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-900/70 text-white text-[9px] font-black uppercase tracking-widest">
+                    Ảnh {i + 1}/{donDangXem.anh.length}
+                  </span>
+                  {/* Mở tấm gốc ở tab mới khi cần phóng to đọc chữ nhỏ. */}
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-white/90 text-slate-700 text-[9px] font-black uppercase tracking-widest hover:bg-white"
+                  >
+                    Mở ảnh gốc
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       <button
         onClick={taiExcel}
         disabled={bang.don.length === 0}
