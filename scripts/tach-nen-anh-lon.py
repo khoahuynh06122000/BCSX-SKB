@@ -30,8 +30,13 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # Coi là nền: cả ba kênh sáng từ mức này trở lên.
+#
+# Mặc định 236 hợp với lon có thân màu đậm. LON THÂN TRẮNG thì phải nâng lên
+# gần 250: chỗ sáng nhất của thân lon Lâu Đài Mặt Trăng chỉ tối hơn nền có vài
+# bậc (246 so với 255), để ngưỡng thấp là ăn mất luôn rìa lon, lon cụt mất dáng.
 NGUONG_NEN = 236
 # Dải viền pha: pixel sáng từ mức này trở lên và nằm sát nền thì cho mờ dần.
+# Đặt bằng ngưỡng nền là tắt hẳn, dùng cho lon thân trắng.
 NGUONG_VIEN = 170
 # Chừa quanh lon sau khi cắt, tính bằng pixel.
 LE = 2
@@ -117,7 +122,7 @@ def ghi_png(duong_dan, w, h, px):
     open(duong_dan, "wb").write(out)
 
 
-def tach_nen(w, h, px):
+def tach_nen(w, h, px, nguong_nen=NGUONG_NEN, nguong_vien=NGUONG_VIEN):
     """Loang từ biên, xóa nền trắng, làm mềm viền. Trả về số điểm đã xóa."""
     la_nen = bytearray(w * h)
     hang_doi = deque()
@@ -126,7 +131,7 @@ def tach_nen(w, h, px):
         if la_nen[i]:
             return
         r, g, b = px[i * 4], px[i * 4 + 1], px[i * 4 + 2]
-        if min(r, g, b) >= NGUONG_NEN:
+        if min(r, g, b) >= nguong_nen:
             la_nen[i] = 1
             hang_doi.append(i)
 
@@ -163,9 +168,11 @@ def tach_nen(w, h, px):
         )
         if not ke:
             continue
+        if nguong_vien >= nguong_nen:
+            continue
         sang = min(px[i * 4], px[i * 4 + 1], px[i * 4 + 2])
-        if sang >= NGUONG_VIEN:
-            mo[i] = int(255 * (NGUONG_NEN - sang) / (NGUONG_NEN - NGUONG_VIEN))
+        if sang >= nguong_vien:
+            mo[i] = int(255 * (nguong_nen - sang) / (nguong_nen - nguong_vien))
 
     for i in range(w * h):
         if la_nen[i]:
@@ -210,14 +217,23 @@ def lat_ngang(w, h, px):
 
 def main(doi_so):
     lat = "--lat" in doi_so
+    nen = NGUONG_NEN
+    vien = NGUONG_VIEN
+    for a in doi_so:
+        if a.startswith("--nguong="):
+            nen = int(a.split("=", 1)[1])
+            vien = min(vien, nen)
+        elif a.startswith("--vien="):
+            vien = int(a.split("=", 1)[1])
     cac_tep = [a for a in doi_so if not a.startswith("--")]
     if not cac_tep:
         raise SystemExit(
-            "Cách dùng: python scripts/tach-nen-anh-lon.py [--lat] <tệp.png>..."
+            "Cách dùng: python scripts/tach-nen-anh-lon.py "
+            "[--lat] [--nguong=N] [--vien=N] <tệp.png>..."
         )
     for tep in cac_tep:
         w, h, px = doc_png(tep)
-        xoa = tach_nen(w, h, px)
+        xoa = tach_nen(w, h, px, nen, vien)
         nw, nh, moi = cat_sat(w, h, px)
         if lat:
             moi = lat_ngang(nw, nh, moi)

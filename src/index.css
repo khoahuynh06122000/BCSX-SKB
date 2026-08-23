@@ -281,19 +281,71 @@
   to   { opacity: 1; transform: none; }
 }
 
-@keyframes dn-noi {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-18px); }
+/*
+   Lon giữa màn hình chồng bốn lớp, MỖI LỚP GIỮ ĐÚNG MỘT NGUỒN transform:
+
+     .dn-ly    nghiêng theo con trỏ, do vòng requestAnimationFrame ghi thẳng
+     .dn-vao   hiện lên lúc mới vào trang
+     .dn-lac   lắc và nổi lên xuống không ngừng
+     .dn-xoay  quay một vòng mỗi khi đổi loại bia
+
+   Phải tách ra vì hoạt ảnh CSS luôn ĐÈ transform đặt bằng style. Trước đây
+   `.dn-ly` vừa mang hoạt ảnh vừa nhận transform từ vòng rAF, nên phần nghiêng
+   theo con trỏ không bao giờ hiện ra. */
+.dn-vao {
+  animation: dn-hien-len 1.2s ease-out 0.2s both;
+  height: 100%;
+  width: 100%;
 }
 
-.dn-ly {
-  animation: dn-hien-len 1.2s ease-out 0.2s both, dn-noi 6s ease-in-out 1.4s infinite;
+/* Lon lắc nhẹ không ngừng, như đang lơ lửng chứ không đứng chết một chỗ.
+   Gốc xoay đặt gần đáy lon để trông như lon đung đưa trên chân, không phải
+   xoay quanh giữa thân. */
+@keyframes dn-lac {
+  0%,
+  100% {
+    transform: rotate(-2.6deg) translateY(0);
+  }
+  50% {
+    transform: rotate(2.6deg) translateY(-16px);
+  }
+}
+.dn-lac {
+  animation: dn-lac 6.5s ease-in-out infinite;
+  transform-origin: 50% 88%;
+  height: 100%;
+  width: 100%;
+}
+
+/* Cú xoay khi đổi loại bia: lon quay nghiêng đi rồi quay lại.
+   Ảnh được thay đúng lúc lon quay ngang (mốc 50%, tức lúc gần như không nhìn
+   thấy mặt lon) nên không thấy ảnh nhảy, cũng không lộ mặt sau lật gương như
+   khi cho quay trọn 360 độ. */
+@keyframes dn-xoay-lon {
+  0% {
+    transform: perspective(1400px) rotateY(0) scale(1);
+  }
+  50% {
+    transform: perspective(1400px) rotateY(92deg) scale(0.94);
+  }
+  100% {
+    transform: perspective(1400px) rotateY(0) scale(1);
+  }
+}
+.dn-xoay {
+  height: 100%;
+  width: 100%;
+}
+.dn-xoay.dn-dang-xoay {
+  animation: dn-xoay-lon 0.66s cubic-bezier(0.62, 0.05, 0.32, 1);
 }
 
 /* Máy yếu hoặc người dùng tắt hiệu ứng thì bỏ hết chuyển động, giữ nguyên
    bố cục. Trang đăng nhập không được đánh đổi khả năng dùng lấy cái đẹp. */
 @media (prefers-reduced-motion: reduce) {
   .dn-bot { display: none; }
-  .dn-ly { animation: none; }
+  .dn-vao { animation: none; }
+  .dn-lac { animation: none; }
+  .dn-xoay.dn-dang-xoay { animation: none; }
   .dn-nen { transition: none; }
 }
