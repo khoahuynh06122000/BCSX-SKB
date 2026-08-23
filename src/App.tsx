@@ -8158,7 +8158,7 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {userRole === "OWNER" &&
+                    {daDuocDuyet &&
                       transactions.some(
                         (t) =>
                           t.status === "completed" &&
@@ -8173,8 +8173,7 @@ export default function App() {
                           Khôi phục đơn lỗi
                         </button>
                       )}
-                    {userRole === "OWNER" &&
-                      selectedInTransitIds.length > 0 && (
+                    {daDuocDuyet && selectedInTransitIds.length > 0 && (
                         <button
                           onClick={handleBulkConfirm}
                           className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
@@ -8191,7 +8190,9 @@ export default function App() {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-100">
-                          {userRole === "OWNER" && (
+                          {/* Chọn nhiều đơn để xác nhận hàng loạt — việc của
+                              kho, không riêng chủ sở hữu. */}
+                          {daDuocDuyet && (
                             <th className="py-4 px-6 w-10">
                               <input
                                 type="checkbox"
@@ -8259,7 +8260,7 @@ export default function App() {
                                     "bg-primary/5",
                                 )}
                               >
-                                {userRole === "OWNER" && (
+                                {daDuocDuyet && (
                                   <td className="py-4 px-6">
                                     <input
                                       type="checkbox"
