@@ -8,12 +8,10 @@ import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
  * theo con trỏ, hoa bia và hạt lúa mạch trôi quanh và BỊ ĐẨY RA khi con trỏ
  * lại gần. Chọn loại bia bên phải thì cả nền lẫn ly đổi màu.
  *
- * HÌNH VẼ BẰNG SVG, KHÔNG DÙNG ẢNH. Mẫu thiết kế gốc dựng trên mấy tệp mô hình
- * 3D và ảnh lon nước ngọt tải từ máy chủ ngoài. App này không có ảnh sản phẩm
- * bia nào — danh mục chỉ lưu tên, mã vật tư và dung tích, còn Cloudinary chỉ
- * chứa ảnh biên bản. Nên hình ở đây vẽ thẳng bằng SVG: đúng chủ đề bia, không
- * phụ thuộc tệp bên ngoài, không thêm một đường hỏng khi mạng chập chờn — mà
- * màn hình đăng nhập thì hỏng là không ai vào được.
+ * DÙNG ẢNH LON THẬT NẾU CÓ, KHÔNG CÓ THÌ VẼ BẰNG SVG. Thả tệp PNG nền trong
+ * vào `public/lon-bia-vang.png` và `public/lon-bia-den.png` là ảnh tự thay cho
+ * hình vẽ, không phải sửa dòng code nào. Chưa có tệp thì quay về hình vẽ —
+ * không vỡ, không ô trắng. Xem `ANH_LON` bên dưới.
  *
  * Hai loại bia lấy từ chính danh mục thật: Golden Bridge Helles Lager (bia
  * vàng) và Wings Dark Lager (bia đen).
@@ -28,6 +26,28 @@ interface Props {
 }
 
 type LoaiBia = "vang" | "den";
+
+/**
+ * ẢNH LON BIA THẬT — thả tệp vào `public/` là tự thay cho hình vẽ.
+ *
+ * Đường dẫn dưới đây trỏ vào thư mục `public/`, nên chỉ cần chép hai tệp PNG
+ * NỀN TRONG (đã tách nền, không phải ảnh chụp có phông) vào đó với đúng tên là
+ * xong, không phải sửa dòng code nào.
+ *
+ * Chưa có tệp thì trình duyệt báo lỗi tải ảnh và màn hình tự quay về hình vẽ
+ * SVG — không vỡ, không ô trắng. Đó là lý do làm theo kiểu này thay vì bắt
+ * người dùng khai báo trước là có ảnh hay chưa.
+ *
+ * Vì sao chưa có sẵn: ảnh công khai trên mạng về Sun KraftBeer đều là ảnh bài
+ * báo (xưởng bia, ly bia trên bàn), không phải ảnh sản phẩm tách nền — mà mẫu
+ * thiết kế này cần đúng cái lon lơ lửng giữa không trung. Ảnh sản phẩm đúng
+ * chuẩn thì bộ phận truyền thông của công ty có, và dùng ảnh của chính mình
+ * thì không vướng bản quyền lẫn chuyện ảnh bên thứ ba đổi đường dẫn.
+ */
+const ANH_LON: Record<LoaiBia, string> = {
+  vang: "/lon-bia-vang.png",
+  den: "/lon-bia-den.png",
+};
 
 /** Bảng màu của bia trong ly, đổi theo loại. */
 const MAU_BIA: Record<LoaiBia, { dam: string; nhat: string; bot: string }> = {
@@ -228,6 +248,16 @@ export default function ManHinhDangNhap({
   maBuild,
 }: Props) {
   const [loai, setLoai] = useState<LoaiBia>("vang");
+  /**
+   * Loại nào không tải được ảnh thì đánh dấu lại và dùng hình vẽ.
+   *
+   * Nhớ theo TỪNG LOẠI chứ không phải một cờ chung: có thể chỉ có ảnh bia vàng
+   * mà chưa có bia đen, lúc đó vàng vẫn hiện ảnh thật.
+   */
+  const [anhHong, setAnhHong] = useState<Record<LoaiBia, boolean>>({
+    vang: false,
+    den: false,
+  });
   const nenRef = useRef<HTMLDivElement>(null);
   const lyRef = useRef<HTMLDivElement>(null);
   const lopTruocRef = useRef<HTMLDivElement>(null);
@@ -457,14 +487,24 @@ export default function ManHinhDangNhap({
         {veHat(hatSau, hatTruoc.length, 0.55)}
       </div>
 
-      {/* Ly bia ở giữa */}
+      {/* Lon bia ở giữa — ảnh thật nếu có, không thì hình vẽ */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
         <div
           ref={lyRef}
           className="dn-ly h-[58vh] max-h-[560px] w-auto"
           style={{ aspectRatio: "280 / 400" }}
         >
-          <LyBia loai={loai} />
+          {anhHong[loai] ? (
+            <LyBia loai={loai} />
+          ) : (
+            <img
+              src={ANH_LON[loai]}
+              alt={loai === "den" ? "Bia Wings Dark Lager" : "Bia Golden Bridge Helles Lager"}
+              className="h-full w-full object-contain"
+              style={{ filter: "drop-shadow(0 30px 60px rgba(0,0,0,0.55))" }}
+              onError={() => setAnhHong((t) => ({ ...t, [loai]: true }))}
+            />
+          )}
         </div>
       </div>
 
