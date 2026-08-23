@@ -141,7 +141,16 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
      */
     let docDuoc = false;
     let soGiaoDich = -1;
-    for (const ten of ["transactions", "partners"] as const) {
+    const khoBiChan: string[] = [];
+    // Đọc đủ BỐN kho, không chỉ hai. Ảnh phiếu nhập kho nằm ở `slips`, nên
+    // thiếu kho đó trong bảng chẩn đoán thì đúng trường hợp "tải ảnh lên mà
+    // không ai thấy" lại không chỉ ra được chỗ nghẽn.
+    for (const ten of [
+      "transactions",
+      "slips",
+      "partners",
+      "diem_ban",
+    ] as const) {
       const batDau = performance.now();
       try {
         const snap = await getDocs(collection(db, ten));
@@ -156,6 +165,7 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
           tot: snap.docs.length > 0,
         });
       } catch (e: any) {
+        khoBiChan.push(ten);
         ds.push({
           ten: `Đọc ${ten}`,
           giaTri: "BỊ TỪ CHỐI — " + (e?.code || e?.message || "lỗi"),
@@ -179,6 +189,16 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
     } else if (!u.emailVerified && vaiTroMayChu === "OWNER") {
       setKetLuan(
         "Vai trò là OWNER nhưng email chưa được xác minh, mà phân quyền đòi email đã xác minh. Xác minh email của tài khoản Google này, hoặc đổi tạm sang vai trò STAFF.",
+      );
+    } else if (khoBiChan.length > 0) {
+      setKetLuan(
+        `Vai trò là ${vaiTroMayChu} mà vẫn bị từ chối đọc ${khoBiChan.length} kho: ${khoBiChan.join(", ")}. ` +
+          "Phân quyền trên máy chủ chưa có phần dành cho những kho này — bản " +
+          "rules đang chạy cũ hơn app. " +
+          `Chủ sở hữu dán lại firestore.rules vào đúng cơ sở dữ liệu "${firestoreDatabaseId}" rồi bấm Publish. ` +
+          (khoBiChan.includes("slips")
+            ? "Riêng kho slips là nơi giữ ẢNH PHIẾU NHẬP KHO: bị chặn thì tải ảnh lên xong không ai xem được."
+            : ""),
       );
     } else if (!docDuoc) {
       setKetLuan(
