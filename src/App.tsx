@@ -166,6 +166,11 @@ import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
+import {
+  dungAnhThuVien,
+  thangCoAnh,
+  type AnhThuVien,
+} from "./lib/thuVienAnh";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
@@ -761,7 +766,7 @@ export default function App() {
    * được nhưng kiểu sai nên TypeScript không còn bắt được lỗi tên trường.
    */
   const [selectedGalleryImage, setSelectedGalleryImage] =
-    useState<Transaction | null>(null);
+    useState<AnhThuVien | null>(null);
   // Danh sach so hoa don dang bung chi tiet o so chi tiet doanh thu.
   // Truoc day khai bao la Set nhung cho dung lai goi .includes()/.filter() nen
   // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
@@ -3880,64 +3885,43 @@ export default function App() {
     return filtered;
   }, [countedTransactionsByTime, batchSearchQuery, reportPartnerSearch]);
 
-  // Filter for Gallery
+  /*
+   * ẢNH CHO THƯ VIỆN — xem `src/lib/thuVienAnh.ts`.
+   *
+   * Phải gom từ HAI nguồn: ảnh tờ phiếu đã ký nằm ở `slips`, ảnh biên bản xuất
+   * nằm ở `transactions`. Bản trước chỉ đọc `transactions[].evidencePhotoUrl`
+   * nên tab Nhập kho luôn trống, dù người dùng đã tải ảnh phiếu lên đầy đủ.
+   */
+  const anhThuVien = useMemo(
+    () =>
+      dungAnhThuVien({
+        transactions,
+        slips,
+        loai: galleryFilter,
+        thang: galleryMonth,
+        tuKhoa: gallerySearchQuery,
+      }),
+    [transactions, slips, galleryFilter, galleryMonth, gallerySearchQuery],
+  );
+
+  // Ô chọn tháng dựng trên chính các ảnh của chiều đang xem, KHÔNG lọc theo
+  // tháng — nếu lọc thì chọn xong một tháng là các tháng khác biến mất khỏi ô.
   const galleryMonthOptions = useMemo(() => {
-    const dates = transactions
-      .filter((t) => t.evidencePhotoUrl)
-      .map((t) => startOfMonth(parseISO(t.date)));
-
-    const monthStrings = dates.map((d) => format(d, "yyyy-MM"));
-    const uniqueMonths = ([...new Set(monthStrings)] as string[]).sort((a, b) =>
-      b.localeCompare(a),
-    ); // Newest first
-
+    const tatCa = dungAnhThuVien({
+      transactions,
+      slips,
+      loai: galleryFilter,
+      thang: "all",
+      tuKhoa: "",
+    });
     return [
       { value: "all", label: "Tất cả các tháng" },
-      ...uniqueMonths.map((m: string) => {
-        try {
-          return {
-            value: m,
-            label: `Tháng ${format(parse(m, "yyyy-MM", new Date()), "MM/yyyy")}`,
-          };
-        } catch (e) {
-          return { value: m, label: `Tháng ${m}` };
-        }
-      }),
+      ...thangCoAnh(tatCa).map((m) => ({
+        value: m,
+        label: `Tháng ${m.slice(5)}/${m.slice(0, 4)}`,
+      })),
     ];
-  }, [transactions]);
-
-  const filteredGalleryTransactions = useMemo(() => {
-    return transactions.filter((t) => {
-      if (t.type !== galleryFilter || !t.evidencePhotoUrl) return false;
-
-      if (galleryMonth !== "all") {
-        try {
-          const tDate = parseISO(t.date);
-          const monthStr = format(tDate, "yyyy-MM");
-          if (monthStr !== galleryMonth) return false;
-        } catch (e) {
-          return false;
-        }
-      }
-
-      if (gallerySearchQuery.trim() !== "") {
-        const query = gallerySearchQuery.toLowerCase();
-        if (galleryFilter === "IN") {
-          // Nhập kho: Tra cứu mã lô
-          if (!t.batchNumber?.toLowerCase().includes(query)) {
-            return false;
-          }
-        } else {
-          // Xuất kho: Tra cứu đơn vị
-          if (!t.partnerName.toLowerCase().includes(query)) {
-            return false;
-          }
-        }
-      }
-
-      return true;
-    });
-  }, [transactions, galleryFilter, galleryMonth, gallerySearchQuery]);
+  }, [transactions, slips, galleryFilter]);
 
   const batchLifecycle = useMemo(() => {
     const bq = batchSearchQuery.toLowerCase().trim();
@@ -10346,7 +10330,7 @@ export default function App() {
                         type="text"
                         placeholder={
                           galleryFilter === "IN"
-                            ? "Tra cứu MÃ LÔ..."
+                            ? "Tra cứu MÃ PHIẾU / MÃ LÔ..."
                             : "Tra cứu ĐƠN VỊ..."
                         }
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700"
@@ -10409,8 +10393,8 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                  {filteredGalleryTransactions.length > 0 ? (
-                    filteredGalleryTransactions.map((t) => (
+                  {anhThuVien.length > 0 ? (
+                    anhThuVien.map((t) => (
                       <div
                         key={t.id}
                         className="group relative bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all border border-slate-100 cursor-pointer"
@@ -10418,8 +10402,9 @@ export default function App() {
                       >
                         <div className="aspect-[4/5] overflow-hidden">
                           <img
-                            src={t.evidencePhotoUrl}
-                            alt={t.productName}
+                            src={t.url}
+                            alt={t.tieuDe}
+                            loading="lazy"
                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -10444,7 +10429,7 @@ export default function App() {
                               </span>
                             </div>
                             <h5 className="text-white font-bold text-[11px] sm:text-xs leading-tight truncate">
-                              {t.productName}
+                              {t.tieuDe}
                             </h5>
                             <div className="flex items-center gap-1.5 mt-1 border-t border-white/10 pt-2">
                               <Users
@@ -10463,7 +10448,7 @@ export default function App() {
                                     : "text-rose-200",
                                 )}
                               >
-                                {t.partnerName}
+                                {t.phu}
                               </span>
                             </div>
                           </div>
@@ -10486,9 +10471,9 @@ export default function App() {
                           Trống
                         </h4>
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                          Chưa có ảnh minh chứng{" "}
-                          {galleryFilter === "IN" ? "nhập kho" : "xuất kho"} nào
-                          được ghi nhận.
+                          {galleryFilter === "IN"
+                            ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi tải tờ phiếu đã ký lên ở tab Phiếu nhập."
+                            : "Chưa có ảnh biên bản xuất kho nào được ghi nhận."}
                         </p>
                       </div>
                     </div>
@@ -10508,16 +10493,16 @@ export default function App() {
                   <div className="absolute -top-16 left-0 right-0 flex items-center justify-between pointer-events-none">
                     <div className="flex flex-col">
                       <h3 className="text-white font-black text-xl uppercase tracking-tighter">
-                        {selectedGalleryImage.productName}
+                        {selectedGalleryImage.tieuDe}
                       </h3>
                       <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">
-                        Ngày up: {formatDate(selectedGalleryImage.date)} •{" "}
-                        {selectedGalleryImage.partnerName}
+                        {formatDate(selectedGalleryImage.date)} •{" "}
+                        {selectedGalleryImage.phu}
                       </p>
                     </div>
                     <div className="flex gap-4 pointer-events-auto">
                       <a
-                        href={selectedGalleryImage.evidencePhotoUrl}
+                        href={selectedGalleryImage.url}
                         download={`BCSX-${selectedGalleryImage.id}.png`}
                         className="w-12 h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
                       >
@@ -10532,7 +10517,7 @@ export default function App() {
                     </div>
                   </div>
                   <img
-                    src={selectedGalleryImage.evidencePhotoUrl}
+                    src={selectedGalleryImage.url}
                     className="w-full h-full object-contain rounded-3xl shadow-2xl"
                     alt="Zoomed"
                   />
