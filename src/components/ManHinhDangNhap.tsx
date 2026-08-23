@@ -8,9 +8,8 @@ import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
  * theo con trỏ, hoa bia và hạt lúa mạch trôi quanh và BỊ ĐẨY RA khi con trỏ
  * lại gần. Chọn loại bia bên phải thì cả nền lẫn ly đổi màu.
  *
- * DÙNG ẢNH LON THẬT NẾU CÓ, KHÔNG CÓ THÌ VẼ BẰNG SVG. Thả tệp PNG nền trong
- * vào `public/lon-bia-vang.png` và `public/lon-bia-den.png` là ảnh tự thay cho
- * hình vẽ, không phải sửa dòng code nào. Chưa có tệp thì quay về hình vẽ —
+ * DÙNG ẢNH LON THẬT NẾU CÓ, KHÔNG CÓ THÌ VẼ BẰNG SVG. Thả ba tệp PNG nền
+ * trong vào `public/` là ảnh tự thay cho hình vẽ, không phải sửa dòng code nào. Chưa có tệp thì quay về hình vẽ —
  * không vỡ, không ô trắng. Xem `ANH_LON` bên dưới.
  *
  * Hai loại bia lấy từ chính danh mục thật: Golden Bridge Helles Lager (bia
@@ -25,48 +24,76 @@ interface Props {
   maBuild: string;
 }
 
-type LoaiBia = "vang" | "den";
+/**
+ * Ba loại bia Sun KraftBeer · Bà Nà Signature, khớp với danh mục trong app:
+ *   caubang → Bia Golden Bridge Helles Lager       (Cầu Vàng, lon đỏ)
+ *   laudai  → Bia Lunar Castle Dry hop Pale Ale    (Lâu Đài Mặt Trăng, lon trắng)
+ *   atlas   → Bia Wings Dark Lager                 (Sức Mạnh Atlas, lon đen)
+ */
+type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
  * ẢNH LON BIA THẬT — thả tệp vào `public/` là tự thay cho hình vẽ.
  *
- * Đường dẫn dưới đây trỏ vào thư mục `public/`, nên chỉ cần chép hai tệp PNG
- * NỀN TRONG (đã tách nền, không phải ảnh chụp có phông) vào đó với đúng tên là
- * xong, không phải sửa dòng code nào.
+ * Chỉ cần chép ba tệp PNG NỀN TRONG (đã tách nền, không phải ảnh chụp có
+ * phông) vào thư mục `public/` với đúng tên dưới đây, không phải sửa dòng code
+ * nào. Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
+ * trắng, và loại nào có ảnh vẫn hiện ảnh thật.
  *
- * Chưa có tệp thì trình duyệt báo lỗi tải ảnh và màn hình tự quay về hình vẽ
- * SVG — không vỡ, không ô trắng. Đó là lý do làm theo kiểu này thay vì bắt
- * người dùng khai báo trước là có ảnh hay chưa.
- *
- * Vì sao chưa có sẵn: ảnh công khai trên mạng về Sun KraftBeer đều là ảnh bài
- * báo (xưởng bia, ly bia trên bàn), không phải ảnh sản phẩm tách nền — mà mẫu
- * thiết kế này cần đúng cái lon lơ lửng giữa không trung. Ảnh sản phẩm đúng
- * chuẩn thì bộ phận truyền thông của công ty có, và dùng ảnh của chính mình
- * thì không vướng bản quyền lẫn chuyện ảnh bên thứ ba đổi đường dẫn.
+ * Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi trình
+ * duyệt "tệp này có tồn tại không" mà không tải thử.
  */
 const ANH_LON: Record<LoaiBia, string> = {
-  vang: "/lon-bia-vang.png",
-  den: "/lon-bia-den.png",
+  caubang: "/lon-cau-vang.png",
+  laudai: "/lon-lau-dai-mat-trang.png",
+  atlas: "/lon-suc-manh-atlas.png",
 };
 
-/** Bảng màu của bia trong ly, đổi theo loại. */
+/**
+ * Màu bia trong ly khi chưa có ảnh lon, lấy theo đúng tông của từng lon:
+ * Cầu Vàng vàng hổ phách, Lâu Đài Mặt Trăng vàng nhạt trong, Atlas nâu đen.
+ */
 const MAU_BIA: Record<LoaiBia, { dam: string; nhat: string; bot: string }> = {
-  vang: { dam: "#b4791b", nhat: "#f7c948", bot: "#fff6de" },
-  den: { dam: "#3d1109", nhat: "#8a3520", bot: "#f0dcc8" },
+  caubang: { dam: "#a8541a", nhat: "#f0a92c", bot: "#fff1d6" },
+  laudai: { dam: "#b98f2a", nhat: "#f7dc7a", bot: "#f4fbf8" },
+  atlas: { dam: "#241606", nhat: "#6b4415", bot: "#e8d5b0" },
 };
 
-const BIA = [
+/** Tên lớp CSS đổi màu nền. Cầu Vàng là mặc định nên không cần lớp riêng. */
+const LOP_NEN: Record<LoaiBia, string> = {
+  caubang: "",
+  laudai: "dn-laudai",
+  atlas: "dn-atlas",
+};
+
+/** Màu thân lon trên thẻ chọn, và màu nhấn của từng loại. */
+const BIA: {
+  id: LoaiBia;
+  ten: string;
+  phu: string;
+  than: string;
+  nhan: string;
+}[] = [
   {
-    id: "vang" as LoaiBia,
-    ten: "Golden Bridge",
-    phu: "Helles Lager",
-    dvt: "Lít",
+    id: "caubang",
+    ten: "Cầu Vàng",
+    phu: "Golden Bridge Helles Lager",
+    than: "#9e2020",
+    nhan: "#f0a92c",
   },
   {
-    id: "den" as LoaiBia,
-    ten: "Wings Dark",
-    phu: "Dark Lager",
-    dvt: "Lít",
+    id: "laudai",
+    ten: "Lâu Đài Mặt Trăng",
+    phu: "Lunar Castle Dry Hop Pale Ale",
+    than: "#e9efe9",
+    nhan: "#1c7f7a",
+  },
+  {
+    id: "atlas",
+    ten: "Sức Mạnh Atlas",
+    phu: "Atlas Wings Dark Lager",
+    than: "#17140f",
+    nhan: "#d8ab48",
   },
 ];
 
@@ -247,16 +274,17 @@ export default function ManHinhDangNhap({
   authError,
   maBuild,
 }: Props) {
-  const [loai, setLoai] = useState<LoaiBia>("vang");
+  const [loai, setLoai] = useState<LoaiBia>("caubang");
   /**
    * Loại nào không tải được ảnh thì đánh dấu lại và dùng hình vẽ.
    *
-   * Nhớ theo TỪNG LOẠI chứ không phải một cờ chung: có thể chỉ có ảnh bia vàng
-   * mà chưa có bia đen, lúc đó vàng vẫn hiện ảnh thật.
+   * Nhớ theo TỪNG LOẠI chứ không phải một cờ chung: có thể mới có ảnh Cầu Vàng
+   * mà chưa có hai lon kia, lúc đó Cầu Vàng vẫn hiện ảnh thật.
    */
   const [anhHong, setAnhHong] = useState<Record<LoaiBia, boolean>>({
-    vang: false,
-    den: false,
+    caubang: false,
+    laudai: false,
+    atlas: false,
   });
   const nenRef = useRef<HTMLDivElement>(null);
   const lyRef = useRef<HTMLDivElement>(null);
@@ -412,7 +440,7 @@ export default function ManHinhDangNhap({
   return (
     <div
       ref={nenRef}
-      className={`dn-nen relative h-screen overflow-hidden text-white ${loai === "den" ? "dn-den" : ""}`}
+      className={`dn-nen relative h-screen overflow-hidden text-white ${LOP_NEN[loai]}`}
     >
       {/* Bọt bia */}
       <div
@@ -499,7 +527,7 @@ export default function ManHinhDangNhap({
           ) : (
             <img
               src={ANH_LON[loai]}
-              alt={loai === "den" ? "Bia Wings Dark Lager" : "Bia Golden Bridge Helles Lager"}
+              alt={`Lon ${BIA.find((b) => b.id === loai)?.ten ?? ""}`}
               className="h-full w-full object-contain"
               style={{ filter: "drop-shadow(0 30px 60px rgba(0,0,0,0.55))" }}
               onError={() => setAnhHong((t) => ({ ...t, [loai]: true }))}
@@ -599,56 +627,47 @@ export default function ManHinhDangNhap({
           {/* Cột phải */}
           <div className="hidden h-full w-[420px] flex-col items-end justify-between py-16 text-right lg:flex">
             <div className="flex flex-col items-end gap-5">
-              <div className="flex gap-3">
+              {/*
+                Ba thẻ trong cột rộng 420px, nên thẻ phải hẹp lại còn 124px chứ
+                không giữ 140px như hồi hai loại — ba thẻ 140 cộng khoảng cách
+                là tràn cột, đẩy vỡ bố cục.
+              */}
+              <div className="flex gap-2.5">
                 {BIA.map((b) => {
                   const dangChon = loai === b.id;
-                  const m = MAU_BIA[b.id];
                   return (
                     <button
                       key={b.id}
                       onClick={() => setLoai(b.id)}
-                      className={`dn-kinh group relative w-[140px] cursor-pointer rounded-[28px] p-4 pt-8 text-center transition-all duration-300 ${
-                        dangChon
-                          ? "border-[#f7c948]"
-                          : "hover:border-white/40"
-                      }`}
-                      style={
-                        dangChon
-                          ? { borderColor: "#f7c948" }
-                          : undefined
-                      }
+                      className="dn-kinh group relative w-[124px] cursor-pointer rounded-[24px] p-3 pt-6 text-center transition-all duration-300"
+                      style={{
+                        borderColor: dangChon ? b.nhan : undefined,
+                        boxShadow: dangChon ? `0 0 0 1px ${b.nhan}, 0 18px 40px -18px ${b.nhan}` : undefined,
+                      }}
                     >
-                      <div className="mx-auto mb-3 h-24 w-16 transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-[-8deg] group-hover:scale-110">
-                        <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
-                          <rect
-                            x="14"
-                            y="10"
-                            width="36"
-                            height="80"
-                            rx="8"
-                            fill={m.dam}
+                      <div className="mx-auto mb-2.5 h-24 w-16 transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-[-8deg] group-hover:scale-110">
+                        {anhHong[b.id] ? (
+                          <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
+                            <rect x="14" y="10" width="36" height="80" rx="8" fill={b.than} />
+                            <rect x="14" y="10" width="10" height="80" rx="5" fill="rgba(255,255,255,0.20)" />
+                            {/* Dải nhãn giữa lon, lấy đúng màu nhấn của loại. */}
+                            <rect x="14" y="40" width="36" height="18" fill={b.nhan} opacity="0.95" />
+                            <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
+                          </svg>
+                        ) : (
+                          <img
+                            src={ANH_LON[b.id]}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-full w-full object-contain"
+                            onError={() => setAnhHong((t) => ({ ...t, [b.id]: true }))}
                           />
-                          <rect
-                            x="14"
-                            y="10"
-                            width="12"
-                            height="80"
-                            rx="6"
-                            fill="rgba(255,255,255,0.22)"
-                          />
-                          <rect
-                            x="14"
-                            y="38"
-                            width="36"
-                            height="20"
-                            fill={m.bot}
-                            opacity="0.9"
-                          />
-                          <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
-                        </svg>
+                        )}
                       </div>
-                      <div className="flex flex-col text-[0.72rem] leading-tight">
-                        <span className="font-semibold">{b.ten}</span>
+                      <div className="flex flex-col text-[0.68rem] leading-tight">
+                        <span className="font-semibold" style={{ color: dangChon ? b.nhan : undefined }}>
+                          {b.ten}
+                        </span>
                         <span className="text-white/60">{b.phu}</span>
                       </div>
                     </button>

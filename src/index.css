@@ -182,23 +182,24 @@
 @property --dn-trong {
   syntax: "<color>";
   inherits: true;
-  initial-value: #b4791b;
+  initial-value: #b8651c;
 }
 @property --dn-giua {
   syntax: "<color>";
   inherits: true;
-  initial-value: #5c3a08;
+  initial-value: #5e2a09;
 }
 @property --dn-ngoai {
   syntax: "<color>";
   inherits: true;
-  initial-value: #140c02;
+  initial-value: #150803;
 }
 
+/* Mặc định: Cầu Vàng — lon đỏ, hoa bia vàng. */
 .dn-nen {
-  --dn-trong: #b4791b;
-  --dn-giua: #5c3a08;
-  --dn-ngoai: #140c02;
+  --dn-trong: #b8651c;
+  --dn-giua: #5e2a09;
+  --dn-ngoai: #150803;
   background: radial-gradient(
     circle at center,
     var(--dn-trong) 0%,
@@ -211,11 +212,18 @@
     --dn-ngoai 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Bia đen: nâu đỏ trầm. */
-.dn-nen.dn-den {
-  --dn-trong: #7a2418;
-  --dn-giua: #3d1109;
-  --dn-ngoai: #0f0503;
+/* Lâu Đài Mặt Trăng — lon trắng ngọc, lâu đài xanh cổ vịt. */
+.dn-nen.dn-laudai {
+  --dn-trong: #1c7f7a;
+  --dn-giua: #08403f;
+  --dn-ngoai: #021211;
+}
+
+/* Sức Mạnh Atlas — lon đen, đôi cánh vàng kim. */
+.dn-nen.dn-atlas {
+  --dn-trong: #8a6a1e;
+  --dn-giua: #33270a;
+  --dn-ngoai: #0b0902;
 }
 
 .dn-tieu-de {

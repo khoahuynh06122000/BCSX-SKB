@@ -1,27 +1,28 @@
 # Ảnh lon bia cho màn hình đăng nhập
 
-Thả hai tệp vào chính thư mục này, đúng tên:
+Chép ba tệp vào chính thư mục này (`public/`), đúng tên:
 
-| Tệp | Dùng cho |
-|---|---|
-| `lon-bia-vang.png` | Golden Bridge Helles Lager |
-| `lon-bia-den.png`  | Wings Dark Lager |
+| Tệp | Loại bia | Danh mục trong app |
+|---|---|---|
+| `lon-cau-vang.png` | Cầu Vàng — lon đỏ | Bia Golden Bridge Helles Lager |
+| `lon-lau-dai-mat-trang.png` | Lâu Đài Mặt Trăng — lon trắng | Bia Lunar Castle Dry hop Pale Ale |
+| `lon-suc-manh-atlas.png` | Sức Mạnh Atlas — lon đen | Bia Wings Dark Lager |
 
-Có tệp là màn hình đăng nhập tự dùng ảnh thật thay cho hình vẽ, **không phải
-sửa dòng code nào**. Thiếu tệp nào thì riêng loại đó quay về hình vẽ — không
-vỡ giao diện.
+Có tệp là màn hình tự dùng ảnh thật, **không phải sửa dòng code nào**. Thiếu
+tệp nào thì riêng loại đó quay về hình vẽ — không vỡ, không ô trắng.
 
-## Ảnh cần đúng kiểu gì
+## Yêu cầu ảnh
 
-- **PNG nền trong** (đã tách nền). Ảnh chụp còn phông thì dán lên nền tối sẽ
-  lộ ra một khối chữ nhật, hỏng hết hiệu ứng lon lơ lửng.
-- **Dựng đứng**, tỉ lệ khoảng 280×400 trở lên. Cao ít nhất 1200px cho nét trên
-  màn hình lớn.
-- Chụp hơi chếch, có bóng đổ nhẹ trên thân lon thì nhìn có khối hơn.
+- **PNG nền trong** (đã tách nền). Ảnh chụp còn phông sẽ lộ ra một khối chữ
+  nhật trên nền tối, hỏng hết hiệu ứng lon lơ lửng.
+- Dựng đứng, cao từ **1200px** trở lên — màn hình lớn phóng ảnh tới ~560px, ảnh
+  nhỏ hơn sẽ rỗ.
+- Cắt sát viền lon, chừa lề tối thiểu.
+- **Chữ trên lon phải đọc xuôi.** Ảnh xuất từ file dựng bao bì đôi khi bị lật
+  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết.
 
 ## Lấy ảnh ở đâu
 
-Ảnh của bộ phận truyền thông công ty. Ảnh Sun KraftBeer trên mạng đều là ảnh
-bài báo — xưởng bia, ly bia trên bàn — không phải ảnh sản phẩm tách nền, và
-dùng ảnh bên thứ ba thì vướng bản quyền lẫn chuyện họ đổi đường dẫn lúc nào
-không biết.
+Bộ phận truyền thông của công ty có ảnh sản phẩm chuẩn. Dùng ảnh của chính mình
+thì không vướng bản quyền, và không sợ bên thứ ba đổi đường dẫn làm chết ảnh
+ngay trên màn hình đăng nhập.
