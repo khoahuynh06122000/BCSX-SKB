@@ -40,8 +40,9 @@ export interface AnhThuVien {
   timKiem: string;
 }
 
-function thangCua(iso: string): string {
-  return String(iso ?? "").slice(0, 7);
+/** `2026-08-05T08:00:00Z` → `2026-08-05`, để so với biên ngày người dùng chọn. */
+function ngayCua(iso: string): string {
+  return String(iso ?? "").slice(0, 10);
 }
 
 /** Ảnh thật thì phải có đường dẫn; bỏ chuỗi rỗng và giá trị thiếu. */
@@ -58,8 +59,15 @@ export interface ThuVienInput {
   transactions: Transaction[];
   slips: ImportSlip[];
   loai: "IN" | "OUT";
-  /** `all` hoặc `yyyy-MM`. */
-  thang: string;
+  /**
+   * Khoảng ngày, dạng `yyyy-MM-dd`. Để trống nghĩa là KHÔNG chặn phía đó.
+   *
+   * Chọn khoảng ngày thay vì chọn tháng: ảnh cần tra thường gắn với một lượt
+   * giao cụ thể ("hôm kia giao cho Cầu Vàng"), mà lượt giao thì không nằm gọn
+   * trong ranh giới tháng. Ô chọn tháng bắt người ta mở cả tháng rồi tự dò.
+   */
+  tuNgay: string;
+  denNgay: string;
   tuKhoa: string;
 }
 
@@ -143,22 +151,18 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
   }
 
   const q = input.tuKhoa.trim().toLowerCase();
+  const tu = input.tuNgay.trim();
+  const den = input.denNgay.trim();
+
   return ra
     .filter((a) => {
-      if (input.thang !== "all" && thangCua(a.date) !== input.thang)
-        return false;
+      const ngay = ngayCua(a.date);
+      // So sánh chuỗi được vì `yyyy-MM-dd` xếp theo bảng chữ cái trùng với xếp
+      // theo thời gian. Không dựng Date để tránh lệch múi giờ ở hai đầu biên.
+      if (tu && ngay < tu) return false;
+      if (den && ngay > den) return false;
       if (q && !a.timKiem.includes(q)) return false;
       return true;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
-}
-
-/** Các tháng có ảnh, mới nhất trước — để dựng ô chọn tháng. */
-export function thangCoAnh(anh: AnhThuVien[]): string[] {
-  const s = new Set<string>();
-  anh.forEach((a) => {
-    const m = thangCua(a.date);
-    if (m) s.add(m);
-  });
-  return [...s].sort().reverse();
 }

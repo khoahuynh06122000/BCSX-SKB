@@ -166,11 +166,7 @@ import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
-import {
-  dungAnhThuVien,
-  thangCoAnh,
-  type AnhThuVien,
-} from "./lib/thuVienAnh";
+import { dungAnhThuVien, type AnhThuVien } from "./lib/thuVienAnh";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
@@ -754,8 +750,18 @@ export default function App() {
   const [reportPartnerSearch, setReportPartnerSearch] = useState("");
 
   const [galleryFilter, setGalleryFilter] = useState<"IN" | "OUT">("IN");
-  const [galleryMonth, setGalleryMonth] = useState(
-    new Date().toISOString().substring(0, 7),
+  /*
+   * Khoảng ngày của thư viện ảnh.
+   *
+   * Mặc định 30 ngày gần nhất chứ không phải "tất cả": ảnh cần tra gần như
+   * luôn là ảnh mới, còn tải hết vài nghìn tấm về máy điện thoại thì vừa chậm
+   * vừa tốn 4G. Muốn xem xa hơn thì kéo ngày bắt đầu lùi lại.
+   */
+  const [galleryTuNgay, setGalleryTuNgay] = useState(() =>
+    format(new Date(Date.now() - 30 * 86400000), "yyyy-MM-dd"),
+  );
+  const [galleryDenNgay, setGalleryDenNgay] = useState(() =>
+    format(new Date(), "yyyy-MM-dd"),
   );
   const [gallerySearchQuery, setGallerySearchQuery] = useState("");
   /**
@@ -1448,41 +1454,60 @@ export default function App() {
     if (!isOwner) return;
 
     const confirmReset = window.confirm(
-      "TIÊU ĐIỂM: Tin sẽ giúp anh làm sạch toàn bộ dữ liệu Giao dịch và Doanh thu.\n\nMục Đối tác và Danh mục sản phẩm sẽ được giữ lại theo yêu cầu của anh.\n\nAnh có chắc chắn muốn dọn dẹp không?",
+      `Xoá sạch ${transactions.length} giao dịch và ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký)?\n\nĐối tác và danh mục sản phẩm được giữ lại.\n\nKhông khôi phục lại được.`,
     );
 
     if (!confirmReset) return;
 
     try {
       setLoading(true);
-      const batch = writeBatch(db);
-      let count = 0;
-
-      // Delete all Transactions
-      transactions.forEach((t) => {
-        if (t.id) {
-          batch.delete(doc(db, "transactions", t.id));
-          count++;
-        }
-      });
 
       /*
-       * Không xoá doanh thu ở đây nữa: doanh thu là số tính từ giao dịch, xoá
-       * hết giao dịch ở trên là doanh thu về 0 theo. Trước kia vòng lặp này
-       * dùng `revenueData` để lấy khoá tài liệu — nay khoá đó là `dt-...` suy
-       * từ giao dịch, không trỏ tới tài liệu nào cả nên xoá cũng không trúng.
-       * Số cũ còn sót lại dọn bằng nút "Dọn số cũ" trong tab Doanh thu.
+       * XOÁ CẢ PHIẾU NHẬP KHO, không riêng giao dịch.
+       *
+       * Bản trước chỉ xoá `transactions`, để nguyên `slips`. Mà ảnh tờ phiếu
+       * đã ký lại nằm ở `slips`, nên "dọn sạch" xong thư viện ảnh vẫn đầy ảnh
+       * nhập kho, và tab Phiếu nhập còn lại một đống phiếu mồ côi không còn
+       * dòng hàng nào bên dưới. Sạch một nửa còn khó hiểu hơn không dọn.
+       *
+       * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại
+       * còn dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
        */
+      const canXoa: [string, string][] = [
+        ...transactions.filter((t) => t.id).map((t) => ["transactions", t.id] as [string, string]),
+        ...slips.filter((s) => s.id).map((s) => ["slips", s.id] as [string, string]),
+      ];
 
-      if (count === 0) {
+      if (canXoa.length === 0) {
         showNotification("Hệ thống hiện tại đã ở trạng thái sạch.");
         setLoading(false);
         return;
       }
 
-      await batch.commit();
+      /*
+       * Chia lô 400. Một `writeBatch` chỉ nhận tối đa 500 thao tác — nhồi hết
+       * vào một lô thì kho đã chạy vài tháng là lệnh dọn hỏng thẳng, đúng lúc
+       * người dùng tin là nó đã chạy.
+       */
+      const CHUNK = 400;
+      for (let i = 0; i < canXoa.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        canXoa.slice(i, i + CHUNK).forEach(([kho, id]) => {
+          batch.delete(doc(db, kho, id));
+        });
+        await batch.commit();
+      }
+
+      /*
+       * Không xoá doanh thu ở đây: doanh thu là số tính từ giao dịch, xoá hết
+       * giao dịch ở trên là doanh thu về 0 theo. Số cũ còn sót lại từ thời nạp
+       * file Excel thì dọn bằng nút "Dọn số cũ" trong tab Doanh thu.
+       */
+
       setLoading(false);
-      showNotification("Hệ thống cập nhật data thành công");
+      showNotification(
+        `Đã xoá ${transactions.length} giao dịch và ${slips.length} phiếu`,
+      );
     } catch (error) {
       console.error("Hard Reset Error:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -3898,30 +3923,39 @@ export default function App() {
         transactions,
         slips,
         loai: galleryFilter,
-        thang: galleryMonth,
+        tuNgay: galleryTuNgay,
+        denNgay: galleryDenNgay,
         tuKhoa: gallerySearchQuery,
       }),
-    [transactions, slips, galleryFilter, galleryMonth, gallerySearchQuery],
-  );
-
-  // Ô chọn tháng dựng trên chính các ảnh của chiều đang xem, KHÔNG lọc theo
-  // tháng — nếu lọc thì chọn xong một tháng là các tháng khác biến mất khỏi ô.
-  const galleryMonthOptions = useMemo(() => {
-    const tatCa = dungAnhThuVien({
+    [
       transactions,
       slips,
-      loai: galleryFilter,
-      thang: "all",
-      tuKhoa: "",
-    });
-    return [
-      { value: "all", label: "Tất cả các tháng" },
-      ...thangCoAnh(tatCa).map((m) => ({
-        value: m,
-        label: `Tháng ${m.slice(5)}/${m.slice(0, 4)}`,
-      })),
-    ];
-  }, [transactions, slips, galleryFilter]);
+      galleryFilter,
+      galleryTuNgay,
+      galleryDenNgay,
+      gallerySearchQuery,
+    ],
+  );
+
+  /**
+   * Tổng số ảnh của chiều đang xem, KHÔNG lọc ngày.
+   *
+   * Để nói được "đang xem 4 trong 120 tấm" — không có con số này thì lưới rỗng
+   * trông y hệt lúc chưa có ảnh nào, và người dùng không biết là do khoảng ngày
+   * đang hẹp.
+   */
+  const tongAnhMoiChieu = useMemo(
+    () =>
+      dungAnhThuVien({
+        transactions,
+        slips,
+        loai: galleryFilter,
+        tuNgay: "",
+        denNgay: "",
+        tuKhoa: "",
+      }).length,
+    [transactions, slips, galleryFilter],
+  );
 
   const batchLifecycle = useMemo(() => {
     const bq = batchSearchQuery.toLowerCase().trim();
@@ -7299,13 +7333,16 @@ export default function App() {
                                                     ? t.partnerName
                                                     : t.batchNumber || "",
                                                 );
+                                                // Mở thư viện đúng ngày của
+                                                // giao dịch này, không phải cả
+                                                // tháng.
                                                 try {
-                                                  const tDate = parseISO(
-                                                    t.date,
+                                                  const ngay = format(
+                                                    parseISO(t.date),
+                                                    "yyyy-MM-dd",
                                                   );
-                                                  setGalleryMonth(
-                                                    format(tDate, "yyyy-MM"),
-                                                  );
+                                                  setGalleryTuNgay(ngay);
+                                                  setGalleryDenNgay(ngay);
                                                 } catch (e) {}
                                                 setActiveTab("gallery");
                                               }}
@@ -10317,8 +10354,11 @@ export default function App() {
                       {galleryFilter === "IN" ? "NHẬP KHO" : "XUẤT KHO"}
                     </h2>
                     <p className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-[0.3em]">
-                      Minh chứng giao dịch thực hiện bởi BP{" "}
-                      {galleryFilter === "IN" ? "Nhập kho" : "Xuất kho"}
+                      {galleryFilter === "IN"
+                        ? "Ảnh tờ phiếu nhập kho đã ký"
+                        : "Ảnh biên bản giao hàng"}{" "}
+                      · đang xem {formatNumber(anhThuVien.length)}/
+                      {formatNumber(tongAnhMoiChieu)} ảnh
                     </p>
                   </div>
 
@@ -10347,21 +10387,43 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Month Filter */}
-                    <div className="relative w-full lg:w-48">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      <select
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all appearance-none cursor-pointer shadow-sm uppercase tracking-widest text-slate-700"
-                        value={galleryMonth}
-                        onChange={(e) => setGalleryMonth(e.target.value)}
+                    {/* Khoảng ngày: từ ngày — đến ngày */}
+                    <div className="flex items-center gap-2 w-full lg:w-auto">
+                      <div className="relative flex-1 lg:w-40">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type="date"
+                          aria-label="Từ ngày"
+                          className="w-full pl-10 pr-2 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
+                          value={galleryTuNgay}
+                          max={galleryDenNgay || undefined}
+                          onChange={(e) => setGalleryTuNgay(e.target.value)}
+                        />
+                      </div>
+                      <span className="text-slate-300 font-black shrink-0">
+                        —
+                      </span>
+                      <div className="relative flex-1 lg:w-40">
+                        <input
+                          type="date"
+                          aria-label="Đến ngày"
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
+                          value={galleryDenNgay}
+                          min={galleryTuNgay || undefined}
+                          onChange={(e) => setGalleryDenNgay(e.target.value)}
+                        />
+                      </div>
+                      {/* Bỏ chặn ngày để xem lại toàn bộ. Có nút này thì không
+                          ai phải chỉnh tay hai ô về rỗng. */}
+                      <button
+                        onClick={() => {
+                          setGalleryTuNgay("");
+                          setGalleryDenNgay("");
+                        }}
+                        className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0"
                       >
-                        {galleryMonthOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label.toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        Tất cả
+                      </button>
                     </div>
 
                     {/* Toggle IN/OUT */}
@@ -10470,10 +10532,15 @@ export default function App() {
                         <h4 className="text-xl font-black text-slate-900 uppercase">
                           Trống
                         </h4>
+                        {/* Rỗng vì khoảng ngày hẹp KHÁC hẳn rỗng vì chưa có
+                            ảnh nào. Nói nhầm là người dùng đi tìm lỗi ở chỗ
+                            không có lỗi. */}
                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                          {galleryFilter === "IN"
-                            ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi tải tờ phiếu đã ký lên ở tab Phiếu nhập."
-                            : "Chưa có ảnh biên bản xuất kho nào được ghi nhận."}
+                          {tongAnhMoiChieu > 0
+                            ? `Không có ảnh nào trong khoảng ngày đang chọn. Toàn bộ có ${formatNumber(tongAnhMoiChieu)} ảnh — nới ngày ra hoặc bấm "Tất cả".`
+                            : galleryFilter === "IN"
+                              ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi tải tờ phiếu đã ký lên ở tab Phiếu nhập."
+                              : "Chưa có ảnh biên bản xuất kho nào được ghi nhận."}
                         </p>
                       </div>
                     </div>

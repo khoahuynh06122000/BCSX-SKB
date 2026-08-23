@@ -4,7 +4,7 @@
  */
 
 import type { ImportSlip, Transaction } from "../../types";
-import { dungAnhThuVien, thangCoAnh } from "../thuVienAnh";
+import { dungAnhThuVien } from "../thuVienAnh";
 
 let pass = 0;
 let fail = 0;
@@ -95,7 +95,8 @@ const nhap = dungAnhThuVien({
   transactions,
   slips,
   loai: "IN",
-  thang: "all",
+  tuNgay: "",
+    denNgay: "",
   tuKhoa: "",
 });
 
@@ -128,7 +129,8 @@ const xuat = dungAnhThuVien({
   transactions,
   slips,
   loai: "OUT",
-  thang: "all",
+  tuNgay: "",
+    denNgay: "",
   tuKhoa: "",
 });
 // Lấy cả mảng nhiều ảnh, và không đếm hai lần tấm nằm ở cả hai trường.
@@ -139,28 +141,55 @@ kiemTra(
   [U(1), U(2)],
 );
 
-// Lọc tháng.
+
+// Khoảng ngày: hai đầu biên phải TÍNH VÀO, không loại ra.
 kiemTra(
-  "loc thang 08",
+  "dung ngay bien dau va cuoi",
   dungAnhThuVien({
     transactions,
     slips,
     loai: "IN",
-    thang: "2026-08",
+    tuNgay: "2026-08-05",
+    denNgay: "2026-08-05",
     tuKhoa: "",
   }).length,
   2,
 );
 kiemTra(
-  "loc thang 07",
+  "chi de trong dau tren",
   dungAnhThuVien({
     transactions,
     slips,
     loai: "IN",
-    thang: "2026-07",
+    tuNgay: "2026-08-01",
+    denNgay: "",
+    tuKhoa: "",
+  }).length,
+  2,
+);
+kiemTra(
+  "chi de trong dau duoi",
+  dungAnhThuVien({
+    transactions,
+    slips,
+    loai: "IN",
+    tuNgay: "",
+    denNgay: "2026-07-31",
     tuKhoa: "",
   }).length,
   1,
+);
+kiemTra(
+  "khoang khong chua anh nao",
+  dungAnhThuVien({
+    transactions,
+    slips,
+    loai: "IN",
+    tuNgay: "2026-09-01",
+    denNgay: "2026-09-30",
+    tuKhoa: "",
+  }).length,
+  0,
 );
 
 // Tra cứu: nhập kho tra được cả mã phiếu lẫn mã lô.
@@ -170,7 +199,8 @@ kiemTra(
     transactions,
     slips,
     loai: "IN",
-    thang: "all",
+    tuNgay: "",
+    denNgay: "",
     tuKhoa: "PN-260805-01",
   }).length,
   2,
@@ -181,7 +211,8 @@ kiemTra(
     transactions,
     slips,
     loai: "IN",
-    thang: "all",
+    tuNgay: "",
+    denNgay: "",
     tuKhoa: "lot-01",
   }).length,
   2,
@@ -192,7 +223,8 @@ kiemTra(
     transactions,
     slips,
     loai: "IN",
-    thang: "all",
+    tuNgay: "",
+    denNgay: "",
     tuKhoa: "khong-co-that",
   }).length,
   0,
@@ -204,13 +236,12 @@ kiemTra(
     transactions,
     slips,
     loai: "OUT",
-    thang: "all",
+    tuNgay: "",
+    denNgay: "",
     tuKhoa: "1901",
   }).length,
   2,
 );
-
-kiemTra("thang co anh", thangCoAnh(nhap), ["2026-08", "2026-07"]);
 
 // Không có gì thì không vỡ.
 kiemTra(
@@ -219,7 +250,8 @@ kiemTra(
     transactions: [],
     slips: [],
     loai: "IN",
-    thang: "all",
+    tuNgay: "",
+    denNgay: "",
     tuKhoa: "",
   }).length,
   0,
