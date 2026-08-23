@@ -401,3 +401,37 @@ export function buildBbgnTemplateRows(
     ],
   };
 }
+
+/**
+ * ĐÁNH KHOÁ TÀI LIỆU CHO TỪNG DÒNG NẠP TỪ FILE BBGN.
+ *
+ * Khoá suy từ NỘI DUNG chứ không từ `Date.now()`: nạp lại đúng một tệp thì ghi
+ * đè lên chính nó, không sinh ra một bộ giao dịch mới làm tồn kho bị trừ hai
+ * lần và doanh thu nhân đôi.
+ *
+ * VÌ SAO CẦN SỐ LẦN XUẤT HIỆN: một điểm bán có thể nhận nhiều chuyến trong
+ * cùng một ngày, và sheet ghi mỗi chuyến một cột. Bốn trường (ngày, đơn vị,
+ * mặt hàng, điểm bán) khi đó trùng nhau y hệt. Bản trước tin rằng mỗi tổ hợp
+ * chỉ có một ô, nên dòng sau ghi đè dòng trước và số liệu âm thầm bay mất —
+ * riêng tệp "BBGN Bia T8" mất 762,2 lít trên 6.882,2, hơn 11%, không một cảnh
+ * báo nào.
+ *
+ * Thứ tự các ô do `parseTkhoXuat` duyệt từ trái sang phải nên ổn định: nạp lại
+ * cùng một tệp cho ra đúng bộ khoá cũ.
+ *
+ * Trả về khoá GỐC (chưa gắn số lô FIFO). Nơi gọi nối thêm `-<số thứ tự lô>`.
+ */
+export function danhKhoaBbgn(
+  drafts: { dateKey: string; partnerId: string; productId: string; outlet?: string }[],
+  bam: (s: string) => string,
+): string[] {
+  const dem = new Map<string, number>();
+  return drafts.map((d) => {
+    const goc =
+      "bbgn-" +
+      bam([d.dateKey, d.partnerId, d.productId, d.outlet || ""].join("|"));
+    const lan = dem.get(goc) ?? 0;
+    dem.set(goc, lan + 1);
+    return `${goc}-l${lan}`;
+  });
+}

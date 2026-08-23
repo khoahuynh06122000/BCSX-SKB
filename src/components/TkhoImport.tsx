@@ -55,6 +55,8 @@ interface Props {
   onCreate: (
     drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string }[],
     loMoi?: { productId: string; batchNumber: string; quantity: number; date: string }[],
+    /** true = đưa qua Đơn đi đường chờ ảnh; false = ghi thẳng vào xuất kho. */
+    quaDiDuong?: boolean,
   ) => Promise<void>;
   busy: boolean;
 }
@@ -107,6 +109,18 @@ export default function TkhoImport({
   const [result, setResult] = useState<TkhoParseResult | null>(null);
   const [nhap, setNhap] = useState<TkhoNhapResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Mặc định ĐƯA QUA ĐƠN ĐI ĐƯỜNG.
+   *
+   * Nạp file xong, mỗi (ngày × đơn vị) thành một đơn nằm chờ ở tab Đơn đi
+   * đường; người phụ trách tải ảnh biên bản lên rồi bấm hoàn tất thì đơn mới
+   * ghi nhận vào xuất kho. Giống hệt đường điền tay, chỉ khác là số liệu đến
+   * từ file thay vì gõ.
+   *
+   * Bỏ dấu tick thì ghi thẳng vào xuất kho, không cần ảnh — dùng khi nạp bù
+   * số liệu của kỳ đã chốt xong từ lâu, biên bản giấy đã lưu ngoài app.
+   */
+  const [quaDiDuong, setQuaDiDuong] = useState(true);
   /** Gán tạm trên màn hình: khoá chuẩn hoá -> { partnerId, note }. */
   const [gan, setGan] = useState<Record<string, { partnerId: string; note: string }>>({});
   const [saving, setSaving] = useState(false);
@@ -244,6 +258,12 @@ export default function TkhoImport({
    * Các lô vừa tạo được chuyển thẳng sang phần xuất, không chờ Firestore bắn
    * dữ liệu về: trong cùng một lượt chạy thì state chưa kịp đổi.
    */
+  /** Số đơn sẽ sinh ra: mỗi (ngày × đơn vị) là một đơn, đúng như điền tay. */
+  const soDon = useMemo(() => {
+    if (!result?.drafts.length) return 0;
+    return new Set(result.drafts.map((d) => `${d.dateKey}|${d.partnerId}`)).size;
+  }, [result]);
+
   const taoGiaoDich = async () => {
     if (!result?.drafts.length) return;
     const loMoi = nhap?.drafts.length ? await onCreateNhap(nhap.drafts) : [];
@@ -253,6 +273,7 @@ export default function TkhoImport({
         partnerName: partnerById.get(d.partnerId)?.name || d.partnerId,
       })),
       loMoi,
+      quaDiDuong,
     );
     setResult(null);
     setNhap(null);
@@ -571,9 +592,27 @@ export default function TkhoImport({
           </div>
 
           <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-              Số lượng sẽ trừ vào tồn kho theo lô nhập trước xuất trước
-            </p>
+            <label className="flex items-start gap-2.5 cursor-pointer max-w-md">
+              <input
+                type="checkbox"
+                checked={quaDiDuong}
+                onChange={(e) => setQuaDiDuong(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-rose-600 shrink-0"
+              />
+              <span className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                Đưa qua <strong className="text-slate-900">Đơn đi đường</strong>{" "}
+                để tải ảnh biên bản.
+                <span className="block text-[10px] font-bold text-slate-400 mt-0.5">
+                  {quaDiDuong
+                    ? `${soDon} đơn sẽ nằm chờ ở tab Đơn đi đường; tải ảnh rồi bấm hoàn tất thì mới ghi nhận vào xuất kho.`
+                    : "Ghi thẳng vào xuất kho, không cần ảnh. Chỉ dùng khi nạp bù kỳ đã chốt xong."}
+                </span>
+                <span className="block text-[10px] font-bold text-slate-400 mt-0.5">
+                  Số lượng trừ vào tồn kho ngay từ lúc nạp, theo lô nhập trước
+                  xuất trước — hàng rời kho là rời kho, dù chưa có ảnh.
+                </span>
+              </span>
+            </label>
             <div className="flex gap-2">
               <button
                 onClick={() => {

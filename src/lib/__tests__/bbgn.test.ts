@@ -13,7 +13,9 @@ import {
   parseBbgnDateCell,
   toBbgnNumber,
   normalizeBbgn,
+  danhKhoaBbgn,
 } from "../bbgn";
+import { stableHash } from "../hash";
 import type { Partner, Product } from "../../types";
 
 let pass = 0;
@@ -258,6 +260,64 @@ console.log("\n8. Vong tron day du: ghi ra .xlsx that roi doc lai");
     ["2026-08-11", "2026-08-12", "2026-08-13"],
   );
 }
+
+
+// --------------------------------------------------------------------------
+// ĐÁNH KHOÁ: một điểm bán nhận nhiều chuyến trong cùng một ngày
+// --------------------------------------------------------------------------
+{
+  const bam = (s: string) => stableHash(s);
+  const d = (outlet: string, productId = "p1", dateKey = "2026-08-21") => ({
+    dateKey,
+    partnerId: "AD0103-1901",
+    productId,
+    outlet,
+  });
+
+  // Hai chuyến cùng ngày, cùng điểm bán, cùng mặt hàng — sheet ghi hai cột.
+  const hai = danhKhoaBbgn([d("NH 1901"), d("NH 1901")], bam);
+  eq(
+    "hai chuyen cung ngay ra hai khoa khac nhau",
+    new Set(hai).size === 2,
+    true,
+  );
+  eq("khoa thu nhat la lan 0", hai[0].endsWith("-l0"), true);
+  eq("khoa thu hai la lan 1", hai[1].endsWith("-l1"), true);
+  // Cùng gốc thì chỉ khác phần số lần, nên xoá theo tiền tố gốc vẫn quét hết.
+  eq(
+    "cung tien to goc",
+    hai[0].slice(0, hai[0].lastIndexOf("-")) ===
+      hai[1].slice(0, hai[1].lastIndexOf("-")),
+    true,
+  );
+
+  // Nạp lại đúng cùng một danh sách phải ra đúng bộ khoá cũ.
+  const lan1 = danhKhoaBbgn(
+    [d("NH 1901"), d("Lễ Hội  Bia"), d("NH 1901"), d("NH 1901", "p4")],
+    bam,
+  );
+  const lan2 = danhKhoaBbgn(
+    [d("NH 1901"), d("Lễ Hội  Bia"), d("NH 1901"), d("NH 1901", "p4")],
+    bam,
+  );
+  eq("nap lai ra dung bo khoa cu", JSON.stringify(lan1), JSON.stringify(lan2));
+  eq("bon dong ra bon khoa", new Set(lan1).size, 4);
+
+  // Khác ngày / khác điểm bán / khác mặt hàng thì phải khác khoá.
+  const khac = danhKhoaBbgn(
+    [
+      d("NH 1901"),
+      d("NH 1901", "p1", "2026-08-22"),
+      d("Kavkaz"),
+      d("NH 1901", "p4"),
+    ],
+    bam,
+  );
+  eq("khac ngay/diem/hang thi khac khoa", new Set(khac).size, 4);
+
+  eq("danh sach rong", danhKhoaBbgn([], bam).length, 0);
+}
+
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

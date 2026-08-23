@@ -171,7 +171,7 @@ import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import { stableHash } from "./lib/hash";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
-import type { BbgnDraft } from "./lib/bbgn";
+import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 
 /**
@@ -1723,13 +1723,25 @@ export default function App() {
    * lech ngay. Moi (ngay + don vi) duoc coi la mot phieu -> chung mot
    * referenceGroupId, dung nhu khi nhap tay nhieu mat hang cung luc.
    *
-   * Dat status 'completed' (khong phai 'in_transit') vi file BBGN la bien ban
-   * giao nhan DA KY — hang da toi noi roi.
+   * MAC DINH DUA QUA DON DI DUONG (`in_transit`).
+   *
+   * Truoc day ghi thang 'completed' voi ly do file BBGN la bien ban da ky. Nay
+   * quy trinh doi: nap file xong thi don nam cho o tab Don di duong, nguoi phu
+   * trach tai anh bien ban len roi bam hoan tat, luc do moi ghi nhan vao xuat
+   * kho. Giong het duong dien tay, chi khac la so lieu den tu file.
+   *
+   * TON KHO VAN TRU NGAY tu luc nap, khong cho anh: hang roi kho la roi kho.
+   * Rieng doanh thu va cong no thi chua tinh, vi `billableTransactions()` bo
+   * qua don dang di duong - dung nghia, chua giao xong thi chua phai mot lan
+   * ban.
+   *
+   * `quaDiDuong=false` thi ghi thang nhu cu, dung khi nap bu ky da chot xong.
    */
   const handleCreateFromBbgn = async (
     drafts: BbgnDraft[],
     /** Lô nhập vừa ghi trong cùng lần chạy, FIFO phải thấy chúng. */
     loMoi: { productId: string; batchNumber: string; quantity: number; date: string }[] = [],
+    quaDiDuong: boolean = true,
   ) => {
     if (!drafts.length || loading) return;
 
@@ -1748,10 +1760,15 @@ export default function App() {
       ),
     ).length;
 
+    const soDon = new Set(drafts.map((d) => `${d.dateKey}|${d.partnerId}`)).size;
+
     if (
       !window.confirm(
-        `Tạo ${drafts.length} giao dịch xuất kho từ file BBGN?\n\n` +
-          `Số lượng sẽ trừ vào tồn kho theo nguyên tắc lô nhập trước xuất trước.\n\n` +
+        `Nạp ${drafts.length} dòng xuất kho từ file BBGN, gom thành ${soDon} đơn?\n\n` +
+          (quaDiDuong
+            ? `${soDon} đơn sẽ nằm ở tab ĐƠN ĐI ĐƯỜNG. Tải ảnh biên bản rồi bấm hoàn tất thì mới ghi nhận vào xuất kho.\n\n`
+            : `Ghi thẳng vào xuất kho, không qua bước ảnh.\n\n`) +
+          `Số lượng trừ vào tồn kho ngay, theo lô nhập trước xuất trước.\n\n` +
           (daCoTruoc
             ? `${daCoTruoc} dòng của lần nạp trước sẽ được GHI ĐÈ, không cộng thêm.`
             : `Chưa có dòng nào của kỳ này trên hệ thống.`),
@@ -1800,16 +1817,35 @@ export default function App() {
        * Ban cu dat khoa la `bbgn-${Date.now()}-${seq}`, nen nap lai dung mot
        * tep la sinh ra mot bo giao dich hoan toan moi: ton kho bi tru hai lan,
        * va vi doanh thu nay sinh tu xuat kho nen doanh thu cung nhan doi.
-       *
-       * Sheet "T Kho" bao dam moi (ngay, diem ban, mat hang) chi co MOT o, nen
-       * bon truong duoi day la du de dinh danh mot lan xuat. Nap lai cung tep
-       * thi ghi de len chinh no.
        */
       const khoaGoc = (d: BbgnDraft) =>
         "bbgn-" +
         stableHash(
           [d.dateKey, d.partnerId, d.productId, d.outlet || ""].join("|"),
         );
+
+      /*
+       * MOT DIEM BAN CO THE NHAN NHIEU LAN TRONG CUNG MOT NGAY.
+       *
+       * Truoc day o day tin rang moi (ngay, diem ban, mat hang) chi co dung
+       * MOT o trong sheet. Khong dung: tep "BBGN Bia T8" co "NH 1901" nam o
+       * hai cot khac nhau cung ngay 21.08 - hai chuyen giao rieng. Bon truong
+       * tren sinh ra khoa GIONG HET NHAU, nen dong sau ghi de dong truoc va
+       * so lieu am tham bay mat. Rieng tep T8: 7 o trung, mat 762,2 lit tren
+       * tong 6.882,2 - hon 11%, ma khong co canh bao nao.
+       *
+       * Nay them so lan xuat hien vao khoa. Thu tu cac o do `parseTkhoXuat`
+       * duyet tu trai sang phai nen on dinh: nap lai cung tep ra dung khoa cu,
+       * van khong nhan doi.
+       *
+       * Van xoa duoc dong cu: phan don o duoi xoa theo tien to `khoaGoc(d)-`,
+       * ma tien to do bao trum moi so lan.
+       */
+      // Bộ khoá dựng sẵn cho cả lượt, bằng `danhKhoaBbgn()` trong lib để chạy
+      // thử được — chính chỗ này từng làm mất 11% số liệu nên không để logic
+      // nằm chìm trong màn hình nữa.
+      const khoaDong = danhKhoaBbgn(drafts, stableHash);
+      let viTri = -1;
 
       /*
        * Doi khi tep duoc sua lai roi nap de. Mot lan xuat co the tach thanh so
@@ -1838,6 +1874,8 @@ export default function App() {
       }
 
       for (const d of drafts) {
+        // Tăng trước mọi nhánh thoát, để chỉ số luôn khớp với `khoaDong`.
+        viTri++;
         const product = products.find((p) => p.id === d.productId);
         if (!product) continue;
 
@@ -1863,7 +1901,7 @@ export default function App() {
           const alloc = allocations[i];
           if (alloc.batchNumber === "VUOT_DINH_MUC") shortfall++;
 
-          const id = `${khoaGoc(d)}-${i}`;
+          const id = `${khoaDong[viTri]}-${i}`;
           seq++;
           const transaction: Transaction = {
             id,
@@ -1883,7 +1921,7 @@ export default function App() {
             evidencePhotoUrls: [],
             createdBy: user || "Guest",
             referenceGroupId,
-            status: "completed",
+            status: quaDiDuong ? "in_transit" : "completed",
             originalQuantity: alloc.quantity,
           };
 
@@ -1899,7 +1937,15 @@ export default function App() {
 
       if (opCount > 0) await batch.commit();
 
-      showNotification(`Đã tạo ${seq} dòng xuất kho từ file BBGN`);
+      // Đưa thẳng người dùng tới nơi có việc phải làm tiếp, không để họ tự dò.
+      if (quaDiDuong) {
+        setActiveTab("in-transit");
+        showNotification(
+          `Đã nạp ${seq} dòng thành ${soDon} đơn — đang chờ ảnh ở tab Đơn đi đường`,
+        );
+      } else {
+        showNotification(`Đã ghi ${seq} dòng thẳng vào xuất kho`);
+      }
       if (shortfall > 0) {
         alert(
           `Đã ghi xong, nhưng có ${shortfall} dòng xuất vượt tồn kho hiện có ` +
