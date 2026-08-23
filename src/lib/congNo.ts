@@ -260,6 +260,8 @@ export interface BangCongNo {
   };
   /** Số hóa đơn kế tiếp, để điền sẵn cho tháng sau. */
   soHoaDonTiepTheo: number;
+  /** Còn bao nhiêu hóa đơn đang dùng số app tự đánh, chưa có số thật. */
+  chuaCoSoThat: number;
 }
 
 export interface DungBangInput {
@@ -271,6 +273,15 @@ export interface DungBangInput {
   tienToHoaDon: string;
   /** Số hóa đơn đầu tiên của kỳ, ví dụ 192. */
   soHoaDonBatDau: number;
+  /**
+   * Số và ngày hóa đơn THẬT, do người dùng điền sau khi phát hành.
+   *
+   * Khoá là `<tuNgay>|<denNgay>|<maBp>`. Có thì dùng, không có thì mới lấy số
+   * app tự đánh — số tự đánh chỉ là gợi ý, xem `hoaDon.ts`. Trước đây app luôn
+   * ghi số tự đánh vào sổ, tức là ghi một số hóa đơn KHÔNG CÓ THẬT; đối chiếu
+   * với cơ quan thuế sau này thì không lần ra được gì.
+   */
+  hoaDonThat?: Map<string, { soHoaDon: string; ngayHoaDon: string }>;
 }
 
 /** Ngày của giao dịch, cắt về `yyyy-MM-dd` để so với biên đợt. */
@@ -388,14 +399,37 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       a.maVatTu.localeCompare(b.maVatTu),
   );
 
-  // Cấp số hóa đơn: một số cho mỗi (đợt × đơn vị), chạy liên tục qua các đợt.
+  /*
+   * Số hóa đơn: một số cho mỗi (đợt × đơn vị).
+   *
+   * Ưu tiên số THẬT người dùng đã điền. Không có thì app tự đánh một số chạy
+   * liên tục qua các đợt — nhưng đó chỉ là GỢI Ý để điền sẵn, và `chuaCoSoThat`
+   * đếm lại xem còn bao nhiêu hóa đơn chưa có số thật.
+   */
   const soTheoDonVi = new Map<string, string>();
+  const ngayTheoDonVi = new Map<string, string>();
+  const goiYTheoDonVi = new Map<string, string>();
   let soChay = Math.trunc(input.soHoaDonBatDau) || 0;
+  let chuaCoSoThat = 0;
+
   xep.forEach((g) => {
     const k = `${g.dotIndex}|${g.maBp || g.donVi}`;
-    if (!soTheoDonVi.has(k)) {
-      soTheoDonVi.set(k, soHoaDonThu(input.tienToHoaDon, soChay));
-      soChay += 1;
+    if (soTheoDonVi.has(k)) return;
+
+    const d = dot[g.dotIndex];
+    const goiY = soHoaDonThu(input.tienToHoaDon, soChay);
+    soChay += 1;
+    goiYTheoDonVi.set(k, goiY);
+
+    const that = input.hoaDonThat?.get(
+      [d.tuNgay, d.denNgay, g.maBp || g.donVi].join("|"),
+    );
+    if (that?.soHoaDon) {
+      soTheoDonVi.set(k, that.soHoaDon);
+      ngayTheoDonVi.set(k, ngayVietNam(that.ngayHoaDon || d.ngayHoaDon));
+    } else {
+      soTheoDonVi.set(k, goiY);
+      chuaCoSoThat += 1;
     }
   });
 
@@ -407,7 +441,9 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
     const { revenue511, exciseTax } = exciseSplit(skb.amount);
     return {
       ngayGiaoBia: nhanNgayGiao(d.tuNgay, d.denNgay),
-      ngayHoaDon: ngayVietNam(d.ngayHoaDon),
+      ngayHoaDon:
+        ngayTheoDonVi.get(`${g.dotIndex}|${g.maBp || g.donVi}`) ||
+        ngayVietNam(d.ngayHoaDon),
       stt: i + 1,
       donVi: g.donVi,
       maVatTu: g.maVatTu,
@@ -546,5 +582,6 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       doanhThu511: cong((r) => r.doanhThu511),
     },
     soHoaDonTiepTheo: soChay,
+    chuaCoSoThat,
   };
 }

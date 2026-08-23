@@ -214,6 +214,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    /*
+     * So hoa don da phat hanh, do nguoi dung dien lai sau khi xuat hoa don.
+     *
+     * Khoa tai lieu suy tu bien dot va ma BP nen dien lai la ghi de len chinh
+     * no. KHONG CHO XOA: mot so hoa don da phat hanh la chung tu da len co
+     * quan thue: dien nham thi sua lai, khong xoa dau vet.
+     */
+    match /hoa_don/{key} {
+      allow read: if isApproved();
+      allow create, update: if isAccountant();
+      allow delete: if false;
+    }
+
     match /partners/{partnerId} {
       allow read: if isViewer();
       allow create, update: if isStaff();

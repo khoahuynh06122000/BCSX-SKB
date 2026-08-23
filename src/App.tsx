@@ -175,6 +175,7 @@ import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import DonBNC from "./components/DonBNC";
+import type { HoaDonGhiNhan } from "./lib/hoaDon";
 
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
@@ -689,6 +690,14 @@ export default function App() {
   const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
     null,
   );
+  /**
+   * Hóa đơn ĐÃ PHÁT HÀNH, do người dùng điền lại số và ngày thật.
+   *
+   * Đây là bước cuối của quy trình: nạp đơn đã giao → app tính công nợ từng
+   * đơn vị → cầm số đó đi phát hành hóa đơn ngoài app → quay lại điền số thật.
+   * Xem `src/lib/hoaDon.ts`.
+   */
+  const [hoaDon, setHoaDon] = useState<HoaDonGhiNhan[]>([]);
   const [sapJobs, setSapJobs] = useState<SapJob[]>([]);
   const [sapBusy, setSapBusy] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1039,6 +1048,22 @@ export default function App() {
       },
     );
 
+    const unsubHoaDon = onSnapshot(
+      collection(db, "hoa_don"),
+      (snapshot) => {
+        setHoaDon(
+          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as HoaDonGhiNhan),
+        );
+        ghiNhanLoiDoc("hoa_don", null);
+      },
+      (error) => {
+        ghiNhanLoiDoc(
+          "hoa_don",
+          handleFirestoreError(error, OperationType.GET, "hoa_don"),
+        );
+      },
+    );
+
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
@@ -1077,6 +1102,7 @@ export default function App() {
       unsubPartners();
       unsubSlips();
       unsubDiemBan();
+      unsubHoaDon();
       unsubUsers();
       unsubSapJobs();
     };
@@ -1990,6 +2016,36 @@ export default function App() {
       alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Ghi lại số hóa đơn thật cho một hoặc nhiều (đợt × đơn vị).
+   *
+   * Khoá tài liệu suy từ biên đợt và mã BP nên điền lại là ghi đè lên chính
+   * nó, không sinh bản trùng. Ghi cả tên đơn vị lúc điền để sau này đọc sổ
+   * không phải tra ngược mã.
+   */
+  const handleSaveHoaDon = async (ds: HoaDonGhiNhan[]) => {
+    if (!ds.length) return;
+    try {
+      const batch = writeBatch(db);
+      const luc = new Date().toISOString();
+      ds.forEach((h) => {
+        batch.set(
+          doc(db, "hoa_don", h.id),
+          {
+            ...h,
+            updatedAt: luc,
+            updatedBy: currentUserProfile?.email || user || "",
+          },
+          { merge: true },
+        );
+      });
+      await batch.commit();
+      showNotification(`Đã lưu ${ds.length} số hóa đơn`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "hoa_don"));
     }
   };
 
@@ -10363,6 +10419,8 @@ export default function App() {
                     /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
                        ma thieu ma BP la hoa don sai khach. */
                     partners={donVi}
+                    hoaDon={hoaDon}
+                    onSaveHoaDon={handleSaveHoaDon}
                   />
                 </Card>
               </div>

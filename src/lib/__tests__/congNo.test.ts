@@ -356,5 +356,68 @@ kiemTra(
   true,
 );
 
+
+// -------------------------------------------- so hoa don THAT do nguoi dien
+{
+  // Chua dien gi: dung so app tu danh, va dem lai con bao nhieu chua co so that.
+  // Bon hoa don: dot 1 co BNC, BNG, don vi thieu ma BP; dot 2 co FV.
+  kiemTra("chua dien thi dem het bon", bang.chuaCoSoThat, 4);
+
+  const that = new Map([
+    // BNC dot 1
+    [
+      "2026-08-01|2026-08-12|AD0103",
+      { soHoaDon: "C26TKB#00009999", ngayHoaDon: "2026-08-16" },
+    ],
+  ]);
+  const b2 = dungBangCongNo({
+    transactions,
+    products,
+    partners,
+    dot,
+    tienToHoaDon: "C26TKB#",
+    soHoaDonBatDau: 192,
+    hoaDonThat: that,
+  });
+
+  const bnc = b2.dong.filter((r) => r.maBp === "AD0103");
+  kiemTra("so that de len so tu danh", bnc[0].soHoaDon, "C26TKB#00009999");
+  // Ca hai dong bia cua BNC dot 1 cung mang mot so hoa don.
+  kiemTra(
+    "moi dong cua don vi do dung chung so",
+    bnc.every((r) => r.soHoaDon === "C26TKB#00009999"),
+    true,
+  );
+  // Ngay hoa don lay theo to hoa don that, khong lay ngay khai trong dot.
+  kiemTra("ngay lay theo hoa don that", bnc[0].ngayHoaDon, "16.08.2026");
+
+  // Don vi khac trong cung dot KHONG bi anh huong.
+  const bng = b2.dong.find((r) => r.maBp === "AC0118")!;
+  kiemTra("don vi khac giu so tu danh", bng.soHoaDon, "C26TKB#00000193");
+  kiemTra("don vi khac giu ngay cua dot", bng.ngayHoaDon, "15.08.2026");
+
+  kiemTra("dem lai con ba chua co so that", b2.chuaCoSoThat, 3);
+
+  // Dien so rong thi coi nhu chua dien.
+  const rong = new Map([
+    ["2026-08-01|2026-08-12|AD0103", { soHoaDon: "", ngayHoaDon: "2026-08-16" }],
+  ]);
+  const b3 = dungBangCongNo({
+    transactions,
+    products,
+    partners,
+    dot,
+    tienToHoaDon: "C26TKB#",
+    soHoaDonBatDau: 192,
+    hoaDonThat: rong,
+  });
+  kiemTra("so rong khong tinh la da dien", b3.chuaCoSoThat, 4);
+  kiemTra(
+    "so rong thi quay ve so tu danh",
+    b3.dong[0].soHoaDon,
+    "C26TKB#00000192",
+  );
+}
+
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

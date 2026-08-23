@@ -12,7 +12,13 @@ import {
 import { format } from "date-fns";
 import type { Transaction, Product, Partner } from "../types";
 import { PRICE_TABLE, invoiceUnitOf } from "../lib/invoice";
-import { dungBangCongNo, type DotChot } from "../lib/congNo";
+import { dungBangCongNo, nhanNgayGiao, type DotChot } from "../lib/congNo";
+import {
+  dongCanDienHoaDon,
+  bangHoaDon,
+  type HoaDonGhiNhan,
+} from "../lib/hoaDon";
+import { stableHash } from "../lib/hash";
 import { taoWorkbookCongNo } from "../lib/congNoExcel";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -39,6 +45,9 @@ interface Props {
   transactions: Transaction[];
   products: Product[];
   partners: Partner[];
+  /** Hóa đơn đã phát hành, do người dùng điền lại. */
+  hoaDon: HoaDonGhiNhan[];
+  onSaveHoaDon: (ds: HoaDonGhiNhan[]) => Promise<void>;
 }
 
 const KHOA_LUU = "bcsx.congno.dot";
@@ -71,7 +80,13 @@ function docDotDaLuu(): DotChot[] {
   }
 }
 
-export default function DebtExport({ transactions, products, partners }: Props) {
+export default function DebtExport({
+  transactions,
+  products,
+  partners,
+  hoaDon,
+  onSaveHoaDon,
+}: Props) {
   const [dot, setDot] = useState<DotChot[]>(docDotDaLuu);
   const [tienTo, setTienTo] = useState("C26TKB#");
   const [soBatDau, setSoBatDau] = useState<number>(() => {
@@ -87,6 +102,19 @@ export default function DebtExport({ transactions, products, partners }: Props) 
     }
   }, [dot]);
 
+  /** Số hóa đơn thật đã lưu, tra theo `<tuNgay>|<denNgay>|<maBp>`. */
+  const hoaDonThat = useMemo(() => {
+    const m = new Map<string, { soHoaDon: string; ngayHoaDon: string }>();
+    hoaDon.forEach((h) => {
+      if (!h.soHoaDon) return;
+      m.set([h.tuNgay, h.denNgay, h.maBp].join("|"), {
+        soHoaDon: h.soHoaDon,
+        ngayHoaDon: h.ngayHoaDon,
+      });
+    });
+    return m;
+  }, [hoaDon]);
+
   const bang = useMemo(
     () =>
       dungBangCongNo({
@@ -96,9 +124,107 @@ export default function DebtExport({ transactions, products, partners }: Props) 
         dot,
         tienToHoaDon: tienTo,
         soHoaDonBatDau: soBatDau,
+        hoaDonThat,
       }),
-    [transactions, products, partners, dot, tienTo, soBatDau],
+    [transactions, products, partners, dot, tienTo, soBatDau, hoaDonThat],
   );
+
+  /*
+   * Danh sách hóa đơn cần điền: mỗi (đợt × đơn vị) một dòng.
+   *
+   * Kèm tổng tiền để người điền đối chiếu với tờ hóa đơn đang cầm trước khi gõ
+   * số vào — gõ nhầm số sang đơn vị khác thì đối chiếu thuế sau này mới lộ.
+   */
+  const daGhi = useMemo(() => bangHoaDon(hoaDon), [hoaDon]);
+  const canDien = useMemo(
+    () =>
+      dongCanDienHoaDon(
+        bang.dong,
+        dot.map((d) => ({
+          tuNgay: d.tuNgay,
+          denNgay: d.denNgay,
+          nhan: nhanNgayGiao(d.tuNgay, d.denNgay),
+        })),
+        daGhi,
+        stableHash,
+      ),
+    [bang.dong, dot, daGhi],
+  );
+
+  /** Chữ đang gõ trong bảng, chưa bấm lưu. */
+  const [nhap, setNhap] = useState<
+    Record<string, { soHoaDon: string; ngayHoaDon: string }>
+  >({});
+  const [dangLuu, setDangLuu] = useState(false);
+
+  const oCuaDong = (d: (typeof canDien)[0]) =>
+    nhap[d.khoa] ?? { soHoaDon: d.soDaGhi, ngayHoaDon: d.ngayDaGhi };
+
+  const suaO = (
+    khoa: string,
+    truong: "soHoaDon" | "ngayHoaDon",
+    giaTri: string,
+    d: (typeof canDien)[0],
+  ) =>
+    setNhap((t) => ({
+      ...t,
+      [khoa]: { ...oCuaDongTrong(t, d), [truong]: giaTri },
+    }));
+
+  const oCuaDongTrong = (
+    t: Record<string, { soHoaDon: string; ngayHoaDon: string }>,
+    d: (typeof canDien)[0],
+  ) => t[d.khoa] ?? { soHoaDon: d.soDaGhi, ngayHoaDon: d.ngayDaGhi };
+
+  /** Điền sẵn số app gợi ý vào những ô còn trống, chạy tuần tự. */
+  const dienGoiY = () => {
+    const t = { ...nhap };
+    canDien.forEach((d) => {
+      const o = oCuaDongTrong(t, d);
+      if (!o.soHoaDon.trim()) {
+        t[d.khoa] = {
+          soHoaDon: d.soGoiY,
+          ngayHoaDon: o.ngayHoaDon || d.denNgay,
+        };
+      }
+    });
+    setNhap(t);
+  };
+
+  const luuHoaDon = async () => {
+    const ds: HoaDonGhiNhan[] = canDien
+      .map((d) => {
+        const o = oCuaDong(d);
+        return { d, o };
+      })
+      .filter(({ d, o }) => {
+        const doi =
+          o.soHoaDon.trim() !== d.soDaGhi ||
+          (o.ngayHoaDon || "") !== d.ngayDaGhi;
+        return doi && o.soHoaDon.trim();
+      })
+      .map(({ d, o }) => ({
+        id: d.khoa,
+        tuNgay: d.tuNgay,
+        denNgay: d.denNgay,
+        maBp: d.maBp,
+        donVi: d.donVi,
+        soHoaDon: o.soHoaDon.trim(),
+        ngayHoaDon: o.ngayHoaDon || d.denNgay,
+      }));
+
+    if (!ds.length) {
+      alert("Không có ô nào thay đổi.");
+      return;
+    }
+    setDangLuu(true);
+    try {
+      await onSaveHoaDon(ds);
+      setNhap({});
+    } finally {
+      setDangLuu(false);
+    }
+  };
 
   const themDot = () => {
     const cuoi = dot[dot.length - 1];
@@ -383,6 +509,126 @@ export default function DebtExport({ transactions, products, partners }: Props) 
           </table>
         </div>
       </div>
+
+      {/* ----- Điền số hóa đơn thật ----- */}
+      {canDien.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Số hóa đơn đã phát hành · {canDien.length} hóa đơn
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={dienGoiY}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+                >
+                  Điền số gợi ý
+                </button>
+                <button
+                  onClick={luuHoaDon}
+                  disabled={dangLuu}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
+                >
+                  {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+              Phát hành hóa đơn xong thì điền số và ngày thật vào đây. Số app tự
+              đánh chỉ là gợi ý — ghi một số không có thật vào sổ thì đối chiếu
+              với cơ quan thuế sau này không lần ra được gì.
+            </p>
+          </div>
+
+          {bang.chuaCoSoThat > 0 && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
+              <p className="text-[11px] font-bold text-amber-800">
+                <strong>{bang.chuaCoSoThat}</strong> hóa đơn chưa có số thật —
+                file kết xuất đang dùng số app tự đánh cho những dòng đó.
+              </p>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead>
+                <tr>
+                  {[
+                    "Đợt",
+                    "Đơn vị",
+                    "Mã BP",
+                    "Dòng",
+                    "Thành tiền",
+                    "Số hóa đơn",
+                    "Ngày hóa đơn",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {canDien.map((d) => {
+                  const o = oCuaDong(d);
+                  const chuaCo = !o.soHoaDon.trim();
+                  return (
+                    <tr
+                      key={d.khoa}
+                      className={cn(
+                        "border-t border-slate-100 text-[11px] font-bold text-slate-600",
+                        chuaCo && "bg-amber-50/40",
+                      )}
+                    >
+                      <td className="px-3 py-1.5">{d.nhanDot}</td>
+                      <td className="px-3 py-1.5 text-slate-900">{d.donVi}</td>
+                      <td className="px-3 py-1.5 font-mono text-slate-400">
+                        {d.maBp}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">
+                        {d.soDong}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                        {tien(d.thanhTien)}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <input
+                          value={o.soHoaDon}
+                          onChange={(e) =>
+                            suaO(d.khoa, "soHoaDon", e.target.value, d)
+                          }
+                          placeholder={d.soGoiY}
+                          className={cn(
+                            "w-44 px-2 py-1.5 rounded-lg border bg-white text-[12px] font-black font-mono outline-none focus:border-primary",
+                            chuaCo
+                              ? "border-amber-300 placeholder:text-amber-400"
+                              : "border-slate-200",
+                          )}
+                        />
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <input
+                          type="date"
+                          value={o.ngayHoaDon}
+                          onChange={(e) =>
+                            suaO(d.khoa, "ngayHoaDon", e.target.value, d)
+                          }
+                          className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold outline-none focus:border-primary"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
 
       {/* ----- Thống kê theo đơn vị ----- */}
       {bang.theoDonVi.length > 0 && (
