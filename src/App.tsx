@@ -176,6 +176,7 @@ import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import DonBNC from "./components/DonBNC";
+import ManHinhDangNhap from "./components/ManHinhDangNhap";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
 
 /**
@@ -5133,151 +5134,12 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 relative overflow-hidden font-sans">
-        {/* Cinematic Backdrop */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2669&auto=format&fit=crop"
-            className="w-full h-full object-cover opacity-40 scale-110 blur-[1px]"
-            alt="Background"
-          />
-          <div className="absolute inset-0 bg-gradient-to-tr from-slate-100/90 via-white/60 to-slate-200/90" />
-          {/* Animated Glows */}
-          <div className="absolute top-1/4 -left-20 w-[600px] h-[600px] bg-white/40 blur-[120px] rounded-full animate-pulse" />
-          <div className="absolute bottom-1/4 -right-20 w-[500px] h-[500px] bg-slate-300/20 blur-[100px] rounded-full animate-pulse delay-1000" />
-        </div>
-
-        <div className="w-full max-w-[1000px] grid lg:grid-cols-2 bg-white/70 backdrop-blur-3xl rounded-3xl overflow-hidden border border-white shadow-[0_32px_120px_-20px_rgba(0,0,0,0.15)] relative z-10 ring-1 ring-black/[0.05]">
-          {/* Left Side: Branding & Info */}
-          <div className="hidden lg:flex flex-col justify-between p-16 border-r border-slate-200 bg-gradient-to-br from-slate-50 to-white/30">
-            <div>
-              <div className="flex items-center gap-4 mb-12">
-                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center border border-slate-200 shadow-sm">
-                  <Beer className="w-6 h-6 text-slate-600" />
-                </div>
-                <div>
-                  <h3 className="text-slate-900 text-xs font-black uppercase tracking-[0.3em]">
-                    Hệ thống vận hành
-                  </h3>
-                  <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">
-                    Bana BrewHouse OS v3.5
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <h2 className="text-5xl font-black text-slate-900 leading-tight font-serif italic italic tracking-tight">
-                  Tinh hoa <br />{" "}
-                  <span className="text-slate-500">Bia Bà Nà</span>
-                </h2>
-                <div className="w-20 h-1 bg-slate-900 rounded-full" />
-                <p className="text-slate-600 text-sm leading-relaxed max-w-sm font-medium">
-                  Hệ thống quản trị tài nguyên và doanh nghiệp tích hợp dành
-                  riêng cho đội ngũ vận hành Bia Bà Nà. Vui lòng xác thực danh
-                  tính để bắt đầu.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6">
-              <div className="flex -space-x-3">
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="w-10 h-10 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-600 shadow-sm"
-                  >
-                    {i === 3 ? "+24" : "U"}
-                  </div>
-                ))}
-              </div>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                Nhân sự trực tuyến hệ thống
-              </p>
-            </div>
-          </div>
-
-          {/* Right Side: Login Form */}
-          <div className="p-8 sm:p-16 flex flex-col justify-center bg-white/50 backdrop-blur-md">
-            <div className="mb-10 lg:hidden text-center">
-              <Beer className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase font-serif italic">
-                Bia Bà Nà
-              </h1>
-            </div>
-
-            <div className="space-y-8">
-              <div className="space-y-2">
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  Chào mừng trở lại
-                </h2>
-                <p className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
-                  Đăng nhập bằng tài khoản Google
-                </p>
-              </div>
-
-              {authError && (
-                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-bold text-rose-700 leading-relaxed">
-                    {authError}
-                  </p>
-                </div>
-              )}
-
-              <button
-                onClick={handleGoogleLogin}
-                disabled={isAuthenticating}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 sm:py-5 bg-white border-2 border-slate-200 rounded-2xl font-black text-sm sm:text-base text-slate-700 hover:border-primary hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isAuthenticating ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  /* Logo Google ve bang SVG de khong phai tai anh tu ben ngoai */
-                  <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
-                    <path
-                      fill="#EA4335"
-                      d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                    />
-                    <path
-                      fill="#4285F4"
-                      d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                    />
-                  </svg>
-                )}
-                {isAuthenticating ? "Đang xác thực..." : "Đăng nhập bằng Google"}
-              </button>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                    Cần được phê duyệt
-                  </p>
-                </div>
-                <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-                  Lần đầu đăng nhập, tài khoản của bạn sẽ ở trạng thái chờ. Quản
-                  trị viên duyệt xong bạn mới xem được dữ liệu kho.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="absolute inset-x-0 bottom-8 flex justify-center items-center">
-          <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
-            Tài sản thuộc Bana BrewHouse • Bảo mật mức 4 • Tin Tin OS
-          </p>
-        </div>
-      </div>
+      <ManHinhDangNhap
+        onLogin={handleGoogleLogin}
+        isAuthenticating={isAuthenticating}
+        authError={authError}
+        maBuild={__BUILD_ID__}
+      />
     );
   }
 

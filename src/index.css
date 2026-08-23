@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Galada&family=Manrope:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 /* Che do toi bat bang cach them class "dark" vao the <html>. */
@@ -166,4 +166,126 @@
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: theme('colors.slate.200') transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   MÀN HÌNH ĐĂNG NHẬP — nền chuyển màu, bọt bia bay lên, hoa bia trôi
+
+   Ba màu nền khai bằng @property chứ không phải biến CSS thường: biến thường
+   KHÔNG chuyển màu mượt được, đổi bảng màu là nền nhảy phịch một cái. Khai
+   bằng @property thì trình duyệt biết đó là màu và tự nội suy — nhờ vậy đổi
+   loại bia là nền tan dần sang màu mới, không cần thêm thư viện hoạt hình nào.
+
+   Trình duyệt cũ không hiểu @property thì nền vẫn đúng màu, chỉ là đổi tức
+   thì thay vì tan dần. Mất phần đẹp, không mất phần dùng được.
+--------------------------------------------------------------------------- */
+@property --dn-trong {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #b4791b;
+}
+@property --dn-giua {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #5c3a08;
+}
+@property --dn-ngoai {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #140c02;
+}
+
+.dn-nen {
+  --dn-trong: #b4791b;
+  --dn-giua: #5c3a08;
+  --dn-ngoai: #140c02;
+  background: radial-gradient(
+    circle at center,
+    var(--dn-trong) 0%,
+    var(--dn-giua) 50%,
+    var(--dn-ngoai) 100%
+  );
+  transition:
+    --dn-trong 1.2s cubic-bezier(0.4, 0, 0.2, 1),
+    --dn-giua 1.2s cubic-bezier(0.4, 0, 0.2, 1),
+    --dn-ngoai 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Bia đen: nâu đỏ trầm. */
+.dn-nen.dn-den {
+  --dn-trong: #7a2418;
+  --dn-giua: #3d1109;
+  --dn-ngoai: #0f0503;
+}
+
+.dn-tieu-de {
+  font-family: "Galada", cursive;
+  font-size: clamp(3rem, 8vw, 9rem);
+  line-height: 0.85;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.dn-nav {
+  font-family: "Manrope", sans-serif;
+}
+
+/* Kính mờ: dùng chung cho thanh trên và các thẻ. */
+.dn-kinh {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+@keyframes dn-bot-bay {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.6);
+    opacity: 0;
+  }
+  12% { opacity: 0.55; }
+  88% { opacity: 0.55; }
+  100% {
+    transform: translateY(-110vh) translateX(28px) scale(1);
+    opacity: 0;
+  }
+}
+
+.dn-bot {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 32% 28%,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.35) 38%,
+    rgba(255, 255, 255, 0.06) 70%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+@keyframes dn-hien-len {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes dn-noi {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-18px); }
+}
+
+.dn-ly {
+  animation: dn-hien-len 1.2s ease-out 0.2s both, dn-noi 6s ease-in-out 1.4s infinite;
+}
+
+/* Máy yếu hoặc người dùng tắt hiệu ứng thì bỏ hết chuyển động, giữ nguyên
+   bố cục. Trang đăng nhập không được đánh đổi khả năng dùng lấy cái đẹp. */
+@media (prefers-reduced-motion: reduce) {
+  .dn-bot { display: none; }
+  .dn-ly { animation: none; }
+  .dn-nen { transition: none; }
 }
