@@ -1847,6 +1847,18 @@ export default function App() {
       const khoaDong = danhKhoaBbgn(drafts, stableHash);
       let viTri = -1;
 
+      // Các chuyến của từng (ngày × đơn vị), xếp theo thứ tự cột trong sheet.
+      const chuyenTrongNgay = new Map<string, number[]>();
+      drafts.forEach((d) => {
+        const k = `${d.dateKey}|${d.partnerId}`;
+        const ds = chuyenTrongNgay.get(k) || [];
+        if (!ds.includes(d.cot ?? -1)) {
+          ds.push(d.cot ?? -1);
+          ds.sort((a, b) => a - b);
+        }
+        chuyenTrongNgay.set(k, ds);
+      });
+
       /*
        * Doi khi tep duoc sua lai roi nap de. Mot lan xuat co the tach thanh so
        * lo khac lan truoc (3 lo -> 2 lo), va dong lo thu ba cua lan truoc se
@@ -1879,13 +1891,31 @@ export default function App() {
         const product = products.find((p) => p.id === d.productId);
         if (!product) continue;
 
-        const groupKey = `${d.dateKey}|${d.partnerId}`;
+        // MỘT CHUYẾN GIAO LÀ MỘT ĐƠN. Cột trong sheet chính là chuyến: cùng
+        // ngày mà một điểm bán nhận hai chuyến thì sheet ghi hai cột, và đó là
+        // hai biên bản riêng, hai lần ký riêng — phải tải được ảnh riêng.
+        const groupKey = `${d.dateKey}|${d.partnerId}|${d.cot ?? -1}`;
         if (!groupIds.has(groupKey)) {
           groupIds.set(groupKey, "multi-" + stableHash(groupKey));
         }
         const referenceGroupId = groupIds.get(groupKey)!;
 
+        /*
+         * Đánh số chuyến khi một điểm bán nhận nhiều lần trong cùng ngày.
+         *
+         * Không có số này thì hai đơn của "BNC · 1901" ngày 21.08 hiện ra
+         * giống hệt nhau trên tab Đơn đi đường — cùng ngày, cùng đơn vị, cùng
+         * ghi chú — và người tải ảnh không biết tờ biên bản trong tay là của
+         * đơn nào. Chỉ đánh số khi thật sự có nhiều hơn một chuyến, để ngày
+         * bình thường không bị thêm chữ thừa.
+         */
+        const soChuyen = chuyenTrongNgay.get(`${d.dateKey}|${d.partnerId}`)!;
+        const thuTuChuyen = soChuyen.indexOf(d.cot ?? -1) + 1;
+
         const noteParts = [
+          soChuyen.length > 1
+            ? `Chuyến ${thuTuChuyen}/${soChuyen.length}`
+            : "",
           d.outlet ? `Điểm nhận: ${d.outlet}` : "",
           d.note,
           "Nạp từ file BBGN",

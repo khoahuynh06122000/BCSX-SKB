@@ -324,5 +324,45 @@ eq(
   true,
 );
 
+
+console.log("\n17. Mot diem ban nhan HAI CHUYEN trong cung mot ngay");
+{
+  /*
+   * Tep that "BBGN Bia T8" co "NH 1901" o hai cot khac nhau cung ngay 21.08 —
+   * hai chuyen giao rieng, hai bien ban rieng. Neu draft khong mang so cot thi
+   * hai chuyen do khong phan biet duoc, va app buoc phai gom thanh mot don.
+   */
+  const haiChuyen: any[][] = [
+    ["XUAT HANG THANG 08 /2026"],
+    [null, null, null, null, "Xuat kho"],
+    ["STT", "MÃ HÀNG", "TÊN HÀNG", "Ngày", "21.08.26", null, null, "Cộng"],
+    [null, null, null, "Điểm bán", "NH 1901", "Kavkaz", "NH 1901", null],
+    [1, "10168107", "Bia hoi", null, 103, 206, 309, 618],
+  ];
+  const k = parseTkhoXuat(haiChuyen, "T Kho T8", products);
+  eq("doc du ba o", k.drafts.length, 3);
+
+  const cua1901 = k.drafts.filter((d) => d.outlet === "NH 1901");
+  eq("1901 co hai dong", cua1901.length, 2);
+  eq("hai dong mang hai so cot khac nhau", cua1901[0].cot !== cua1901[1].cot, true);
+  eq("so cot dung thu tu trai sang phai", cua1901[0].cot < cua1901[1].cot, true);
+  eq("giu nguyen ca hai so luong", cua1901.map((d) => d.quantity), [103, 309]);
+
+  const don = new Set(
+    k.drafts.map((d) => `${d.dateKey}|${d.partnerId}|${d.cot}`),
+  );
+  eq("ba o thanh ba don rieng", don.size, 3);
+
+  // Bo cot di thi hai chuyen cua 1901 dinh lam mot — day dung la loi cu.
+  const gomNham = new Set(k.drafts.map((d) => `${d.dateKey}|${d.partnerId}`));
+  eq("khong co cot thi bi gom con hai", gomNham.size, 2);
+
+  eq(
+    "tong so luong giu nguyen",
+    k.drafts.reduce((a, d) => a + d.quantity, 0),
+    618,
+  );
+}
+
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

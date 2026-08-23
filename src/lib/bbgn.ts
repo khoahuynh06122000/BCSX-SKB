@@ -47,6 +47,14 @@ export interface BbgnDraft {
   outlet: string;
   /** Cột Note trong file, chỉ giữ khi khác với địa điểm. */
   note: string;
+  /**
+   * Chỉ số cột trong sheet — danh tính của một CHUYẾN GIAO.
+   *
+   * Chỉ dòng đọc từ bảng chéo "T Kho" mới có. Cùng ngày một điểm bán có thể
+   * nhận hai chuyến, sheet ghi mỗi chuyến một cột; thiếu số này thì hai chuyến
+   * không phân biệt được và bị gom thành một đơn.
+   */
+  cot?: number;
 }
 
 /** Dòng đọc được từ file nhưng chưa biết thuộc đơn vị nào. */
@@ -422,7 +430,13 @@ export function buildBbgnTemplateRows(
  * Trả về khoá GỐC (chưa gắn số lô FIFO). Nơi gọi nối thêm `-<số thứ tự lô>`.
  */
 export function danhKhoaBbgn(
-  drafts: { dateKey: string; partnerId: string; productId: string; outlet?: string }[],
+  drafts: {
+    dateKey: string;
+    partnerId: string;
+    productId: string;
+    outlet?: string;
+    cot?: number;
+  }[],
   bam: (s: string) => string,
 ): string[] {
   const dem = new Map<string, number>();

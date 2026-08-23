@@ -49,6 +49,18 @@ export interface TkhoDraft {
   outlet: string;
   /** Ghi chú lấy từ bảng gán điểm bán: "Ngoại giao", "HTKD", hoặc rỗng. */
   note: string;
+  /**
+   * Chỉ số CỘT trong sheet mà ô này nằm ở đó.
+   *
+   * Đây là danh tính của một CHUYẾN GIAO. Cùng một ngày, một điểm bán có thể
+   * nhận hai chuyến và sheet ghi mỗi chuyến một cột — ví dụ "NH 1901" nằm ở
+   * cả cột E lẫn cột M của ngày 21.08. Thiếu số cột thì hai chuyến đó không
+   * phân biệt được với nhau, và app buộc phải gom chúng thành một đơn.
+   *
+   * Dùng để nhóm đơn và để đánh khoá tài liệu, nên phải giữ nguyên qua mọi
+   * bước xử lý.
+   */
+  cot: number;
 }
 
 export interface TkhoUnknownOutlet {
@@ -351,6 +363,7 @@ export function parseTkhoXuat(
         quantity: qty,
         outlet: tenDiem,
         note: diem.note,
+        cot: c,
       });
     }
 

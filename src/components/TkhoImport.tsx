@@ -53,7 +53,7 @@ interface Props {
     drafts: TkhoNhapDraft[],
   ) => Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]>;
   onCreate: (
-    drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string }[],
+    drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string; cot: number }[],
     loMoi?: { productId: string; batchNumber: string; quantity: number; date: string }[],
     /** true = đưa qua Đơn đi đường chờ ảnh; false = ghi thẳng vào xuất kho. */
     quaDiDuong?: boolean,
@@ -258,10 +258,18 @@ export default function TkhoImport({
    * Các lô vừa tạo được chuyển thẳng sang phần xuất, không chờ Firestore bắn
    * dữ liệu về: trong cùng một lượt chạy thì state chưa kịp đổi.
    */
-  /** Số đơn sẽ sinh ra: mỗi (ngày × đơn vị) là một đơn, đúng như điền tay. */
+  /**
+   * Số đơn sẽ sinh ra.
+   *
+   * MỘT CHUYẾN GIAO LÀ MỘT ĐƠN, nhận diện bằng cột trong sheet. Cùng ngày mà
+   * một điểm bán nhận hai chuyến thì đó là hai đơn, hai biên bản, hai lần ký —
+   * gom lại thành một đơn thì không tải riêng ảnh cho từng chuyến được.
+   */
   const soDon = useMemo(() => {
     if (!result?.drafts.length) return 0;
-    return new Set(result.drafts.map((d) => `${d.dateKey}|${d.partnerId}`)).size;
+    return new Set(
+      result.drafts.map((d) => `${d.dateKey}|${d.partnerId}|${d.cot}`),
+    ).size;
   }, [result]);
 
   const taoGiaoDich = async () => {
