@@ -8426,10 +8426,10 @@ export default function App() {
                         đó là hơn một phần mười, đủ để tên bia bị cắt.
                       */}
                       <div className="relative w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
-                        <div className="p-4 sm:p-8 sm:pb-4 border-b border-slate-100">
+                        <div className="px-4 py-3 sm:p-8 sm:pb-4 border-b border-slate-100">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <h3 className="text-base sm:text-xl font-black text-slate-900 uppercase leading-tight">
+                              <h3 className="text-[15px] sm:text-xl font-black text-slate-900 uppercase leading-tight">
                                 {selectedInTransitIds.length > 1
                                   ? "XÁC NHẬN HÀNG LOẠT"
                                   : "XÁC NHẬN CẢ PHIẾU GIAO HÀNG"}
@@ -8465,7 +8465,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="p-4 sm:p-8 sm:pt-4 space-y-5 sm:space-y-6 overflow-y-auto">
+                        <div className="px-4 py-3 sm:p-8 sm:pt-4 space-y-3 sm:space-y-6 overflow-y-auto">
                           <div className="space-y-4">
                             {(() => {
                               const groupedItems =
@@ -8496,7 +8496,7 @@ export default function App() {
                                     Chi tiết hàng hóa ({productList.length} mặt
                                     hàng)
                                   </h4>
-                                  <div className="space-y-3">
+                                  <div className="space-y-2 sm:space-y-3">
                                     {productList.map((item: any) => {
                                       const isMatched =
                                         matchedProductIds.has(item.productId) ||
@@ -8506,29 +8506,22 @@ export default function App() {
                                       return (
                                         <div
                                           key={item.productId}
-                                          className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 transition-all ${isMatched ? "bg-emerald-50/50 border-emerald-500/20" : "bg-slate-50 border-transparent opacity-60"}`}
+                                          className={`p-3 sm:p-5 rounded-2xl sm:rounded-3xl border sm:border-2 transition-all ${isMatched ? "bg-emerald-50/50 border-emerald-500/25" : "bg-slate-50 border-transparent opacity-60"}`}
                                         >
                                           {/*
-                                            Trên điện thoại xếp DỌC: tên bia
-                                            một dòng riêng chiếm hết bề ngang,
-                                            nút bấm xuống dòng dưới. Xếp ngang
-                                            như bản trước thì nút "Loại bỏ"
-                                            chiếm mất một phần ba bề ngang và
-                                            tên bia bị cắt còn "Bia Wings
-                                            Dark…" — người tải ảnh không đọc
-                                            được mình đang xác nhận mặt hàng
-                                            nào.
+                                            Thẻ bó sát để bớt phải lướt: phiếu
+                                            5 mặt hàng trước đây dài gần ba màn
+                                            hình điện thoại, phải cuộn ba lần
+                                            mới thấy hết rồi mới tới chỗ tải
+                                            ảnh. Đo lại sau khi bó: 1.745px còn
+                                            1.201px, tức chưa tới hai màn hình.
+                                            Bỏ ô biểu tượng thùng hàng (chỉ để
+                                            trang trí), tên bia và nút "Loại bỏ"
+                                            về chung một hàng, ô nhập nằm cùng
+                                            hàng với nhãn.
                                           */}
-                                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2.5 mb-3">
-                                            <div className="flex items-start gap-3 min-w-0">
-                                              <div
-                                                className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-2xl flex items-center justify-center border ${isMatched ? "bg-white border-emerald-100" : "bg-slate-100 border-slate-200"}`}
-                                              >
-                                                <Package2
-                                                  className={`w-5 h-5 ${isMatched ? "text-emerald-500" : "text-slate-400"}`}
-                                                />
-                                              </div>
-                                              <div className="min-w-0 flex-1">
+                                          <div className="flex items-start gap-2.5">
+                                            <div className="min-w-0 flex-1">
                                                 {/* Cho xuống dòng thay vì cắt
                                                     chữ: tên bia dài là bình
                                                     thường, mà cắt đi thì hai
@@ -8537,7 +8530,7 @@ export default function App() {
                                                 <div className="text-[13px] sm:text-sm font-black text-slate-900 leading-snug break-words">
                                                   {item.productName}
                                                 </div>
-                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                                                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
                                                     Xuất:{" "}
                                                     {formatNumber(
@@ -8552,7 +8545,6 @@ export default function App() {
                                                     </span>
                                                   )}
                                                 </div>
-                                              </div>
                                             </div>
                                             <button
                                               onClick={() => {
@@ -8584,7 +8576,7 @@ export default function App() {
                                                   );
                                                 }
                                               }}
-                                              className={`w-full sm:w-auto shrink-0 px-3 py-2.5 sm:py-1.5 rounded-xl text-[10px] sm:text-[9px] font-black uppercase transition-all ${isMatched ? "bg-rose-100 text-rose-500 hover:bg-rose-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
+                                              className={`shrink-0 px-3 py-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] font-black uppercase transition-all ${isMatched ? "bg-rose-100 text-rose-500 hover:bg-rose-200" : "bg-slate-200 text-slate-600 hover:bg-slate-300"}`}
                                             >
                                               {isMatched
                                                 ? "Loại bỏ"
@@ -8598,11 +8590,11 @@ export default function App() {
                                             const currentQty = parseFloat(Number(rawQty ?? 0).toFixed(4));
 
                                             return (
-                                              <div className="pt-3 border-t border-emerald-500/10 space-y-2 w-full">
-                                                <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block">
-                                                  THỰC NHẬN TRÊN PHIẾU
+                                              <div className="mt-2 flex items-center gap-2 w-full">
+                                                <label className="text-[9px] font-black text-emerald-600 uppercase tracking-widest shrink-0">
+                                                  Thực nhận
                                                 </label>
-                                                <div className="flex items-center gap-2 font-mono">
+                                                <div className="flex items-center gap-1.5 font-mono flex-1">
                                                   {/*
                                                     `text` + `inputMode="decimal"`:
                                                     vẫn ra bàn phím số trên
@@ -8616,7 +8608,7 @@ export default function App() {
                                                   <input
                                                     type="text"
                                                     inputMode="decimal"
-                                                    className="flex-1 min-w-0 px-4 py-2.5 sm:py-2 bg-white border-2 border-emerald-500/20 rounded-xl text-base sm:text-sm font-black focus:border-emerald-500 outline-none transition-all"
+                                                    className="flex-1 min-w-0 px-3 py-1.5 bg-white border-2 border-emerald-500/20 rounded-lg text-base sm:text-sm font-black focus:border-emerald-500 outline-none transition-all"
                                                     value={
                                                       soThucNhanText[
                                                         item.productId
@@ -8714,7 +8706,7 @@ export default function App() {
                               trên.
                             */}
                             <div className="grid grid-cols-3 gap-2">
-                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/40 hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group relative overflow-hidden min-h-[76px]">
+                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/40 hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group relative overflow-hidden min-h-[58px] sm:min-h-[76px]">
                                 {isScanning ? (
                                   <div className="flex flex-col items-center gap-1.5">
                                     <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
@@ -8786,7 +8778,7 @@ export default function App() {
                                   }}
                                 />
                               </label>
-                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[76px]">
+                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
                                 <Camera className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
                                 <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-primary text-center leading-tight tracking-tight">
                                   Chụp thêm
@@ -8829,7 +8821,7 @@ export default function App() {
                                   }}
                                 />
                               </label>
-                              <label className="flex flex-col items-center justify-center gap-1.5 p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group min-h-[76px]">
+                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
                                 <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
                                 <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-emerald-500 text-center leading-tight tracking-tight">
                                   Chọn từ máy
@@ -8931,7 +8923,7 @@ export default function App() {
 
                         {/* Chân hộp thoại: chừa thêm đệm dưới cho thanh điều hướng của điện
                             thoại, không thì nút Xác nhận nằm sát mép và bấm hay trượt. */}
-                        <div className="p-4 pb-5 sm:p-8 sm:pt-4 border-t border-slate-100 bg-slate-50/30 flex gap-3">
+                        <div className="px-4 py-3 pb-4 sm:p-8 sm:pt-4 border-t border-slate-100 bg-slate-50/30 flex gap-2 sm:gap-3">
                           <Button
                             variant="outline"
                             className="flex-1"
