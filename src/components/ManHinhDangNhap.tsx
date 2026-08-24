@@ -34,32 +34,31 @@ interface Props {
 type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
- * ẢNH LON BIA THẬT — thả tệp vào `public/` là tự thay cho hình vẽ.
+ * ẢNH LON BIA — BỐN GÓC MỖI LOẠI, theo đúng thứ tự xoay một chiều:
+ * mặt trước → hông phải → mặt sau → hông trái.
  *
- * Chỉ cần chép ba tệp PNG NỀN TRONG (đã tách nền, không phải ảnh chụp có
- * phông) vào thư mục `public/` với đúng tên dưới đây, không phải sửa dòng code
- * nào. Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
- * trắng, và loại nào có ảnh vẫn hiện ảnh thật.
- *
- * Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi trình
- * duyệt "tệp này có tồn tại không" mà không tải thử.
+ * Đây là ảnh chụp lon thật, đã tách nền. Thiếu tấm nào thì riêng loại đó quay
+ * về hình vẽ SVG — không vỡ, không ô trắng.
  */
-const ANH_LON: Record<LoaiBia, string> = {
-  caubang: "/lon-cau-vang.png",
-  laudai: "/lon-lau-dai-mat-trang.png",
-  atlas: "/lon-suc-manh-atlas.png",
-};
-
-/**
- * ẢNH MẶT SAU — lon xoay đúng 180°, cũng nền trong.
- *
- * Bắt buộc phải có: lon quay tròn nên thiếu mặt sau là xoay tới đâu lòi ra
- * mảng trống tới đó. Thiếu tệp nào thì riêng loại đó về hình vẽ SVG.
- */
-const ANH_LON_SAU: Record<LoaiBia, string> = {
-  caubang: "/lon-cau-vang-sau.png",
-  laudai: "/lon-lau-dai-mat-trang-sau.png",
-  atlas: "/lon-suc-manh-atlas-sau.png",
+const ANH_LON: Record<LoaiBia, string[]> = {
+  caubang: [
+    "/lon-cau-vang.png",
+    "/lon-cau-vang-hong-phai.png",
+    "/lon-cau-vang-sau.png",
+    "/lon-cau-vang-hong-trai.png",
+  ],
+  laudai: [
+    "/lon-lau-dai-mat-trang.png",
+    "/lon-lau-dai-mat-trang-hong-phai.png",
+    "/lon-lau-dai-mat-trang-sau.png",
+    "/lon-lau-dai-mat-trang-hong-trai.png",
+  ],
+  atlas: [
+    "/lon-suc-manh-atlas.png",
+    "/lon-suc-manh-atlas-hong-phai.png",
+    "/lon-suc-manh-atlas-sau.png",
+    "/lon-suc-manh-atlas-hong-trai.png",
+  ],
 };
 
 /**
@@ -575,7 +574,6 @@ export default function ManHinhDangNhap({
               ) : (
                 <LonXoay
                   anh={ANH_LON}
-                  anhSau={ANH_LON_SAU}
                   loai={loai}
                   ten={TEN_BIA}
                   onLoiAnh={(id) =>
@@ -713,7 +711,7 @@ export default function ManHinhDangNhap({
                           </svg>
                         ) : (
                           <img
-                            src={ANH_LON[b.id]}
+                            src={ANH_LON[b.id][0]}
                             alt=""
                             aria-hidden="true"
                             className="h-full w-full object-contain"
