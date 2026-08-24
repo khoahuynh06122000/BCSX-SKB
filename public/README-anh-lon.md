@@ -1,44 +1,43 @@
-# Ảnh lon bia cho màn hình đăng nhập
+# Nhãn lon cho màn hình đăng nhập
 
-Mỗi loại bia cần **hai tấm**: mặt trước và mặt sau. Lon trên màn hình quay
-tròn, nên thiếu mặt sau là xoay tới đâu lòi ra mảng trống tới đó. Thiếu tấm nào
-thì riêng loại đó quay về hình vẽ, không làm hỏng hai loại kia.
+Mỗi loại bia cần **một tấm nhãn trải phẳng 360 độ** — cả cái nhãn bóc khỏi lon,
+dàn ra thành hình chữ nhật dài, hai đầu nối liền được vào nhau. Màn hình đăng
+nhập cuộn tấm ấy quanh một hình trụ nên lon quay liên tục, mọi góc đều là nhãn
+thật, không có chỗ nào phải dựng thêm.
 
-| Loại bia | Mặt trước | Mặt sau |
-|---|---|---|
-| Cầu Vàng — Golden Bridge Helles Lager | `lon-cau-vang.png` | `lon-cau-vang-sau.png` |
-| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `lon-lau-dai-mat-trang.png` | `lon-lau-dai-mat-trang-sau.png` |
-| Sức Mạnh Atlas — Atlas Wings Dark Lager | `lon-suc-manh-atlas.png` | `lon-suc-manh-atlas-sau.png` |
+| Loại bia | Tệp |
+|---|---|
+| Cầu Vàng — Golden Bridge Helles Lager | `nhan-cau-vang.png` |
+| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `nhan-lau-dai-mat-trang.png` |
+| Sức Mạnh Atlas — Atlas Wings Dark Lager | `nhan-suc-manh-atlas.png` |
 
-Chép vào chính thư mục này (`public/`) là xong, **không phải sửa dòng code nào**.
+Thiếu tấm nào thì riêng loại đó hiện hình vẽ, hai loại kia vẫn chạy.
 
-## Yêu cầu ảnh
+## Cách xin nhãn trải phẳng
 
-- **PNG nền trong** (đã tách nền). Ảnh chụp còn phông sẽ lộ ra một khối chữ
-  nhật trên nền tối, hỏng hết hiệu ứng lon lơ lửng.
-- Dựng đứng, cao từ **1200px** trở lên.
-- **Mặt sau phải là đúng cái lon ấy quay 180°**, chụp cùng khoảng cách và cùng
-  ánh sáng với mặt trước. Lệch sáng thì lúc quay thấy nhảy màu ở chỗ nối.
-- **Chữ trên lon phải đọc xuôi.** Ảnh xuất từ file dựng bao bì đôi khi bị lật
-  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết.
+Đưa Gemini một ảnh lon rồi nhắn:
 
-## Tách nền
+> Trải phẳng nhãn lon bia này thành một hình chữ nhật dài, đúng tỉ lệ chu vi lon
+> (rộng gấp khoảng 2,4 lần chiều cao nhãn). Không có lon, không bóng đổ, không
+> nền — chỉ có nhãn trải phẳng. Hai đầu trái và phải phải nối liền được vào nhau.
 
-Ảnh còn phông thì chạy `scripts/tach-nen-anh-lon.py`, chọn chế độ theo phông:
+Yêu cầu:
 
-```
-# nền trắng phẳng
-python scripts/tach-nen-anh-lon.py public/lon-cau-vang.png
+- **Tỉ lệ rộng/cao khoảng 2,4.** Lệch một chút không sao, chữ chỉ hơi béo hoặc
+  hơi gầy; lệch nhiều thì nhìn ra ngay.
+- **Hai đầu phải nối liền.** Chỗ ghép nằm ở sau lon nên ít ai để ý, nhưng lệch
+  hẳn màu thì lúc quay thấy một vạch dọc.
+- Lề trắng và dấu cắt ở bốn góc thì **để nguyên**, app tự cắt bỏ.
+- Càng lớn càng tốt. Tấm hiện tại 1942×809 là vừa đủ.
 
-# nền trắng nhưng THÂN LON cũng trắng (Lâu Đài Mặt Trăng)
-python scripts/tach-nen-anh-lon.py --nguong=250 --vien=250 public/lon-lau-dai-mat-trang.png
+## Vì sao phải là nhãn trải phẳng
 
-# phông studio xám chuyển sắc
-python scripts/tach-nen-anh-lon.py --mohinh --saiso=40 public/lon-cau-vang-sau.png
+Đã thử dựng nhãn từ ảnh chụp lon và đều thất bại:
 
-# ảnh bị lật gương
-python scripts/tach-nen-anh-lon.py --lat public/lon-suc-manh-atlas.png
-```
+- **Hai tấm** (trước, sau): phần vỏ hai bên hông không có dữ liệu, phải bịa. Bịa
+  một khúc nhãn rồi đặt cạnh khúc nhãn thật là lộ ngay thành vệt nhoè.
+- **Bốn tấm** (thêm hai bên hông): phải ghép, mà ghép cần biết chúng cách nhau
+  bao nhiêu độ. Đo ra bốn tấm chụp tay lệch nhau từ 40 tới 140 độ, không tấm nào
+  khớp tấm nào; ghép theo giả định 90 độ thì cả nhãn bị co kéo, chữ bị cắt.
 
-Ảnh được ghi đè tại chỗ và cắt sát viền lon, nên giữ một bản gốc ở nơi khác
-trước khi chạy.
+Ảnh chụp lon (12 tấm, ba loại bốn góc) vẫn giữ trong `anh-lon-that/` nếu cần.
