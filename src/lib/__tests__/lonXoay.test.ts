@@ -4,15 +4,14 @@
  */
 
 import {
+  DAI_HOA,
   GOC_SANG,
-  NUA_CUNG,
-  NUA_HOA,
   TRAN_NEN,
+  TRAN_SANG,
   bangChieu,
   bangRong,
   doSang,
-  trongSo,
-  veVong,
+  mauLay,
 } from "../lonXoay";
 
 let pass = 0;
@@ -36,125 +35,190 @@ const dung = (ten: string, x: boolean) => eq(ten, x, true);
 
 const PI = Math.PI;
 
-// -------------------------------------------------------- do sang
+// ------------------------------------------------------- do sang
 
 gan("dinh sang dung tai huong nguon sang", doSang(GOC_SANG), 1);
-dung(
-  "khong cho nao sang hon dinh",
-  [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) <= 1 + 1e-12),
-);
-dung(
-  "luon duong",
-  [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) > 0),
-);
+dung("khong cot nao sang hon dinh", [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) <= 1 + 1e-12));
+dung("luon duong", [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) > 0));
 dung("chinh dien sang hon mep", doSang(0) > doSang(PI / 2));
+dung("mep trai sang hon mep phai vi den lech trai", doSang(-PI / 2) > doSang(PI / 2));
 
-// Chi dung phan giua moi tam nen he so khu bong khong duoc lon qua. Ban cu co
-// cho doi keo sang gap ba, keo len la bet trang.
-{
-  let toiDa = 0;
-  for (let i = 0; i <= 200; i++) {
-    const lech = -(NUA_CUNG + NUA_HOA) + (i * 2 * (NUA_CUNG + NUA_HOA)) / 200;
-    toiDa = Math.max(toiDa, 1 / doSang(lech));
-  }
-  // Ban cu co cho doi keo sang gap ba vi phai lay ca phan sat mep anh.
-  dung(`he so khu bong khong qua 2,5 (${toiDa.toFixed(2)})`, toiDa <= 2.5);
+// ------------------------------------------------------- lay mau
+
+// Dung yen thi cot nguon trung cot dich: anh khong meo mo gi.
+for (const s of [-1, -0.7, -0.2, 0, 0.35, 0.8, 1]) {
+  const m = mauLay(s, 0);
+  gan(`phi=0 lay dung cot cua no tai s=${s}`, m.u, s, 1e-12);
+  eq(`phi=0 khong cham mat sau tai s=${s}`, m.sau, false);
 }
 
-// -------------------------------------------------------- ve vong
+// Goc be mat chi phu thuoc vi tri tren man hinh, khong phu thuoc lon xoay bao nhieu.
+for (const phi of [0, 0.8, 2.5, -1.9]) {
+  gan(`beta khong doi theo phi=${phi}`, mauLay(0.5, phi).beta, Math.asin(0.5), 1e-12);
+}
 
-gan("ve vong: 0", veVong(0), 0);
-gan("ve vong: qua pi", veVong(1.5 * PI), -0.5 * PI, 1e-12);
-gan("ve vong: am", veVong(-1.5 * PI), 0.5 * PI, 1e-12);
+// Xoay sang phai thi nhan truot sang phai: phan nhan o giua di ve mep phai.
+{
+  const truoc = mauLay(0, 0).u;
+  const sau = mauLay(0, 0.5).u;
+  dung("xoay duong lam nhan truot ve mot phia", sau > truoc);
+}
+
+// Mat sau bi lo ra ngay khi lon chom xoay, va lo ve dung mot phia.
+{
+  const m = mauLay(0.999, 0.3);
+  eq("xoay duong thi mep phai thanh mat sau", m.sau, true);
+  eq("cung luc do mep trai van la mat truoc", mauLay(-0.999, 0.3).sau, false);
+}
+
+// Noi lien mep: hai ben duong ghep phai tra ve cung mot cho tren nhan, khong
+// thi thay mot vach doc chay quanh lon.
+{
+  const phi = 0.6;
+  // Tim s ngay truoc va ngay sau diem a = pi/2.
+  const sGhep = Math.sin(PI / 2 - phi);
+  const a = mauLay(sGhep - 1e-6, phi);
+  const b = mauLay(sGhep + 1e-6, phi);
+  eq("mot ben ghep la mat truoc", a.sau, false);
+  eq("ben kia ghep la mat sau", b.sau, true);
+  gan("mat truoc cham dung mep phai cua anh", a.u, 1, 1e-5);
+  gan("mat sau bat dau dung tu mep phai", b.u, 0, 1e-5);
+}
+{
+  // Xoay nguoc lai thi lo duong ghep ben kia, o mep trai.
+  const phi = -0.6;
+  const sGhep = Math.sin(-PI / 2 - phi);
+  const a = mauLay(sGhep + 1e-6, phi);
+  const b = mauLay(sGhep - 1e-6, phi);
+  eq("ben trong duong ghep trai la mat truoc", a.sau, false);
+  gan("mat truoc cham dung mep trai cua anh", a.u, -1, 1e-5);
+  eq("ben ngoai la mat sau", b.sau, true);
+  gan("mat sau ket thuc dung o mep trai", b.u, 1, 1e-5);
+}
+
+// Mot luc chi lo duoc MOT duong ghep: xoay mot chieu thi mep ben kia van con
+// nam trong nua truoc, chua vong toi.
+{
+  let caHai = 0;
+  for (let i = 1; i <= 60; i++) {
+    const phi = (i * 1.2) / 60;
+    if (mauLay(-1, phi).sau && mauLay(1, phi).sau) caHai++;
+  }
+  eq("xoay vua phai thi chi lo mot ben", caHai, 0);
+}
+
+// Quay tron mot vong thi tro lai y nguyen.
+for (const s of [-0.6, 0, 0.4]) {
+  gan(`quay tron 2pi tro lai cho cu tai s=${s}`, mauLay(s, 2 * PI).u, mauLay(s, 0).u, 1e-9);
+  gan(`quay lui 2pi tro lai cho cu tai s=${s}`, mauLay(s, -2 * PI).u, mauLay(s, 0).u, 1e-9);
+}
+
+// Quay nua vong thi ca lon la mat sau — luc nay doi anh sang loai khac se
+// khong ai thay, do chinh la cho de thay nhan.
 dung(
-  "ve vong luon nam trong (-pi; pi]",
-  [...Array(400)].every((_, i) => {
-    const v = veVong(-20 + i * 0.1);
-    return v > -PI - 1e-12 && v <= PI + 1e-12;
-  }),
+  "quay nua vong thi toan bo la mat sau",
+  [-0.95, -0.5, 0, 0.5, 0.95].every((s) => mauLay(s, PI).sau),
 );
 
-// -------------------------------------------------------- trong so
-
-gan("dung tam thi trong so bang 1", trongSo(0), 1);
-gan("dung ranh gioi thi bang 0,5", trongSo(NUA_CUNG), 0.5, 1e-12);
-gan("qua dai hoa thi bang 0", trongSo(NUA_CUNG + NUA_HOA), 0);
-gan("ngoai khoang cung bang 0", trongSo(NUA_CUNG * 2), 0);
-// Hai tam ke nhau cong lai luon du 1: khong cho nao bi hut sang hay chay sang.
+// u cua mat sau luon nam trong 0..1, khong bao gio troi ra ngoai bang mau.
 {
-  let lech = 0;
+  let ngoai = 0;
   for (let i = 0; i <= 400; i++) {
-    const g = -NUA_CUNG + (i * 2 * NUA_CUNG) / 400;
-    lech = Math.max(lech, Math.abs(trongSo(g) + trongSo(g - Math.PI / 2) + trongSo(g + Math.PI / 2) - 1));
+    const phi = -4 * PI + (i * 8 * PI) / 400;
+    for (const s of [-1, -0.5, 0, 0.5, 1]) {
+      const m = mauLay(s, phi);
+      if (m.sau && (m.u < 0 || m.u > 1)) ngoai++;
+      if (!m.sau && (m.u < -1 || m.u > 1)) ngoai++;
+    }
   }
-  gan("hai tam ke nhau cong lai du 1", lech, 0, 1e-9);
-}
-gan("doi xung hai ben", trongSo(0.3), trongSo(-0.3), 1e-12);
-dung(
-  "giam dan tu tam ra",
-  [...Array(50)].every(
-    (_, i) =>
-      trongSo((i * (NUA_CUNG + NUA_HOA)) / 50) >=
-      trongSo(((i + 1) * (NUA_CUNG + NUA_HOA)) / 50),
-  ),
-);
-// Diem nao tren vong cung phai duoc it nhat mot tam nhin thay, khong thi trai
-// nhan ra lo trong.
-{
-  let itNhat = Infinity;
-  for (let i = 0; i < 720; i++) {
-    const goc = (i / 720) * 2 * PI;
-    let tong = 0;
-    for (let k = 0; k < 4; k++) tong += trongSo(veVong(goc - (k * PI) / 2));
-    itNhat = Math.min(itNhat, tong);
-  }
-  dung(`cho nao tren vong cung co tam nhin thay (${itNhat.toFixed(3)})`, itNhat > 0.2);
+  eq("khong co diem lay nao troi ra ngoai bang mau", ngoai, 0);
 }
 
-// -------------------------------------------------------- bang tra
+// Vao ngoai khoang cung khong lam vo phep tinh.
+eq("s ngoai khoang bi kep lai", mauLay(5, 0).u, 1);
+eq("s am ngoai khoang bi kep lai", mauLay(-5, 0).u, -1);
+
+// ------------------------------------------------------- bang tra
 
 {
   const BUC = 1024;
   const b0 = bangChieu(0, bangRong(BUC));
-  // Dung yen: giua lon la goc 0 cua dai nhan, hai mep la 1/4 vong hai ben.
-  // So theo khoang cach TREN VONG: 0 va 1 la cung mot cho.
-  const cachVong = (a: number, b: number) => {
-    const d = Math.abs(a - b) % 1;
-    return Math.min(d, 1 - d);
-  };
-  gan("phi=0: giua lon ung voi dau dai nhan", cachVong(b0.u[(BUC - 1) >> 1], 0), 0, 0.002);
-  gan("phi=0: mep phai la 1/4 vong", cachVong(b0.u[BUC - 1], 0.25), 0, 0.002);
-  gan("phi=0: mep trai la 3/4 vong", cachVong(b0.u[0], 0.75), 0, 0.002);
+  // Dung yen thi bang tra phai tra ve dung cot cua no va he so chinh sang phai
+  // bang 1 — day la dieu kien de anh dung yen hien ra y het anh goc.
+  let lechU = 0;
+  let lechF = 0;
+  for (let i = 0; i < BUC; i++) {
+const s = -1 + (2 * i) / (BUC - 1);
+lechU = Math.max(lechU, Math.abs(b0.u[i] - s));
+lechF = Math.max(lechF, Math.abs(b0.sangManHinh[i] / b0.sangNhan[i] - 1));
+  }
+  dung("phi=0: bang tra tra ve dung cot cua no", lechU < 1e-6);
+  dung("phi=0: he so chinh sang deu bang 1", lechF < 1e-6);
+  // Dung yen thi dai hoa chi duoc cham vien, khong duoc an vao giua nhan. 56
+  // bac tren 1024 la khoang 2,3% ban kinh moi ben — vai diem anh sat mep, ma
+  // ngay tai do hai anh truoc/sau cung la mot cho tren vo lon nen hoa vao nhau
+  // khong sai gi.
+  const chamHoa = [...b0.hoa].filter((h) => h > 0).length;
+  dung(`phi=0: dai hoa chi cham vien (${chamHoa} bac)`, chamHoa <= 56);
 
   const b1 = bangChieu(1.0, bangRong(BUC));
-  dung("u luon trong 0..1", [...b1.u].every((v) => v >= 0 && v <= 1));
-  dung("do sang luon duong", [...b1.sang].every((v) => v > 0 && v <= 1));
-  dung("do nen luon duong", [...b1.nen].every((v) => v > 0));
-  // Do nen o mep phai lon hon han o giua: do la cho nhan bi don lai.
-  dung("sat mep nen hon giua", b1.nen[BUC - 2] > b1.nen[BUC >> 1] * 3);
-  dung("do nen bi chan tran", [...b1.nen].every((v) => v <= TRAN_NEN));
-
-  // Xoay tron mot vong thi tra ve dung cho cu.
-  const b2 = bangChieu(2 * PI, bangRong(BUC));
-  let lech = 0;
-  for (let i = 0; i < BUC; i++) {
-    const d = Math.abs(b2.u[i] - b0.u[i]);
-    lech = Math.max(lech, Math.min(d, 1 - d));
+  dung("xoay thi co phan la mat sau", [...b1.hoa].some((h) => h === 1));
+  dung("xoay thi van con phan la nhan", [...b1.hoa].some((h) => h === 0));
+  dung("co vung hoa dan giua hai ben", [...b1.hoa].some((h) => h > 0 && h < 1));
+  dung("he so hoa luon trong 0..1", [...b1.hoa].every((h) => h >= 0 && h <= 1));
+  dung("co danh dau mat sau", [...b1.sau].some((v) => v === 1));
+  dung("van con danh dau mat truoc", [...b1.sau].some((v) => v === 0));
+  // Do nen chi bi chan dau tren; phan nho hon 1 phai giu vi do la tin hieu
+  // cho biet cho nao dang bi keo gian.
+  dung(
+    "do nen duong va bi chan tran",
+    [...b1.nen].every((v) => v >= 0 && v <= TRAN_NEN),
+  );
+  dung("xoay thi co cho bi keo gian manh", [...b1.nen].some((v) => v < 0.35));
+  // Dung yen thi anh khong bi nen o dau ca, vi moi cot lay dung cot cua no.
+  dung(
+    "phi=0: khong nen o bat cu dau",
+    [...b0.nen].every((v) => Math.abs(v - 1) < 1e-6),
+  );
+  // Xoay roi thi hai mep bi nen manh hon giua.
+  dung("xoay thi mep trai nen hon giua", b1.nen[1] > b1.nen[BUC >> 1]);
+  dung("xoay thi mep phai nen hon giua", b1.nen[BUC - 2] > b1.nen[BUC >> 1]);
+  dung(
+"do sang luon duong va khong vuot dinh",
+[...b1.sangManHinh, ...b1.sangNhan].every((v) => v > 0 && v <= 1),
+  );
+  // Quay nua vong thi khong con nhan nao — day la cho de doi sang loai bia khac.
+  dung(
+"quay nua vong thi toan mat sau",
+[...bangChieu(Math.PI, bangRong(BUC)).hoa].every((h) => h === 1),
+  );
+  eq("dai hoa dung hang so da khai", DAI_HOA, 0.3);
+  // He so chinh sang phai duoc chan tran, khong thi cho toi xoay ra chinh dien
+  // bi keo sang gap ba lan, bet trang.
+  dung(
+    "he so chinh sang bi chan tran",
+    [...b1.heSoNhan, ...b1.heSoSau].every((v) => v > 0 && v <= TRAN_SANG + 1e-6),
+  );
+  dung(
+    "phi=0: he so nhan deu bang 1",
+    [...b0.heSoNhan].every((v) => Math.abs(v - 1) < 1e-6),
+  );
+  // Dung lai bang cu phai cho ket qua y het bang moi, khong con sot so cu.
+  {
+    const chung = bangRong(BUC);
+    bangChieu(2.4, chung);
+    bangChieu(0.7, chung);
+    const rieng = bangChieu(0.7, bangRong(BUC));
+    let lech = 0;
+    for (let i = 0; i < BUC; i++) {
+      lech = Math.max(lech, Math.abs(chung.u[i] - rieng.u[i]));
+      lech = Math.max(lech, Math.abs(chung.hoa[i] - rieng.hoa[i]));
+      lech = Math.max(lech, Math.abs(chung.heSoSau[i] - rieng.heSoSau[i]));
+    }
+    eq("dung lai bang cu khong sot so cu", lech, 0);
   }
-  dung(`quay tron 2pi tro lai cho cu (lech ${lech.toExponential(1)})`, lech < 1e-6);
-
-  // Dung lai bang cu phai cho ket qua y het bang moi.
-  const chung = bangRong(BUC);
-  bangChieu(2.4, chung);
-  bangChieu(0.7, chung);
-  const rieng = bangChieu(0.7, bangRong(BUC));
-  let sot = 0;
-  for (let i = 0; i < BUC; i++) {
-    sot = Math.max(sot, Math.abs(chung.u[i] - rieng.u[i]));
-    sot = Math.max(sot, Math.abs(chung.nen[i] - rieng.nen[i]));
-  }
-  eq("dung lai bang cu khong sot so cu", sot, 0);
 }
+
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
