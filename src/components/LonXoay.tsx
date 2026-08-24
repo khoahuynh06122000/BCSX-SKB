@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { BangChieu } from "../lib/lonXoay";
-import { bangChieu, bangRong } from "../lib/lonXoay";
+import { TRAN_NEN, bangChieu, bangRong } from "../lib/lonXoay";
 
 /**
  * LON BIA XOAY 3D
@@ -41,6 +41,30 @@ const BIEN_LAC = 0.4;
 const BAN_KINH_MO = 10;
 /** Vị trí ngang lấy màu dựng hông, tính theo bán kính của hàng. */
 const S_HONG = 0.88;
+/**
+ * Ngoài mức này của bán kính thì chuyển hẳn sang dải hông tự dựng.
+ *
+ * Sát mép lon, ảnh gốc chỉ còn cái viền khử răng cưa nham nhở: vài điểm ảnh
+ * lem nhem, hàng nào một kiểu. Lấy đúng nó rồi ép cho đục hẳn thì rìa lon hiện
+ * ra như bị xơ, đầy vạch ngang — mà đó lại là chỗ vỏ lon cong khuất đi, đáng
+ * ra phải là một dải tối mượt.
+ */
+const S_VIEN = 0.94;
+/**
+ * Trên mức nén này cũng chuyển sang dải hông.
+ *
+ * Giữa lúc quay, sát mép có chỗ hàng trăm cột ảnh dồn vào một cột màn hình.
+ * Lấy trung bình vài chục cột thì mỗi cột màn hình ra một kiểu, thành nhiễu.
+ */
+const NEN_CHUYEN_HONG = 4;
+/**
+ * Dải hông tự dựng được tô tối đi chừng này.
+ *
+ * Để đúng độ sáng thì nó thành một mảng sáng trơn nằm giữa hai vùng đầy chi
+ * tiết, nhìn như nhãn bị bôi. Tối đi thì mắt đọc ra là chỗ vỏ lon cong khuất
+ * đi — vốn cũng là sự thật, chỗ đó đúng là mép vỏ đang lượn ra sau.
+ */
+const TOI_HONG = 0.72;
 /**
  * Dưới mức giãn này thì bắt đầu chuyển sang bản đã làm mờ dọc.
  *
@@ -343,9 +367,27 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
        */
       const aVien = truoc.aGiua[y] * phu * 255;
 
-      // Mức chuyển sang bản làm mờ dọc: 0 là dùng ảnh gốc, 1 là mờ hẳn.
-      const mo =
-        doNen >= NGUONG_GIAN ? 0 : (NGUONG_GIAN - doNen) / NGUONG_GIAN;
+      /*
+       * Mức chuyển sang dải hông tự dựng: 0 là dùng ảnh thật, 1 là dựng hẳn.
+       *
+       * Ba trường hợp phải dựng, đều là chỗ ảnh chụp không còn gì để lấy:
+       *   - sát mép lon, nơi chỉ còn viền khử răng cưa;
+       *   - chỗ bị kéo giãn mạnh, tức dải nối hai ảnh;
+       *   - chỗ bị nén mạnh, hàng trăm cột ảnh dồn vào một cột màn hình.
+       */
+      const xa = s < 0 ? -s : s;
+      let mo = xa > S_VIEN ? (xa - S_VIEN) / (1 - S_VIEN) : 0;
+      if (doNen < NGUONG_GIAN) {
+        const g = (NGUONG_GIAN - doNen) / NGUONG_GIAN;
+        if (g > mo) mo = g;
+      } else if (doNen > NEN_CHUYEN_HONG) {
+        const n2 = Math.min(
+          1,
+          (doNen - NEN_CHUYEN_HONG) / (TRAN_NEN - NEN_CHUYEN_HONG),
+        );
+        if (n2 > mo) mo = n2;
+      }
+      if (mo > 1) mo = 1;
 
       if (w <= 0 && doNen < 1.5 && mo === 0) {
         // Đường đi của phần lớn điểm ảnh: nhãn thuần, không nén. Viết thẳng ra
@@ -429,7 +471,8 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
           ? truoc.hongTrai
           : truoc.hongPhai;
       const q3 = y * 3;
-      const sangHong = heSoNhan[i] * (1 - w) + heSoSau[i] * w;
+      const sangHong =
+        (heSoNhan[i] * (1 - w) + heSoSau[i] * w) * TOI_HONG;
 
       const gop = aTruoc * (1 - w) + aSau * w;
       // KHÔNG BAO GIỜ để trống một điểm nằm trong bóng lon. Chỗ ảnh không có
