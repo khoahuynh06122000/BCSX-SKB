@@ -51,6 +51,18 @@ const ANH_LON: Record<LoaiBia, string> = {
 };
 
 /**
+ * ẢNH MẶT SAU — lon xoay đúng 180°, cũng nền trong.
+ *
+ * Bắt buộc phải có: lon quay tròn nên thiếu mặt sau là xoay tới đâu lòi ra
+ * mảng trống tới đó. Thiếu tệp nào thì riêng loại đó về hình vẽ SVG.
+ */
+const ANH_LON_SAU: Record<LoaiBia, string> = {
+  caubang: "/lon-cau-vang-sau.png",
+  laudai: "/lon-lau-dai-mat-trang-sau.png",
+  atlas: "/lon-suc-manh-atlas-sau.png",
+};
+
+/**
  * Màu bia trong ly khi chưa có ảnh lon, lấy theo đúng tông của từng lon:
  * Cầu Vàng vàng hổ phách, Lâu Đài Mặt Trăng vàng nhạt trong, Atlas nâu đen.
  */
@@ -563,6 +575,7 @@ export default function ManHinhDangNhap({
               ) : (
                 <LonXoay
                   anh={ANH_LON}
+                  anhSau={ANH_LON_SAU}
                   loai={loai}
                   ten={TEN_BIA}
                   onLoiAnh={(id) =>

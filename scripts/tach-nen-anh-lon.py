@@ -19,6 +19,13 @@ Chạy:  python scripts/tach-nen-anh-lon.py public/lon-cau-vang.png ...
 
 Thêm cờ --lat để lật ngang: ảnh xuất từ file dựng bao bì đôi khi bị lật gương,
 nhìn lướt không thấy nhưng chữ trên lon đọc ngược hết.
+
+Thêm cờ --loang cho ảnh nền XÁM CHUYỂN SẮC (phông chụp studio) thay vì nền
+trắng phẳng: lúc đó không có ngưỡng sáng nào đúng cho cả ảnh, vì góc trên nền
+sáng 240 mà góc dưới chỉ 178 — lấy ngưỡng cao thì sót góc tối, lấy thấp thì ăn
+mất thân lon. Chế độ này so từng điểm với ĐIỂM NỀN KỀ NÓ chứ không so với một
+ngưỡng chung, nên bò theo được dải chuyển sắc và dừng lại ở mép lon, chỗ màu
+đổi đột ngột.
 """
 import struct
 import sys
@@ -120,6 +127,124 @@ def ghi_png(duong_dan, w, h, px):
     out += khoi(b"IDAT", zlib.compress(bytes(raw), 9))
     out += khoi(b"IEND", b"")
     open(duong_dan, "wb").write(out)
+
+
+def tach_nen_mo_hinh(w, h, px, sai_so=40):
+    """
+    Xoá nền chuyển sắc bằng cách DỰNG MÔ HÌNH NỀN rồi so từng điểm với nó.
+
+    Cách loang theo điểm kề (`tach_nen_loang`) không dùng được cho ảnh có quầng
+    sáng quanh lon: nới tay cho vết loang qua được quầng thì nó qua luôn cả thân
+    lon, vì thân lon cũng chuyển màu từ từ; siết lại thì mắc ở quầng.
+
+    Ở đây lợi dụng một điều: nền là dải chuyển sắc TRƠN trải hết bề ngang, nên
+    hai đầu mỗi hàng chắc chắn là nền. Nội suy tuyến tính giữa hai đầu ấy ra màu
+    nền dự đoán cho cả hàng. Điểm nào lệch khỏi dự đoán quá `sai_so` thì là lon.
+    Quầng sáng lệch ít nên bị xoá, còn thân lon lệch nhiều nên giữ lại — điều mà
+    một ngưỡng theo từng bước không phân biệt nổi.
+
+    Vẫn loang từ biên để giữ tính liền mạch: mảng sáng giữa nhãn có thể tình cờ
+    giống màu nền, nhưng nó không nối ra tới mép ảnh nên không bị xoá.
+    """
+    la_nen = bytearray(w * h)
+    hang_doi = deque()
+
+    def giong_nen(i):
+        x, y = i % w, i // w
+        t = x / (w - 1) if w > 1 else 0
+        for c in range(3):
+            trai = px[(y * w) * 4 + c]
+            phai = px[(y * w + w - 1) * 4 + c]
+            if abs(px[i * 4 + c] - (trai * (1 - t) + phai * t)) > sai_so:
+                return False
+        return True
+
+    def xet(i):
+        if la_nen[i] or not giong_nen(i):
+            return
+        la_nen[i] = 1
+        hang_doi.append(i)
+
+    for x in range(w):
+        xet(x)
+        xet((h - 1) * w + x)
+    for y in range(h):
+        xet(y * w)
+        xet(y * w + w - 1)
+
+    while hang_doi:
+        i = hang_doi.popleft()
+        x, y = i % w, i // w
+        if x > 0:
+            xet(i - 1)
+        if x < w - 1:
+            xet(i + 1)
+        if y > 0:
+            xet(i - w)
+        if y < h - 1:
+            xet(i + w)
+
+    for i in range(w * h):
+        if la_nen[i]:
+            px[i * 4 + 3] = 0
+    return sum(la_nen)
+
+
+def tach_nen_loang(w, h, px, sai_so=11, lech_mau=16):
+    """
+    Xoá nền chuyển sắc: loang từ biên, mỗi bước chỉ so với điểm nền vừa qua.
+
+    Hai điều kiện phải cùng đúng thì mới coi là nền:
+      - lệch không quá `sai_so` so với điểm nền kề bên (bò theo dải chuyển sắc);
+      - ba kênh màu gần bằng nhau, chênh không quá `lech_mau` (nền xám thì trung
+        tính, còn thân lon thì có màu — điều kiện này giữ cho vết loang không
+        tràn vào những mảng sáng có màu trên nhãn).
+    """
+    la_nen = bytearray(w * h)
+    hang_doi = deque()
+
+    def trung_tinh(i):
+        r, g, b = px[i * 4], px[i * 4 + 1], px[i * 4 + 2]
+        return max(r, g, b) - min(r, g, b) <= lech_mau
+
+    def gieo(i):
+        if la_nen[i] or not trung_tinh(i):
+            return
+        la_nen[i] = 1
+        hang_doi.append(i)
+
+    for x in range(w):
+        gieo(x)
+        gieo((h - 1) * w + x)
+    for y in range(h):
+        gieo(y * w)
+        gieo(y * w + w - 1)
+
+    def xet(i, tu):
+        if la_nen[i] or not trung_tinh(i):
+            return
+        for c in range(3):
+            if abs(px[i * 4 + c] - px[tu * 4 + c]) > sai_so:
+                return
+        la_nen[i] = 1
+        hang_doi.append(i)
+
+    while hang_doi:
+        i = hang_doi.popleft()
+        x, y = i % w, i // w
+        if x > 0:
+            xet(i - 1, i)
+        if x < w - 1:
+            xet(i + 1, i)
+        if y > 0:
+            xet(i - w, i)
+        if y < h - 1:
+            xet(i + w, i)
+
+    for i in range(w * h):
+        if la_nen[i]:
+            px[i * 4 + 3] = 0
+    return sum(la_nen)
 
 
 def tach_nen(w, h, px, nguong_nen=NGUONG_NEN, nguong_vien=NGUONG_VIEN):
@@ -229,11 +354,25 @@ def main(doi_so):
     if not cac_tep:
         raise SystemExit(
             "Cách dùng: python scripts/tach-nen-anh-lon.py "
-            "[--lat] [--nguong=N] [--vien=N] <tệp.png>..."
+            "[--lat] [--loang|--mohinh [--saiso=N] [--lech=N]] "
+            "[--nguong=N] [--vien=N] <tệp.png>..."
         )
+    loang = "--loang" in doi_so
+    sai_so = 11
+    lech_mau = 16
+    for a in doi_so:
+        if a.startswith("--saiso="):
+            sai_so = int(a.split("=", 1)[1])
+        elif a.startswith("--lech="):
+            lech_mau = int(a.split("=", 1)[1])
     for tep in cac_tep:
         w, h, px = doc_png(tep)
-        xoa = tach_nen(w, h, px, nen, vien)
+        if "--mohinh" in doi_so:
+            xoa = tach_nen_mo_hinh(w, h, px, sai_so)
+        elif loang:
+            xoa = tach_nen_loang(w, h, px, sai_so, lech_mau)
+        else:
+            xoa = tach_nen(w, h, px, nen, vien)
         nw, nh, moi = cat_sat(w, h, px)
         if lat:
             moi = lat_ngang(nw, nh, moi)

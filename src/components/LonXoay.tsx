@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { BangChieu } from "../lib/lonXoay";
-import { S_MEP, bangChieu, bangRong } from "../lib/lonXoay";
+import { bangChieu, bangRong } from "../lib/lonXoay";
 
 /**
  * LON BIA XOAY 3D
@@ -9,30 +9,27 @@ import { S_MEP, bangChieu, bangRong } from "../lib/lonXoay";
  * nhãn cuộn quanh thân và nén lại ở hai mép đúng như lon thật đang xoay. Toàn
  * bộ phép tính nằm ở `src/lib/lonXoay.ts` — đọc chú thích đầu tệp đó trước.
  *
+ * Mỗi loại bia cần HAI ảnh: mặt trước và mặt sau. Thiếu ảnh nào thì loại đó
+ * quay về hình vẽ SVG, vì không có mặt sau thì xoay tới đâu cũng lòi ra một
+ * mảng trống.
+ *
  * Đổi loại bia thì lon quay TRỌN MỘT VÒNG, và ảnh được thay đúng lúc lon quay
- * được nửa vòng: lúc ấy cả bề mặt nhìn thấy đều là mặt sau dựng thêm, không
- * còn tí nhãn nào, nên không ai thấy ảnh nhảy.
+ * được nửa vòng: lúc ấy màn hình toàn mặt sau, không còn tí nhãn trước nào,
+ * nên không ai thấy ảnh nhảy.
  */
 
 /**
- * Khung vẽ chuẩn, nhỏ lại trên máy màn hình nhỏ.
+ * Khung vẽ chuẩn.
  *
- * Mỗi khung hình phải tính lại từng điểm ảnh, nên chi phí tỉ lệ thẳng với số
- * điểm. Điện thoại vốn hiện lon nhỏ hơn hẳn, vẽ ở 340×560 rồi thu lại là trả
- * tiền cho phần không ai nhìn thấy — khung nhỏ cắt được nửa số điểm.
- *
- * Chọn một lần lúc nạp mã: xoay ngang xoay dọc không đổi hạng máy, mà đổi cỡ
- * khung giữa chừng thì phải dựng lại toàn bộ kho ảnh.
+ * Bằng đúng cỡ ảnh nguồn (rộng hơn 300, cao gần 600). Vẽ to hơn không nét thêm
+ * vì nguồn chỉ có chừng ấy chi tiết; vẽ nhỏ hơn thì vứt đi chi tiết đang có và
+ * lon hiện ra nhoè — đó là lý do không rút khung xuống trên điện thoại nữa,
+ * dù rút thì nhanh hơn.
  */
-const MAN_NHO =
-  typeof window !== "undefined" &&
-  Math.min(window.innerWidth, window.innerHeight) < 700;
-const KHUNG_W = MAN_NHO ? 240 : 340;
-const KHUNG_H = MAN_NHO ? 396 : 560;
+const KHUNG_W = 340;
+const KHUNG_H = 560;
 /** Số bậc của bảng tra. 1024 bậc là dưới nửa điểm ảnh, mắt không thấy bậc. */
 const SO_BUC = 1024;
-/** Bán kính làm mịn dọc dải màu mặt sau, tính bằng hàng. */
-const BAN_KINH_MIN = 26;
 /** Một vòng quay khi đổi loại, mili giây. */
 const THOI_GIAN_QUAY = 1150;
 /** Chu kỳ lắc qua lại lúc đứng yên, mili giây. */
@@ -40,40 +37,35 @@ const CHU_KY_LAC = 9000;
 /** Biên độ lắc, radian. Khoảng 23 độ mỗi bên. */
 const BIEN_LAC = 0.4;
 
-interface Kho {
-  /** Ảnh gốc đặt giữa khung chuẩn, chưa đụng gì tới màu. */
+/** Một mặt lon đã đặt vào khung chuẩn, kèm bóng lon của từng hàng. */
+interface Mat {
   diem: Uint8ClampedArray;
-  /** Mép trái, mép phải, tâm và bán kính của TỪNG HÀNG. */
   trai: Int16Array;
   phai: Int16Array;
   tam: Float32Array;
   ban: Float32Array;
-  /** Dải màu hai mép đã làm mịn dọc, dùng dựng mặt sau. RGBA theo hàng. */
-  mepTrai: Uint8ClampedArray;
-  mepPhai: Uint8ClampedArray;
 }
 
-/**
- * Dựng sẵn mọi thứ cần cho một loại bia. Chạy một lần lúc ảnh tải xong vì phải
- * quét toàn bộ điểm ảnh, đủ nặng để không được phép chạy mỗi khung hình.
- */
-function dungKho(img: HTMLImageElement): Kho | null {
-  const ti = Math.min(KHUNG_W / img.naturalWidth, KHUNG_H / img.naturalHeight);
-  const w = Math.round(img.naturalWidth * ti);
-  const h = Math.round(img.naturalHeight * ti);
-  const tam = document.createElement("canvas");
-  tam.width = KHUNG_W;
-  tam.height = KHUNG_H;
-  const g = tam.getContext("2d", { willReadFrequently: true });
+interface Kho {
+  truoc: Mat;
+  sau: Mat;
+}
+
+/** Vẽ ảnh vào khung chuẩn rồi đo bóng lon của từng hàng theo alpha. */
+function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
+  const c = document.createElement("canvas");
+  c.width = KHUNG_W;
+  c.height = KHUNG_H;
+  const g = c.getContext("2d", { willReadFrequently: true });
   if (!g) return null;
-  g.drawImage(img, Math.round((KHUNG_W - w) / 2), Math.round((KHUNG_H - h) / 2), w, h);
+  ve(g);
   const diem = g.getImageData(0, 0, KHUNG_W, KHUNG_H).data;
 
-  // Mép lon của TỪNG HÀNG, lấy theo alpha. Đây là chỗ giữ cho dáng lon không
-  // vỡ khi xoay: lon thóp ở cổ và đáy nên mỗi hàng một bán kính khác nhau.
+  // Mép lon của TỪNG HÀNG. Đây là chỗ giữ cho dáng lon không vỡ khi xoay: lon
+  // thóp ở cổ và đáy nên mỗi hàng một bán kính khác nhau.
   const trai = new Int16Array(KHUNG_H).fill(-1);
   const phai = new Int16Array(KHUNG_H).fill(-1);
-  const oTam = new Float32Array(KHUNG_H);
+  const tam = new Float32Array(KHUNG_H);
   const ban = new Float32Array(KHUNG_H);
   for (let y = 0; y < KHUNG_H; y++) {
     const dong = y * KHUNG_W;
@@ -84,89 +76,164 @@ function dungKho(img: HTMLImageElement): Kho | null {
       }
     }
     if (trai[y] >= 0) {
-      oTam[y] = (trai[y] + phai[y] + 1) / 2;
+      tam[y] = (trai[y] + phai[y] + 1) / 2;
       ban[y] = (phai[y] + 1 - trai[y]) / 2;
     }
   }
+  return { diem, trai, phai, tam, ban };
+}
 
-  // Hai dải màu dựng mặt sau.
-  const thoTrai = new Uint8ClampedArray(KHUNG_H * 4);
-  const thoPhai = new Uint8ClampedArray(KHUNG_H * 4);
-  for (let y = 0; y < KHUNG_H; y++) {
-    if (trai[y] < 0) continue;
-    const kep = (x: number) => Math.max(trai[y], Math.min(phai[y], Math.round(x)));
-    const xt = kep(oTam[y] - S_MEP * ban[y]);
-    const xp = kep(oTam[y] + S_MEP * ban[y]);
-    thoTrai.set(diem.subarray((y * KHUNG_W + xt) * 4, (y * KHUNG_W + xt) * 4 + 4), y * 4);
-    thoPhai.set(diem.subarray((y * KHUNG_W + xp) * 4, (y * KHUNG_W + xp) * 4 + 4), y * 4);
-  }
-
-  // Làm mịn DỌC: lấy nguyên thì mặt sau thành sọc ngang, vì mỗi hàng một màu
-  // theo chữ và hình trên nhãn. Mịn rồi thì còn lại màu nền thân lon và hai
-  // vành kim loại trên dưới — đúng như mặt sau trơn của lon thật.
-  const minDoc = (tho: Uint8ClampedArray) => {
-    const ra = new Uint8ClampedArray(tho.length);
-    for (let y = 0; y < KHUNG_H; y++) {
-      let r = 0;
-      let g2 = 0;
-      let b = 0;
-      let n = 0;
-      const dau = Math.max(0, y - BAN_KINH_MIN);
-      const cuoi = Math.min(KHUNG_H - 1, y + BAN_KINH_MIN);
-      for (let k = dau; k <= cuoi; k++) {
-        if (tho[k * 4 + 3] < 8) continue;
-        r += tho[k * 4];
-        g2 += tho[k * 4 + 1];
-        b += tho[k * 4 + 2];
-        n++;
+/** Khung bao quanh phần đục của một ảnh, theo alpha. */
+function khungBao(img: HTMLImageElement): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+} | null {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  if (!g) return null;
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  let t = c.height;
+  let d2 = -1;
+  let tr = c.width;
+  let ph = -1;
+  for (let y = 0; y < c.height; y++) {
+    const dong = y * c.width;
+    for (let x = 0; x < c.width; x++) {
+      if (d[(dong + x) * 4 + 3] > 24) {
+        if (y < t) t = y;
+        if (y > d2) d2 = y;
+        if (x < tr) tr = x;
+        if (x > ph) ph = x;
       }
-      if (n) {
-        ra[y * 4] = r / n;
-        ra[y * 4 + 1] = g2 / n;
-        ra[y * 4 + 2] = b / n;
-      }
-      ra[y * 4 + 3] = tho[y * 4 + 3];
     }
-    return ra;
-  };
-
-  return {
-    diem,
-    trai,
-    phai,
-    tam: oTam,
-    ban,
-    mepTrai: minDoc(thoTrai),
-    mepPhai: minDoc(thoPhai),
-  };
+  }
+  if (d2 < 0) return null;
+  return { x: tr, y: t, w: ph + 1 - tr, h: d2 + 1 - t };
 }
 
 /**
- * Vẽ một khung hình: lon đã xoay đi góc `phi`, ghi thẳng vào `ra`.
+ * Dựng sẵn mọi thứ cần cho một loại bia. Chạy một lần lúc hai ảnh tải xong vì
+ * phải quét toàn bộ điểm ảnh vài lượt, quá nặng để chạy mỗi khung hình.
  *
- * Vòng trong chạy hơn trăm nghìn lượt mỗi khung hình nên tách hẳn ba nhánh:
- * phần lớn điểm ảnh là NHÃN THUẦN, chỉ cần ba phép nhân. Gộp chung một công
- * thức cho cả ba thì mọi điểm đều phải tính thêm màu mặt sau và một phép chia,
- * đủ để tụt khung hình trên điện thoại.
+ * Ảnh mặt sau được ép vào ĐÚNG khung bao của mặt trước. Hai ảnh chụp rời nhau
+ * nên cỡ lon và lề chừa mỗi tấm một khác; không ép về cùng một chỗ thì lúc
+ * quay qua chỗ nối, bóng lon nhảy một cái.
  */
+function dungKho(anhTruoc: HTMLImageElement, anhSau: HTMLImageElement): Kho | null {
+  const baoTruoc = khungBao(anhTruoc);
+  const baoSau = khungBao(anhSau);
+  if (!baoTruoc || !baoSau) return null;
+
+  const ti = Math.min(KHUNG_W / baoTruoc.w, KHUNG_H / baoTruoc.h);
+  const w = Math.round(baoTruoc.w * ti);
+  const h = Math.round(baoTruoc.h * ti);
+  const dx = Math.round((KHUNG_W - w) / 2);
+  const dy = Math.round((KHUNG_H - h) / 2);
+
+  const truoc = doMat((g) =>
+    g.drawImage(anhTruoc, baoTruoc.x, baoTruoc.y, baoTruoc.w, baoTruoc.h, dx, dy, w, h),
+  );
+  const sau = doMat((g) =>
+    g.drawImage(anhSau, baoSau.x, baoSau.y, baoSau.w, baoSau.h, dx, dy, w, h),
+  );
+  if (!truoc || !sau) return null;
+  return { truoc, sau };
+}
+
+/**
+ * Lấy màu một cột nguồn, có khử răng cưa theo độ nén.
+ *
+ * Chỗ nén nhiều thì một cột màn hình gánh nhiều cột ảnh; lấy đúng một cột là
+ * bỏ qua phần còn lại, sinh vệt răng cưa nhấp nháy lúc lon quay. Lấy trung
+ * bình đúng chừng ấy cột thì mượt. Chỗ không nén thì nội suy giữa hai cột kề
+ * để khỏi bị bậc thang.
+ */
+function layCot(
+  m: Mat,
+  y: number,
+  xThuc: number,
+  nen: number,
+  ra: Float32Array,
+): number {
+  const dong = y * KHUNG_W;
+  const mepT = m.trai[y];
+  const mepP = m.phai[y];
+  ra[0] = 0;
+  ra[1] = 0;
+  ra[2] = 0;
+  let tong = 0;
+
+  const soTia = nen < 1.5 ? 0 : Math.min(8, Math.round(nen));
+  if (soTia === 0) {
+    // Nội suy giữa hai cột kề.
+    const san = Math.floor(xThuc);
+    const le = xThuc - san;
+    for (let k = 0; k < 2; k++) {
+      let x = san + k;
+      if (x < mepT) x = mepT;
+      else if (x > mepP) x = mepP;
+      const i = (dong + x) * 4;
+      const a = (m.diem[i + 3] / 255) * (k === 0 ? 1 - le : le);
+      ra[0] += m.diem[i] * a;
+      ra[1] += m.diem[i + 1] * a;
+      ra[2] += m.diem[i + 2] * a;
+      tong += a;
+    }
+  } else {
+    const dau = xThuc - (soTia - 1) / 2;
+    for (let k = 0; k < soTia; k++) {
+      let x = Math.round(dau + k);
+      if (x < mepT) x = mepT;
+      else if (x > mepP) x = mepP;
+      const i = (dong + x) * 4;
+      const a = m.diem[i + 3] / 255;
+      ra[0] += m.diem[i] * a;
+      ra[1] += m.diem[i + 1] * a;
+      ra[2] += m.diem[i + 2] * a;
+      tong += a;
+    }
+    tong /= soTia;
+    if (tong > 0) {
+      ra[0] /= soTia;
+      ra[1] /= soTia;
+      ra[2] /= soTia;
+    }
+  }
+  if (tong > 0) {
+    ra[0] /= tong;
+    ra[1] /= tong;
+    ra[2] /= tong;
+  }
+  return tong;
+}
+
+/** Vẽ một khung hình: lon đã xoay đi góc `phi`, ghi thẳng vào `ra`. */
 function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
-  const { diem, trai, phai, tam, ban, mepTrai, mepPhai } = kho;
+  const { truoc, sau } = kho;
   bangChieu(phi, bang);
-  const { u, hoa, t: thamSo, heSoNhan, heSoSau } = bang;
+  const { u, hoa, nen, heSoNhan, heSoSau } = bang;
   const out = ra.data;
   out.fill(0);
   const buc = u.length - 1;
+  const mauTruoc = new Float32Array(3);
+  const mauSau = new Float32Array(3);
 
+  // Bóng lon lấy theo MẶT TRƯỚC cho cả hai mặt: hai ảnh đã ép về cùng khung
+  // bao nhưng vẫn lệch nhau vài điểm, mà bóng lon thì không được phép nhúc
+  // nhích giữa chừng lúc quay.
   for (let y = 0; y < KHUNG_H; y++) {
-    const r = ban[y];
+    const r = truoc.ban[y];
     if (r < 1) continue;
-    const cx = tam[y];
-    const q = y * 4;
-    const aPhai = mepPhai[q + 3] / 255;
-    const aTrai = mepTrai[q + 3] / 255;
-    const dongNguon = y * KHUNG_W;
-    const mepT = trai[y];
-    const mepP = phai[y];
+    const cx = truoc.tam[y];
+    const dong = y * KHUNG_W;
+    const coSau = sau.ban[y] >= 1;
+    const cxS = sau.tam[y];
+    const rS = sau.ban[y];
     const x0 = Math.max(0, Math.floor(cx - r));
     const x1 = Math.min(KHUNG_W, Math.ceil(cx + r));
 
@@ -179,57 +246,53 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
       else if (s > 1) s = 1;
       const i = (((s + 1) / 2) * buc + 0.5) | 0;
       const w = hoa[i];
-      const d = (dongNguon + x) * 4;
+      const d = (dong + x) * 4;
+      const doNen = nen[i];
 
-      if (w <= 0) {
-        // Nhãn thuần — đường đi của phần lớn điểm ảnh.
-        let xn = ((cx + r * u[i] + 0.5) | 0) as number;
-        if (xn < mepT) xn = mepT;
-        else if (xn > mepP) xn = mepP;
-        const n = (dongNguon + xn) * 4;
-        const f = heSoNhan[i];
-        out[d] = diem[n] * f;
-        out[d + 1] = diem[n + 1] * f;
-        out[d + 2] = diem[n + 2] * f;
-        out[d + 3] = diem[n + 3] * phu;
+      let aTruoc = 0;
+      if (w <= 0 && doNen < 1.5) {
+        // Đường đi của phần lớn điểm ảnh: nhãn thuần, không nén. Viết thẳng ra
+        // đây thay vì gọi `layCot` — hơn trăm nghìn lượt gọi mỗi khung hình,
+        // riêng chi phí gọi hàm đã đủ tụt mất vài khung mỗi giây.
+        const xT = cx + r * u[i];
+        const san = Math.floor(xT);
+        const le = xT - san;
+        let xa = san;
+        if (xa < truoc.trai[y]) xa = truoc.trai[y];
+        else if (xa > truoc.phai[y]) xa = truoc.phai[y];
+        let xb = san + 1;
+        if (xb < truoc.trai[y]) xb = truoc.trai[y];
+        else if (xb > truoc.phai[y]) xb = truoc.phai[y];
+        const ia = (dong + xa) * 4;
+        const ib = (dong + xb) * 4;
+        const aa = (truoc.diem[ia + 3] / 255) * (1 - le);
+        const ab = (truoc.diem[ib + 3] / 255) * le;
+        const tong = aa + ab;
+        if (tong <= 0) continue;
+        const f = heSoNhan[i] / tong;
+        out[d] = (truoc.diem[ia] * aa + truoc.diem[ib] * ab) * f;
+        out[d + 1] = (truoc.diem[ia + 1] * aa + truoc.diem[ib + 1] * ab) * f;
+        out[d + 2] = (truoc.diem[ia + 2] * aa + truoc.diem[ib + 2] * ab) * f;
+        out[d + 3] = tong * phu * 255;
         continue;
       }
-
-      // Màu mặt sau, cần cho cả nhánh hoà lẫn nhánh mặt sau thuần.
-      const ts = thamSo[i];
-      const wTrai = aTrai * ts;
-      const aSau = wTrai + aPhai * (1 - wTrai);
-      const fSau = heSoSau[i];
-
-      if (w >= 1) {
-        if (aSau <= 0) continue;
-        for (let c = 0; c < 3; c++) {
-          out[d + c] =
-            ((mepTrai[q + c] * wTrai + mepPhai[q + c] * aPhai * (1 - wTrai)) / aSau) *
-            fSau;
-        }
-        out[d + 3] = aSau * phu * 255;
-        continue;
+      if (w < 1) {
+        aTruoc = layCot(truoc, y, cx + r * u[i], doNen, mauTruoc);
+      }
+      let aSau = 0;
+      if (w > 0 && coSau) {
+        // Ảnh mặt sau là lon đã quay nửa vòng, nên đổi dấu vị trí ngang.
+        aSau = layCot(sau, y, cxS - rS * u[i], doNen, mauSau);
       }
 
-      // Dải hoà giữa nhãn và mặt sau, chỉ vài cột quanh chỗ nhãn hết.
-      let xn = ((cx + r * u[i] + 0.5) | 0) as number;
-      if (xn < mepT) xn = mepT;
-      else if (xn > mepP) xn = mepP;
-      const n = (dongNguon + xn) * 4;
-      const aNhan = diem[n + 3] / 255;
-      const fNhan = heSoNhan[i];
-      const aGop = aNhan * (1 - w) + aSau * w;
-      if (aGop <= 0) continue;
-      for (let c = 0; c < 3; c++) {
-        const tuNhan = diem[n + c] * fNhan * aNhan * (1 - w);
-        const tuSau =
-          aSau > 0
-            ? (mepTrai[q + c] * wTrai + mepPhai[q + c] * aPhai * (1 - wTrai)) * fSau * w
-            : 0;
-        out[d + c] = (tuNhan + tuSau) / aGop;
-      }
-      out[d + 3] = aGop * phu * 255;
+      const gop = aTruoc * (1 - w) + aSau * w;
+      if (gop <= 0) continue;
+      const fT = heSoNhan[i] * aTruoc * (1 - w);
+      const fS = heSoSau[i] * aSau * w;
+      out[d] = (mauTruoc[0] * fT + mauSau[0] * fS) / gop;
+      out[d + 1] = (mauTruoc[1] * fT + mauSau[1] * fS) / gop;
+      out[d + 2] = (mauTruoc[2] * fT + mauSau[2] * fS) / gop;
+      out[d + 3] = gop * phu * 255;
     }
   }
 }
@@ -238,8 +301,10 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
 const muot = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
 
 interface Props {
-  /** Đường dẫn ảnh của từng loại. */
+  /** Đường dẫn ảnh mặt trước của từng loại. */
   anh: Record<string, string>;
+  /** Đường dẫn ảnh mặt sau của từng loại. */
+  anhSau: Record<string, string>;
   /** Loại đang chọn. */
   loai: string;
   /** Tên loại, dùng cho trình đọc màn hình. */
@@ -248,7 +313,7 @@ interface Props {
   onLoiAnh: (loai: string) => void;
 }
 
-export default function LonXoay({ anh, loai, ten, onLoiAnh }: Props) {
+export default function LonXoay({ anh, anhSau, loai, ten, onLoiAnh }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const khoRef = useRef<Record<string, Kho | null>>({});
   const hienRef = useRef(loai);
@@ -257,31 +322,43 @@ export default function LonXoay({ anh, loai, ten, onLoiAnh }: Props) {
   const loiRef = useRef(onLoiAnh);
   loiRef.current = onLoiAnh;
 
-  // Nạp ảnh và dựng kho, mỗi loại một lần.
+  // Nạp cả hai ảnh của mỗi loại rồi dựng kho, mỗi loại một lần.
   useEffect(() => {
     let con = true;
-    Object.entries(anh).forEach(([id, url]) => {
-      const img = new Image();
-      img.onload = () => {
-        if (!con) return;
-        try {
-          khoRef.current[id] = dungKho(img);
-        } catch {
-          // Trình duyệt chặn đọc điểm ảnh thì coi như không có ảnh và quay về
-          // hình vẽ, chứ không để lon biến mất khỏi màn hình đăng nhập.
-          khoRef.current[id] = null;
-        }
-        if (!khoRef.current[id]) loiRef.current(id);
-      };
-      img.onerror = () => {
-        if (con) loiRef.current(id);
-      };
-      img.src = url;
+    const nap = (url: string) =>
+      new Promise<HTMLImageElement>((xong, hong) => {
+        const img = new Image();
+        img.onload = () => xong(img);
+        img.onerror = hong;
+        img.src = url;
+      });
+
+    Object.entries(anh).forEach(([id, urlTruoc]) => {
+      const urlSau = anhSau[id];
+      if (!urlSau) {
+        loiRef.current(id);
+        return;
+      }
+      Promise.all([nap(urlTruoc), nap(urlSau)])
+        .then(([t, s]) => {
+          if (!con) return;
+          try {
+            khoRef.current[id] = dungKho(t, s);
+          } catch {
+            // Trình duyệt chặn đọc điểm ảnh thì coi như không có ảnh và quay về
+            // hình vẽ, chứ không để lon biến mất khỏi màn hình đăng nhập.
+            khoRef.current[id] = null;
+          }
+          if (!khoRef.current[id]) loiRef.current(id);
+        })
+        .catch(() => {
+          if (con) loiRef.current(id);
+        });
     });
     return () => {
       con = false;
     };
-  }, [anh]);
+  }, [anh, anhSau]);
 
   useEffect(() => {
     dichRef.current = loai;
@@ -317,8 +394,8 @@ export default function LonXoay({ anh, loai, ten, onLoiAnh }: Props) {
       if (q) {
         const p = Math.min(1, (moc - q.tu) / THOI_GIAN_QUAY);
         phi += 2 * Math.PI * muot(p);
-        // Quá nửa vòng là cả mặt nhìn thấy đều là mặt sau — thay ảnh ở đây thì
-        // không còn tí nhãn cũ nào trên màn hình để mà thấy nhảy.
+        // Quá nửa vòng là màn hình toàn mặt sau — thay ảnh ở đây thì không còn
+        // tí nhãn trước nào để mà thấy nhảy.
         if (!q.da && p >= 0.5) {
           hienRef.current = dichRef.current;
           q.da = true;

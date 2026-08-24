@@ -3,7 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DAI_HOA, GOC_SANG, bangChieu, bangRong, doSang, mauLay } from "../lonXoay";
+import {
+  DAI_HOA,
+  GOC_SANG,
+  TRAN_NEN,
+  TRAN_SANG,
+  bangChieu,
+  bangRong,
+  doSang,
+  mauLay,
+} from "../lonXoay";
 
 let pass = 0;
 let fail = 0;
@@ -145,16 +154,33 @@ lechF = Math.max(lechF, Math.abs(b0.sangManHinh[i] / b0.sangNhan[i] - 1));
   }
   dung("phi=0: bang tra tra ve dung cot cua no", lechU < 1e-6);
   dung("phi=0: he so chinh sang deu bang 1", lechF < 1e-6);
-  // Dung yen thi dai hoa chi duoc cham vai bac sat vien, khong duoc an vao nhan.
+  // Dung yen thi dai hoa chi duoc cham vien, khong duoc an vao giua nhan. 56
+  // bac tren 1024 la khoang 2,3% ban kinh moi ben — vai diem anh sat mep, ma
+  // ngay tai do hai anh truoc/sau cung la mot cho tren vo lon nen hoa vao nhau
+  // khong sai gi.
   const chamHoa = [...b0.hoa].filter((h) => h > 0).length;
-  dung(`phi=0: dai hoa chi cham vien (${chamHoa} bac)`, chamHoa <= 24);
+  dung(`phi=0: dai hoa chi cham vien (${chamHoa} bac)`, chamHoa <= 56);
 
   const b1 = bangChieu(1.0, bangRong(BUC));
   dung("xoay thi co phan la mat sau", [...b1.hoa].some((h) => h === 1));
   dung("xoay thi van con phan la nhan", [...b1.hoa].some((h) => h === 0));
   dung("co vung hoa dan giua hai ben", [...b1.hoa].some((h) => h > 0 && h < 1));
   dung("he so hoa luon trong 0..1", [...b1.hoa].every((h) => h >= 0 && h <= 1));
-  dung("tham so mat sau luon trong 0..1", [...b1.t].every((v) => v >= 0 && v <= 1));
+  dung("co danh dau mat sau", [...b1.sau].some((v) => v === 1));
+  dung("van con danh dau mat truoc", [...b1.sau].some((v) => v === 0));
+  // Do nen phai >= 1 va bi chan tran, khong thi vong lay mau chay mai o mep.
+  dung(
+    "do nen nam trong 1..TRAN_NEN",
+    [...b1.nen].every((v) => v >= 1 && v <= TRAN_NEN),
+  );
+  // Dung yen thi anh khong bi nen o dau ca, vi moi cot lay dung cot cua no.
+  dung(
+    "phi=0: khong nen o bat cu dau",
+    [...b0.nen].every((v) => Math.abs(v - 1) < 1e-6),
+  );
+  // Xoay roi thi hai mep bi nen manh hon giua.
+  dung("xoay thi mep trai nen hon giua", b1.nen[1] > b1.nen[BUC >> 1]);
+  dung("xoay thi mep phai nen hon giua", b1.nen[BUC - 2] > b1.nen[BUC >> 1]);
   dung(
 "do sang luon duong va khong vuot dinh",
 [...b1.sangManHinh, ...b1.sangNhan].every((v) => v > 0 && v <= 1),
@@ -164,12 +190,12 @@ lechF = Math.max(lechF, Math.abs(b0.sangManHinh[i] / b0.sangNhan[i] - 1));
 "quay nua vong thi toan mat sau",
 [...bangChieu(Math.PI, bangRong(BUC)).hoa].every((h) => h === 1),
   );
-  eq("dai hoa dung hang so da khai", DAI_HOA, 0.2);
+  eq("dai hoa dung hang so da khai", DAI_HOA, 0.3);
   // He so chinh sang phai duoc chan tran, khong thi cho toi xoay ra chinh dien
   // bi keo sang gap ba lan, bet trang.
   dung(
     "he so chinh sang bi chan tran",
-    [...b1.heSoNhan, ...b1.heSoSau].every((v) => v > 0 && v <= 1.5 + 1e-6),
+    [...b1.heSoNhan, ...b1.heSoSau].every((v) => v > 0 && v <= TRAN_SANG + 1e-6),
   );
   dung(
     "phi=0: he so nhan deu bang 1",

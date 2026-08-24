@@ -1,42 +1,44 @@
 # Ảnh lon bia cho màn hình đăng nhập
 
-Chép ba tệp vào chính thư mục này (`public/`), đúng tên:
+Mỗi loại bia cần **hai tấm**: mặt trước và mặt sau. Lon trên màn hình quay
+tròn, nên thiếu mặt sau là xoay tới đâu lòi ra mảng trống tới đó. Thiếu tấm nào
+thì riêng loại đó quay về hình vẽ, không làm hỏng hai loại kia.
 
-| Tệp | Loại bia | Danh mục trong app |
+| Loại bia | Mặt trước | Mặt sau |
 |---|---|---|
-| `lon-cau-vang.png` | Cầu Vàng — lon đỏ | Bia Golden Bridge Helles Lager |
-| `lon-lau-dai-mat-trang.png` | Lâu Đài Mặt Trăng — lon trắng | Bia Lunar Castle Dry hop Pale Ale |
-| `lon-suc-manh-atlas.png` | Sức Mạnh Atlas — lon đen | Bia Wings Dark Lager |
+| Cầu Vàng — Golden Bridge Helles Lager | `lon-cau-vang.png` | `lon-cau-vang-sau.png` |
+| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `lon-lau-dai-mat-trang.png` | `lon-lau-dai-mat-trang-sau.png` |
+| Sức Mạnh Atlas — Atlas Wings Dark Lager | `lon-suc-manh-atlas.png` | `lon-suc-manh-atlas-sau.png` |
 
-Có tệp là màn hình tự dùng ảnh thật, **không phải sửa dòng code nào**. Thiếu
-tệp nào thì riêng loại đó quay về hình vẽ — không vỡ, không ô trắng.
+Chép vào chính thư mục này (`public/`) là xong, **không phải sửa dòng code nào**.
 
-## Ảnh hiện tại
+## Yêu cầu ảnh
 
-Ba tệp trong thư mục này đã tách nền và cắt sát viền, cao khoảng 530–590px.
-Màn hình phóng lon tới ~560px nên vừa đủ nét ở màn thường; màn Retina sẽ hơi
-mềm. Có ảnh gốc lớn hơn thì thay vào sẽ nét hơn.
-
-## Thay ảnh mới
-
-- **PNG nền trong.** Ảnh chụp còn phông sẽ lộ ra một khối chữ nhật trên nền
-  tối, hỏng hết hiệu ứng lon lơ lửng.
-- Dựng đứng, cao từ **1200px** trở lên là lý tưởng.
+- **PNG nền trong** (đã tách nền). Ảnh chụp còn phông sẽ lộ ra một khối chữ
+  nhật trên nền tối, hỏng hết hiệu ứng lon lơ lửng.
+- Dựng đứng, cao từ **1200px** trở lên.
+- **Mặt sau phải là đúng cái lon ấy quay 180°**, chụp cùng khoảng cách và cùng
+  ánh sáng với mặt trước. Lệch sáng thì lúc quay thấy nhảy màu ở chỗ nối.
 - **Chữ trên lon phải đọc xuôi.** Ảnh xuất từ file dựng bao bì đôi khi bị lật
-  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết — tấm Sức
-  Mạnh Atlas ban đầu đúng như vậy.
+  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết.
 
-Ảnh mới còn nền trắng thì chạy tệp này để tách nền và cắt sát viền:
+## Tách nền
+
+Ảnh còn phông thì chạy `scripts/tach-nen-anh-lon.py`, chọn chế độ theo phông:
 
 ```
+# nền trắng phẳng
 python scripts/tach-nen-anh-lon.py public/lon-cau-vang.png
+
+# nền trắng nhưng THÂN LON cũng trắng (Lâu Đài Mặt Trăng)
+python scripts/tach-nen-anh-lon.py --nguong=250 --vien=250 public/lon-lau-dai-mat-trang.png
+
+# phông studio xám chuyển sắc
+python scripts/tach-nen-anh-lon.py --mohinh --saiso=40 public/lon-cau-vang-sau.png
+
+# ảnh bị lật gương
+python scripts/tach-nen-anh-lon.py --lat public/lon-suc-manh-atlas.png
 ```
 
-Thêm cờ `--lat` nếu ảnh bị lật gương. Ảnh được ghi đè tại chỗ, nên giữ bản gốc
-ở nơi khác trước khi chạy.
-
-## Lấy ảnh ở đâu
-
-Bộ phận truyền thông của công ty có ảnh sản phẩm chuẩn. Dùng ảnh của chính mình
-thì không vướng bản quyền, và không sợ bên thứ ba đổi đường dẫn làm chết ảnh
-ngay trên màn hình đăng nhập.
+Ảnh được ghi đè tại chỗ và cắt sát viền lon, nên giữ một bản gốc ở nơi khác
+trước khi chạy.

@@ -28,11 +28,16 @@
  * một bán kính riêng thì bóng lon đứng yên tuyệt đối trong lúc xoay — đúng như
  * mọi vật tròn xoay.
  *
- * MẶT SAU. Ảnh chụp chỉ thấy nửa trước, nửa sau không có dữ liệu. Lấy nửa
- * trước lật gương đắp vào thì chữ đọc ngược — chính lỗi đã phải sửa ở lon
- * Atlas. Thay vào đó dựng một mặt sau trơn bằng cách hoà hai dải màu hai bên
- * mép lon, đã làm mịn dọc để không thành sọc ngang. Kết quả là màu nền thân
- * lon cùng hai vành kim loại trên dưới — đúng như phần thân không có hình.
+ * MẶT SAU LÀ ẢNH THẬT. Mỗi loại bia cần hai ảnh: mặt trước và mặt sau (lon
+ * xoay đúng 180°). Trước đây chỉ có mặt trước nên phải bịa mặt sau bằng cách
+ * hoà hai dải màu ở hai mép — ra một mảng trơn lì, không chữ không mã vạch,
+ * nhìn không ra lon bia.
+ *
+ * Ảnh mặt sau chụp cùng cái lon đã quay nửa vòng, nên phần nhãn ở góc a xuất
+ * hiện trong ảnh ấy tại cột `cxSau − rSau·sin(a)` — vẫn công thức cũ, chỉ đổi
+ * dấu. Nhờ vậy hai mép nối liền nhau đúng theo hình học: tại a = π/2, mặt
+ * trước chạm mép phải của nó thì mặt sau cũng chạm mép trái của nó, cùng một
+ * đường trên vỏ lon thật.
  *
  * CHỈNH SÁNG. Ảnh chụp đã có sẵn bóng của lon: sáng giữa, tối dần ra mép. Cứ
  * thế xoay thì mảng tối chạy theo nhãn, nhìn như nhãn bị bẩn. Nên mỗi điểm
@@ -57,11 +62,13 @@ const MU_CHOI = 16;
  * Trần của hệ số chỉnh sáng.
  *
  * Phần nhãn vốn nằm sát mép ảnh rất tối; xoay ra chính diện thì hệ số đòi kéo
- * sáng gấp ba, quá tay là bệt trắng. Chặn lại thì chỗ đó hơi tối hơn thực tế,
- * đổi lại không cháy. Lúc đứng yên hệ số luôn bằng 1 nên trần này không đụng
- * tới ảnh tĩnh.
+ * sáng gấp ba. Chỗ ấy trong ảnh gốc chỉ rộng vài điểm nên chẳng còn chi tiết
+ * gì, kéo sáng lên chỉ được một dải bệt trắng chạy dọc thân lon — thà để nó
+ * hơi tối hơn thực tế mà chìm đi. Lúc đứng yên hệ số luôn đúng bằng 1 nên trần
+ * này không đụng gì tới ảnh tĩnh.
  */
-export const TRAN_SANG = 1.5;
+export const TRAN_SANG = 1.2;
+
 
 /**
  * Bề rộng dải hoà từ nhãn sang mặt sau, tính theo cos của góc nhãn.
@@ -69,15 +76,16 @@ export const TRAN_SANG = 1.5;
  * Không hoà thì chỗ nhãn hết hiện ra một vạch dọc cắt ngang thân lon, nhìn
  * như nhãn bị rách.
  */
-export const DAI_HOA = 0.2;
+export const DAI_HOA = 0.3;
 
 /**
- * Vị trí ngang lấy màu dựng mặt sau, −0,82 và +0,82 của bán kính.
+ * Trần của độ nén, tính bằng số điểm ảnh nguồn dồn vào một điểm ảnh đích.
  *
- * Không lấy sát mép: chỗ sát mép ảnh bị nén và tối, kéo sáng lên thì bạc trắng
- * ra, mặt sau nhìn như phủ sương.
+ * Sát mép lon độ nén tiến ra vô cùng, không chặn thì vòng lấy mẫu chạy mãi.
+ * Lấy ít quá thì dải sát mép hiện ra thành vệt sọc nhấp nháy lúc lon quay, nên
+ * để rộng tay; dải đó hẹp nên tốn thêm không đáng kể.
  */
-export const S_MEP = 0.82;
+export const TRAN_NEN = 14;
 
 function thoRaw(goc: number): number {
   const c = Math.cos(goc - GOC_SANG);
@@ -142,28 +150,33 @@ export interface BangChieu {
   u: Float32Array;
   /** Tỉ lệ hoà sang mặt sau, 0 là nhãn thuần, 1 là mặt sau thuần. */
   hoa: Float32Array;
-  /** Tham số mặt sau, đã kẹp về 0..1. */
-  t: Float32Array;
+  /** 1 nếu chỗ này thuộc mặt sau, 0 nếu là mặt trước. */
+  sau: Uint8Array;
+  /**
+   * Độ nén tại chỗ: một điểm ảnh trên màn hình gánh bao nhiêu điểm ảnh nguồn.
+   *
+   * Càng ra mép lon càng nén. Không tính tới thì chỗ nén chỉ lấy đúng một điểm
+   * nguồn, bỏ qua những điểm bên cạnh — sinh ra vệt răng cưa nhấp nháy trong
+   * lúc lon quay. Biết độ nén thì lấy trung bình đúng chừng ấy điểm.
+   */
+  nen: Float32Array;
   /** Độ sáng theo vị trí TRÊN MÀN HÌNH. */
   sangManHinh: Float32Array;
   /** Độ sáng đã có sẵn trong ảnh tại chỗ lấy nhãn. */
   sangNhan: Float32Array;
   /** Hệ số nhân màu nhãn, đã chặn trần. Tra sẵn để vòng vẽ khỏi phải chia. */
   heSoNhan: Float32Array;
-  /** Hệ số nhân màu mặt sau, đã chặn trần. */
+  /** Hệ số nhân màu lấy từ ảnh mặt sau, đã chặn trần. */
   heSoSau: Float32Array;
 }
-
-/** Độ sáng sẵn có tại hai chỗ lấy màu dựng mặt sau. */
-const SANG_MEP_PHAI = doSang(Math.asin(S_MEP));
-const SANG_MEP_TRAI = doSang(Math.asin(-S_MEP));
 
 /** Cấp phát một bảng rỗng để dùng lại qua các khung hình. */
 export function bangRong(soBuc: number): BangChieu {
   return {
     u: new Float32Array(soBuc),
     hoa: new Float32Array(soBuc),
-    t: new Float32Array(soBuc),
+    sau: new Uint8Array(soBuc),
+    nen: new Float32Array(soBuc),
     sangManHinh: new Float32Array(soBuc),
     sangNhan: new Float32Array(soBuc),
     heSoNhan: new Float32Array(soBuc),
@@ -179,14 +192,17 @@ export function bangRong(soBuc: number): BangChieu {
  */
 export function bangChieu(phi: number, ra: BangChieu): BangChieu {
   const soBuc = ra.u.length;
+  const cp = Math.cos(phi);
+  const sp = Math.sin(phi);
   for (let i = 0; i < soBuc; i++) {
     const s = -1 + (2 * i) / (soBuc - 1);
     const m = mauLay(s, phi);
     const sMh = doSang(m.beta);
-    const sNhan = doSang(m.gocNhan);
-    const t = m.sau ? m.u : 0;
-    ra.u[i] = m.u;
-    ra.t[i] = t;
+    // Ảnh mặt sau chụp lon đã quay nửa vòng, nên phần nhãn ở góc a nằm ở chỗ
+    // ứng với góc a∓π trong ảnh đó, và mang sẵn bóng của góc ấy.
+    const gocSau = m.gocNhan > 0 ? m.gocNhan - Math.PI : m.gocNhan + Math.PI;
+    ra.u[i] = Math.sin(m.gocNhan);
+    ra.sau[i] = m.sau ? 1 : 0;
     ra.hoa[i] =
       m.cosNhan <= 0
         ? 1
@@ -194,12 +210,21 @@ export function bangChieu(phi: number, ra: BangChieu): BangChieu {
           ? 0
           : (DAI_HOA - m.cosNhan) / DAI_HOA;
     ra.sangManHinh[i] = sMh;
-    ra.sangNhan[i] = sNhan;
-    ra.heSoNhan[i] = Math.min(TRAN_SANG, sMh / sNhan);
-    ra.heSoSau[i] = Math.min(
-      TRAN_SANG,
-      sMh / (SANG_MEP_TRAI * t + SANG_MEP_PHAI * (1 - t)),
-    );
+    ra.sangNhan[i] = doSang(m.gocNhan);
+    ra.heSoNhan[i] = Math.min(TRAN_SANG, sMh / ra.sangNhan[i]);
+    ra.heSoSau[i] = Math.min(TRAN_SANG, sMh / doSang(gocSau));
+    // du/ds = cos φ − s·sin φ / √(1−s²). Ra vô cùng ở đúng mép lon nên chặn.
+    const cosBeta = Math.sqrt(1 - s * s);
+    // Số hạng s·sinφ/cosβ chỉ vọt lên vô cùng khi lon ĐANG xoay. Lon đứng yên
+    // thì sinφ = 0, độ nén đúng bằng 1 ở khắp nơi kể cả sát mép — không tách
+    // riêng trường hợp này thì hai cột ngoài cùng bị làm mờ oan lúc đứng yên.
+    const dao =
+      Math.abs(sp) < 1e-9
+        ? Math.abs(cp)
+        : cosBeta < 1e-6
+          ? TRAN_NEN
+          : Math.abs(cp - (s * sp) / cosBeta);
+    ra.nen[i] = dao > TRAN_NEN ? TRAN_NEN : dao < 1 ? 1 : dao;
   }
   return ra;
 }

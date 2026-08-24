@@ -13,3 +13,6 @@ firebase-applet-config.json
 # Tep mau SAP: chua ten khach hang, ma so thue, so tien - khong day len GitHub
 sap-mau/*
 !sap-mau/README.md
+
+# Python bytecode cua script tach nen anh
+__pycache__/
