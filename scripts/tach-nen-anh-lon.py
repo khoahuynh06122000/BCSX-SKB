@@ -129,6 +129,76 @@ def ghi_png(duong_dan, w, h, px):
     open(duong_dan, "wb").write(out)
 
 
+def tach_nen_vai(w, h, px, sai_so=60):
+    """
+    Xoá phông VẢI MÀU: so theo SẮC chứ không theo độ sáng.
+
+    Ảnh chụp thật đặt lon trên tấm vải xanh. Vải có nhung nên chỗ sáng chỗ tối
+    chênh nhau gấp ba (38 đến 137), mọi cách so theo độ sáng đều thua. Nhưng
+    SẮC của nó thì gần như không đổi — vẫn là xanh ấy, chỉ sáng tối khác nhau.
+
+    Nên mỗi điểm được chia cho tổng ba kênh của chính nó rồi mới đem so với sắc
+    của viền ảnh. Thân lon màu kem, sắc lệch hẳn nên giữ lại; bóng lon đổ trên
+    vải tối thui nhưng vẫn đúng sắc xanh nên vẫn bị xoá.
+
+    `sai_so` tính theo phần nghìn, khoảng cách sắc cho phép.
+
+    Vẫn loang từ biên: mảng xanh trên nhãn (mái lâu đài, vành đáy) trùng sắc
+    với vải, nhưng nó không nối ra tới mép ảnh nên không bị xoá.
+    """
+    # Sắc của phông, lấy trung vị viền ảnh cho khỏi lệch vì một vệt sáng.
+    mau = [[], [], []]
+    for x in range(0, w, 3):
+        for y in (0, h - 1):
+            i = (y * w + x) * 4
+            t = px[i] + px[i + 1] + px[i + 2] or 1
+            for c in range(3):
+                mau[c].append(px[i + c] * 1000 // t)
+    for c in range(3):
+        mau[c].sort()
+    nen = [mau[c][len(mau[c]) // 2] for c in range(3)]
+
+    la_nen = bytearray(w * h)
+    hang_doi = deque()
+
+    def giong(i):
+        t = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] or 1
+        d = 0
+        for c in range(3):
+            d += abs(px[i * 4 + c] * 1000 // t - nen[c])
+        return d <= sai_so
+
+    def xet(i):
+        if la_nen[i] or not giong(i):
+            return
+        la_nen[i] = 1
+        hang_doi.append(i)
+
+    for x in range(w):
+        xet(x)
+        xet((h - 1) * w + x)
+    for y in range(h):
+        xet(y * w)
+        xet(y * w + w - 1)
+
+    while hang_doi:
+        i = hang_doi.popleft()
+        x, y = i % w, i // w
+        if x > 0:
+            xet(i - 1)
+        if x < w - 1:
+            xet(i + 1)
+        if y > 0:
+            xet(i - w)
+        if y < h - 1:
+            xet(i + w)
+
+    for i in range(w * h):
+        if la_nen[i]:
+            px[i * 4 + 3] = 0
+    return sum(la_nen)
+
+
 def tach_nen_mo_hinh(w, h, px, sai_so=40):
     """
     Xoá nền chuyển sắc bằng cách DỰNG MÔ HÌNH NỀN rồi so từng điểm với nó.
@@ -307,6 +377,53 @@ def tach_nen(w, h, px, nguong_nen=NGUONG_NEN, nguong_vien=NGUONG_VIEN):
     return sum(la_nen)
 
 
+def giu_khoi_lon_nhat(w, h, px):
+    """
+    Chỉ giữ lại khối đục LỚN NHẤT, xoá mọi mảnh vụn còn sót.
+
+    Phông vải có nhung nên vài chỗ sắc lệch hẳn khỏi phần còn lại, tách nền
+    không xoá tới, để lại lấm tấm vụn quanh lon. Vụn ấy làm khung bao tính sai
+    — mà khung bao là thứ dùng để ghép bốn tấm ảnh về cùng một chỗ, sai một
+    tí là lúc lon quay thấy nó giật.
+
+    Lon là khối đục lớn nhất trong ảnh, nên giữ đúng nó là xong.
+    """
+    nhan = bytearray(w * h)
+    lon_nhat = 0
+    khoi_lon = 0
+    khoi = 0
+    for dau in range(w * h):
+        if nhan[dau] or px[dau * 4 + 3] <= 24:
+            continue
+        khoi += 1
+        nhan[dau] = khoi if khoi < 255 else 254
+        ma = nhan[dau]
+        dem_o = 0
+        hang_doi = deque([dau])
+        while hang_doi:
+            i = hang_doi.popleft()
+            dem_o += 1
+            x, y = i % w, i // w
+            for j in (
+                i - 1 if x > 0 else -1,
+                i + 1 if x < w - 1 else -1,
+                i - w if y > 0 else -1,
+                i + w if y < h - 1 else -1,
+            ):
+                if j >= 0 and not nhan[j] and px[j * 4 + 3] > 24:
+                    nhan[j] = ma
+                    hang_doi.append(j)
+        if dem_o > lon_nhat:
+            lon_nhat = dem_o
+            khoi_lon = ma
+    xoa = 0
+    for i in range(w * h):
+        if nhan[i] and nhan[i] != khoi_lon:
+            px[i * 4 + 3] = 0
+            xoa += 1
+    return xoa
+
+
 def va_lo(w, h, px, ti_toi_thieu=0.12):
     """
     Vá lại những lỗ mà phép tách nền ăn nhầm vào trong thân lon.
@@ -391,7 +508,7 @@ def main(doi_so):
     if not cac_tep:
         raise SystemExit(
             "Cách dùng: python scripts/tach-nen-anh-lon.py "
-            "[--lat] [--dac] [--loang|--mohinh [--saiso=N] [--lech=N]] "
+            "[--lat] [--dac] [--motkhoi] [--vai|--loang|--mohinh [--saiso=N] [--lech=N]] "
             "[--nguong=N] [--vien=N] <tệp.png>..."
         )
     loang = "--loang" in doi_so
@@ -404,18 +521,23 @@ def main(doi_so):
             lech_mau = int(a.split("=", 1)[1])
     for tep in cac_tep:
         w, h, px = doc_png(tep)
-        if "--mohinh" in doi_so:
+        if "--vai" in doi_so:
+            xoa = tach_nen_vai(w, h, px, sai_so if sai_so != 11 else 60)
+        elif "--mohinh" in doi_so:
             xoa = tach_nen_mo_hinh(w, h, px, sai_so)
         elif loang:
             xoa = tach_nen_loang(w, h, px, sai_so, lech_mau)
         else:
             xoa = tach_nen(w, h, px, nen, vien)
+        vun = giu_khoi_lon_nhat(w, h, px) if "--motkhoi" in doi_so else 0
         vaLo = va_lo(w, h, px) if "--dac" in doi_so else 0
         nw, nh, moi = cat_sat(w, h, px)
         if lat:
             moi = lat_ngang(nw, nh, moi)
         ghi_png(tep, nw, nh, moi)
         them = ", đã lật ngang" if lat else ""
+        if vun:
+            them += f", bỏ {vun} điểm vụn"
         if vaLo:
             them += f", vá {vaLo} điểm thủng"
         print(f"{tep}: {w}x{h} -> {nw}x{nh}, xóa {xoa * 100 // (w * h)}% nền{them}")
