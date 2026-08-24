@@ -34,20 +34,36 @@ interface Props {
 type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
- * NHÃN LON TRẢI PHẲNG 360 độ — cả cái nhãn bóc khỏi lon, dàn ra hình chữ nhật
- * dài, hai đầu nối liền được vào nhau.
+ * ẢNH LON BIA THẬT — thả tệp vào `public/` là tự thay cho hình vẽ.
  *
- * Loại nào chưa có nhãn thì riêng loại đó quay về hình vẽ SVG. Cách xin nhãn
- * xem `public/README-anh-lon.md`.
+ * Chỉ cần chép ba tệp PNG NỀN TRONG (đã tách nền, không phải ảnh chụp có
+ * phông) vào thư mục `public/` với đúng tên dưới đây, không phải sửa dòng code
+ * nào. Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
+ * trắng, và loại nào có ảnh vẫn hiện ảnh thật.
+ *
+ * Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi trình
+ * duyệt "tệp này có tồn tại không" mà không tải thử.
  */
 const ANH_LON: Record<LoaiBia, string> = {
-  caubang: "/nhan-cau-vang.png",
-  laudai: "/nhan-lau-dai-mat-trang.png",
-  atlas: "/nhan-suc-manh-atlas.png",
+  caubang: "/lon-cau-vang.png",
+  laudai: "/lon-lau-dai-mat-trang.png",
+  atlas: "/lon-suc-manh-atlas.png",
 };
 
 /**
- * Màu bia trong ly khi chưa có nhãn, lấy theo đúng tông của từng lon:
+ * ẢNH MẶT SAU — lon xoay đúng 180°, cũng nền trong.
+ *
+ * Bắt buộc phải có: lon quay tròn nên thiếu mặt sau là xoay tới đâu lòi ra
+ * mảng trống tới đó. Thiếu tệp nào thì riêng loại đó về hình vẽ SVG.
+ */
+const ANH_LON_SAU: Record<LoaiBia, string> = {
+  caubang: "/lon-cau-vang-sau.png",
+  laudai: "/lon-lau-dai-mat-trang-sau.png",
+  atlas: "/lon-suc-manh-atlas-sau.png",
+};
+
+/**
+ * Màu bia trong ly khi chưa có ảnh lon, lấy theo đúng tông của từng lon:
  * Cầu Vàng vàng hổ phách, Lâu Đài Mặt Trăng vàng nhạt trong, Atlas nâu đen.
  */
 const MAU_BIA: Record<LoaiBia, { dam: string; nhat: string; bot: string }> = {
@@ -559,6 +575,7 @@ export default function ManHinhDangNhap({
               ) : (
                 <LonXoay
                   anh={ANH_LON}
+                  anhSau={ANH_LON_SAU}
                   loai={loai}
                   ten={TEN_BIA}
                   onLoiAnh={(id) =>
@@ -686,16 +703,23 @@ export default function ManHinhDangNhap({
                       }}
                     >
                       <div className="mx-auto mb-2.5 h-24 w-16 transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-[-8deg] group-hover:scale-110">
-                        {/* Thẻ chọn luôn vẽ lon bằng SVG, không dùng ảnh nhãn:
-                            nhãn là một dải ngang dài gấp hai lần rưỡi chiều
-                            cao, nhét vào ô đứng thì ra một vệt dẹt tí xíu. */}
-                        <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
-                          <rect x="14" y="10" width="36" height="80" rx="8" fill={b.than} />
-                          <rect x="14" y="10" width="10" height="80" rx="5" fill="rgba(255,255,255,0.20)" />
-                          {/* Dải nhãn giữa lon, lấy đúng màu nhấn của loại. */}
-                          <rect x="14" y="40" width="36" height="18" fill={b.nhan} opacity="0.95" />
-                          <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
-                        </svg>
+                        {anhHong[b.id] ? (
+                          <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
+                            <rect x="14" y="10" width="36" height="80" rx="8" fill={b.than} />
+                            <rect x="14" y="10" width="10" height="80" rx="5" fill="rgba(255,255,255,0.20)" />
+                            {/* Dải nhãn giữa lon, lấy đúng màu nhấn của loại. */}
+                            <rect x="14" y="40" width="36" height="18" fill={b.nhan} opacity="0.95" />
+                            <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
+                          </svg>
+                        ) : (
+                          <img
+                            src={ANH_LON[b.id]}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-full w-full object-contain"
+                            onError={() => setAnhHong((t) => ({ ...t, [b.id]: true }))}
+                          />
+                        )}
                       </div>
                       <div className="flex flex-col text-[0.68rem] leading-tight">
                         <span className="font-semibold" style={{ color: dangChon ? b.nhan : undefined }}>
