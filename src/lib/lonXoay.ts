@@ -155,9 +155,14 @@ export interface BangChieu {
   /**
    * Độ nén tại chỗ: một điểm ảnh trên màn hình gánh bao nhiêu điểm ảnh nguồn.
    *
-   * Càng ra mép lon càng nén. Không tính tới thì chỗ nén chỉ lấy đúng một điểm
-   * nguồn, bỏ qua những điểm bên cạnh — sinh ra vệt răng cưa nhấp nháy trong
-   * lúc lon quay. Biết độ nén thì lấy trung bình đúng chừng ấy điểm.
+   * Lớn hơn 1 là NÉN — hay gặp ở sát mép lon. Không tính tới thì chỗ nén chỉ
+   * lấy đúng một điểm nguồn, bỏ qua những điểm bên cạnh, sinh vệt răng cưa
+   * nhấp nháy lúc lon quay. Biết độ nén thì lấy trung bình đúng chừng ấy điểm.
+   *
+   * Nhỏ hơn 1 là GIÃN, và giãn rất mạnh ở đúng chỗ nối hai ảnh: phần vỏ quanh
+   * góc ±π/2 bị chụp nghiêng gần hết cỡ nên cả một vòng cung chỉ nằm gọn trong
+   * dăm cột ảnh; xoay ra chính diện thì dăm cột ấy phải trải kín mấy chục cột
+   * màn hình. Xem `veLon` để biết cách làm dịu chỗ đó.
    */
   nen: Float32Array;
   /** Độ sáng theo vị trí TRÊN MÀN HÌNH. */
@@ -224,7 +229,9 @@ export function bangChieu(phi: number, ra: BangChieu): BangChieu {
         : cosBeta < 1e-6
           ? TRAN_NEN
           : Math.abs(cp - (s * sp) / cosBeta);
-    ra.nen[i] = dao > TRAN_NEN ? TRAN_NEN : dao < 1 ? 1 : dao;
+    // Chỉ chặn đầu trên. Giữ nguyên phần nhỏ hơn 1 vì đó chính là tín hiệu
+    // cho biết chỗ nào đang bị kéo giãn.
+    ra.nen[i] = dao > TRAN_NEN ? TRAN_NEN : dao;
   }
   return ra;
 }

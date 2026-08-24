@@ -37,9 +37,31 @@ const CHU_KY_LAC = 9000;
 /** Biên độ lắc, radian. Khoảng 23 độ mỗi bên. */
 const BIEN_LAC = 0.4;
 
+/** Bán kính làm mờ dọc, tính bằng hàng. Xem `diemMo`. */
+const BAN_KINH_MO = 6;
+/**
+ * Dưới mức giãn này thì bắt đầu chuyển sang bản đã làm mờ dọc.
+ *
+ * Để rộng tay (0,4) thì hỏng: giữa lúc lon quay qua ngang, độ giãn ở CHÍNH
+ * GIỮA thân lon cũng xuống quanh mức đó, nên cả cái nhãn bị làm mờ chứ không
+ * riêng dải nối — vừa xấu vừa tốn, mỗi khung mất thêm bốn phần nghìn giây.
+ * 0,15 chỉ bắt đúng chỗ vỏ lon bị chụp nghiêng gần hết cỡ.
+ */
+const NGUONG_GIAN = 0.15;
+
 /** Một mặt lon đã đặt vào khung chuẩn, kèm bóng lon của từng hàng. */
 interface Mat {
   diem: Uint8ClampedArray;
+  /**
+   * Bản đã làm mờ THEO CHIỀU DỌC, dùng riêng cho dải nối hai ảnh.
+   *
+   * Ở đó dăm cột ảnh phải trải kín mấy chục cột màn hình. Kéo giãn ngang thì
+   * màu của mỗi hàng bị bôi dài ra, mà hàng nào cũng khác hàng nào, nên hiện
+   * lên thành một mớ vạch ngang chồng chất — đúng cái dải nhoè nhìn thấy giữa
+   * thân lon. Làm mờ dọc trước rồi mới kéo giãn thì dải ấy thành một mảng màu
+   * chuyển mượt, đọc ra như phần vỏ đang cong khuất đi.
+   */
+  diemMo: Uint8ClampedArray;
   trai: Int16Array;
   phai: Int16Array;
   tam: Float32Array;
@@ -80,7 +102,35 @@ function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
       ban[y] = (phai[y] + 1 - trai[y]) / 2;
     }
   }
-  return { diem, trai, phai, tam, ban };
+  // Làm mờ dọc: chỉ chạy một lần cho mỗi mặt lon.
+  const diemMo = new Uint8ClampedArray(diem.length);
+  for (let x = 0; x < KHUNG_W; x++) {
+    for (let y = 0; y < KHUNG_H; y++) {
+      let r = 0;
+      let g2 = 0;
+      let b = 0;
+      let n = 0;
+      const dau = Math.max(0, y - BAN_KINH_MO);
+      const cuoi = Math.min(KHUNG_H - 1, y + BAN_KINH_MO);
+      for (let k = dau; k <= cuoi; k++) {
+        const i = (k * KHUNG_W + x) * 4;
+        if (diem[i + 3] < 8) continue;
+        r += diem[i];
+        g2 += diem[i + 1];
+        b += diem[i + 2];
+        n++;
+      }
+      const d = (y * KHUNG_W + x) * 4;
+      if (n) {
+        diemMo[d] = r / n;
+        diemMo[d + 1] = g2 / n;
+        diemMo[d + 2] = b / n;
+      }
+      diemMo[d + 3] = diem[d + 3];
+    }
+  }
+
+  return { diem, diemMo, trai, phai, tam, ban };
 }
 
 /** Khung bao quanh phần đục của một ảnh, theo alpha. */
@@ -158,8 +208,14 @@ function layCot(
   y: number,
   xThuc: number,
   nen: number,
+  mo: number,
   ra: Float32Array,
 ): number {
+  // Chỉ đụng tới bản đã làm mờ khi thật sự cần: đó là một mảng gần một megabyte
+  // nữa, đọc vào cả lúc không dùng là thừa mà còn đẩy bộ nhớ đệm.
+  const diem = m.diem;
+  const diemMo = mo > 0 ? m.diemMo : m.diem;
+  const ro = 1 - mo;
   const dong = y * KHUNG_W;
   const mepT = m.trai[y];
   const mepP = m.phai[y];
@@ -178,10 +234,10 @@ function layCot(
       if (x < mepT) x = mepT;
       else if (x > mepP) x = mepP;
       const i = (dong + x) * 4;
-      const a = (m.diem[i + 3] / 255) * (k === 0 ? 1 - le : le);
-      ra[0] += m.diem[i] * a;
-      ra[1] += m.diem[i + 1] * a;
-      ra[2] += m.diem[i + 2] * a;
+      const a = (diem[i + 3] / 255) * (k === 0 ? 1 - le : le);
+      ra[0] += (diem[i] * ro + diemMo[i] * mo) * a;
+      ra[1] += (diem[i + 1] * ro + diemMo[i + 1] * mo) * a;
+      ra[2] += (diem[i + 2] * ro + diemMo[i + 2] * mo) * a;
       tong += a;
     }
   } else {
@@ -191,10 +247,10 @@ function layCot(
       if (x < mepT) x = mepT;
       else if (x > mepP) x = mepP;
       const i = (dong + x) * 4;
-      const a = m.diem[i + 3] / 255;
-      ra[0] += m.diem[i] * a;
-      ra[1] += m.diem[i + 1] * a;
-      ra[2] += m.diem[i + 2] * a;
+      const a = diem[i + 3] / 255;
+      ra[0] += (diem[i] * ro + diemMo[i] * mo) * a;
+      ra[1] += (diem[i + 1] * ro + diemMo[i + 1] * mo) * a;
+      ra[2] += (diem[i + 2] * ro + diemMo[i + 2] * mo) * a;
       tong += a;
     }
     tong /= soTia;
@@ -249,8 +305,11 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
       const d = (dong + x) * 4;
       const doNen = nen[i];
 
-      let aTruoc = 0;
-      if (w <= 0 && doNen < 1.5) {
+      // Mức chuyển sang bản làm mờ dọc: 0 là dùng ảnh gốc, 1 là mờ hẳn.
+      const mo =
+        doNen >= NGUONG_GIAN ? 0 : (NGUONG_GIAN - doNen) / NGUONG_GIAN;
+
+      if (w <= 0 && doNen < 1.5 && mo === 0) {
         // Đường đi của phần lớn điểm ảnh: nhãn thuần, không nén. Viết thẳng ra
         // đây thay vì gọi `layCot` — hơn trăm nghìn lượt gọi mỗi khung hình,
         // riêng chi phí gọi hàm đã đủ tụt mất vài khung mỗi giây.
@@ -276,13 +335,41 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
         out[d + 3] = tong * phu * 255;
         continue;
       }
+      if (w >= 1 && coSau && doNen < 1.5 && mo === 0) {
+        // Mặt sau thuần. Giữa lúc quay thì nửa lon là mặt sau, nên nhánh này
+        // cũng phải viết thẳng ra như nhánh mặt trước, không thì mất một nửa
+        // số điểm ảnh vào chi phí gọi hàm.
+        const xT = cxS - rS * u[i];
+        const san = Math.floor(xT);
+        const le = xT - san;
+        let xa = san;
+        if (xa < sau.trai[y]) xa = sau.trai[y];
+        else if (xa > sau.phai[y]) xa = sau.phai[y];
+        let xb = san + 1;
+        if (xb < sau.trai[y]) xb = sau.trai[y];
+        else if (xb > sau.phai[y]) xb = sau.phai[y];
+        const ia = (dong + xa) * 4;
+        const ib = (dong + xb) * 4;
+        const aa = (sau.diem[ia + 3] / 255) * (1 - le);
+        const ab = (sau.diem[ib + 3] / 255) * le;
+        const tong = aa + ab;
+        if (tong <= 0) continue;
+        const f = heSoSau[i] / tong;
+        out[d] = (sau.diem[ia] * aa + sau.diem[ib] * ab) * f;
+        out[d + 1] = (sau.diem[ia + 1] * aa + sau.diem[ib + 1] * ab) * f;
+        out[d + 2] = (sau.diem[ia + 2] * aa + sau.diem[ib + 2] * ab) * f;
+        out[d + 3] = tong * phu * 255;
+        continue;
+      }
+
+      let aTruoc = 0;
       if (w < 1) {
-        aTruoc = layCot(truoc, y, cx + r * u[i], doNen, mauTruoc);
+        aTruoc = layCot(truoc, y, cx + r * u[i], doNen, mo, mauTruoc);
       }
       let aSau = 0;
       if (w > 0 && coSau) {
         // Ảnh mặt sau là lon đã quay nửa vòng, nên đổi dấu vị trí ngang.
-        aSau = layCot(sau, y, cxS - rS * u[i], doNen, mauSau);
+        aSau = layCot(sau, y, cxS - rS * u[i], doNen, mo, mauSau);
       }
 
       const gop = aTruoc * (1 - w) + aSau * w;

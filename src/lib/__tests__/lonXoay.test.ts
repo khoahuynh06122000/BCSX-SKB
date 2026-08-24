@@ -168,11 +168,13 @@ lechF = Math.max(lechF, Math.abs(b0.sangManHinh[i] / b0.sangNhan[i] - 1));
   dung("he so hoa luon trong 0..1", [...b1.hoa].every((h) => h >= 0 && h <= 1));
   dung("co danh dau mat sau", [...b1.sau].some((v) => v === 1));
   dung("van con danh dau mat truoc", [...b1.sau].some((v) => v === 0));
-  // Do nen phai >= 1 va bi chan tran, khong thi vong lay mau chay mai o mep.
+  // Do nen chi bi chan dau tren; phan nho hon 1 phai giu vi do la tin hieu
+  // cho biet cho nao dang bi keo gian.
   dung(
-    "do nen nam trong 1..TRAN_NEN",
-    [...b1.nen].every((v) => v >= 1 && v <= TRAN_NEN),
+    "do nen duong va bi chan tran",
+    [...b1.nen].every((v) => v >= 0 && v <= TRAN_NEN),
   );
+  dung("xoay thi co cho bi keo gian manh", [...b1.nen].some((v) => v < 0.35));
   // Dung yen thi anh khong bi nen o dau ca, vi moi cot lay dung cot cua no.
   dung(
     "phi=0: khong nen o bat cu dau",

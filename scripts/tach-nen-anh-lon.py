@@ -307,6 +307,43 @@ def tach_nen(w, h, px, nguong_nen=NGUONG_NEN, nguong_vien=NGUONG_VIEN):
     return sum(la_nen)
 
 
+def va_lo(w, h, px, ti_toi_thieu=0.12):
+    """
+    Vá lại những lỗ mà phép tách nền ăn nhầm vào trong thân lon.
+
+    Thân lon trắng (Lâu Đài Mặt Trăng) có màu gần hệt phông chụp, nên mọi cách
+    tách nền đều ăn lem vào trong, để lại lon thủng lỗ chỗ. Chỗ thủng khi vẽ ra
+    thì không có màu để lấy, hiện lên thành những vệt ngang xé dọc thân lon.
+
+    Bóng lon nhìn ngang là một khối liền: mọi điểm nằm GIỮA mép trái và mép
+    phải của một hàng đều thuộc về lon. Nên chỉ việc trả lại alpha cho chúng.
+
+    Chỉ vá những hàng đã đục sẵn ít nhất `ti_toi_thieu` bề ngang, để một vài
+    điểm nhiễu sót lại ngoài nền không kéo theo cả một vệt ngang.
+    """
+    va = 0
+    for y in range(h):
+        trai = phai = -1
+        duc = 0
+        for x in range(w):
+            if px[(y * w + x) * 4 + 3] > 24:
+                if trai < 0:
+                    trai = x
+                phai = x
+                duc += 1
+        if trai < 0:
+            continue
+        rong = phai - trai + 1
+        if duc < rong * ti_toi_thieu:
+            continue
+        for x in range(trai, phai + 1):
+            i = (y * w + x) * 4
+            if px[i + 3] <= 24:
+                px[i + 3] = 255
+                va += 1
+    return va
+
+
 def cat_sat(w, h, px):
     """Cắt bỏ phần trong suốt thừa quanh lon, chừa LE pixel."""
     t, d, tr, ph = h, -1, w, -1
@@ -354,7 +391,7 @@ def main(doi_so):
     if not cac_tep:
         raise SystemExit(
             "Cách dùng: python scripts/tach-nen-anh-lon.py "
-            "[--lat] [--loang|--mohinh [--saiso=N] [--lech=N]] "
+            "[--lat] [--dac] [--loang|--mohinh [--saiso=N] [--lech=N]] "
             "[--nguong=N] [--vien=N] <tệp.png>..."
         )
     loang = "--loang" in doi_so
@@ -373,11 +410,14 @@ def main(doi_so):
             xoa = tach_nen_loang(w, h, px, sai_so, lech_mau)
         else:
             xoa = tach_nen(w, h, px, nen, vien)
+        vaLo = va_lo(w, h, px) if "--dac" in doi_so else 0
         nw, nh, moi = cat_sat(w, h, px)
         if lat:
             moi = lat_ngang(nw, nh, moi)
         ghi_png(tep, nw, nh, moi)
         them = ", đã lật ngang" if lat else ""
+        if vaLo:
+            them += f", vá {vaLo} điểm thủng"
         print(f"{tep}: {w}x{h} -> {nw}x{nh}, xóa {xoa * 100 // (w * h)}% nền{them}")
 
 
