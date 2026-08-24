@@ -38,18 +38,21 @@ const CHU_KY_LAC = 9000;
 const BIEN_LAC = 0.4;
 
 /** Bán kính làm mịn dọc dải màu hông, tính bằng hàng. */
-const BAN_KINH_MO = 10;
+const BAN_KINH_MO = 30;
 /** Vị trí ngang lấy màu dựng hông, tính theo bán kính của hàng. */
 const S_HONG = 0.88;
 /**
  * Ngoài mức này của bán kính thì chuyển hẳn sang dải hông tự dựng.
  *
- * Sát mép lon, ảnh gốc chỉ còn cái viền khử răng cưa nham nhở: vài điểm ảnh
- * lem nhem, hàng nào một kiểu. Lấy đúng nó rồi ép cho đục hẳn thì rìa lon hiện
- * ra như bị xơ, đầy vạch ngang — mà đó lại là chỗ vỏ lon cong khuất đi, đáng
- * ra phải là một dải tối mượt.
+ * Chỉ được lấy đúng một hai điểm ảnh ngoài cùng, nơi ảnh gốc chỉ còn cái viền
+ * khử răng cưa. Để rộng tay hơn thì cả một dải chục điểm sát mép bị thay bằng
+ * màu tự dựng NGAY CẢ LÚC LON ĐỨNG YÊN — mà lúc ấy ảnh gốc có sẵn viền tối
+ * đàng hoàng, thay vào chỉ tổ làm rìa lon bạc đi.
+ *
+ * Phần răng cưa của viền được xử lý chỗ khác: mép lon từng hàng đã lấy trung
+ * vị chín hàng nên bóng lon là đường cong trơn.
  */
-const S_VIEN = 0.94;
+const S_VIEN = 0.985;
 /**
  * Trên mức nén này cũng chuyển sang dải hông.
  *
@@ -130,10 +133,67 @@ function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
         phai[y] = x;
       }
     }
-    if (trai[y] >= 0) {
-      tam[y] = (trai[y] + phai[y] + 1) / 2;
-      ban[y] = (phai[y] + 1 - trai[y]) / 2;
+  }
+
+  /*
+   * LÀM MƯỢT MÉP LON THEO CHIỀU DỌC.
+   *
+   * Mép vừa đo được lấy theo alpha của ảnh gốc, mà cái viền alpha ấy lem nhem:
+   * hàng này rộng hơn hàng kia một hai điểm, hoàn toàn ngẫu nhiên. Bóng lon
+   * dựng theo đó thì đường viền lởm chởm như bị xé, và vì mỗi khung hình lại
+   * lởm một kiểu nên lúc lon quay nhìn cứ rung rung — đúng cái "nhoè" ở hai
+   * bên rìa.
+   *
+   * Thân lon là một đường cong trơn, nên lấy TRUNG VỊ của chín hàng quanh đó.
+   * Trung vị chứ không phải trung bình: nó bỏ qua vài hàng lỗi mà không kéo
+   * theo cả đoạn, nên chỗ vát ở nắp và đáy vẫn giữ đúng dáng.
+   */
+  const BK = 4;
+  const goc = { trai: Int16Array.from(trai), phai: Int16Array.from(phai) };
+  const dem: number[] = [];
+  const trungVi = (nguon: Int16Array, y: number) => {
+    dem.length = 0;
+    for (let k = Math.max(0, y - BK); k <= Math.min(KHUNG_H - 1, y + BK); k++) {
+      if (nguon[k] >= 0) dem.push(nguon[k]);
     }
+    if (!dem.length) return -1;
+    dem.sort((a, b) => a - b);
+    return dem[dem.length >> 1];
+  };
+  for (let y = 0; y < KHUNG_H; y++) {
+    if (goc.trai[y] < 0) continue;
+    const t = trungVi(goc.trai, y);
+    const p = trungVi(goc.phai, y);
+    if (t < 0 || p <= t) continue;
+    trai[y] = t;
+    phai[y] = p;
+  }
+
+  /*
+   * Rồi lấy TRUNG BÌNH của các trung vị để bóng lon nhận cả giá trị lẻ.
+   *
+   * Trung vị chỉ trả về số nguyên nên đường viền vẫn nhảy từng điểm một, nhìn
+   * gần thấy rõ những bậc răng cưa chạy dọc rìa lon. Trung bình cho ra số lẻ,
+   * và `phu` biến phần lẻ ấy thành độ đục — viền thành đường cong liền mạch.
+   *
+   * Chỉ dùng cho hình dáng (`tam`, `ban`); còn `trai`/`phai` giữ số nguyên vì
+   * chúng dùng để kẹp toạ độ lấy màu.
+   */
+  for (let y = 0; y < KHUNG_H; y++) {
+    if (trai[y] < 0) continue;
+    let st = 0;
+    let sp = 0;
+    let n = 0;
+    for (let k = Math.max(0, y - 3); k <= Math.min(KHUNG_H - 1, y + 3); k++) {
+      if (trai[k] < 0) continue;
+      st += trai[k];
+      sp += phai[k];
+      n++;
+    }
+    const t = st / n;
+    const p = sp / n;
+    tam[y] = (t + p + 1) / 2;
+    ban[y] = (p + 1 - t) / 2;
   }
   // Dải màu hông, dựng một lần cho mỗi mặt lon.
   const thoTrai = new Float32Array(KHUNG_H * 3);
@@ -387,6 +447,11 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
         );
         if (n2 > mo) mo = n2;
       }
+      // Cả vùng vỏ đang VÒNG RA SAU cũng dùng màu hông, đậm nhất ở đúng giữa
+      // rồi nhạt dần về hai đầu. Đó là dải mà cả hai ảnh đều chỉ còn vài cột
+      // để mô tả cả một vòng cung, lấy ảnh thật ra chỉ được một mớ vạch ngang.
+      const vong = 4 * w * (1 - w);
+      if (vong > mo) mo = vong;
       if (mo > 1) mo = 1;
 
       if (w <= 0 && doNen < 1.5 && mo === 0) {
