@@ -30,25 +30,8 @@ const KHUNG_W = 340;
 const KHUNG_H = 560;
 /** Số bậc của bảng tra. 1024 bậc là dưới nửa điểm ảnh, mắt không thấy bậc. */
 const SO_BUC = 1024;
-/** Cú xoay khi đổi loại, mili giây. */
-const THOI_GIAN_QUAY = 950;
-/**
- * Lon xoay đi bao nhiêu khi đổi loại, radian. Khoảng 32 độ.
- *
- * TRƯỚC ĐÂY QUAY TRỌN MỘT VÒNG, và đó là sai lầm. Quay tròn thì có lúc lon
- * nằm ngang đúng 90 độ, và khi ấy chỗ vỏ vòng ra sau — chỗ CẢ HAI ẢNH đều
- * không chụp tới — rơi vào chính giữa thân lon, nơi dễ thấy nhất. Bịa ra màu
- * gì ở đó cũng thành một vệt dọc giữa lon.
- *
- * Xoay vừa phải thì chỗ nối luôn nằm ở khoảng 85% bán kính trở ra, tức sát
- * mép, nơi nó bị nén lại còn vài điểm ảnh và tối đi — không ai nhận ra. Đổi
- * loại thì lon nghiêng đi rồi nghiêng về, ảnh tan dần sang loại mới giữa
- * chừng. Mất cú quay tròn, đổi lại không còn chỗ nào phải bịa lộ liễu.
- */
-const GOC_DOI = 0.55;
-/** Khoảng tan ảnh khi đổi loại, tính theo tiến trình cú xoay. */
-const TAN_TU = 0.3;
-const TAN_DEN = 0.7;
+/** Một vòng quay khi đổi loại, mili giây. */
+const THOI_GIAN_QUAY = 1150;
 /** Chu kỳ lắc qua lại lúc đứng yên, mili giây. */
 const CHU_KY_LAC = 9000;
 /** Biên độ lắc, radian. Khoảng 23 độ mỗi bên. */
@@ -575,6 +558,9 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
   }
 }
 
+/** Vào nhanh ra chậm, để cú quay có đà chứ không đều đều như máy. */
+const muot = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+
 interface Props {
   /** Đường dẫn ảnh mặt trước của từng loại. */
   anh: Record<string, string>;
@@ -646,11 +632,6 @@ export default function LonXoay({ anh, anhSau, loai, ten, onLoiAnh }: Props) {
     const giam = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dem = ctx.createImageData(KHUNG_W, KHUNG_H);
     const bang = bangRong(SO_BUC);
-    const tam = document.createElement("canvas");
-    tam.width = KHUNG_W;
-    tam.height = KHUNG_H;
-    const tctx = tam.getContext("2d");
-    if (!tctx) return;
     let id = 0;
     let batDau = -1;
 
@@ -670,37 +651,23 @@ export default function LonXoay({ anh, anhSau, loai, ten, onLoiAnh }: Props) {
       let phi = giam
         ? 0
         : BIEN_LAC * Math.sin((2 * Math.PI * (moc - batDau)) / CHU_KY_LAC);
-      let pha = 0;
       const q = quayRef.current;
       if (q) {
         const p = Math.min(1, (moc - q.tu) / THOI_GIAN_QUAY);
-        // Nghiêng đi rồi nghiêng về, không quay tròn. Xem chú thích GOC_DOI.
-        phi += GOC_DOI * Math.sin(Math.PI * p);
-        pha = Math.min(1, Math.max(0, (p - TAN_TU) / (TAN_DEN - TAN_TU)));
-        if (p >= 1) {
+        phi += 2 * Math.PI * muot(p);
+        // Quá nửa vòng là màn hình toàn mặt sau — thay ảnh ở đây thì không còn
+        // tí nhãn trước nào để mà thấy nhảy.
+        if (!q.da && p >= 0.5) {
           hienRef.current = dichRef.current;
-          quayRef.current = null;
-          pha = 0;
+          q.da = true;
         }
+        if (p >= 1) quayRef.current = null;
       }
 
       const kho = khoRef.current[hienRef.current];
       if (!kho) return;
-      const khoMoi = pha > 0 ? khoRef.current[dichRef.current] : null;
-      if (!khoMoi) {
-        veLon(kho, phi, bang, dem);
-        ctx.putImageData(dem, 0, 0);
-        return;
-      }
-      // Đang đổi loại: vẽ cả hai rồi chồng lên nhau. putImageData không nghe
-      // globalAlpha nên phải mượn một canvas tạm rồi drawImage.
-      veLon(khoMoi, phi, bang, dem);
-      ctx.putImageData(dem, 0, 0);
       veLon(kho, phi, bang, dem);
-      tctx.putImageData(dem, 0, 0);
-      ctx.globalAlpha = 1 - pha;
-      ctx.drawImage(tam, 0, 0);
-      ctx.globalAlpha = 1;
+      ctx.putImageData(dem, 0, 0);
     };
 
     id = requestAnimationFrame(khung);
