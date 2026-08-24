@@ -96,6 +96,16 @@ interface Mat {
    */
   hongTrai: Float32Array;
   hongPhai: Float32Array;
+  /**
+   * Màu NỀN của nhãn ở từng hàng: trung vị cả hàng.
+   *
+   * Dùng cho khúc giữa của phần hông, nơi xa hai mép nhất. Lấy màu ngay sát
+   * mép thì vớ phải đúng cái gì đang vẽ ở đó — với lon Cầu Vàng là bàn tay màu
+   * kem, thành ra hông lon hiện ra một mảng kem giữa thân lon đỏ. Trung vị cả
+   * hàng cho ra màu nền thật của nhãn ở độ cao ấy: đỏ ở thân, vàng ở vành
+   * trên, kem ở vành dưới — đúng dáng một lon bia nhìn nghiêng.
+   */
+  nenHang: Float32Array;
   /** Alpha ở giữa mỗi hàng, dùng làm alpha dự phòng để lon không bị thủng. */
   aGiua: Float32Array;
   trai: Int16Array;
@@ -199,8 +209,22 @@ function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
   const thoTrai = new Float32Array(KHUNG_H * 3);
   const thoPhai = new Float32Array(KHUNG_H * 3);
   const aGiua = new Float32Array(KHUNG_H);
+  const nenHang = new Float32Array(KHUNG_H * 3);
+  const gom: number[] = [];
   for (let y = 0; y < KHUNG_H; y++) {
     if (trai[y] < 0) continue;
+    // Trung vị từng kênh của cả hàng.
+    for (let c = 0; c < 3; c++) {
+      gom.length = 0;
+      for (let x = trai[y]; x <= phai[y]; x++) {
+        const i = (y * KHUNG_W + x) * 4;
+        if (diem[i + 3] > 200) gom.push(diem[i + c]);
+      }
+      if (gom.length) {
+        gom.sort((a, b) => a - b);
+        nenHang[y * 3 + c] = gom[gom.length >> 1];
+      }
+    }
     const kep = (v: number) => Math.max(trai[y], Math.min(phai[y], Math.round(v)));
     const xt = kep(tam[y] - S_HONG * ban[y]);
     const xp = kep(tam[y] + S_HONG * ban[y]);
@@ -242,6 +266,7 @@ function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
     diem,
     hongTrai: minDoc(thoTrai),
     hongPhai: minDoc(thoPhai),
+    nenHang: minDoc(nenHang),
     aGiua,
     trai,
     phai,
@@ -536,6 +561,9 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
           ? truoc.hongTrai
           : truoc.hongPhai;
       const q3 = y * 3;
+      // Hàng nào mặt sau không có thì mượn màu nền của mặt trước, tránh lấy
+      // phải mảng rỗng rồi ra một vệt đen.
+      const nenSau = coSau ? sau.nenHang : truoc.nenHang;
       const sangHong =
         (heSoNhan[i] * (1 - w) + heSoSau[i] * w) * TOI_HONG;
 
@@ -548,9 +576,21 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
       const fS = co ? (heSoSau[i] * aSau * w) / gop : 0;
       const moHong = co ? mo : 1;
       const roHong = 1 - moHong;
+      /*
+       * Màu hông: ở sát hai đầu thì lấy màu ngay mép nhãn cho nối liền, càng
+       * vào giữa càng chuyển sang MÀU NỀN của hàng ấy.
+       *
+       * Vì giữa phần hông là chỗ xa cả hai mép nhất, bám lấy màu mép thì vớ
+       * phải đúng cái gì đang vẽ ở đó — lon Cầu Vàng ra một mảng kem giữa thân
+       * đỏ. Màu nền cho ra đúng dáng lon nhìn nghiêng.
+       */
+      const giua = 4 * w * (1 - w);
+      const roGiua = 1 - giua;
       for (let cc = 0; cc < 3; cc++) {
         const that = mauTruoc[cc] * fT + mauSau[cc] * fS;
-        const hong = (hT[q3 + cc] * (1 - w) + hS[q3 + cc] * w) * sangHong;
+        const mep = hT[q3 + cc] * (1 - w) + hS[q3 + cc] * w;
+        const nen = truoc.nenHang[q3 + cc] * (1 - w) + nenSau[q3 + cc] * w;
+        const hong = (mep * roGiua + nen * giua) * sangHong;
         out[d + cc] = that * roHong + hong * moHong;
       }
       out[d + 3] = aVien;
