@@ -37,8 +37,10 @@ const CHU_KY_LAC = 9000;
 /** Biên độ lắc, radian. Khoảng 23 độ mỗi bên. */
 const BIEN_LAC = 0.4;
 
-/** Bán kính làm mờ dọc, tính bằng hàng. Xem `diemMo`. */
-const BAN_KINH_MO = 6;
+/** Bán kính làm mịn dọc dải màu hông, tính bằng hàng. */
+const BAN_KINH_MO = 10;
+/** Vị trí ngang lấy màu dựng hông, tính theo bán kính của hàng. */
+const S_HONG = 0.88;
 /**
  * Dưới mức giãn này thì bắt đầu chuyển sang bản đã làm mờ dọc.
  *
@@ -53,15 +55,22 @@ const NGUONG_GIAN = 0.15;
 interface Mat {
   diem: Uint8ClampedArray;
   /**
-   * Bản đã làm mờ THEO CHIỀU DỌC, dùng riêng cho dải nối hai ảnh.
+   * Màu HÔNG LON tự dựng, mỗi hàng ba số RGB, đã làm mịn dọc.
    *
-   * Ở đó dăm cột ảnh phải trải kín mấy chục cột màn hình. Kéo giãn ngang thì
-   * màu của mỗi hàng bị bôi dài ra, mà hàng nào cũng khác hàng nào, nên hiện
-   * lên thành một mớ vạch ngang chồng chất — đúng cái dải nhoè nhìn thấy giữa
-   * thân lon. Làm mờ dọc trước rồi mới kéo giãn thì dải ấy thành một mảng màu
-   * chuyển mượt, đọc ra như phần vỏ đang cong khuất đi.
+   * Ảnh chụp chỉ có mặt trước và mặt sau; phần vỏ ở hai bên hông nằm đúng chỗ
+   * ống kính nhìn nghiêng hết cỡ nên cả một vòng cung chỉ còn dăm cột ảnh —
+   * kéo giãn ra là thành một mớ vạch ngang, mà chỗ nào ảnh không có dữ liệu
+   * thì còn thủng lỗ, lòi cả nền ra sau.
+   *
+   * Nên phần hông được DỰNG chứ không cố moi từ ảnh: lấy màu ở gần mép rồi làm
+   * mịn dọc, ra một dải chuyển màu êm nối liền hai nửa. Không phải nhãn thật,
+   * nhưng đúng tông lon và không ai nhận ra chỗ nối — đủ cho một màn hình đăng
+   * nhập.
    */
-  diemMo: Uint8ClampedArray;
+  hongTrai: Float32Array;
+  hongPhai: Float32Array;
+  /** Alpha ở giữa mỗi hàng, dùng làm alpha dự phòng để lon không bị thủng. */
+  aGiua: Float32Array;
   trai: Int16Array;
   phai: Int16Array;
   tam: Float32Array;
@@ -102,35 +111,59 @@ function doMat(ve: (g: CanvasRenderingContext2D) => void): Mat | null {
       ban[y] = (phai[y] + 1 - trai[y]) / 2;
     }
   }
-  // Làm mờ dọc: chỉ chạy một lần cho mỗi mặt lon.
-  const diemMo = new Uint8ClampedArray(diem.length);
-  for (let x = 0; x < KHUNG_W; x++) {
+  // Dải màu hông, dựng một lần cho mỗi mặt lon.
+  const thoTrai = new Float32Array(KHUNG_H * 3);
+  const thoPhai = new Float32Array(KHUNG_H * 3);
+  const aGiua = new Float32Array(KHUNG_H);
+  for (let y = 0; y < KHUNG_H; y++) {
+    if (trai[y] < 0) continue;
+    const kep = (v: number) => Math.max(trai[y], Math.min(phai[y], Math.round(v)));
+    const xt = kep(tam[y] - S_HONG * ban[y]);
+    const xp = kep(tam[y] + S_HONG * ban[y]);
+    for (let c = 0; c < 3; c++) {
+      thoTrai[y * 3 + c] = diem[(y * KHUNG_W + xt) * 4 + c];
+      thoPhai[y * 3 + c] = diem[(y * KHUNG_W + xp) * 4 + c];
+    }
+    aGiua[y] = diem[(y * KHUNG_W + kep(tam[y])) * 4 + 3] / 255;
+  }
+
+  // Làm mịn dọc: lấy nguyên thì dải hông thành sọc ngang, vì mỗi hàng một màu
+  // theo chữ và hình trên nhãn.
+  const minDoc = (tho: Float32Array) => {
+    const ra = new Float32Array(tho.length);
     for (let y = 0; y < KHUNG_H; y++) {
+      const dau = Math.max(0, y - BAN_KINH_MO);
+      const cuoi = Math.min(KHUNG_H - 1, y + BAN_KINH_MO);
+      let n = 0;
       let r = 0;
       let g2 = 0;
       let b = 0;
-      let n = 0;
-      const dau = Math.max(0, y - BAN_KINH_MO);
-      const cuoi = Math.min(KHUNG_H - 1, y + BAN_KINH_MO);
       for (let k = dau; k <= cuoi; k++) {
-        const i = (k * KHUNG_W + x) * 4;
-        if (diem[i + 3] < 8) continue;
-        r += diem[i];
-        g2 += diem[i + 1];
-        b += diem[i + 2];
+        if (trai[k] < 0) continue;
+        r += tho[k * 3];
+        g2 += tho[k * 3 + 1];
+        b += tho[k * 3 + 2];
         n++;
       }
-      const d = (y * KHUNG_W + x) * 4;
       if (n) {
-        diemMo[d] = r / n;
-        diemMo[d + 1] = g2 / n;
-        diemMo[d + 2] = b / n;
+        ra[y * 3] = r / n;
+        ra[y * 3 + 1] = g2 / n;
+        ra[y * 3 + 2] = b / n;
       }
-      diemMo[d + 3] = diem[d + 3];
     }
-  }
+    return ra;
+  };
 
-  return { diem, diemMo, trai, phai, tam, ban };
+  return {
+    diem,
+    hongTrai: minDoc(thoTrai),
+    hongPhai: minDoc(thoPhai),
+    aGiua,
+    trai,
+    phai,
+    tam,
+    ban,
+  };
 }
 
 /** Khung bao quanh phần đục của một ảnh, theo alpha. */
@@ -208,14 +241,9 @@ function layCot(
   y: number,
   xThuc: number,
   nen: number,
-  mo: number,
   ra: Float32Array,
 ): number {
-  // Chỉ đụng tới bản đã làm mờ khi thật sự cần: đó là một mảng gần một megabyte
-  // nữa, đọc vào cả lúc không dùng là thừa mà còn đẩy bộ nhớ đệm.
   const diem = m.diem;
-  const diemMo = mo > 0 ? m.diemMo : m.diem;
-  const ro = 1 - mo;
   const dong = y * KHUNG_W;
   const mepT = m.trai[y];
   const mepP = m.phai[y];
@@ -235,9 +263,9 @@ function layCot(
       else if (x > mepP) x = mepP;
       const i = (dong + x) * 4;
       const a = (diem[i + 3] / 255) * (k === 0 ? 1 - le : le);
-      ra[0] += (diem[i] * ro + diemMo[i] * mo) * a;
-      ra[1] += (diem[i + 1] * ro + diemMo[i + 1] * mo) * a;
-      ra[2] += (diem[i + 2] * ro + diemMo[i + 2] * mo) * a;
+      ra[0] += diem[i] * a;
+      ra[1] += diem[i + 1] * a;
+      ra[2] += diem[i + 2] * a;
       tong += a;
     }
   } else {
@@ -248,9 +276,9 @@ function layCot(
       else if (x > mepP) x = mepP;
       const i = (dong + x) * 4;
       const a = diem[i + 3] / 255;
-      ra[0] += (diem[i] * ro + diemMo[i] * mo) * a;
-      ra[1] += (diem[i + 1] * ro + diemMo[i + 1] * mo) * a;
-      ra[2] += (diem[i + 2] * ro + diemMo[i + 2] * mo) * a;
+      ra[0] += diem[i] * a;
+      ra[1] += diem[i + 1] * a;
+      ra[2] += diem[i + 2] * a;
       tong += a;
     }
     tong /= soTia;
@@ -304,6 +332,16 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
       const w = hoa[i];
       const d = (dong + x) * 4;
       const doNen = nen[i];
+      /*
+       * Độ đục lấy theo HÌNH DÁNG LON, không lấy theo điểm ảnh vừa nhặt được.
+       *
+       * Nhặt theo điểm ảnh thì hỏng: sát mép ảnh nguồn có một viền khử răng
+       * cưa nửa trong nửa đục, mà lúc lon xoay thì chính cái viền ấy bị kéo
+       * vào giữa thân lon — thành ra một mảng nhìn xuyên thấy nền phía sau.
+       * Điểm nào nằm trong bóng lon thì phải đục, chấm hết; `phu` lo phần rìa
+       * trái phải, `aGiua` lo phần vát ở nắp và đáy.
+       */
+      const aVien = truoc.aGiua[y] * phu * 255;
 
       // Mức chuyển sang bản làm mờ dọc: 0 là dùng ảnh gốc, 1 là mờ hẳn.
       const mo =
@@ -327,13 +365,16 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
         const aa = (truoc.diem[ia + 3] / 255) * (1 - le);
         const ab = (truoc.diem[ib + 3] / 255) * le;
         const tong = aa + ab;
-        if (tong <= 0) continue;
-        const f = heSoNhan[i] / tong;
-        out[d] = (truoc.diem[ia] * aa + truoc.diem[ib] * ab) * f;
-        out[d + 1] = (truoc.diem[ia + 1] * aa + truoc.diem[ib + 1] * ab) * f;
-        out[d + 2] = (truoc.diem[ia + 2] * aa + truoc.diem[ib + 2] * ab) * f;
-        out[d + 3] = tong * phu * 255;
-        continue;
+        // Có màu thì đi lối tắt; không có thì rơi xuống nhánh chung để được
+        // lấp bằng màu hông, tuyệt đối không bỏ trống.
+        if (tong > 0) {
+          const f = heSoNhan[i] / tong;
+          out[d] = (truoc.diem[ia] * aa + truoc.diem[ib] * ab) * f;
+          out[d + 1] = (truoc.diem[ia + 1] * aa + truoc.diem[ib + 1] * ab) * f;
+          out[d + 2] = (truoc.diem[ia + 2] * aa + truoc.diem[ib + 2] * ab) * f;
+          out[d + 3] = aVien;
+          continue;
+        }
       }
       if (w >= 1 && coSau && doNen < 1.5 && mo === 0) {
         // Mặt sau thuần. Giữa lúc quay thì nửa lon là mặt sau, nên nhánh này
@@ -353,33 +394,58 @@ function veLon(kho: Kho, phi: number, bang: BangChieu, ra: ImageData) {
         const aa = (sau.diem[ia + 3] / 255) * (1 - le);
         const ab = (sau.diem[ib + 3] / 255) * le;
         const tong = aa + ab;
-        if (tong <= 0) continue;
-        const f = heSoSau[i] / tong;
-        out[d] = (sau.diem[ia] * aa + sau.diem[ib] * ab) * f;
-        out[d + 1] = (sau.diem[ia + 1] * aa + sau.diem[ib + 1] * ab) * f;
-        out[d + 2] = (sau.diem[ia + 2] * aa + sau.diem[ib + 2] * ab) * f;
-        out[d + 3] = tong * phu * 255;
-        continue;
+        if (tong > 0) {
+          const f = heSoSau[i] / tong;
+          out[d] = (sau.diem[ia] * aa + sau.diem[ib] * ab) * f;
+          out[d + 1] = (sau.diem[ia + 1] * aa + sau.diem[ib + 1] * ab) * f;
+          out[d + 2] = (sau.diem[ia + 2] * aa + sau.diem[ib + 2] * ab) * f;
+          out[d + 3] = aVien;
+          continue;
+        }
       }
 
       let aTruoc = 0;
       if (w < 1) {
-        aTruoc = layCot(truoc, y, cx + r * u[i], doNen, mo, mauTruoc);
+        aTruoc = layCot(truoc, y, cx + r * u[i], doNen, mauTruoc);
       }
       let aSau = 0;
       if (w > 0 && coSau) {
         // Ảnh mặt sau là lon đã quay nửa vòng, nên đổi dấu vị trí ngang.
-        aSau = layCot(sau, y, cxS - rS * u[i], doNen, mo, mauSau);
+        aSau = layCot(sau, y, cxS - rS * u[i], doNen, mauSau);
       }
 
+      // Màu hông tự dựng cho chỗ này: đi vòng qua bên nào thì lấy mép bên ấy
+      // của mặt trước, nối sang mép đối diện của mặt sau.
+      const benPhai = u[i] > 0;
+      const hT = benPhai ? truoc.hongPhai : truoc.hongTrai;
+      // Hàng nào ảnh mặt sau không có (hai tấm chụp lệch nhau vài hàng ở nắp
+      // và đáy) thì vòng tiếp bằng mép đối diện của chính mặt trước, chứ
+      // không lấy mảng rỗng — lấy rỗng là ra một vệt đen.
+      const hS = coSau
+        ? benPhai
+          ? sau.hongTrai
+          : sau.hongPhai
+        : benPhai
+          ? truoc.hongTrai
+          : truoc.hongPhai;
+      const q3 = y * 3;
+      const sangHong = heSoNhan[i] * (1 - w) + heSoSau[i] * w;
+
       const gop = aTruoc * (1 - w) + aSau * w;
-      if (gop <= 0) continue;
-      const fT = heSoNhan[i] * aTruoc * (1 - w);
-      const fS = heSoSau[i] * aSau * w;
-      out[d] = (mauTruoc[0] * fT + mauSau[0] * fS) / gop;
-      out[d + 1] = (mauTruoc[1] * fT + mauSau[1] * fS) / gop;
-      out[d + 2] = (mauTruoc[2] * fT + mauSau[2] * fS) / gop;
-      out[d + 3] = gop * phu * 255;
+      // KHÔNG BAO GIỜ để trống một điểm nằm trong bóng lon. Chỗ ảnh không có
+      // dữ liệu mà bỏ qua thì lòi cả nền ra sau, hiện thành vệt xé dọc thân
+      // lon — đúng lỗi thấy khi lon quay. Thiếu thì lấp bằng màu hông.
+      const co = gop > 0.02;
+      const fT = co ? (heSoNhan[i] * aTruoc * (1 - w)) / gop : 0;
+      const fS = co ? (heSoSau[i] * aSau * w) / gop : 0;
+      const moHong = co ? mo : 1;
+      const roHong = 1 - moHong;
+      for (let cc = 0; cc < 3; cc++) {
+        const that = mauTruoc[cc] * fT + mauSau[cc] * fS;
+        const hong = (hT[q3 + cc] * (1 - w) + hS[q3 + cc] * w) * sangHong;
+        out[d + cc] = that * roHong + hong * moHong;
+      }
+      out[d + 3] = aVien;
     }
   }
 }
