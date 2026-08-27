@@ -26,40 +26,42 @@ import { MAU, VIEN } from "./excelDep";
 import {
   KIEU_TRUONG_SAP,
   MA_TRUONG_SAP,
+  NHOM_TRUONG_1,
+  NHOM_TRUONG_2,
+  SO_COT_SAP,
   TEN_TRUONG_SAP,
   type OSap,
   type TepSap,
 } from "./sapTemplate";
 
-/** Bề rộng cột, ước theo nội dung để mở ra đọc được ngay. */
-const BE_RONG = [
-  11, 11, 6, 7, 8, 9, 12, 28, 8, 13, 9, 12, 8, 15, 6, 14, 15, 15, 14, 15, 10,
-  8, 11, 11, 13, 13, 30, 11, 8,
-];
+/**
+ * Bề rộng riêng cho những cột thật sự có dữ liệu; cột còn lại để hẹp.
+ *
+ * Tệp có 117 cột mà ta chỉ điền hai mươi mấy cột. Nới rộng hết thì mở ra phải
+ * cuộn ngang cả màn hình mới thấy hết chỗ trống.
+ */
+const BE_RONG_THEO_TRUONG: Record<string, number> = {
+  BLDAT: 11, BUDAT: 11, BLART: 6, BUKRS: 8, WAERS: 8, BUPLA: 9,
+  BKTXT: 30, BSCHL: 8, HKONT: 13, WRBTR: 15, MWSKZ: 7, WMWST: 14,
+  FWBAS: 15, DMBTR: 15, ZTERM: 8, ZFBDT: 11, COPA_KNDNR: 12,
+  COPA_PRCTR: 13, PRCTR: 13, SGTXT: 30, MENGE: 11, MEINS: 8,
+};
+/** Bề rộng cho những cột không dùng tới. */
+const BE_RONG_TRONG = 4;
 
 export function sheetTemplateSap(tep: TepSap): XLSX.WorkSheet {
   const aoa: (string | number | null)[][] = [];
 
-  const hang0: (string | null)[] = new Array(29).fill(null);
-  hang0[0] = "DOCUMENT HEADER";
-  hang0[8] = "DOCUMENT LINE ITEM";
-  aoa.push(hang0);
-
-  const hang1: (string | null)[] = new Array(29).fill(null);
-  hang1[8] = "ACCOUNT";
-  hang1[13] = "DOCUMENT CURRENCY";
-  hang1[17] = "LOCAL CURRENCY";
-  hang1[20] = "PAYMENT/CASHFLOW";
-  hang1[23] = "COPA OBJECTS";
-  hang1[25] = "CO OBJECTS";
-  aoa.push(hang1);
-
-  aoa.push([...MA_TRUONG_SAP]);
-  aoa.push(KIEU_TRUONG_SAP.map((v) => v || null));
-  aoa.push([...TEN_TRUONG_SAP]);
+  // Năm hàng tiêu đề chép nguyên từ tệp mẫu, đủ 117 cột.
+  const rong = (ds: string[]) => ds.map((v) => v || null);
+  aoa.push(rong(NHOM_TRUONG_1));
+  aoa.push(rong(NHOM_TRUONG_2));
+  aoa.push(rong(MA_TRUONG_SAP));
+  aoa.push(rong(KIEU_TRUONG_SAP));
+  aoa.push(rong(TEN_TRUONG_SAP));
 
   // Chừa chỗ cho dữ liệu, ghi giá trị ở vòng dưới để giữ đúng kiểu từng ô.
-  tep.oDong.forEach(() => aoa.push(new Array(29).fill(null)));
+  tep.oDong.forEach(() => aoa.push(new Array(SO_COT_SAP).fill(null)));
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -127,7 +129,7 @@ export function sheetTemplateSap(tep: TepSap): XLSX.WorkSheet {
     },
     border: VIEN,
   });
-  for (let c = 0; c < 29; c++) {
+  for (let c = 0; c < SO_COT_SAP; c++) {
     for (let r = 0; r < 5; r++) {
       const dc = XLSX.utils.encode_cell({ c, r });
       const cu = ws[dc];
@@ -143,19 +145,19 @@ export function sheetTemplateSap(tep: TepSap): XLSX.WorkSheet {
 
   ws["!ref"] = XLSX.utils.encode_range({
     s: { c: 0, r: 0 },
-    e: { c: 28, r: 4 + tep.oDong.length },
+    e: { c: SO_COT_SAP - 1, r: 4 + tep.oDong.length },
   });
 
-  ws["!merges"] = [
-    { s: { c: 0, r: 0 }, e: { c: 7, r: 1 } },
-    { s: { c: 8, r: 0 }, e: { c: 26, r: 0 } },
-    { s: { c: 8, r: 1 }, e: { c: 12, r: 1 } },
-    { s: { c: 13, r: 1 }, e: { c: 16, r: 1 } },
-    { s: { c: 17, r: 1 }, e: { c: 19, r: 1 } },
-    { s: { c: 20, r: 1 }, e: { c: 22, r: 1 } },
-    { s: { c: 23, r: 1 }, e: { c: 24, r: 1 } },
-  ];
-  ws["!cols"] = BE_RONG.map((w) => ({ wch: w }));
+  /*
+   * KHÔNG GỘP Ô Ở HÀNG TIÊU ĐỀ.
+   *
+   * Tệp mẫu có gộp, nhưng gộp chỉ để người đọc dễ nhìn. Ô gộp thì mọi ô trừ ô
+   * đầu bị xoá giá trị, mà hệ thống nạp lên đọc từng ô theo vị trí — thà để
+   * rời, đằng nào cũng đúng nội dung.
+   */
+  ws["!cols"] = MA_TRUONG_SAP.map((ma) => ({
+    wch: BE_RONG_THEO_TRUONG[ma] ?? BE_RONG_TRONG,
+  }));
   ws["!rows"] = [
     { hpt: 18 },
     { hpt: 18 },

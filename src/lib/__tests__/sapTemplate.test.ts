@@ -16,8 +16,13 @@ import {
   CAU_HINH_MAC_DINH,
   dungTepSap,
   kiemCanChungTu,
+  KIEU_TRUONG_SAP,
   MA_TRUONG_SAP,
   ngayDDMMYYYY,
+  NHOM_TRUONG_1,
+  NHOM_TRUONG_2,
+  TEN_TRUONG_SAP,
+  viTriCot,
   type DongHangSap,
 } from "../sapTemplate";
 
@@ -39,7 +44,29 @@ eq("ngay DDMMYYYY", ngayDDMMYYYY("2026-08-23"), "23082026");
 eq("giu so 0 dung dau", ngayDDMMYYYY("2026-09-01"), "01092026");
 eq("ngay hong", ngayDDMMYYYY(""), "");
 
-eq("29 cot", MA_TRUONG_SAP.length, 29);
+eq("du 117 cot nhu tep mau", MA_TRUONG_SAP.length, 117);
+// Vi tri cot la thu he thong ben kia doc theo. Sai mot cot la tep bi tu choi
+// ngay khi nap len, nen chot cung tung cai o day.
+eq("BLDAT o cot A", viTriCot("BLDAT"), 0);
+eq("BKTXT o cot H", viTriCot("BKTXT"), 7);
+eq("BSCHL o cot N", viTriCot("BSCHL"), 13);
+eq("HKONT o cot O", viTriCot("HKONT"), 14);
+eq("WRBTR o cot S", viTriCot("WRBTR"), 18);
+eq("MWSKZ o cot T", viTriCot("MWSKZ"), 19);
+eq("WMWST o cot U", viTriCot("WMWST"), 20);
+eq("FWBAS o cot V", viTriCot("FWBAS"), 21);
+eq("DMBTR o cot W", viTriCot("DMBTR"), 22);
+eq("ZTERM o cot AA", viTriCot("ZTERM"), 26);
+eq("ZFBDT o cot AB", viTriCot("ZFBDT"), 27);
+eq("COPA_KNDNR o cot AC", viTriCot("COPA_KNDNR"), 28);
+eq("COPA_PRCTR o cot AP", viTriCot("COPA_PRCTR"), 41);
+eq("PRCTR o cot CD", viTriCot("PRCTR"), 81);
+eq("SGTXT o cot CH", viTriCot("SGTXT"), 85);
+eq("MENGE o cot CN", viTriCot("MENGE"), 91);
+eq("MEINS o cot CO", viTriCot("MEINS"), 92);
+// Nam hang tieu de phai dai bang nhau, khong thi ghi ra lech cot.
+eq("nam hang tieu de deu 117 o", [NHOM_TRUONG_1, NHOM_TRUONG_2, MA_TRUONG_SAP, KIEU_TRUONG_SAP, TEN_TRUONG_SAP].every((h) => h.length === 117), true);
+eq("khong co ma truong trung", new Set(MA_TRUONG_SAP.filter(Boolean)).size, MA_TRUONG_SAP.filter(Boolean).length);
 
 // --------------------------------------------------------------- dữ liệu
 
@@ -71,7 +98,7 @@ const tep = dungTepSap({
 // 2 chứng từ: BNC (1 + 9 + 1 = 11 dòng), ITC (1 + 5 + 1 = 7 dòng).
 eq("hai chung tu", tep.chungTu.length, 2);
 eq("dung 18 dong", tep.oDong.length, 18);
-eq("moi dong du 29 o", tep.oDong.every((d) => d.length === 29), true);
+eq("moi dong du 117 o", tep.oDong.every((d) => d.length === 117), true);
 
 const bnc = tep.chungTu.find((x) => x.maBp === "AD0103")!;
 eq("BNC truoc thue", bnc.truocThue, 163_242_000);
@@ -95,9 +122,9 @@ const o = (ma: string) => d0[MA_TRUONG_SAP.indexOf(ma)];
 eq("BLDAT", o("BLDAT"), { t: "s", v: "23082026" });
 eq("BUDAT", o("BUDAT"), { t: "s", v: "23082026" });
 eq("BLART", o("BLART"), { t: "s", v: "DR" });
-eq("BUKRS", o("BUKRS"), { t: "s", v: "S132" });
+eq("BUKRS", o("BUKRS"), { t: "s", v: "S026" });
 eq("WAERS", o("WAERS"), { t: "s", v: "VND" });
-eq("BUPLA", o("BUPLA"), { t: "s", v: "B182" });
+eq("BUPLA", o("BUPLA"), { t: "s", v: "B046" });
 eq("XBLNR de trong", o("XBLNR"), { t: "s", v: "" });
 eq("BSCHL la chuoi 01", o("BSCHL"), { t: "s", v: "01" });
 eq("HKONT phai thu", o("HKONT"), { t: "s", v: "AK0101" });

@@ -34,34 +34,51 @@
 
 import { VAT_RATE, type InvoiceUnit } from "./invoice";
 
-/** 29 mã trường của tệp mẫu, đúng thứ tự cột A→AC. */
+/**
+ * NĂM HÀNG TIÊU ĐỀ CỦA TỆP MẪU, chép nguyên xi, đủ cả 117 cột.
+ *
+ * Phải đủ 117 cột chứ không phải chỉ 29 cột ta dùng. Hệ thống bên kia đọc theo
+ * VỊ TRÍ CỘT: BSCHL phải nằm ở cột N, WRBTR ở cột S, MENGE ở cột CN. Bản trước
+ * xếp 29 trường ta dùng nằm liền nhau từ A tới AC, nên trường nào cũng lệch
+ * cột và tệp bị từ chối ngay khi nạp lên.
+ *
+ * Sinh từ `D:\coder\_file-le\TEMPLATE đúng.xlsx`. Muốn dựng lại thì đọc năm
+ * hàng đầu của tệp ấy ra mảng, đừng gõ tay.
+ */
+export const NHOM_TRUONG_1: string[] = [
+  "DOCUMENT HEADER", "", "", "", "", "", "", "", "", "", "", "", "", "DOCUMENT LINE ITEM", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+];
+
+export const NHOM_TRUONG_2: string[] = [
+  "", "", "", "", "", "", "", "", "", "", "", "", "", "ACCOUNT", "", "", "", "", "DOCUMENT CURRENCY", "", "", "", "LOCAL CURRENCY", "", "", "PAYMENT/CASHFLOW", "", "", "COPA OBJECTS", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "CO OBJECTS", "", "", "REFERENCE/TEXT", "", "", "", "", "", "", "", "", "One-time Posting", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+];
+
 export const MA_TRUONG_SAP: string[] = [
-  "BLDAT", "BUDAT", "BLART", "BUKRS", "WAERS", "BUPLA", "XBLNR", "BKTXT",
-  "BSCHL", "HKONT", "WW024_PA", "ALT_HKONT", "UMSKZ", "WRBTR", "MWSKZ",
-  "WMWST", "FWBAS", "DMBTR", "MWSTS", "HWBAS", "VALUT", "ZTERM", "ZFBDT",
-  "COPA_KNDNR", "COPA_PRCTR", "PRCTR", "SGTXT", "MENGE", "MEINS",
+  "BLDAT", "BUDAT", "BLART", "BUKRS", "WAERS", "BUPLA", "XBLNR", "BKTXT", "VATBPN", "VATBPA", "VATBPR", "PAYER", "PAYERA", "BSCHL", "HKONT", "WW024_PA", "ALT_HKONT", "UMSKZ", "WRBTR", "MWSKZ", "WMWST", "FWBAS", "DMBTR", "MWSTS", "HWBAS", "VALUT", "ZTERM", "ZFBDT", "COPA_KNDNR", "COPA_ARTNR", "COPA_FKART", "COPA_KAUFN", "COPA_KDPOS", "COPA_RKAUFNR", "COPA_WERKS", "COPA_FKBER", "COPA_SEGMENT", "COPA_VKORG", "COPA_VTWEG", "COPA_KOSTL", "COPA_KSTRG", "COPA_PRCTR", "COPA_PPRCTR", "COPA_ARTNRG", "COPA_KDGRP", "COPA_KMBRND", "COPA_KUNRE", "COPA_KUNWE", "COPA_LAND1", "COPA_MATKL", "COPA_PARTNER", "COPA_PRODH", "COPA_SAISJ", "COPA_SAISO", "COPA_VKBUR", "COPA_VKGRP", "COPA_GEBIE", "COPA_BRSCH", "COPA_BZIRK", "COPA_KMVTNR", "COPA_KMWNHG", "COPA_KMZONE", "COPA_WW010", "COPA_WW020", "COPA_WW030", "COPA_WW040", "COPA_ABTNR", "COPA_AUART", "COPA_BWTAR", "COPA_KONDA", "COPA_KONDM", "COPA_KUNNR", "COPA_LGORT", "COPA_PLTYP", "COPA_VKAUS", "COPA_VSTEL", "COPA_WW050", "COPA_WW060", "COPA_WW070", "COPA_WW080", "COPA_AUGRU", "PRCTR", "KOSTL", "AUFNR", "ZUONR", "SGTXT", "FIPOS", "XREF1", "XREF2", "XREF3", "MATNR", "MENGE", "MEINS", "Title", "NAME1", "NAME_2", "NAME_3", "NAME_4", "ORT01", "COUNTRY", "REGION", "STCEG", "KOKRS", "GSBER", "SPART", "WW011", "VERTN", "VPTNR", "BVTYP", "XNEGP", "REBZG", "REBZJ", "REBZZ", "PO_NUMBER", "PO_ITEM", "FUNDS_CTR", "",
 ];
 
-/** Hàng 4 của tệp mẫu — kiểu dữ liệu từng cột, chép nguyên. */
 export const KIEU_TRUONG_SAP: string[] = [
-  "DDMMYYYY", "DDMMYYYY", "C(2)", "C(4)", "C(5)", "C(6)", "C(16)", "C(25)",
-  "C(2)", "C(017)", "C(6)", "C(010)", "C(1)", "DEC(13,2)\r\nXXXXXXXX.YY",
-  "C(2)", "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY",
-  "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY",
-  "DEC(13,2)\r\nXXXXXXXX.YY", "DDMMYYYY", "C(4)", "DDMMYYYY", "C(10)",
-  "C(10)", "C(10)", "C(50)", "", "",
+  "DDMMYYYY", "DDMMYYYY", "C(2)", "C(4)", "C(5)", "C(6)", "C(16)", "C(25)", "(C30)", "(C30)", "(C30)", "(C30)", "(C30)", "C(2)", "C(017)", "C(6)", "C(010)", "C(1)", "DEC(13,2)\r\nXXXXXXXX.YY", "C(2)", "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY", "DEC(13,2)\r\nXXXXXXXX.YY", "DDMMYYYY", "C(4)", "DDMMYYYY", "C(10)", "C(40)", "C(4)", "C(10)", "Num(6)", "C(12)", "C(4)", "C(16)", "C(10)", "C(4)", "C(2)", "C(10)", "C(12)", "C(10)", "C(10)", "C(40)", "C(2)", "C(2)", "C(10)", "C(10)", "C(3)", "C(9)", "C(10)", "C(18)", "C(4)", "C(4)", "C(4)", "C(3)", "C(4)", "C(4)", "C(6)", "C(8)", "C(2)", "C(5)", "C(4)", "C(4)", "C(4)", "C(4)", "C(4)", "C(4)", "C(10)", "C(2)", "C(2)", "C(10)", "C(4)", "C(2)", "C(3)", "C(4)", "C(3)", "C(5)", "C(3)", "C(3)", "C(3)", "C(10)", "C(10)", "C(10)", "C(18)", "C(50)", "C(14)", "C(12)", "C(12)", "C(20)", "", "", "", "C(15)", "C(35)", "C(35)", "C(35)", "C(35)", "C(35)", "C(3)", "C(3)", "C(20)", "C(4)", "C(4)", "C(2)", "C(18)", "C(13)", "C(13)", "C(4)", "C(1)", "C(10)", "C(4)", "C(3)", "C(10)", "C(5)", "C(16)", "",
 ];
 
-/** Hàng 5 của tệp mẫu — tên tiếng Anh của từng cột. */
 export const TEN_TRUONG_SAP: string[] = [
-  "Document Date", "Posting Date", "Doc. type", "Comp. Code", "Currency",
-  "Business Place", "Reference Doc", "Header Text", "Posting Key", "Account",
-  "Trading Partner", "Alternative Reconciliatn A/C", "Special G/L Ind.",
-  "Amount\r\n(Doc Curr)", "Tax Code", "Tax Amt\r\n(Doc Curr)",
-  "Tax Base\r\n(Doc Curr)", "Amount\r\n(Local Curr)", "Tax Amt\r\n(Local Curr)",
-  "Tax Base\r\n(Local Curr)", "Value Date", "Payment Term", "Baseline Date",
-  "Customer", "Profit Center", "Profit Center", "Text", "Quantity", "Base Unit",
+  "Document Date", "Posting Date", "Doc. type", "Comp. Code", "Currency", "Business Place", "Reference Doc", "Header Text", "VAT Business partner name", "VAT Business partner address", "VAT Business partner VAT Reg.N", "Payer/Payee", "Payer/Payee address", "Posting Key", "Account", "Trading Partner", "Alternative Reconciliatn A/C", "Special G/L Ind.", "Amount\r\n(Doc Curr)", "Tax Code", "Tax Amt\r\n(Doc Curr)", "Tax Base\r\n(Doc Curr)", "Amount\r\n(Local Curr)", "Tax Amt\r\n(Local Curr)", "Tax Base\r\n(Local Curr)", "Value Date", "Payment Term", "Baseline Date", "Customer", "Product", "Billing Type", "Sales Order", "Sales ord. item", "Order", "Plant", "COPA-Functional area (chiều phân tích doanh thu)", "Segment", "Sales Org.", "Distr. Channel", "Cost center", "Cost Object", "Profit Center", "Partner PC", "Generic Article", "Customer Group", "Brand", "Bill-to party", "Ship-to party", "Country", "Material Group", "Partner", "Prod.hierarchy", "Season Year", "Season", "Sales Office", "Sales Group", "Area", "Industry", "Sales District", "Sales employee", "Main material group", "Zone", "Sale Transaction Typ", "Discount Type", "Tender Type", "Financial Trasn.Type", "Department", "Sales doc. type", "Valuation Type", "Price Group", "Mat. Price Grp", "Sold-to party", "Stor. location", "Price List", "Usage", "Shipping Point", "Region", "Branch Code", "Return Reason", "Refund Code", "Order Reason", "Profit Center", "Cost center", "Order", "Assignment", "Text", "Commitment Item", "Reference Key 1", "Reference Key 2", "Reference Key 3", "Material", "Quantity", "Base Unit", "TITLE", "Name 1", "Name 2", "Name 3", "Name 4", "City", "COUNTRY", "REGION", "Tax Number ", "Controlling area", "Business area", "Division", "Khối", "Hợp đồng (Functional area)", "Partner (BP parner)", "Partner bank type", "Negative posting", "Document No. Relevant Invoice", "Fiscal Year of the Relevant Invoice", "Line Item in the Relevant Invoice", "PO Number", "PO Items", "Fund center", "",
 ];
+
+/** Số cột của tệp mẫu. */
+export const SO_COT_SAP = MA_TRUONG_SAP.length;
+
+/**
+ * Vị trí cột của một mã trường, ví dụ `viTriCot("WRBTR")` ra 18 (cột S).
+ *
+ * Tra theo mã chứ không viết số cứng: mã trường đọc là hiểu ngay, còn con số
+ * thì phải đếm cột mới biết đúng sai.
+ */
+export function viTriCot(ma: string): number {
+  const i = MA_TRUONG_SAP.indexOf(ma);
+  if (i < 0) throw new Error(`Tệp mẫu SAP không có trường ${ma}`);
+  return i;
+}
 
 /**
  * Những giá trị cố định, đọc từ tệp mẫu và từ phần chú thích ở sheet 1.
@@ -101,9 +118,9 @@ export interface CauHinhSap {
 
 export const CAU_HINH_MAC_DINH: CauHinhSap = {
   docType: "DR",
-  compCode: "S132",
+  compCode: "S026",
   currency: "VND",
-  businessPlace: "B182",
+  businessPlace: "B046",
   taxCode: "O2",
   paymentTerm: "T000",
   profitCenter: "SX182001",
@@ -201,6 +218,13 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
   const oDong: OSap[][] = [];
   const chungTu: ChungTuSap[] = [];
 
+  /**
+   * Dựng một dòng đủ 117 ô, đặt từng trường vào ĐÚNG CỘT của nó.
+   *
+   * Điền theo mã trường chứ không xếp liền nhau: hệ thống nạp lên đọc theo vị
+   * trí cột, nên BSCHL phải nằm ở cột N chứ không phải cột thứ chín. Ô nào
+   * không dùng thì để trống, đúng như tệp mẫu.
+   */
   const khung = (
     tieuDe: string,
     postingKey: string,
@@ -213,37 +237,38 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
       soLuong?: number;
       dvt?: string;
     } = {},
-  ): OSap[] => [
-    chu(ngay), // BLDAT
-    chu(ngay), // BUDAT
-    chu(c.docType),
-    chu(c.compCode),
-    chu(c.currency),
-    chu(c.businessPlace),
-    trong, // XBLNR — tệp mẫu để trống
-    chu(tieuDe), // BKTXT — khai C(25) nhưng tệp mẫu ghi nguyên, xem ghi chú
-    chu(postingKey),
-    chu(taiKhoan),
-    trong, // WW024_PA
-    trong, // ALT_HKONT
-    trong, // UMSKZ
-    so(tien), // WRBTR
-    chu(c.taxCode),
-    opt.taxAmt === undefined ? trong : so(opt.taxAmt), // WMWST
-    opt.taxBase === undefined ? trong : so(opt.taxBase), // FWBAS
-    so(tien), // DMBTR — cùng đồng tiền nên bằng WRBTR
-    trong, // MWSTS
-    trong, // HWBAS
-    trong, // VALUT
-    chu(c.paymentTerm),
-    chu(ngay), // ZFBDT
-    opt.customer ? chu(opt.customer) : trong, // COPA_KNDNR
-    chu(c.profitCenter),
-    chu(c.profitCenter),
-    chu(tieuDe), // SGTXT
-    opt.soLuong === undefined ? trong : so(opt.soLuong), // MENGE
-    opt.dvt ? chu(opt.dvt) : trong, // MEINS
-  ];
+  ): OSap[] => {
+    const o: OSap[] = new Array(SO_COT_SAP).fill(trong);
+    const dat = (ma: string, v: OSap) => {
+      o[viTriCot(ma)] = v;
+    };
+    dat("BLDAT", chu(ngay));
+    dat("BUDAT", chu(ngay));
+    dat("BLART", chu(c.docType));
+    dat("BUKRS", chu(c.compCode));
+    dat("WAERS", chu(c.currency));
+    dat("BUPLA", chu(c.businessPlace));
+    // BKTXT khai C(25) nhưng tệp mẫu ghi nguyên cả câu, xem ghi chú ở dưới.
+    dat("BKTXT", chu(tieuDe));
+    dat("BSCHL", chu(postingKey));
+    dat("HKONT", chu(taiKhoan));
+    dat("WRBTR", so(tien));
+    dat("MWSKZ", chu(c.taxCode));
+    if (opt.taxAmt !== undefined) dat("WMWST", so(opt.taxAmt));
+    if (opt.taxBase !== undefined) dat("FWBAS", so(opt.taxBase));
+    // Cùng đồng tiền nên số tiền nội tệ bằng số tiền chứng từ.
+    dat("DMBTR", so(tien));
+    dat("ZTERM", chu(c.paymentTerm));
+    dat("ZFBDT", chu(ngay));
+    // Dòng nợ phải thu để trống ô khách hàng, dòng doanh thu và thuế thì điền.
+    dat("COPA_KNDNR", chu(opt.customer ?? ""));
+    dat("COPA_PRCTR", chu(c.profitCenter));
+    dat("PRCTR", chu(c.profitCenter));
+    dat("SGTXT", chu(tieuDe));
+    if (opt.soLuong !== undefined) dat("MENGE", so(opt.soLuong));
+    if (opt.dvt) dat("MEINS", chu(opt.dvt));
+    return o;
+  };
 
   theoDonVi.forEach((ds) => {
     const donVi = ds[0].donVi;
