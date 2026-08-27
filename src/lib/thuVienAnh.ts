@@ -36,6 +36,14 @@ export interface AnhThuVien {
   date: string;
   tieuDe: string;
   phu: string;
+  /**
+   * Tên đơn vị nhận hàng, để lọc bằng danh sách chọn.
+   *
+   * Tách riêng khỏi `timKiem` vì hai việc khác nhau: gõ tra cứu thì phải nhớ
+   * tên, còn danh sách chọn thì bày sẵn ra. Ảnh nhập kho gom theo phiếu có thể
+   * không có đơn vị nào rõ ràng, lúc đó để rỗng.
+   */
+  donVi: string;
   /** Chữ để tra cứu: mã lô, mã phiếu, tên đối tác, tên hàng. Đã hạ chữ thường. */
   timKiem: string;
 }
@@ -109,6 +117,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phu: tenHang.length
             ? `${tenHang.length} mặt hàng · ${tenHang[0]}`
             : "Chưa khớp giao dịch nào",
+          donVi: lienQuan[0]?.partnerName || "",
           timKiem: [s.code, ...lo, ...tenHang].join(" ").toLowerCase(),
         });
       });
@@ -125,6 +134,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           date: t.date,
           tieuDe: t.productName,
           phu: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
+          donVi: t.partnerName || "",
           timKiem: [t.batchNumber || "", t.productName, t.partnerName]
             .join(" ")
             .toLowerCase(),
@@ -142,6 +152,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           date: t.date,
           tieuDe: t.productName,
           phu: t.partnerName,
+          donVi: t.partnerName || "",
           timKiem: [t.partnerName, t.productName, t.batchNumber || ""]
             .join(" ")
             .toLowerCase(),
@@ -165,4 +176,28 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
       return true;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/**
+ * Danh sách đơn vị có ảnh trong đúng bộ ảnh truyền vào, xếp theo bảng chữ cái.
+ *
+ * Dựng từ chính bộ ảnh ĐANG XEM chứ không lấy từ danh mục đối tác: danh mục có
+ * hàng chục đơn vị mà phần lớn không có ảnh trong khoảng ngày đang chọn, bày ra
+ * hết thì người dùng chọn phải một đơn vị rồi thấy lưới trống, không hiểu vì
+ * sao. Bày đúng những đơn vị chọn vào là có ảnh.
+ */
+export function danhSachDonVi(anh: AnhThuVien[]): string[] {
+  const co = new Set<string>();
+  anh.forEach((a) => {
+    const d = String(a.donVi ?? "").trim();
+    if (d) co.add(d);
+  });
+  return Array.from(co).sort((a, b) => a.localeCompare(b, "vi"));
+}
+
+/** Lọc theo đúng một đơn vị. Để trống là lấy hết. */
+export function locTheoDonVi(anh: AnhThuVien[], donVi: string): AnhThuVien[] {
+  const d = String(donVi ?? "").trim();
+  if (!d) return anh;
+  return anh.filter((a) => a.donVi === d);
 }

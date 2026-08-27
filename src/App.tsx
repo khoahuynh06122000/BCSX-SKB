@@ -167,7 +167,12 @@ import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
-import { dungAnhThuVien, type AnhThuVien } from "./lib/thuVienAnh";
+import {
+  danhSachDonVi,
+  dungAnhThuVien,
+  locTheoDonVi,
+  type AnhThuVien,
+} from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
@@ -793,6 +798,8 @@ export default function App() {
    * `tong` là 0 khi không tải gì. Phải hiện được số đã xong: gói vài trăm tấm
    * mất cả phút, không có gì nhúc nhích thì người dùng tưởng treo và bấm lại.
    */
+  /** Đơn vị đang lọc ở thư viện ảnh chiều xuất. Rỗng là xem hết. */
+  const [galleryDonVi, setGalleryDonVi] = useState("");
   const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
     tong: 0,
     xong: 0,
@@ -4230,7 +4237,7 @@ export default function App() {
    * nằm ở `transactions`. Bản trước chỉ đọc `transactions[].evidencePhotoUrl`
    * nên tab Nhập kho luôn trống, dù người dùng đã tải ảnh phiếu lên đầy đủ.
    */
-  const anhThuVien = useMemo(
+  const anhTruocLocDonVi = useMemo(
     () =>
       dungAnhThuVien({
         transactions,
@@ -4248,6 +4255,24 @@ export default function App() {
       galleryDenNgay,
       gallerySearchQuery,
     ],
+  );
+
+  /**
+   * Đơn vị bày trong ô chọn: lấy từ bộ ảnh ĐANG XEM, tức là sau khi đã lọc
+   * ngày, TRƯỚC khi lọc đơn vị.
+   *
+   * Sau khi lọc ngày thì ô chọn mới đúng ý "khoảng này có những đơn vị nào".
+   * Trước khi lọc đơn vị thì chọn xong danh sách mới không co lại còn mỗi cái
+   * vừa chọn, không thì đổi sang đơn vị khác phải bỏ lọc rồi chọn lại.
+   */
+  const donViCoAnh = useMemo(
+    () => danhSachDonVi(anhTruocLocDonVi),
+    [anhTruocLocDonVi],
+  );
+
+  const anhThuVien = useMemo(
+    () => locTheoDonVi(anhTruocLocDonVi, galleryDonVi),
+    [anhTruocLocDonVi, galleryDonVi],
   );
 
   /**
@@ -10808,7 +10833,12 @@ export default function App() {
                     {/* Toggle IN/OUT */}
                     <div className="flex bg-slate-100/50 backdrop-blur-sm p-1.5 rounded-2xl w-full md:w-auto border border-slate-200/50 shadow-inner">
                       <button
-                        onClick={() => setGalleryFilter("IN")}
+                        onClick={() => {
+                          setGalleryFilter("IN");
+                          // Chiều nhập không lọc theo đơn vị, mà để nguyên thì
+                          // nó vẫn âm thầm lọc khi quay lại chiều xuất.
+                          setGalleryDonVi("");
+                        }}
                         className={cn(
                           "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
                           galleryFilter === "IN"
@@ -10819,7 +10849,10 @@ export default function App() {
                         Nhập kho
                       </button>
                       <button
-                        onClick={() => setGalleryFilter("OUT")}
+                        onClick={() => {
+                          setGalleryFilter("OUT");
+                          setGalleryDonVi("");
+                        }}
                         className={cn(
                           "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
                           galleryFilter === "OUT"
@@ -10830,6 +10863,42 @@ export default function App() {
                         Xuất kho
                       </button>
                     </div>
+
+                    {/* Lọc theo đơn vị — chỉ chiều xuất kho mới có đối tác
+                        nhận hàng. Dùng ô chọn chứ không dùng ô gõ: không ai
+                        nhớ khoảng ngày đó có những đơn vị nào mà gõ. */}
+                    {galleryFilter === "OUT" && (
+                      <div className="relative w-full lg:w-56 shrink-0">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select
+                          aria-label="Lọc theo đơn vị"
+                          value={galleryDonVi}
+                          onChange={(e) => setGalleryDonVi(e.target.value)}
+                          className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700 disabled:opacity-50"
+                          disabled={donViCoAnh.length === 0}
+                        >
+                          <option value="">
+                            {donViCoAnh.length === 0
+                              ? "Không có đơn vị nào"
+                              : `Tất cả đơn vị (${formatNumber(donViCoAnh.length)})`}
+                          </option>
+                          {/* Đơn vị đang chọn mà khoảng ngày mới không còn ảnh
+                              thì vẫn phải bày ra, không thì ô chọn tự nhảy về
+                              "Tất cả" trong khi lưới vẫn đang lọc. */}
+                          {galleryDonVi && !donViCoAnh.includes(galleryDonVi) && (
+                            <option value={galleryDonVi}>
+                              {galleryDonVi} — không có ảnh trong khoảng này
+                            </option>
+                          )}
+                          {donViCoAnh.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    )}
 
                     {/* Tải hàng loạt: gói đúng những tấm đang hiện trên lưới */}
                     <button

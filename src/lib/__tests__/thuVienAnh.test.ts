@@ -4,7 +4,7 @@
  */
 
 import type { ImportSlip, Transaction } from "../../types";
-import { dungAnhThuVien } from "../thuVienAnh";
+import { danhSachDonVi, dungAnhThuVien, locTheoDonVi } from "../thuVienAnh";
 
 let pass = 0;
 let fail = 0;
@@ -256,6 +256,56 @@ kiemTra(
   }).length,
   0,
 );
+
+// ------------------------------------------------------- loc theo don vi
+
+{
+  const anh = dungAnhThuVien({
+    transactions,
+    slips,
+    loai: "OUT",
+    tuNgay: "",
+    denNgay: "",
+    tuKhoa: "",
+  });
+
+  // Danh sach phai lay tu chinh bo anh dang xem, khong lay tu danh muc doi tac:
+  // chon vao phai co anh, khong duoc de nguoi dung chon roi thay luoi trong.
+  const ds = danhSachDonVi(anh);
+  kiemTra("danh sach don vi khong rong", ds.length > 0, true);
+  kiemTra(
+    "moi don vi trong danh sach deu co anh",
+    ds.every((d) => locTheoDonVi(anh, d).length > 0),
+    true,
+  );
+  kiemTra("khong co ten trung", new Set(ds).size === ds.length, true);
+  kiemTra("khong co ten rong", ds.every((d) => d.trim() !== ""), true);
+  // Xep theo bang chu cai tieng Viet.
+  kiemTra("da xep thu tu", [...ds].sort((a, b) => a.localeCompare(b, "vi")), ds);
+
+  // Loc dung mot don vi thi moi tam deu cua don vi ay.
+  const mot = ds[0];
+  const loc = locTheoDonVi(anh, mot);
+  kiemTra("loc ra dung don vi do", loc.every((a) => a.donVi === mot), true);
+  kiemTra("loc ra it hon hoac bang tat ca", loc.length <= anh.length, true);
+
+  // De trong la lay het — de nut "tat ca" khong phai xu ly rieng.
+  kiemTra("de trong thi lay het", locTheoDonVi(anh, "").length, anh.length);
+  kiemTra("chi co khoang trang cung la lay het", locTheoDonVi(anh, "   ").length, anh.length);
+  // Don vi khong ton tai thi ra rong, khong ra tat ca.
+  kiemTra("don vi la thi ra rong", locTheoDonVi(anh, "Khong Co Don Vi Nay").length, 0);
+
+  // Tong so anh cua tung don vi phai bang tong so anh co don vi.
+  const tong = ds.reduce((n, d) => n + locTheoDonVi(anh, d).length, 0);
+  kiemTra(
+    "cong tung don vi lai bang tong",
+    tong,
+    anh.filter((a) => a.donVi.trim() !== "").length,
+  );
+
+  // Bo anh rong thi danh sach cung rong, khong vo.
+  kiemTra("bo anh rong", danhSachDonVi([]), []);
+}
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
