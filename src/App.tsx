@@ -168,6 +168,7 @@ import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
 import { dungAnhThuVien, type AnhThuVien } from "./lib/thuVienAnh";
+import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
@@ -786,6 +787,17 @@ export default function App() {
    */
   const [selectedGalleryImage, setSelectedGalleryImage] =
     useState<AnhThuVien | null>(null);
+  /**
+   * Tiến trình tải hàng loạt ảnh thư viện.
+   *
+   * `tong` là 0 khi không tải gì. Phải hiện được số đã xong: gói vài trăm tấm
+   * mất cả phút, không có gì nhúc nhích thì người dùng tưởng treo và bấm lại.
+   */
+  const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
+    tong: 0,
+    xong: 0,
+    hong: 0,
+  });
   // Danh sach so hoa don dang bung chi tiet o so chi tiet doanh thu.
   // Truoc day khai bao la Set nhung cho dung lai goi .includes()/.filter() nen
   // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
@@ -4237,6 +4249,111 @@ export default function App() {
       gallerySearchQuery,
     ],
   );
+
+  /**
+   * TẢI HÀNG LOẠT: gói mọi ảnh đang xem vào một tệp ZIP.
+   *
+   * Gói đúng những tấm đang hiện trên lưới, tức là đã lọc theo chiều nhập/xuất,
+   * theo khoảng ngày và theo từ khoá. Người dùng lọc xong nhìn thấy gì thì tải
+   * đúng ngần ấy — không phải giải thích thêm là nút này tải cái gì.
+   *
+   * Tải bốn tấm một lúc: chờ từng tấm thì vài trăm tấm mất hàng phút, mà mở
+   * hết một lúc thì Cloudinary chặn bớt và trình duyệt cũng nghẽn.
+   *
+   * Tấm nào tải hỏng thì BỎ QUA rồi đếm lại, không dừng cả mẻ. Hỏng một tấm mà
+   * mất cả tệp thì tệ hơn nhiều; báo số hỏng ở cuối để còn biết mà kiểm.
+   */
+  const taiTatCaAnhThuVien = async () => {
+    if (tienTrinhTaiAnh.tong > 0) return;
+    const ds = anhThuVien;
+    if (!ds.length) {
+      showNotification("Không có ảnh nào trong khoảng đang xem", "error");
+      return;
+    }
+    if (
+      ds.length > 300 &&
+      !window.confirm(
+        `Sắp tải ${ds.length} ảnh và gói vào một tệp ZIP. Việc này có thể mất vài phút và tốn nhiều bộ nhớ. Tiếp tục?`,
+      )
+    ) {
+      return;
+    }
+
+    setTienTrinhTaiAnh({ tong: ds.length, xong: 0, hong: 0 });
+    const tep: { ten: string; duLieu: Uint8Array }[] = [];
+    let hong = 0;
+    let tongByte = 0;
+    let tran = false;
+    let ke = 0;
+
+    // Chặn ở 800 MB: quá mức này trình duyệt hay hết bộ nhớ giữa chừng, mà
+    // báo trước thì còn lọc hẹp lại được, chứ treo tab thì mất sạch.
+    const TRAN_BYTE = 800 * 1024 * 1024;
+
+    const chay = async () => {
+      while (ke < ds.length && !tran) {
+        const k = ke++;
+        const a = ds[k];
+        try {
+          const r = await fetch(a.url);
+          if (!r.ok) throw new Error(String(r.status));
+          const du = new Uint8Array(await r.arrayBuffer());
+          tongByte += du.length;
+          if (tongByte > TRAN_BYTE) {
+            tran = true;
+          } else {
+            tep.push({ ten: tenTrongZip(k + 1, a), duLieu: du });
+          }
+        } catch {
+          hong += 1;
+        }
+        setTienTrinhTaiAnh((t) => ({ ...t, xong: t.xong + 1, hong }));
+      }
+    };
+
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(4, ds.length) }, () => chay()),
+      );
+      if (tran) {
+        showNotification(
+          "Bộ ảnh quá lớn (trên 800 MB). Thu hẹp khoảng ngày rồi tải lại.",
+          "error",
+        );
+        return;
+      }
+      if (!tep.length) {
+        showNotification("Không tải được tấm nào. Kiểm tra lại mạng.", "error");
+        return;
+      }
+      // Xếp theo tên để giải nén ra đúng thứ tự đang xem: tải bốn luồng nên
+      // thứ tự hoàn thành không theo thứ tự trên lưới.
+      tep.sort((a, b) => a.ten.localeCompare(b.ten));
+      const zip = taoZip(tep);
+      const chieu = galleryFilter === "IN" ? "nhap-kho" : "xuat-kho";
+      const khoang =
+        galleryTuNgay || galleryDenNgay
+          ? `-${galleryTuNgay || "dau"}-den-${galleryDenNgay || "nay"}`
+          : "";
+      const url = URL.createObjectURL(zip);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `thu-vien-anh-${chieu}${khoang}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Thu hồi muộn một nhịp: thu ngay thì Safari huỷ luôn việc tải.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      showNotification(
+        hong
+          ? `Đã tải ${tep.length} ảnh, ${hong} tấm hỏng không lấy được`
+          : `Đã tải ${tep.length} ảnh`,
+        hong ? "error" : "success",
+      );
+    } finally {
+      setTienTrinhTaiAnh({ tong: 0, xong: 0, hong: 0 });
+    }
+  };
 
   /**
    * Tổng số ảnh của chiều đang xem, KHÔNG lọc ngày.
@@ -10713,6 +10830,33 @@ export default function App() {
                         Xuất kho
                       </button>
                     </div>
+
+                    {/* Tải hàng loạt: gói đúng những tấm đang hiện trên lưới */}
+                    <button
+                      onClick={taiTatCaAnhThuVien}
+                      disabled={
+                        tienTrinhTaiAnh.tong > 0 || anhThuVien.length === 0
+                      }
+                      title={
+                        anhThuVien.length === 0
+                          ? "Không có ảnh nào trong khoảng đang xem"
+                          : `Gói ${anhThuVien.length} ảnh đang xem vào một tệp ZIP`
+                      }
+                      className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-primary text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                    >
+                      {tienTrinhTaiAnh.tong > 0 ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Đang tải {formatNumber(tienTrinhTaiAnh.xong)}/
+                          {formatNumber(tienTrinhTaiAnh.tong)}
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          Tải tất cả ({formatNumber(anhThuVien.length)})
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
 
