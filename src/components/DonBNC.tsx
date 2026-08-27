@@ -19,6 +19,20 @@ import {
   type MaNhomBNC,
 } from "../lib/nhomBNC";
 import { taoSheetDep, XLSXDep } from "../lib/excelDep";
+import mauDieuChuyenUrl from "../assets/mau-dieu-chuyen.xlsx?url";
+import { dungFileDieuChuyen, tomTatDieuChuyen } from "../lib/dieuChuyen";
+import {
+  boCalcChainDc,
+  boSheetPhu,
+  HANG_DAU_DU_LIEU,
+  lamDepSheet,
+  MUC_BO_DC,
+  SHEET_PHU,
+  suaSheetVaChuDc,
+  tenTepDieuChuyen,
+} from "../lib/dieuChuyenXml";
+import { themKieuDep } from "../lib/dieuChuyenKieu";
+import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
 
 /**
@@ -210,6 +224,117 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   };
 
   const so = (n: number) => formatNumber(Math.round(n * 10) / 10);
+
+  /**
+   * Dữ liệu tệp điều chuyển của phần NỘI BỘ trong khoảng ngày đang xem.
+   *
+   * Luôn tính theo phần Nội bộ, bất kể ô lọc "Phần của BNC" đang chọn gì: ba
+   * phần còn lại không có kho riêng nên không điều chuyển. Nhưng VẪN tôn trọng
+   * ô lọc bộ phận, để xuất riêng một điểm bán khi cần.
+   */
+  const tepDieuChuyen = useMemo(
+    () =>
+      dungFileDieuChuyen({
+        transactions,
+        products,
+        tuNgay,
+        denNgay,
+        boPhan: nhomCuaBoPhan(boPhan) === "NB" ? boPhan : "",
+        tenBoPhan,
+      }),
+    [transactions, products, tuNgay, denNgay, boPhan, tenBoPhan],
+  );
+
+  const [dangTaiDc, setDangTaiDc] = useState(false);
+
+  /**
+   * Tải tệp điều chuyển: mở ĐÚNG TỆP MẪU của bộ phận ra, chỉ điền dữ liệu.
+   *
+   * Nhờ vậy toàn bộ định dạng của tệp mẫu đi theo tệp xuất ra, không phải dựng
+   * lại. Hai sheet hướng dẫn thì bỏ, và phần nhìn được chỉnh cho gọn — xem
+   * `boSheetPhu` và `lamDepSheet`.
+   */
+  const taiTepDieuChuyen = async () => {
+    if (dangTaiDc) return;
+    const f = tepDieuChuyen;
+    if (!f.dong.length) {
+      alert(`Không có dòng nào để điều chuyển.
+
+${tomTatDieuChuyen(f)}`);
+      return;
+    }
+    // Có điểm bán bị giữ lại thì HỎI trước khi tải: tệp thiếu mà không ai nói
+    // thì người dùng nạp lên rồi tưởng đã chuyển hết.
+    if (f.thieuMaKho.length || f.thieuMaVatTu.length) {
+      const ok = window.confirm(
+        `${tomTatDieuChuyen(f)}
+
+Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho phần còn lại?`,
+      );
+      if (!ok) return;
+    }
+
+    setDangTaiDc(true);
+    try {
+      const goc = new Uint8Array(
+        await (await fetch(mauDieuChuyenUrl)).arrayBuffer(),
+      );
+      const muc = docZip(goc);
+      const doc = async (ten: string) => {
+        const m = muc.find((x) => x.ten === ten);
+        if (!m) throw new Error(`Tệp mẫu thiếu ${ten}`);
+        return new TextDecoder().decode(await giaiNen(m));
+      };
+
+      // Thêm bộ kiểu riêng vào bảng kiểu trước, rồi mới dùng chỉ số kiểu đó.
+      const { stylesXml, kieu } = themKieuDep(await doc("xl/styles.xml"));
+      const { sheetXml, chuXml } = suaSheetVaChuDc(
+        await doc("xl/worksheets/sheet1.xml"),
+        await doc("xl/sharedStrings.xml"),
+        f.oDong,
+        kieu,
+        f.toNen,
+      );
+      const boCC = boCalcChainDc(
+        await doc("[Content_Types].xml"),
+        await doc("xl/_rels/workbook.xml.rels"),
+      );
+      // Bỏ hai sheet hướng dẫn rồi mới chỉnh phần nhìn của sheet dữ liệu.
+      const bo = boSheetPhu(
+        await doc("xl/workbook.xml"),
+        boCC.rels,
+        boCC.contentTypes,
+        await doc("docProps/app.xml"),
+        HANG_DAU_DU_LIEU + f.oDong.length - 1,
+      );
+
+      const blob = await suaXlsx(
+        goc,
+        {
+          "xl/worksheets/sheet1.xml": lamDepSheet(sheetXml, kieu),
+          "xl/styles.xml": stylesXml,
+          "xl/sharedStrings.xml": chuXml,
+          "xl/workbook.xml": bo.workbookXml,
+          "docProps/app.xml": bo.appXml,
+          "[Content_Types].xml": bo.contentTypes,
+          "xl/_rels/workbook.xml.rels": bo.relsXml,
+        },
+        [...MUC_BO_DC, ...SHEET_PHU],
+      );
+
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = tenTepDieuChuyen(tuNgay, denNgay);
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert(
+        `Không tạo được tệp điều chuyển: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setDangTaiDc(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -717,13 +842,63 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           </div>
         </div>
       )}
-      <button
-        onClick={taiExcel}
-        disabled={bang.don.length === 0}
-        className="px-5 py-3 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
-      >
-        <Download className="w-4 h-4" /> Tải Excel ({bang.don.length} đơn)
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={taiExcel}
+          disabled={bang.don.length === 0}
+          className="px-5 py-3 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
+        >
+          <Download className="w-4 h-4" /> Tải Excel ({bang.don.length} đơn)
+        </button>
+
+        {/*
+          TỆP ĐIỀU CHUYỂN — chỉ cho phần Nội bộ, vì ba phần còn lại của BNC
+          không có kho riêng. Nút luôn hiện chứ không ẩn theo ô lọc: ẩn đi thì
+          người dùng đang lọc Ngoại giao sẽ tưởng app không có chức năng này.
+        */}
+        <button
+          onClick={taiTepDieuChuyen}
+          disabled={dangTaiDc || tepDieuChuyen.dong.length === 0}
+          title={
+            tepDieuChuyen.dong.length === 0
+              ? tomTatDieuChuyen(tepDieuChuyen)
+              : `Điều chuyển bia về kho từng điểm bán · ${tomTatDieuChuyen(tepDieuChuyen)}`
+          }
+          className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2 disabled:opacity-50"
+        >
+          <Truck className="w-4 h-4" /> File điều chuyển · Nội bộ (
+          {tepDieuChuyen.dong.length} dòng)
+        </button>
+      </div>
+
+      {/*
+        Điểm bán bị giữ lại phải hiện NGAY CẠNH nút, không đợi bấm mới biết:
+        thiếu mã kho là thiếu vĩnh viễn cho tới khi bộ phận cấp mã, mà tệp xuất
+        ra thì trông vẫn bình thường.
+      */}
+      {(tepDieuChuyen.thieuMaKho.length > 0 ||
+        tepDieuChuyen.thieuMaVatTu.length > 0) && (
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-[11px] font-bold text-amber-800 leading-relaxed">
+            <p>Không điều chuyển được, đã giữ lại ngoài tệp:</p>
+            <ul className="mt-1 space-y-0.5">
+              {tepDieuChuyen.thieuMaKho.map((o) => (
+                <li key={o.ten}>
+                  · <strong>{o.ten}</strong> — chưa có mã kho nhận hàng ·{" "}
+                  {o.soDong} dòng, {so(o.soLuong)}
+                </li>
+              ))}
+              {tepDieuChuyen.thieuMaVatTu.map((o) => (
+                <li key={o.ten}>
+                  · <strong>{o.ten}</strong> — chưa có mã vật tư · {o.soDong}{" "}
+                  dòng, {so(o.soLuong)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
