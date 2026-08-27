@@ -25,10 +25,16 @@
  */
 
 import type { Product, Transaction } from "../types";
+import {
+  laBoPhanBNC as laBoPhanBNCGoc,
+  nhomCuaBoPhan,
+  NHOM_BNC,
+  type MaNhomBNC,
+} from "./nhomBNC";
 
-/** Bộ phận của BNC đều mang khoá dạng `AD0103-XX`. */
-export const laBoPhanBNC = (partnerId: string): boolean =>
-  String(partnerId ?? "").startsWith("AD0103-");
+// Định nghĩa nhóm và cách nhận ra bộ phận của BNC nằm ở `nhomBNC.ts` — một nơi
+// duy nhất, để ô chọn khi lập đơn và báo cáo này không bao giờ chia khác nhau.
+export const laBoPhanBNC = laBoPhanBNCGoc;
 
 export interface DonBNC {
   /** = referenceGroupId, hoặc id giao dịch nếu là dòng lẻ. */
@@ -37,6 +43,8 @@ export interface DonBNC {
   ngay: string;
   partnerId: string;
   boPhan: string;
+  /** Một trong bốn nhóm của BNC: Nội bộ, Ngoại giao, HTKD, Chi phí khác. */
+  nhom: MaNhomBNC;
   /** Số mặt hàng trong đơn. */
   soMatHang: number;
   soLuongLit: number;
@@ -62,6 +70,7 @@ export interface DonBNC {
 export interface TongBoPhan {
   partnerId: string;
   boPhan: string;
+  nhom: MaNhomBNC;
   soDon: number;
   soLuongLit: number;
   soLuongLon: number;
@@ -73,9 +82,28 @@ export interface TongBoPhan {
   donChuaXong: number;
 }
 
+/**
+ * Tổng của một nhóm.
+ *
+ * Luôn có đủ bốn nhóm, kể cả nhóm không phát sinh gì trong khoảng ngày đang
+ * xem: nhóm vắng mặt và nhóm bằng không là hai chuyện khác nhau, mà bảng thiếu
+ * hẳn một dòng thì người xem tưởng nhóm đó không tồn tại.
+ */
+export interface TongNhom {
+  nhom: MaNhomBNC;
+  ten: string;
+  soBoPhan: number;
+  soDon: number;
+  soLuongLit: number;
+  soLuongLon: number;
+  litQuyDoi: number;
+  haoHut: number;
+}
+
 export interface BangBNC {
   don: DonBNC[];
   theoBoPhan: TongBoPhan[];
+  theoNhom: TongNhom[];
   tong: {
     soDon: number;
     soBoPhan: number;
@@ -97,6 +125,8 @@ export interface BangBNCInput {
   denNgay: string;
   /** Lọc đúng một bộ phận; để trống là lấy hết. */
   boPhan: string;
+  /** Lọc đúng một nhóm; để trống là lấy hết. Lọc được cả nhóm lẫn bộ phận. */
+  nhom?: MaNhomBNC | "";
   /** Tên bộ phận theo mã, lấy từ danh mục đơn vị. */
   tenBoPhan: Map<string, string>;
 }
@@ -135,6 +165,7 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
     (t) =>
       laBoPhanBNC(t.partnerId) &&
       (!input.boPhan || t.partnerId === input.boPhan) &&
+      (!input.nhom || nhomCuaBoPhan(t.partnerId) === input.nhom) &&
       (t.type === "OUT" || t.type === "LOSS") &&
       trongKhoang(t),
   );
@@ -156,6 +187,9 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
         partnerId: t.partnerId,
         boPhan:
           input.tenBoPhan.get(t.partnerId) || t.partnerName || t.partnerId,
+        // Bộ phận lạ vẫn phải có nhóm, nếu không sản lượng của nó biến mất
+        // khỏi bảng nhóm trong khi tổng chung vẫn có.
+        nhom: nhomCuaBoPhan(t.partnerId) ?? "NB",
         soMatHang: 0,
         soLuongLit: 0,
         soLuongLon: 0,
@@ -199,6 +233,7 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
       o = {
         partnerId: d.partnerId,
         boPhan: d.boPhan,
+        nhom: d.nhom,
         soDon: 0,
         soLuongLit: 0,
         soLuongLon: 0,
@@ -222,9 +257,36 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
     (a, b) => b.litQuyDoi - a.litQuyDoi,
   );
 
+  // Bốn nhóm luôn có mặt, dựng sẵn rồi cộng vào — thứ tự theo `NHOM_BNC` để
+  // bảng nào cũng xếp Nội bộ, Ngoại giao, HTKD, Chi phí khác như nhau.
+  const theoNhom: TongNhom[] = NHOM_BNC.map((n) => ({
+    nhom: n.ma,
+    ten: n.ten,
+    soBoPhan: 0,
+    soDon: 0,
+    soLuongLit: 0,
+    soLuongLon: 0,
+    litQuyDoi: 0,
+    haoHut: 0,
+  }));
+  const chiSoNhom = new Map<MaNhomBNC, TongNhom>(
+    theoNhom.map((n) => [n.nhom, n]),
+  );
+  theoBoPhan.forEach((o) => {
+    const n = chiSoNhom.get(o.nhom);
+    if (!n) return;
+    n.soBoPhan += 1;
+    n.soDon += o.soDon;
+    n.soLuongLit += o.soLuongLit;
+    n.soLuongLon += o.soLuongLon;
+    n.litQuyDoi += o.litQuyDoi;
+    n.haoHut += o.haoHut;
+  });
+
   return {
     don,
     theoBoPhan,
+    theoNhom,
     tong: {
       soDon: don.length,
       soBoPhan: theoBoPhan.length,

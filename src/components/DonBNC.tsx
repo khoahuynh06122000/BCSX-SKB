@@ -12,6 +12,12 @@ import {
 import { format } from "date-fns";
 import type { Partner, Product, Transaction } from "../types";
 import { dungBangBNC, laBoPhanBNC, type DonBNC as DonBNCType } from "../lib/bnc";
+import {
+  nhomCuaBoPhan,
+  NHOM_BNC,
+  tenNhomBNC,
+  type MaNhomBNC,
+} from "../lib/nhomBNC";
 import { taoSheetDep, XLSXDep } from "../lib/excelDep";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -42,12 +48,25 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   );
   const [denNgay, setDenNgay] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [boPhan, setBoPhan] = useState("");
+  /** Lọc theo một trong bốn phần của BNC; rỗng là lấy hết. */
+  const [nhom, setNhom] = useState<MaNhomBNC | "">("");
   /** Đơn đang mở khung xem ảnh biên bản; `null` là đang đóng. */
   const [donDangXem, setDonDangXem] = useState<DonBNCType | null>(null);
 
   const dsBoPhan = useMemo(
     () => partners.filter((p) => laBoPhanBNC(p.id)),
     [partners],
+  );
+
+  /**
+   * Bộ phận bày trong ô chọn — chỉ những bộ phận thuộc nhóm đang lọc.
+   *
+   * Lọc nhóm Ngoại giao rồi ô bộ phận vẫn bày cả 17 điểm bán thì chọn vào là ra
+   * bảng trống, người xem tưởng mất dữ liệu.
+   */
+  const boPhanTheoNhom = useMemo(
+    () => (nhom ? dsBoPhan.filter((p) => nhomCuaBoPhan(p.id) === nhom) : dsBoPhan),
+    [dsBoPhan, nhom],
   );
 
   const tenBoPhan = useMemo(() => {
@@ -64,9 +83,10 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         tuNgay,
         denNgay,
         boPhan,
+        nhom,
         tenBoPhan,
       }),
-    [transactions, products, tuNgay, denNgay, boPhan, tenBoPhan],
+    [transactions, products, tuNgay, denNgay, boPhan, nhom, tenBoPhan],
   );
 
   const taiExcel = () => {
@@ -83,6 +103,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         ],
         tieuDe: [
           "STT",
+          "Phần",
           "Bộ phận",
           "Số đơn",
           "Lít hơi",
@@ -94,6 +115,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         ],
         cot: [
           { rong: 6, kieu: "giua" },
+          { rong: 14 },
           { rong: 26 },
           { rong: 10, kieu: "so" },
           { rong: 12, kieu: "so" },
@@ -105,6 +127,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         ],
         hang: bang.theoBoPhan.map((o, i) => [
           i + 1,
+          tenNhomBNC(o.nhom),
           o.boPhan,
           o.soDon,
           lam1(o.soLuongLit),
@@ -115,6 +138,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           o.lanCuoi,
         ]),
         dongTong: [
+          "",
           "",
           "TỔNG CỘNG",
           bang.tong.soDon,
@@ -139,6 +163,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         tieuDe: [
           "STT",
           "Ngày",
+          "Phần",
           "Bộ phận",
           "Mặt hàng",
           "Lít hơi",
@@ -152,6 +177,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         cot: [
           { rong: 6, kieu: "giua" },
           { rong: 12, kieu: "giua" },
+          { rong: 14 },
           { rong: 26 },
           { rong: 11, kieu: "so" },
           { rong: 12, kieu: "so" },
@@ -165,6 +191,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         hang: bang.don.map((d, i) => [
           i + 1,
           d.ngay,
+          tenNhomBNC(d.nhom),
           d.boPhan,
           d.soMatHang,
           lam1(d.soLuongLit),
@@ -191,14 +218,15 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
           Hóa đơn xuất cho BNC là một khách hàng duy nhất mã{" "}
           <strong>AD0103</strong>, nên file công nợ chỉ có một dòng "BNC". Màn
-          hình này tách ngược lại tới <strong>từng bộ phận</strong> để biết bia
-          đi tới quán nào. Một đơn ở đây là một chuyến giao, đúng như tab Đơn đi
-          đường.
+          hình này tách ngược lại: BNC chia{" "}
+          <strong>bốn phần — Nội bộ, Ngoại giao, HTKD, Chi phí khác</strong>,
+          trong đó Nội bộ tách tiếp tới từng điểm bán để biết bia đi tới quán
+          nào. Một đơn ở đây là một chuyến giao, đúng như tab Đơn đi đường.
         </p>
       </div>
 
       {/* ----- Bộ lọc ----- */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <label className="block">
           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
             Từ ngày
@@ -228,6 +256,28 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         </label>
         <label className="block">
           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            Phần của BNC
+          </span>
+          <select
+            value={nhom}
+            onChange={(e) => {
+              // Đổi nhóm thì bỏ bộ phận đang lọc: bộ phận cũ gần như luôn
+              // thuộc nhóm khác, để lại là ra bảng trống.
+              setNhom(e.target.value as MaNhomBNC | "");
+              setBoPhan("");
+            }}
+            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+          >
+            <option value="">Cả bốn phần</option>
+            {NHOM_BNC.map((n) => (
+              <option key={n.ma} value={n.ma}>
+                {n.ten}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
             Bộ phận
           </span>
           <select
@@ -235,8 +285,11 @@ export default function DonBNC({ transactions, products, partners }: Props) {
             onChange={(e) => setBoPhan(e.target.value)}
             className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
           >
-            <option value="">Tất cả {dsBoPhan.length} bộ phận</option>
-            {dsBoPhan.map((p) => (
+            <option value="">
+              Tất cả {boPhanTheoNhom.length} bộ phận
+              {nhom ? ` · ${tenNhomBNC(nhom)}` : ""}
+            </option>
+            {boPhanTheoNhom.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
@@ -303,6 +356,107 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         </div>
       )}
 
+      {/* ----- Theo bốn phần của BNC ----- */}
+      <div className="rounded-2xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            Bốn phần của BNC
+          </p>
+          {nhom && (
+            <button
+              type="button"
+              onClick={() => {
+                setNhom("");
+                setBoPhan("");
+              }}
+              className="text-[9px] font-black uppercase tracking-widest text-primary"
+            >
+              Xem cả bốn
+            </button>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left whitespace-nowrap">
+            <thead>
+              <tr>
+                {["Phần", "Bộ phận", "Đơn", "Lít hơi", "Lon", "Quy đổi", "Hao hụt"].map(
+                  (h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                    >
+                      {h}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {bang.theoNhom.map((n) => {
+                /*
+                  Bấm vào một phần là lọc luôn — bảng bốn dòng thì thao tác tự
+                  nhiên nhất là bấm thẳng vào dòng, không phải kéo lên ô chọn.
+                  Bấm lại vào phần đang lọc thì bỏ lọc.
+                */
+                const dangLoc = nhom === n.nhom;
+                return (
+                  <tr
+                    key={n.nhom}
+                    onClick={() => {
+                      setNhom(dangLoc ? "" : n.nhom);
+                      setBoPhan("");
+                    }}
+                    className={cn(
+                      "border-t border-slate-100 text-[11px] font-bold cursor-pointer",
+                      dangLoc
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    <td
+                      className={cn(
+                        "px-3 py-1.5 font-black",
+                        dangLoc ? "text-white" : "text-slate-900",
+                      )}
+                    >
+                      {n.ten}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {formatNumber(n.soBoPhan)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {formatNumber(n.soDon)}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-1.5 text-right tabular-nums",
+                        dangLoc ? "text-white" : "text-slate-900",
+                      )}
+                    >
+                      {so(n.soLuongLit)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {formatNumber(n.soLuongLon)}
+                    </td>
+                    <td
+                      className={cn(
+                        "px-3 py-1.5 text-right tabular-nums",
+                        dangLoc ? "text-white" : "text-slate-900",
+                      )}
+                    >
+                      {so(n.litQuyDoi)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {n.haoHut > 0 ? so(n.haoHut) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* ----- Theo bộ phận ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
@@ -321,6 +475,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
                 <tr>
                   {[
                     "Bộ phận",
+                    "Phần",
                     "Đơn",
                     "Lít hơi",
                     "Lon",
@@ -350,6 +505,9 @@ export default function DonBNC({ transactions, products, partners }: Props) {
                           {o.donChuaXong} chờ
                         </span>
                       )}
+                    </td>
+                    <td className="px-3 py-1.5 text-slate-400">
+                      {tenNhomBNC(o.nhom)}
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {o.soDon}

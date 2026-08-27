@@ -177,6 +177,12 @@ import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
+import {
+  laBoPhanBNC,
+  nhomCuaBoPhan,
+  NHOM_BNC,
+  type MaNhomBNC,
+} from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
@@ -3002,9 +3008,7 @@ export default function App() {
    * tồn tại trong ô chọn, và phép kiểm trước khi lưu chặn nó lại. Cố ý không
    * mặc định sẵn một bộ phận: đoán sai là ghi sản lượng vào nhóm sai.
    */
-  const NHOM_BNC = "__BNC__";
-  /** Các bộ phận của BNC đều mang khoá dạng AD0103-XX. */
-  const laBoPhanBNC = (id: string) => id.startsWith("AD0103-");
+  const NHOM_BNC_TAM = "__BNC__";
 
   /**
    * DANH MỤC ĐƠN VỊ DÙNG CHO Ô CHỌN — ghép code với Firestore, CODE ƯU TIÊN.
@@ -3059,6 +3063,18 @@ export default function App() {
     isInTransit: false,
     items: [{ productId: products[0]?.id || "", quantity: 0, batchNumber: "" }],
   });
+
+  /**
+   * Phần của BNC đang chọn ở ô thứ hai.
+   *
+   * Phải giữ riêng chứ không suy hết từ `partnerId`: chọn "Nội bộ" thì chưa có
+   * bộ phận nào, `partnerId` còn là giá trị tạm, mà tầng điểm bán vẫn phải mở
+   * ra. Ba nhóm còn lại thì suy được từ `partnerId` — nên khi ô này rỗng vẫn
+   * lấy nhóm của bộ phận đang chọn, để mở lại đơn cũ là thấy đúng nhóm.
+   */
+  const [nhomBNCChon, setNhomBNCChon] = useState<MaNhomBNC | "">("");
+  const nhomBNCDangChon: MaNhomBNC | "" =
+    nhomBNCChon || nhomCuaBoPhan(newTransaction.partnerId) || "";
 
   const addTransactionItem = () => {
     setNewTransaction((prev) => ({
@@ -4772,10 +4788,10 @@ export default function App() {
 
     // Global Validation
     //
-    // NHOM_BNC là giá trị tạm của ô chọn, không phải đối tác thật — nên phép
+    // NHOM_BNC_TAM là giá trị tạm của ô chọn, không phải đối tác thật — nên phép
     // tra bên trên không thấy và nhánh dưới đây chặn lại. Nói rõ thiếu gì thay
     // vì "chưa chọn đối tác", vì người dùng đã chọn BNC rồi.
-    if (newTransaction.partnerId === NHOM_BNC) {
+    if (newTransaction.partnerId === NHOM_BNC_TAM) {
       alert(
         "Chưa chọn bộ phận của BNC.\n\nBấm đúng một bộ phận trong danh sách ngay dưới ô chọn đơn vị rồi lưu lại nhé.",
       );
@@ -9320,7 +9336,7 @@ export default function App() {
                                 // phải cuộn hết mới thấy.
                                 if (!daChenBNC) {
                                   out.push({
-                                    value: NHOM_BNC,
+                                    value: NHOM_BNC_TAM,
                                     label: "BNC [AD0103]",
                                   });
                                   daChenBNC = true;
@@ -9336,71 +9352,135 @@ export default function App() {
                           })()}
                           value={
                             laBoPhanBNC(newTransaction.partnerId) ||
-                            newTransaction.partnerId === NHOM_BNC
-                              ? NHOM_BNC
+                            newTransaction.partnerId === NHOM_BNC_TAM
+                              ? NHOM_BNC_TAM
                               : newTransaction.partnerId
                           }
-                          onChange={(e: any) =>
+                          onChange={(e: any) => {
+                            // Doi don vi thi bo nhom cu di: giu lai thi chon
+                            // FV roi chon lai BNC se thay "Noi bo" sang san,
+                            // tuong nhu da chon xong.
+                            setNhomBNCChon("");
                             setNewTransaction({
                               ...newTransaction,
                               // Chon BNC thi chua biet bo phan nao -> de o thu
                               // hai quyet dinh. Khong doan mot bo phan mac dinh:
                               // doan sai la ghi san luong vao nhom sai.
                               partnerId: e.target.value,
-                            })
-                          }
+                            });
+                          }}
                         />
                       )}
 
                       {/*
-                        O THU HAI — chi hien khi da chon BNC.
-                        Bat buoc chon: BNC khong con muc "tron" nao, moi lan
-                        xuat cho BNC deu phai thuoc dung mot bo phan.
+                        O THU HAI — BON NHOM CUA BNC, chi hien khi da chon BNC.
+
+                        BNC chia bon phan: Noi bo, Ngoai giao, HTKD, Chi phi
+                        khac. Ba nhom sau dung bang MOT bo phan nen bam la chon
+                        xong; Noi bo gom 17 diem ban nen mo tiep tang thu ba.
+
+                        Truoc day 20 bo phan nam phang thanh 20 nut trong cung
+                        mot luoi: Ngoai giao va HTKD lan giua mot ruot ten quan,
+                        khong ai nhan ra day la bon phan khac han nhau ve ban
+                        chat — mot ben la ban trong khu, ba ben kia thi khong.
                       */}
                       {activeTab !== "import" &&
-                        (newTransaction.partnerId === NHOM_BNC ||
+                        (newTransaction.partnerId === NHOM_BNC_TAM ||
                           laBoPhanBNC(newTransaction.partnerId)) && (
                           <div className="mt-4 space-y-2">
                             <label className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
-                              Bộ phận của BNC
+                              Phần của BNC
                             </label>
-                            {/*
-                              Bốn NÚT thay cho một ô chọn nữa. Ô chọn thứ hai
-                              nằm ngay dưới ô chọn thứ nhất thì rất dễ bấm nhầm
-                              hoặc tưởng là cùng một ô; bốn nút thì thấy hết
-                              lựa chọn cùng lúc và bấm một lần là xong.
-                            */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
-                              {donVi
-                                .filter((p) => laBoPhanBNC(p.id))
-                                .map((p) => {
-                                  const dangChon =
-                                    newTransaction.partnerId === p.id;
-                                  return (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      onClick={() =>
-                                        setNewTransaction({
-                                          ...newTransaction,
-                                          partnerId: p.id,
-                                        })
-                                      }
+                            <div className="grid grid-cols-2 gap-2">
+                              {NHOM_BNC.map((n) => {
+                                const dangChon = nhomBNCDangChon === n.ma;
+                                return (
+                                  <button
+                                    key={n.ma}
+                                    type="button"
+                                    onClick={() => {
+                                      setNhomBNCChon(n.ma);
+                                      setNewTransaction({
+                                        ...newTransaction,
+                                        // Nhóm nào đúng bằng một bộ phận thì
+                                        // chọn luôn. Nội bộ thì để trống chờ
+                                        // chọn điểm bán: đoán sẵn một quán là
+                                        // ghi sản lượng cho nhầm khách.
+                                        partnerId: n.boPhan ?? NHOM_BNC_TAM,
+                                      });
+                                    }}
+                                    className={cn(
+                                      "px-3 py-2.5 rounded-xl border transition-all text-left leading-tight",
+                                      dangChon
+                                        ? "bg-slate-900 text-white border-slate-900 shadow-lg"
+                                        : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                                    )}
+                                  >
+                                    <span className="block text-[11px] font-black uppercase tracking-wide">
+                                      {n.ten}
+                                    </span>
+                                    <span
                                       className={cn(
-                                        "px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide border transition-all text-left leading-tight",
+                                        "block text-[9px] font-bold mt-0.5",
                                         dangChon
-                                          ? "bg-slate-900 text-white border-slate-900 shadow-lg"
-                                          : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                                          ? "text-white/70"
+                                          : "text-slate-400",
                                       )}
                                     >
-                                      {p.name.replace(/^BNC · /, "")}
-                                    </button>
-                                  );
-                                })}
+                                      {n.moTa}
+                                    </span>
+                                  </button>
+                                );
+                              })}
                             </div>
-                            {newTransaction.partnerId === NHOM_BNC && (
+
+                            {/*
+                              TANG THU BA — 17 diem ban, chi hien khi dang o
+                              nhom Noi bo. Ba nhom con lai khong co diem ban nao
+                              nen khong bay ra luoi rong.
+                            */}
+                            {nhomBNCDangChon === "NB" && (
+                              <>
+                                <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1 pt-1">
+                                  Điểm bán nội bộ
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                                  {donVi
+                                    .filter(
+                                      (p) => nhomCuaBoPhan(p.id) === "NB",
+                                    )
+                                    .map((p) => {
+                                      const dangChon =
+                                        newTransaction.partnerId === p.id;
+                                      return (
+                                        <button
+                                          key={p.id}
+                                          type="button"
+                                          onClick={() =>
+                                            setNewTransaction({
+                                              ...newTransaction,
+                                              partnerId: p.id,
+                                            })
+                                          }
+                                          className={cn(
+                                            "px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide border transition-all text-left leading-tight",
+                                            dangChon
+                                              ? "bg-slate-900 text-white border-slate-900 shadow-lg"
+                                              : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                                          )}
+                                        >
+                                          {p.name.replace(/^BNC · /, "")}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
+                              </>
+                            )}
+                            {newTransaction.partnerId === NHOM_BNC_TAM && (
                               <p className="text-[10px] font-bold text-amber-700">
-                                Chưa chọn bộ phận — chưa lưu được.
+                                {nhomBNCDangChon === "NB"
+                                  ? "Chưa chọn điểm bán — chưa lưu được."
+                                  : "Chưa chọn phần của BNC — chưa lưu được."}
                               </p>
                             )}
 

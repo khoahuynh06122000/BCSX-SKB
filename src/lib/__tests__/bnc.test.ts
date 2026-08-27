@@ -292,5 +292,100 @@ eq(
 }
 
 
+// -------------------------------------------------- bon phan cua BNC
+
+// Du lieu mau: 3 don cua diem ban (1901, Cau Vang) + 1 don Ngoai giao.
+{
+  const nb = b.theoNhom.find((n) => n.nhom === "NB");
+  const ng = b.theoNhom.find((n) => n.nhom === "NG");
+  const htkd = b.theoNhom.find((n) => n.nhom === "HTKD");
+  const cpk = b.theoNhom.find((n) => n.nhom === "CPK");
+
+  eq("luon co du bon nhom", b.theoNhom.length, 4);
+  eq("thu tu nhom co dinh", b.theoNhom.map((n) => n.ten), [
+    "Nội bộ",
+    "Ngoại giao",
+    "HTKD",
+    "Chi phí khác",
+  ]);
+
+  eq("Noi bo gom 1901 va Cau Vang", nb?.soBoPhan, 2);
+  eq("Ngoai giao mot bo phan", ng?.soBoPhan, 1);
+  // Nhom khong phat sinh gi VAN phai co dong, so bang khong. Thieu han dong thi
+  // nguoi xem tuong nhom do khong ton tai.
+  eq("HTKD khong phat sinh nhung van co dong", htkd?.soBoPhan, 0);
+  eq("HTKD san luong bang khong", htkd?.litQuyDoi, 0);
+  eq("Chi phi khac khong phat sinh", cpk?.soDon, 0);
+
+  // Cong bon nhom lai phai bang tong ca bang — day la phep chan duy nhat bat
+  // duoc loi mot bo phan roi ra ngoai moi nhom.
+  const congNhom = (lay: (n: (typeof b.theoNhom)[number]) => number) =>
+    b.theoNhom.reduce((s, n) => s + lay(n), 0);
+  eq("cong so don bon nhom = tong", congNhom((n) => n.soDon), b.tong.soDon);
+  eq("cong bo phan bon nhom = tong", congNhom((n) => n.soBoPhan), b.tong.soBoPhan);
+  eq(
+    "cong lit quy doi bon nhom = tong",
+    Math.round(congNhom((n) => n.litQuyDoi) * 100),
+    Math.round(b.tong.litQuyDoi * 100),
+  );
+  eq(
+    "cong hao hut bon nhom = tong",
+    Math.round(congNhom((n) => n.haoHut) * 100),
+    Math.round(b.tong.haoHut * 100),
+  );
+
+  // Tung don mang dung nhom cua bo phan no.
+  eq(
+    "don cua Ngoai giao mang nhom NG",
+    b.don.find((d) => d.partnerId === "AD0103-NG")?.nhom,
+    "NG",
+  );
+  eq(
+    "don cua diem ban mang nhom NB",
+    b.don.find((d) => d.partnerId === "AD0103-1901")?.nhom,
+    "NB",
+  );
+
+  // Loc theo nhom: chi con don cua nhom do.
+  const chiNG = dungBangBNC({
+    transactions,
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    nhom: "NG",
+    tenBoPhan: ten,
+  });
+  eq("loc nhom NG con mot don", chiNG.tong.soDon, 1);
+  eq(
+    "loc nhom NG khong con diem ban nao",
+    chiNG.don.every((d) => d.nhom === "NG"),
+    true,
+  );
+  const chiNB = dungBangBNC({
+    transactions,
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    nhom: "NB",
+    tenBoPhan: ten,
+  });
+  eq("loc nhom NB con ba don", chiNB.tong.soDon, 3);
+  eq("loc nhom rong = lay het", b.tong.soDon, 4);
+
+  // Loc ca nhom lan bo phan: hai dieu kien cung phai dung.
+  const lech = dungBangBNC({
+    transactions,
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "AD0103-1901",
+    nhom: "NG",
+    tenBoPhan: ten,
+  });
+  eq("bo phan khong thuoc nhom dang loc thi rong", lech.tong.soDon, 0);
+}
+
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
