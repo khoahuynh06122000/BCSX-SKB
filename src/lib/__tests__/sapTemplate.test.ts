@@ -44,7 +44,7 @@ eq("ngay DDMMYYYY", ngayDDMMYYYY("2026-08-23"), "23082026");
 eq("giu so 0 dung dau", ngayDDMMYYYY("2026-09-01"), "01092026");
 eq("ngay hong", ngayDDMMYYYY(""), "");
 
-eq("du 117 cot nhu tep mau", MA_TRUONG_SAP.length, 117);
+eq("du 116 cot nhu tep mau", MA_TRUONG_SAP.length, 116);
 // Vi tri cot la thu he thong ben kia doc theo. Sai mot cot la tep bi tu choi
 // ngay khi nap len, nen chot cung tung cai o day.
 eq("BLDAT o cot A", viTriCot("BLDAT"), 0);
@@ -65,7 +65,7 @@ eq("SGTXT o cot CH", viTriCot("SGTXT"), 85);
 eq("MENGE o cot CN", viTriCot("MENGE"), 91);
 eq("MEINS o cot CO", viTriCot("MEINS"), 92);
 // Nam hang tieu de phai dai bang nhau, khong thi ghi ra lech cot.
-eq("nam hang tieu de deu 117 o", [NHOM_TRUONG_1, NHOM_TRUONG_2, MA_TRUONG_SAP, KIEU_TRUONG_SAP, TEN_TRUONG_SAP].every((h) => h.length === 117), true);
+eq("nam hang tieu de deu 116 o", [NHOM_TRUONG_1, NHOM_TRUONG_2, MA_TRUONG_SAP, KIEU_TRUONG_SAP, TEN_TRUONG_SAP].every((h) => h.length === 116), true);
 eq("khong co ma truong trung", new Set(MA_TRUONG_SAP.filter(Boolean)).size, MA_TRUONG_SAP.filter(Boolean).length);
 
 // --------------------------------------------------------------- dữ liệu
@@ -98,7 +98,7 @@ const tep = dungTepSap({
 // 2 chứng từ: BNC (1 + 9 + 1 = 11 dòng), ITC (1 + 5 + 1 = 7 dòng).
 eq("hai chung tu", tep.chungTu.length, 2);
 eq("dung 18 dong", tep.oDong.length, 18);
-eq("moi dong du 117 o", tep.oDong.every((d) => d.length === 117), true);
+eq("moi dong du 116 o", tep.oDong.every((d) => d.length === 116), true);
 
 const bnc = tep.chungTu.find((x) => x.maBp === "AD0103")!;
 eq("BNC truoc thue", bnc.truocThue, 163_242_000);

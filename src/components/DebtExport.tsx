@@ -29,7 +29,13 @@ import {
   type CauHinhSap,
   type DongHangSap,
 } from "../lib/sapTemplate";
-import { taoWorkbookTemplateSap } from "../lib/sapTemplateExcel";
+import duongTepMauSap from "../assets/mau-template-sap.xlsx?url";
+import {
+  boCalcChain,
+  MUC_BO,
+  suaSheetVaChu,
+} from "../lib/sapTemplateXml";
+import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
 
 /**
@@ -99,6 +105,8 @@ export default function DebtExport({
 }: Props) {
   const [dot, setDot] = useState<DotChot[]>(docDotDaLuu);
   const [tienTo, setTienTo] = useState("C26TKB#");
+  /** Đang dựng tệp TEMPLATE. Chặn bấm hai lần vì phải tải tệp mẫu về trước. */
+  const [dangTaiSap, setDangTaiSap] = useState(false);
   const [soBatDau, setSoBatDau] = useState<number>(() => {
     const v = Number(localStorage.getItem(KHOA_LUU_SO));
     return Number.isFinite(v) && v > 0 ? v : 1;
@@ -321,8 +329,16 @@ export default function DebtExport({
     return dungTepSap({ dong, ngayChungTu, cauHinh: cauHinhSap });
   }, [bang.dong, ngayChungTu, cauHinhSap]);
 
-  const taiTepSap = () => {
-    if (!tepSap.oDong.length) return;
+  /**
+   * Tải tệp TEMPLATE: mở ĐÚNG TỆP MẪU của bộ phận ra, chỉ điền dữ liệu vào.
+   *
+   * Không tự dựng lại tệp bằng thư viện Excel nữa. Thư viện bỏ hết những ô
+   * trống mà có kẻ viền — tệp mẫu 117 cột thì phần lớn là ô như thế — nên tệp
+   * dựng lại mất gần hết định dạng. Mở tệp mẫu ra sửa thì kẻ ô, tô màu, gộp ô,
+   * ghi chú, vùng in, tên sheet đều còn nguyên xi.
+   */
+  const taiTepSap = async () => {
+    if (!tepSap.oDong.length || dangTaiSap) return;
     const lech = kiemCanChungTu(tepSap);
     if (lech.length) {
       alert(
@@ -330,10 +346,51 @@ export default function DebtExport({
       );
       return;
     }
-    XLSXDep.writeFile(
-      taoWorkbookTemplateSap(tepSap),
-      `TEMPLATE xuat hoa don ${ngayChungTu}.xlsx`,
-    );
+    setDangTaiSap(true);
+    try {
+      const goc = new Uint8Array(
+        await (await fetch(duongTepMauSap)).arrayBuffer(),
+      );
+      const muc = docZip(goc);
+      const doc = async (ten: string) => {
+        const m = muc.find((x) => x.ten === ten);
+        if (!m) throw new Error(`Tệp mẫu thiếu ${ten}`);
+        return new TextDecoder().decode(await giaiNen(m));
+      };
+
+      const { sheetXml, chuXml } = suaSheetVaChu(
+        await doc("xl/worksheets/sheet1.xml"),
+        await doc("xl/sharedStrings.xml"),
+        tepSap,
+      );
+      const boCC = boCalcChain(
+        await doc("[Content_Types].xml"),
+        await doc("xl/_rels/workbook.xml.rels"),
+      );
+
+      const blob = await suaXlsx(
+        goc,
+        {
+          "xl/worksheets/sheet1.xml": sheetXml,
+          "xl/sharedStrings.xml": chuXml,
+          "[Content_Types].xml": boCC.contentTypes,
+          "xl/_rels/workbook.xml.rels": boCC.rels,
+        },
+        MUC_BO,
+      );
+
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `TEMPLATE xuat hoa don ${ngayChungTu}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert(
+        `Không tạo được tệp TEMPLATE: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setDangTaiSap(false);
+    }
   };
 
   const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
