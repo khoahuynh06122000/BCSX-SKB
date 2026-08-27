@@ -118,9 +118,9 @@ export interface CauHinhSap {
 
 export const CAU_HINH_MAC_DINH: CauHinhSap = {
   docType: "DR",
-  compCode: "S026",
+  compCode: "S132",
   currency: "VND",
-  businessPlace: "B046",
+  businessPlace: "B182",
   taxCode: "O2",
   paymentTerm: "T000",
   profitCenter: "SX182001",
