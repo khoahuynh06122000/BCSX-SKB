@@ -34,6 +34,7 @@ import {
   Truck,
   Camera,
   Image as ImageIcon,
+  ImageOff,
   FileSpreadsheet,
   Layers,
   FileText,
@@ -172,6 +173,7 @@ import {
   danhSachDonVi,
   dungAnhThuVien,
   locTheoDonVi,
+  lyDoAnhLoi,
   tenLocDonVi,
   type AnhThuVien,
 } from "./lib/thuVienAnh";
@@ -816,6 +818,16 @@ export default function App() {
    * không hiện ra.
    */
   const [galleryBoPhan, setGalleryBoPhan] = useState("");
+  /**
+   * Những tấm trình duyệt tải không được, ghi theo khoá ảnh.
+   *
+   * Trước đây tấm nào lỗi thì ô ảnh trắng trơn, không nói gì — nhìn vào tưởng
+   * app lọc sai hoặc mất ảnh. Ghi lại để ô ảnh hiện đúng lý do, và để đếm ra
+   * một dòng cảnh báo phía trên lưới.
+   */
+  const [anhLoi, setAnhLoi] = useState<Set<string>>(new Set());
+  const ghiAnhLoi = (id: string) =>
+    setAnhLoi((cu) => (cu.has(id) ? cu : new Set(cu).add(id)));
   const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
     tong: 0,
     xong: 0,
@@ -4314,6 +4326,12 @@ export default function App() {
         ? anhTruocLocBoPhan.filter((a) => a.donVi === galleryBoPhan)
         : anhTruocLocBoPhan,
     [anhTruocLocBoPhan, galleryBoPhan],
+  );
+
+  /** Số tấm lỗi trong đúng bộ đang xem, không đếm những tấm đã lọc ra ngoài. */
+  const soAnhLoi = useMemo(
+    () => anhThuVien.filter((a) => anhLoi.has(a.id)).length,
+    [anhThuVien, anhLoi],
   );
 
   /**
@@ -10877,10 +10895,16 @@ export default function App() {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                       <input
                         type="text"
+                        /*
+                          Chieu xuat da co o chon don vi ben canh nen o nay
+                          khong con de tra cuu don vi nua: bay hai cach lam mot
+                          viec thi nguoi dung go ten don vi vao day roi khong
+                          hieu vi sao khong ra. O nay de tra ten hang va ma lo.
+                        */
                         placeholder={
                           galleryFilter === "IN"
                             ? "Tra cứu MÃ PHIẾU / MÃ LÔ..."
-                            : "Tra cứu ĐƠN VỊ..."
+                            : "Tra cứu MẶT HÀNG / MÃ LÔ..."
                         }
                         className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700"
                         value={gallerySearchQuery}
@@ -11072,6 +11096,26 @@ export default function App() {
                   </div>
                 </div>
 
+                {/*
+                  Đếm số tấm lỗi trong đúng bộ đang xem. Ảnh lỗi không tự lộ ra
+                  khi lướt qua nhanh, mà biết có bao nhiêu tấm mất thì còn đi
+                  tìm lại chứng từ được.
+                */}
+                {soAnhLoi > 0 && (
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
+                    <ImageOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                      <strong>
+                        {formatNumber(soAnhLoi)}/{formatNumber(anhThuVien.length)}{" "}
+                        tấm
+                      </strong>{" "}
+                      không tải được — ô ảnh ghi rõ lý do từng tấm. Ảnh cũ nhúng
+                      trong hệ thống thì chạy phần <strong>Chuyển ảnh cũ</strong>;
+                      ảnh không còn trên máy chủ thì phải tìm lại tờ biên bản.
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
                   {anhThuVien.length > 0 ? (
                     anhThuVien.map((t) => (
@@ -11081,12 +11125,31 @@ export default function App() {
                         onClick={() => setSelectedGalleryImage(t)}
                       >
                         <div className="aspect-[4/5] overflow-hidden">
-                          <img
-                            src={t.url}
-                            alt={t.tieuDe}
-                            loading="lazy"
-                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                          />
+                          {/*
+                            Tấm nào tải không được thì NÓI RA lý do, không để ô
+                            trắng. Ô trắng trơn nhìn giống app lọc sai hoặc mất
+                            ảnh, mà thật ra ảnh đã không còn hoặc là ảnh cũ
+                            nhúng trong tài liệu bị cắt cụt.
+                          */}
+                          {anhLoi.has(t.id) ? (
+                            <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2 px-3 text-center">
+                              <ImageOff className="w-7 h-7 text-slate-300" />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-snug">
+                                Không tải được ảnh
+                              </span>
+                              <span className="text-[9px] font-bold text-slate-400 leading-snug">
+                                {lyDoAnhLoi(t.url)}
+                              </span>
+                            </div>
+                          ) : (
+                            <img
+                              src={t.url}
+                              alt={t.tieuDe}
+                              loading="lazy"
+                              onError={() => ghiAnhLoi(t.id)}
+                              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                            />
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
                         </div>
 
@@ -11201,11 +11264,34 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                  <img
-                    src={selectedGalleryImage.url}
-                    className="w-full h-full object-contain rounded-3xl shadow-2xl"
-                    alt="Zoomed"
-                  />
+                  {anhLoi.has(selectedGalleryImage.id) ? (
+                    <div className="w-full h-full rounded-3xl bg-slate-100 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                      <ImageOff className="w-12 h-12 text-slate-300" />
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+                        Không tải được ảnh
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-400 max-w-sm leading-relaxed">
+                        {lyDoAnhLoi(selectedGalleryImage.url)}
+                      </p>
+                      {/*
+                        Bày nguyên đường dẫn ra: đây là thứ duy nhất nói được
+                        ảnh hỏng vì lý do gì, mà người dùng thì không mở được
+                        cơ sở dữ liệu lên xem. Có nó thì chụp lại là đủ để lần
+                        ra chỗ ghi sai.
+                      */}
+                      <code className="max-w-lg px-3 py-2 rounded-lg bg-white border border-slate-200 text-[10px] font-mono text-slate-500 break-all leading-relaxed">
+                        {selectedGalleryImage.url.slice(0, 160)}
+                        {selectedGalleryImage.url.length > 160 ? "…" : ""}
+                      </code>
+                    </div>
+                  ) : (
+                    <img
+                      src={selectedGalleryImage.url}
+                      onError={() => ghiAnhLoi(selectedGalleryImage.id)}
+                      className="w-full h-full object-contain rounded-3xl shadow-2xl"
+                      alt="Zoomed"
+                    />
+                  )}
                 </div>
               </div>
             )}

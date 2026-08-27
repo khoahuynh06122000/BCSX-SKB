@@ -52,6 +52,15 @@ export interface AnhThuVien {
    * định — `AD0103-NG` mãi là Ngoại giao.
    */
   maDonVi: string;
+  /**
+   * Số dòng giao dịch dùng chung tấm ảnh này. Chỉ có nghĩa sau khi gộp trùng.
+   *
+   * Một tờ biên bản ký chung cho cả lượt giao nên gắn vào nhiều dòng; gộp lại
+   * thì phải nói ra tờ này ký cho mấy mặt hàng, không thì mất thông tin.
+   */
+  soDongDungChung?: number;
+  /** Chữ phụ gốc, giữ lại để dựng lại khi gộp trùng. */
+  phuGoc: string;
   /** Chữ để tra cứu: mã lô, mã phiếu, tên đối tác, tên hàng. Đã hạ chữ thường. */
   timKiem: string;
 }
@@ -116,15 +125,18 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
       // còn giao dịch có cả giờ nên xếp thứ tự sát thực tế hơn.
       const ngay = lienQuan[0]?.date || s.date;
 
+      const phuPhieu = tenHang.length
+        ? `${tenHang.length} mặt hàng · ${tenHang[0]}`
+        : "Chưa khớp giao dịch nào";
+
       anh.forEach((url, i) => {
         ra.push({
           id: `slip-${s.code}-${i}`,
           url,
           date: ngay,
           tieuDe: `Phiếu ${s.code}`,
-          phu: tenHang.length
-            ? `${tenHang.length} mặt hàng · ${tenHang[0]}`
-            : "Chưa khớp giao dịch nào",
+          phu: phuPhieu,
+          phuGoc: phuPhieu,
           donVi: lienQuan[0]?.partnerName || "",
           maDonVi: lienQuan[0]?.partnerId || "",
           timKiem: [s.code, ...lo, ...tenHang].join(" ").toLowerCase(),
@@ -143,6 +155,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           date: t.date,
           tieuDe: t.productName,
           phu: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
+          phuGoc: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
           timKiem: [t.batchNumber || "", t.productName, t.partnerName]
@@ -162,6 +175,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           date: t.date,
           tieuDe: t.productName,
           phu: t.partnerName,
+          phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
           timKiem: [t.partnerName, t.productName, t.batchNumber || ""]
@@ -176,17 +190,22 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
   const tu = input.tuNgay.trim();
   const den = input.denNgay.trim();
 
-  return ra
-    .filter((a) => {
-      const ngay = ngayCua(a.date);
-      // So sánh chuỗi được vì `yyyy-MM-dd` xếp theo bảng chữ cái trùng với xếp
-      // theo thời gian. Không dựng Date để tránh lệch múi giờ ở hai đầu biên.
-      if (tu && ngay < tu) return false;
-      if (den && ngay > den) return false;
-      if (q && !a.timKiem.includes(q)) return false;
-      return true;
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  // Gộp trùng SAU KHI xếp thứ tự: gộp giữ tấm đầu tiên, nên phải xếp mới nhất
+  // lên trước rồi mới gộp, không thì tấm giữ lại mang ngày của dòng bất kỳ.
+  return gopAnhTrung(
+    ra
+      .filter((a) => {
+        const ngay = ngayCua(a.date);
+        // So sánh chuỗi được vì `yyyy-MM-dd` xếp theo bảng chữ cái trùng với
+        // xếp theo thời gian. Không dựng Date để tránh lệch múi giờ ở hai đầu
+        // biên.
+        if (tu && ngay < tu) return false;
+        if (den && ngay > den) return false;
+        if (q && !a.timKiem.includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date)),
+  );
 }
 
 /**
@@ -283,4 +302,85 @@ export function tenLocDonVi(gia: string): string {
     return ten ? `BNC · ${ten}` : d;
   }
   return d;
+}
+
+/** Kiểu đường dẫn của một tấm ảnh, để nói đúng vì sao nó không tải được. */
+export type KieuDuongDanAnh =
+  | "rong"
+  | "nhung"
+  | "tam"
+  | "khong-hop-le"
+  | "mang";
+
+/**
+ * Xem một đường dẫn ảnh thuộc kiểu nào.
+ *
+ * Bốn kiểu sai đều đã gặp trong dữ liệu thật của app, và mỗi kiểu phải xử lý
+ * một cách khác nhau — nên không gộp hết thành "ảnh lỗi":
+ *
+ *   nhung        `data:image/...` — bản đầu của app nhét ảnh base64 vào tài
+ *                liệu Firestore. Tài liệu tối đa 1 MiB nên khối base64 có thể
+ *                đã bị cắt cụt, cắt cụt thì không giải ra ảnh. Xem `anhCu.ts`.
+ *   tam          `blob:` — đường dẫn tạm của trình duyệt, chỉ sống trong đúng
+ *                phiên đó. Lưu được vào Firestore nhưng tải lại trang là chết,
+ *                nghĩa là lúc lưu đã không tải ảnh lên máy chủ.
+ *   khong-hop-le Không bắt đầu bằng `http` — thiếu địa chỉ máy chủ ảnh, thường
+ *                là lưu mỗi mã ảnh thay vì lưu cả đường dẫn.
+ *   mang         Đường dẫn đúng nhưng máy chủ trả về lỗi: ảnh đã bị xoá.
+ */
+export function kieuDuongDanAnh(url: string): KieuDuongDanAnh {
+  const u = String(url ?? "").trim();
+  if (!u) return "rong";
+  if (u.startsWith("data:")) return "nhung";
+  if (u.startsWith("blob:")) return "tam";
+  if (!/^https?:\/\//i.test(u)) return "khong-hop-le";
+  return "mang";
+}
+
+/** Ảnh nhúng thẳng vào tài liệu chứ không phải đường dẫn. */
+export function laAnhNhung(url: string): boolean {
+  return kieuDuongDanAnh(url) === "nhung";
+}
+
+/** Câu giải thích khi một tấm không tải được, để ô ảnh nói ra thay vì để trắng. */
+export function lyDoAnhLoi(url: string): string {
+  switch (kieuDuongDanAnh(url)) {
+    case "rong":
+      return "Không có đường dẫn ảnh";
+    case "nhung":
+      return "Ảnh cũ nhúng trong hệ thống, có thể đã bị cắt";
+    case "tam":
+      return "Ảnh chưa tải lên máy chủ, chỉ lưu đường dẫn tạm";
+    case "khong-hop-le":
+      return "Đường dẫn ảnh không hợp lệ";
+    default:
+      return "Ảnh không còn trên máy chủ ảnh";
+  }
+}
+
+/**
+ * GỘP NHỮNG TẤM TRÙNG NHAU — cùng một đường dẫn là cùng một tệp ảnh.
+ *
+ * Một tờ biên bản ký chung cho cả loạt mặt hàng trong lượt giao, mà ảnh thì
+ * gắn vào TỪNG DÒNG giao dịch — nên cùng một tờ hiện lại năm lần trên lưới,
+ * đúng chỗ đã phải sửa ở phân hệ Đơn BNC. Xem lưới thì tưởng có năm tấm minh
+ * chứng, tải hàng loạt thì tải cùng một tệp năm lần với năm cái tên khác nhau.
+ *
+ * Giữ tấm ĐẦU TIÊN (đã xếp mới nhất trước) và ghi lại số dòng dùng chung tấm
+ * ấy, để ô ảnh nói rõ tờ này ký cho mấy mặt hàng.
+ */
+export function gopAnhTrung(anh: AnhThuVien[]): AnhThuVien[] {
+  const theoUrl = new Map<string, AnhThuVien>();
+  anh.forEach((a) => {
+    const co = theoUrl.get(a.url);
+    if (!co) {
+      theoUrl.set(a.url, { ...a, soDongDungChung: 1 });
+      return;
+    }
+    co.soDongDungChung = (co.soDongDungChung ?? 1) + 1;
+    // Tên mặt hàng của dòng đầu không nói hết được cả tờ biên bản, nên khi có
+    // từ hai dòng trở lên thì ghi thêm số mặt hàng vào chữ phụ.
+    co.phu = `${co.phuGoc} · ${co.soDongDungChung} mặt hàng`;
+  });
+  return Array.from(theoUrl.values());
 }

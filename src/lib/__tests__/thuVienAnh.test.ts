@@ -8,8 +8,13 @@ import {
   danhSachBoPhanBNC,
   danhSachDonVi,
   dungAnhThuVien,
+  gopAnhTrung,
+  kieuDuongDanAnh,
+  laAnhNhung,
   locTheoDonVi,
+  lyDoAnhLoi,
   tenLocDonVi,
+  type AnhThuVien,
 } from "../thuVienAnh";
 
 let pass = 0;
@@ -415,6 +420,98 @@ kiemTra(
   // Bo anh rong thi danh sach cung rong, khong vo.
   kiemTra("bo anh rong", danhSachDonVi([]), []);
 }
+
+// ------------------------------------------------------- anh tai khong duoc
+
+// Hai nguyen nhan khac nhau va cach xu ly khac nhau, nen loi phai noi ra dung
+// cai nao: anh nhung thi chay phan "Chuyen anh cu", anh Cloudinary thi phai di
+// tim lai to bien ban.
+kiemTra("anh nhung base64", laAnhNhung("data:image/jpeg;base64,/9j/4AA"), true);
+kiemTra("anh nhung dang khac", laAnhNhung("data:image/png;base64,iVBOR"), true);
+kiemTra("duong dan Cloudinary khong phai anh nhung", laAnhNhung(U(1)), false);
+kiemTra("chuoi rong khong phai anh nhung", laAnhNhung(""), false);
+
+kiemTra(
+  "ly do anh nhung",
+  lyDoAnhLoi("data:image/jpeg;base64,/9j/4AA"),
+  "Ảnh cũ nhúng trong hệ thống, có thể đã bị cắt",
+);
+kiemTra("ly do anh Cloudinary", lyDoAnhLoi(U(1)), "Ảnh không còn trên máy chủ ảnh");
+kiemTra("ly do khong co duong dan", lyDoAnhLoi(""), "Không có đường dẫn ảnh");
+kiemTra("chi khoang trang cung la khong co duong dan", lyDoAnhLoi("   "), "Không có đường dẫn ảnh");
+// Luon phai co cau gi de hien, khong duoc tra ve rong.
+kiemTra(
+  "luon co ly do de hien",
+  ["", "   ", U(1), "data:image/png;base64,x"].every((u) => lyDoAnhLoi(u).length > 0),
+  true,
+);
+
+// ------------------------------------------------------- kieu duong dan
+
+// Bon kieu sai deu da gap trong du lieu that va moi kieu xu ly mot cach khac
+// nhau, nen khong duoc gop het thanh "anh loi".
+kiemTra("rong", kieuDuongDanAnh(""), "rong");
+kiemTra("chi khoang trang cung la rong", kieuDuongDanAnh("   "), "rong");
+kiemTra("anh nhung base64", kieuDuongDanAnh("data:image/jpeg;base64,/9j"), "nhung");
+kiemTra("duong dan tam cua trinh duyet", kieuDuongDanAnh("blob:https://a.b/1-2-3"), "tam");
+kiemTra("thieu dia chi may chu", kieuDuongDanAnh("bcsx/abc123.jpg"), "khong-hop-le");
+kiemTra("duong dan tuong doi", kieuDuongDanAnh("/upload/anh.jpg"), "khong-hop-le");
+kiemTra("http", kieuDuongDanAnh("http://a.b/anh.jpg"), "mang");
+kiemTra("https", kieuDuongDanAnh(U(1)), "mang");
+kiemTra("HTTPS chu hoa cung duoc", kieuDuongDanAnh("HTTPS://A.B/x.jpg"), "mang");
+
+kiemTra("moi kieu deu co cau giai thich rieng", new Set(
+  ["", "data:image/png;base64,x", "blob:https://a/1", "bcsx/x.jpg", U(1)].map(lyDoAnhLoi),
+).size, 5);
+
+// ------------------------------------------------------- gop anh trung
+
+// Mot to bien ban ky chung cho ca luot giao, anh gan vao TUNG DONG giao dich —
+// nen cung mot to hien lai nam lan tren luoi.
+{
+  const mau = (o: Partial<AnhThuVien>): AnhThuVien => ({
+    id: "x",
+    url: U(1),
+    date: "2026-08-20T08:00:00.000Z",
+    tieuDe: "Bia A",
+    phu: "NVT",
+    phuGoc: "NVT",
+    donVi: "NVT",
+    maDonVi: "AC0104",
+    timKiem: "",
+    ...o,
+  });
+
+  const gop = gopAnhTrung([
+    mau({ id: "a1", tieuDe: "Bia A" }),
+    mau({ id: "a2", tieuDe: "Bia B" }),
+    mau({ id: "a3", tieuDe: "Bia C" }),
+    mau({ id: "b1", url: U(2), tieuDe: "Bia D" }),
+  ]);
+  kiemTra("bon dong ba tam trung con hai tam", gop.length, 2);
+  kiemTra("giu tam dau tien", gop[0].id, "a1");
+  kiemTra("dem so dong dung chung", gop[0].soDongDungChung, 3);
+  kiemTra("noi ra la ky cho may mat hang", gop[0].phu, "NVT · 3 mặt hàng");
+  // Tam khong trung thi khong doi chu phu, khong duoc them "1 mat hang".
+  kiemTra("tam khong trung giu nguyen chu phu", gop[1].phu, "NVT");
+  kiemTra("tam khong trung van dem la mot", gop[1].soDongDungChung, 1);
+
+  kiemTra("bo rong", gopAnhTrung([]), []);
+  // Khong duoc sua vao mang goc: no la ket qua memo cua man hinh.
+  {
+    const goc = [mau({ id: "c1" }), mau({ id: "c2" })];
+    gopAnhTrung(goc);
+    kiemTra("khong sua chu phu cua mang goc", goc[0].phu, "NVT");
+    kiemTra("khong ghi so dong vao mang goc", goc[0].soDongDungChung, undefined);
+  }
+}
+
+// Tren du lieu mau: giao dich t4 mang U(1) va U(2), khong tam nao trung nhau.
+kiemTra(
+  "luoi khong con tam nao trung duong dan",
+  new Set(xuat.map((a) => a.url)).size,
+  xuat.length,
+);
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
