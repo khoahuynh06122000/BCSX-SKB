@@ -178,6 +178,21 @@ import {
   type AnhThuVien,
 } from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
+import {
+  dungDanhSachCsv,
+  tenTepSaoLuu,
+  THU_MUC,
+  tomTatSaoLuu,
+  type ChieuAnh,
+  type DongDanhSach,
+} from "./lib/saoLuuAnh";
+import {
+  baoCaoSoatAnh,
+  nhanDinhSoatAnh,
+  tomTatSoatAnh,
+  type KetQuaMotAnh,
+  type TomTatSoatAnh,
+} from "./lib/soatAnh";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
@@ -4327,6 +4342,196 @@ export default function App() {
         : anhTruocLocBoPhan,
     [anhTruocLocBoPhan, galleryBoPhan],
   );
+
+  /**
+   * Kết quả soát ảnh: `null` là chưa soát, `tong > 0` là đang chạy.
+   *
+   * Soát trên TOÀN BỘ khoảng ngày đang chọn, không theo đơn vị đang lọc: câu
+   * cần trả lời là ảnh mất theo quy luật nào, mà lọc một đơn vị thì không thấy
+   * được quy luật.
+   */
+  const [dangSoat, setDangSoat] = useState({ tong: 0, xong: 0 });
+  const [ketQuaSoat, setKetQuaSoat] = useState<TomTatSoatAnh | null>(null);
+
+  /**
+   * Tải thử từng tấm bằng thẻ ảnh, không dùng `fetch`.
+   *
+   * Thẻ ảnh không cần máy chủ cho phép đọc chéo tên miền, nên đo đúng cái mà
+   * lưới ảnh gặp phải. Có hẹn giờ vì ảnh mất đôi khi không báo lỗi mà treo.
+   */
+  const thuTaiAnh = (url: string): Promise<boolean> =>
+    new Promise((xong) => {
+      const img = new Image();
+      const hetGio = setTimeout(() => {
+        img.src = "";
+        xong(false);
+      }, 12000);
+      img.onload = () => {
+        clearTimeout(hetGio);
+        xong(true);
+      };
+      img.onerror = () => {
+        clearTimeout(hetGio);
+        xong(false);
+      };
+      img.src = url;
+    });
+
+  const soatAnhThuVien = async () => {
+    if (dangSoat.tong > 0) return;
+    const ds = anhTruocLocDonVi;
+    if (!ds.length) {
+      showNotification("Không có ảnh nào trong khoảng đang xem", "error");
+      return;
+    }
+    setKetQuaSoat(null);
+    setDangSoat({ tong: ds.length, xong: 0 });
+
+    const ra: KetQuaMotAnh[] = [];
+    let ke = 0;
+    const chay = async () => {
+      while (ke < ds.length) {
+        const a = ds[ke++];
+        const duoc = await thuTaiAnh(a.url);
+        ra.push({
+          id: a.id,
+          url: a.url,
+          date: a.date,
+          donVi: a.donVi || "(không rõ)",
+          duoc,
+        });
+        if (!duoc) ghiAnhLoi(a.id);
+        setDangSoat((t) => ({ ...t, xong: t.xong + 1 }));
+      }
+    };
+    // Sáu luồng: đủ nhanh cho vài trăm tấm mà không làm trình duyệt xếp hàng.
+    await Promise.all(Array.from({ length: Math.min(6, ds.length) }, chay));
+    setKetQuaSoat(tomTatSoatAnh(ra));
+    setDangSoat({ tong: 0, xong: 0 });
+  };
+
+  const [dangSaoLuu, setDangSaoLuu] = useState({ tong: 0, xong: 0 });
+
+  /**
+   * SAO LƯU ẢNH MINH CHỨNG: gói CẢ HAI CHIỀU trong khoảng ngày ra một tệp nén.
+   *
+   * Khác nút "Tải tất cả" ở ba điểm, và ba điểm đó mới làm nó dùng được để sao
+   * lưu thật:
+   *
+   *   · Lấy cả nhập kho lẫn xuất kho, chia hai thư mục. Sao lưu bằng tay thì
+   *     phải nhớ đổi tab tải lần thứ hai, quên là mất trắng một chiều.
+   *   · KHÔNG theo đơn vị đang lọc. Sao lưu thì phải đủ, lọc còn một đơn vị mà
+   *     bấm sao lưu là ra một tệp thiếu mang tên "sao lưu".
+   *   · Kèm tệp danh sách ghi đủ mọi tấm, kể cả tấm tải không được — tấm đã mất
+   *     thì ít nhất còn dòng ghi nó từng tồn tại, đủ để đi tìm biên bản giấy.
+   */
+  const saoLuuAnhMinhChung = async () => {
+    if (dangSaoLuu.tong > 0) return;
+
+    const boAnh: { chieu: ChieuAnh; ds: AnhThuVien[] }[] = (
+      ["IN", "OUT"] as ChieuAnh[]
+    ).map((chieu) => ({
+      chieu,
+      ds: dungAnhThuVien({
+        transactions,
+        slips,
+        loai: chieu,
+        tuNgay: galleryTuNgay,
+        denNgay: galleryDenNgay,
+        tuKhoa: "",
+      }),
+    }));
+
+    const tong = boAnh.reduce((n, b) => n + b.ds.length, 0);
+    if (!tong) {
+      showNotification("Không có ảnh nào trong khoảng ngày này", "error");
+      return;
+    }
+    if (
+      tong > 300 &&
+      !window.confirm(
+        `Sắp tải ${tong} ảnh của cả hai chiều và gói vào một tệp nén. Việc này có thể mất vài phút. Tiếp tục?`,
+      )
+    ) {
+      return;
+    }
+
+    setDangSaoLuu({ tong, xong: 0 });
+    const tep: { ten: string; duLieu: Uint8Array }[] = [];
+    const dong: DongDanhSach[] = [];
+    let tongByte = 0;
+    let tran = false;
+    const TRAN_BYTE = 800 * 1024 * 1024;
+
+    try {
+      for (const b of boAnh) {
+        // Bốn luồng một chiều, làm lần lượt hai chiều: số thứ tự trong tệp nén
+        // phải khớp với số thứ tự trong danh sách, nên phải biết trước thứ tự.
+        let ke = 0;
+        const chay = async () => {
+          while (ke < b.ds.length && !tran) {
+            const k = ke++;
+            const a = b.ds[k];
+            let duoc = false;
+            try {
+              const r = await fetch(a.url);
+              if (!r.ok) throw new Error(String(r.status));
+              const du = new Uint8Array(await r.arrayBuffer());
+              tongByte += du.length;
+              if (tongByte > TRAN_BYTE) {
+                tran = true;
+              } else {
+                tep.push({
+                  ten: `${THU_MUC[b.chieu]}/${tenTrongZip(k + 1, a)}`,
+                  duLieu: du,
+                });
+                duoc = true;
+              }
+            } catch {
+              ghiAnhLoi(a.id);
+            }
+            dong.push({ chieu: b.chieu, stt: k + 1, anh: a, duoc });
+            setDangSaoLuu((t) => ({ ...t, xong: t.xong + 1 }));
+          }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(4, b.ds.length) }, chay),
+        );
+      }
+
+      if (tran) {
+        showNotification(
+          "Bộ ảnh quá lớn (trên 800 MB). Thu hẹp khoảng ngày rồi sao lưu lại.",
+          "error",
+        );
+        return;
+      }
+
+      // Danh sách xếp theo chiều rồi theo số thứ tự, đúng như trong tệp nén.
+      dong.sort(
+        (x, y) => x.chieu.localeCompare(y.chieu) || x.stt - y.stt,
+      );
+      tep.push({
+        ten: "danh-sach.csv",
+        duLieu: new TextEncoder().encode(dungDanhSachCsv(dong)),
+      });
+
+      const blob = taoZip(tep);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = tenTepSaoLuu(galleryTuNgay, galleryDenNgay);
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showNotification(tomTatSaoLuu(dong));
+    } catch (e) {
+      showNotification(
+        `Không sao lưu được: ${e instanceof Error ? e.message : String(e)}`,
+        "error",
+      );
+    } finally {
+      setDangSaoLuu({ tong: 0, xong: 0 });
+    }
+  };
 
   /** Số tấm lỗi trong đúng bộ đang xem, không đếm những tấm đã lọc ra ngoài. */
   const soAnhLoi = useMemo(
@@ -11093,8 +11298,157 @@ export default function App() {
                         </>
                       )}
                     </button>
+
+                    {/*
+                      SAO LƯU — gói cả hai chiều trong khoảng ngày, kèm tệp
+                      danh sách. Ảnh biên bản là chứng từ mà chỉ có một bản duy
+                      nhất trên máy chủ ảnh của người khác; tháng 8/2026 đã mất
+                      một loạt và không có chỗ nào lấy lại được.
+                    */}
+                    <button
+                      onClick={saoLuuAnhMinhChung}
+                      disabled={dangSaoLuu.tong > 0}
+                      title="Gói ảnh CẢ HAI CHIỀU trong khoảng ngày này (mọi đơn vị) vào một tệp nén, kèm danh sách. Cất tệp này ra ổ D mỗi tháng một lần."
+                      className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:brightness-125 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+                    >
+                      {dangSaoLuu.tong > 0 ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Đang sao lưu {formatNumber(dangSaoLuu.xong)}/
+                          {formatNumber(dangSaoLuu.tong)}
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          Sao lưu cả hai chiều
+                        </>
+                      )}
+                    </button>
+
+                    {/*
+                      SOÁT ẢNH — tải thử từng tấm rồi gom nhóm xem mất theo quy
+                      luật nào. Nhìn từng ô thì chỉ biết "tấm này mất"; mất hết
+                      trước một mốc ngày và mất rải rác là hai nguyên nhân hoàn
+                      toàn khác nhau. Soát cả khoảng ngày, không theo đơn vị
+                      đang lọc: lọc một đơn vị thì không thấy được quy luật.
+                    */}
+                    {galleryFilter === "OUT" && (
+                      <button
+                        onClick={soatAnhThuVien}
+                        disabled={
+                          dangSoat.tong > 0 || anhTruocLocDonVi.length === 0
+                        }
+                        title={`Tải thử ${anhTruocLocDonVi.length} tấm trong khoảng ngày này (mọi đơn vị) để xem mất theo quy luật nào`}
+                        className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {dangSoat.tong > 0 ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Đang soát {formatNumber(dangSoat.xong)}/
+                            {formatNumber(dangSoat.tong)}
+                          </>
+                        ) : (
+                          <>
+                            <ImageOff className="w-4 h-4" />
+                            Soát ảnh ({formatNumber(anhTruocLocDonVi.length)})
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/*
+                  KẾT QUẢ SOÁT. Một câu nhận định ở trên để biết phải làm gì,
+                  ba bảng số ở dưới để gửi cho người viết code. Có nút sao chép
+                  vì không ai gõ lại được hai chục dòng số.
+                */}
+                {ketQuaSoat && (
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex gap-2">
+                        <ImageOff className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Kết quả soát ·{" "}
+                            {formatNumber(ketQuaSoat.tong)} tấm, hỏng{" "}
+                            {formatNumber(ketQuaSoat.hong)}
+                          </p>
+                          <p className="text-[11px] font-bold text-slate-600 leading-relaxed mt-1 max-w-3xl">
+                            {nhanDinhSoatAnh(ketQuaSoat)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard
+                              ?.writeText(baoCaoSoatAnh(ketQuaSoat))
+                              .then(() =>
+                                showNotification("Đã sao chép báo cáo soát ảnh"),
+                              )
+                              .catch(() =>
+                                showNotification(
+                                  "Trình duyệt không cho sao chép",
+                                  "error",
+                                ),
+                              );
+                          }}
+                          className="px-3 py-2 rounded-xl border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
+                        >
+                          Sao chép báo cáo
+                        </button>
+                        <button
+                          onClick={() => setKetQuaSoat(null)}
+                          className="px-3 py-2 rounded-xl border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {[
+                        { ten: "Theo tháng", ds: ketQuaSoat.theoThang },
+                        { ten: "Theo đơn vị", ds: ketQuaSoat.theoDonVi },
+                        { ten: "Theo kiểu đường dẫn", ds: ketQuaSoat.theoKieu },
+                      ].map((bang) => (
+                        <div
+                          key={bang.ten}
+                          className="rounded-xl border border-slate-100 overflow-hidden"
+                        >
+                          <p className="px-3 py-1.5 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                            {bang.ten}
+                          </p>
+                          <div className="max-h-52 overflow-y-auto">
+                            {bang.ds.map((o) => (
+                              <div
+                                key={o.ten}
+                                className="px-3 py-1.5 flex items-center justify-between gap-2 border-t border-slate-50 text-[11px] font-bold"
+                              >
+                                <span className="truncate text-slate-600">
+                                  {o.ten}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "tabular-nums shrink-0",
+                                    o.hong === 0
+                                      ? "text-emerald-600"
+                                      : o.hong === o.tong
+                                        ? "text-rose-600"
+                                        : "text-amber-600",
+                                  )}
+                                >
+                                  {o.hong}/{o.tong}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/*
                   Đếm số tấm lỗi trong đúng bộ đang xem. Ảnh lỗi không tự lộ ra
