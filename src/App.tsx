@@ -168,9 +168,11 @@ import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import ChuyenAnhCu from "./components/ChuyenAnhCu";
 import {
+  danhSachBoPhanBNC,
   danhSachDonVi,
   dungAnhThuVien,
   locTheoDonVi,
+  tenLocDonVi,
   type AnhThuVien,
 } from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
@@ -806,6 +808,14 @@ export default function App() {
    */
   /** Đơn vị đang lọc ở thư viện ảnh chiều xuất. Rỗng là xem hết. */
   const [galleryDonVi, setGalleryDonVi] = useState("");
+  /**
+   * Điểm bán của BNC đang lọc thêm, chỉ dùng khi đang lọc một phần của BNC.
+   *
+   * Phần Nội bộ có 17 điểm bán nên chọn phần rồi vẫn còn quá nhiều ảnh; ô thứ
+   * hai này để soi tiếp một quán. Ba phần còn lại chỉ có một bộ phận nên ô
+   * không hiện ra.
+   */
+  const [galleryBoPhan, setGalleryBoPhan] = useState("");
   const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
     tong: 0,
     xong: 0,
@@ -4286,9 +4296,24 @@ export default function App() {
     [anhTruocLocDonVi],
   );
 
-  const anhThuVien = useMemo(
+  /** Ảnh sau khi lọc đơn vị (hoặc phần của BNC), trước khi soi tiếp điểm bán. */
+  const anhTruocLocBoPhan = useMemo(
     () => locTheoDonVi(anhTruocLocDonVi, galleryDonVi),
     [anhTruocLocDonVi, galleryDonVi],
+  );
+
+  /** Điểm bán có ảnh trong phần đang lọc; rỗng thì không bày ô chọn thứ hai. */
+  const boPhanCoAnh = useMemo(
+    () => danhSachBoPhanBNC(anhTruocLocBoPhan),
+    [anhTruocLocBoPhan],
+  );
+
+  const anhThuVien = useMemo(
+    () =>
+      galleryBoPhan
+        ? anhTruocLocBoPhan.filter((a) => a.donVi === galleryBoPhan)
+        : anhTruocLocBoPhan,
+    [anhTruocLocBoPhan, galleryBoPhan],
   );
 
   /**
@@ -10918,6 +10943,7 @@ export default function App() {
                           // Chiều nhập không lọc theo đơn vị, mà để nguyên thì
                           // nó vẫn âm thầm lọc khi quay lại chiều xuất.
                           setGalleryDonVi("");
+                          setGalleryBoPhan("");
                         }}
                         className={cn(
                           "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
@@ -10932,6 +10958,7 @@ export default function App() {
                         onClick={() => {
                           setGalleryFilter("OUT");
                           setGalleryDonVi("");
+                          setGalleryBoPhan("");
                         }}
                         className={cn(
                           "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
@@ -10946,14 +10973,23 @@ export default function App() {
 
                     {/* Lọc theo đơn vị — chỉ chiều xuất kho mới có đối tác
                         nhận hàng. Dùng ô chọn chứ không dùng ô gõ: không ai
-                        nhớ khoảng ngày đó có những đơn vị nào mà gõ. */}
+                        nhớ khoảng ngày đó có những đơn vị nào mà gõ.
+
+                        BNC gộp thành BỐN PHẦN như màn xuất kho, không bày 20
+                        dòng "BNC · ..." lấn hết đơn vị khác. Chọn Nội bộ thì
+                        hiện thêm ô chọn điểm bán, nên vẫn soi được từng quán. */}
                     {galleryFilter === "OUT" && (
                       <div className="relative w-full lg:w-56 shrink-0">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         <select
                           aria-label="Lọc theo đơn vị"
                           value={galleryDonVi}
-                          onChange={(e) => setGalleryDonVi(e.target.value)}
+                          onChange={(e) => {
+                            // Đổi đơn vị thì bỏ điểm bán đang soi: điểm bán cũ
+                            // gần như luôn thuộc phần khác, để lại là lưới trống.
+                            setGalleryDonVi(e.target.value);
+                            setGalleryBoPhan("");
+                          }}
                           className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700 disabled:opacity-50"
                           disabled={donViCoAnh.length === 0}
                         >
@@ -10965,14 +11001,41 @@ export default function App() {
                           {/* Đơn vị đang chọn mà khoảng ngày mới không còn ảnh
                               thì vẫn phải bày ra, không thì ô chọn tự nhảy về
                               "Tất cả" trong khi lưới vẫn đang lọc. */}
-                          {galleryDonVi && !donViCoAnh.includes(galleryDonVi) && (
-                            <option value={galleryDonVi}>
-                              {galleryDonVi} — không có ảnh trong khoảng này
-                            </option>
-                          )}
+                          {galleryDonVi &&
+                            !donViCoAnh.some((d) => d.gia === galleryDonVi) && (
+                              <option value={galleryDonVi}>
+                                {tenLocDonVi(galleryDonVi)} — không có ảnh trong
+                                khoảng này
+                              </option>
+                            )}
                           {donViCoAnh.map((d) => (
+                            <option key={d.gia} value={d.gia}>
+                              {d.ten}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    )}
+
+                    {/* Ô THỨ HAI — điểm bán, chỉ hiện khi phần đang lọc có từ
+                        hai bộ phận trở lên (thực tế là Nội bộ với 17 điểm bán).
+                        Ba phần kia chỉ có một bộ phận nên ô này vô nghĩa. */}
+                    {galleryFilter === "OUT" && boPhanCoAnh.length > 0 && (
+                      <div className="relative w-full lg:w-52 shrink-0">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select
+                          aria-label="Lọc theo điểm bán"
+                          value={galleryBoPhan}
+                          onChange={(e) => setGalleryBoPhan(e.target.value)}
+                          className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700"
+                        >
+                          <option value="">
+                            {`Tất cả điểm bán (${formatNumber(boPhanCoAnh.length)})`}
+                          </option>
+                          {boPhanCoAnh.map((d) => (
                             <option key={d} value={d}>
-                              {d}
+                              {d.replace(/^BNC · /, "")}
                             </option>
                           ))}
                         </select>

@@ -26,6 +26,7 @@
  */
 
 import type { ImportSlip, Transaction } from "../types";
+import { laBoPhanBNC, nhomCuaBoPhan, NHOM_BNC, tenNhomBNC } from "./nhomBNC";
 
 /** Một tấm ảnh đã chuẩn hoá để bày lên lưới, bất kể nó đến từ nguồn nào. */
 export interface AnhThuVien {
@@ -44,6 +45,13 @@ export interface AnhThuVien {
    * không có đơn vị nào rõ ràng, lúc đó để rỗng.
    */
   donVi: string;
+  /**
+   * Mã đối tác (`partnerId`), để biết bộ phận này thuộc phần nào của BNC.
+   *
+   * Không suy từ tên: tên là chữ người đọc, đổi cách viết là hỏng. Mã thì cố
+   * định — `AD0103-NG` mãi là Ngoại giao.
+   */
+  maDonVi: string;
   /** Chữ để tra cứu: mã lô, mã phiếu, tên đối tác, tên hàng. Đã hạ chữ thường. */
   timKiem: string;
 }
@@ -118,6 +126,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
             ? `${tenHang.length} mặt hàng · ${tenHang[0]}`
             : "Chưa khớp giao dịch nào",
           donVi: lienQuan[0]?.partnerName || "",
+          maDonVi: lienQuan[0]?.partnerId || "",
           timKiem: [s.code, ...lo, ...tenHang].join(" ").toLowerCase(),
         });
       });
@@ -135,6 +144,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           tieuDe: t.productName,
           phu: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
           donVi: t.partnerName || "",
+          maDonVi: t.partnerId || "",
           timKiem: [t.batchNumber || "", t.productName, t.partnerName]
             .join(" ")
             .toLowerCase(),
@@ -153,6 +163,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           tieuDe: t.productName,
           phu: t.partnerName,
           donVi: t.partnerName || "",
+          maDonVi: t.partnerId || "",
           timKiem: [t.partnerName, t.productName, t.batchNumber || ""]
             .join(" ")
             .toLowerCase(),
@@ -179,25 +190,97 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
 }
 
 /**
- * Danh sách đơn vị có ảnh trong đúng bộ ảnh truyền vào, xếp theo bảng chữ cái.
+ * BNC GỘP THÀNH BỐN PHẦN TRONG Ô CHỌN ĐƠN VỊ.
+ *
+ * BNC có 20 bộ phận nên trước đây ô chọn dài 20 dòng chỉ toàn "BNC · ...", lấn
+ * hết những đơn vị còn lại. Gộp lại đúng bốn phần như màn xuất kho: Nội bộ,
+ * Ngoại giao, HTKD, Chi phí khác. Chọn Nội bộ thì hiện thêm ô chọn điểm bán,
+ * nên vẫn xem được riêng từng quán — không mất gì so với trước.
+ *
+ * Giá trị lọc của bốn phần mang tiền tố `BNC:` để không lẫn với tên đơn vị
+ * thật. Tên đơn vị là chữ người gõ, có ngày sẽ có đơn vị tên đúng bằng "Nội bộ".
+ */
+const TIEN_TO_PHAN = "BNC:";
+
+export interface MucDonVi {
+  /** Giá trị đưa vào `locTheoDonVi`. */
+  gia: string;
+  /** Chữ bày lên ô chọn. */
+  ten: string;
+}
+
+/**
+ * Đơn vị để bày lên ô chọn, xếp theo bảng chữ cái, BNC gộp thành bốn phần.
  *
  * Dựng từ chính bộ ảnh ĐANG XEM chứ không lấy từ danh mục đối tác: danh mục có
  * hàng chục đơn vị mà phần lớn không có ảnh trong khoảng ngày đang chọn, bày ra
  * hết thì người dùng chọn phải một đơn vị rồi thấy lưới trống, không hiểu vì
- * sao. Bày đúng những đơn vị chọn vào là có ảnh.
+ * sao. Bày đúng những đơn vị chọn vào là có ảnh — bốn phần của BNC cũng vậy,
+ * phần nào không có ảnh thì không bày.
  */
-export function danhSachDonVi(anh: AnhThuVien[]): string[] {
-  const co = new Set<string>();
+export function danhSachDonVi(anh: AnhThuVien[]): MucDonVi[] {
+  const ngoaiBNC = new Set<string>();
+  const phanCoAnh = new Set<string>();
   anh.forEach((a) => {
+    if (laBoPhanBNC(a.maDonVi)) {
+      const n = nhomCuaBoPhan(a.maDonVi);
+      if (n) phanCoAnh.add(n);
+      return;
+    }
     const d = String(a.donVi ?? "").trim();
-    if (d) co.add(d);
+    if (d) ngoaiBNC.add(d);
   });
-  return Array.from(co).sort((a, b) => a.localeCompare(b, "vi"));
+
+  const ra: MucDonVi[] = Array.from(ngoaiBNC)
+    .sort((a, b) => a.localeCompare(b, "vi"))
+    .map((d) => ({ gia: d, ten: d }));
+
+  // Bốn phần xếp liền nhau theo thứ tự cố định của `NHOM_BNC`, đặt lên đầu:
+  // BNC là nơi nhận phần lớn sản lượng nên cũng là nơi tra ảnh nhiều nhất.
+  const phan: MucDonVi[] = NHOM_BNC.filter((n) => phanCoAnh.has(n.ma)).map(
+    (n) => ({ gia: `${TIEN_TO_PHAN}${n.ma}`, ten: `BNC · ${n.ten}` }),
+  );
+  return [...phan, ...ra];
 }
 
-/** Lọc theo đúng một đơn vị. Để trống là lấy hết. */
+/** Lọc theo một đơn vị, hoặc theo một phần của BNC. Để trống là lấy hết. */
 export function locTheoDonVi(anh: AnhThuVien[], donVi: string): AnhThuVien[] {
   const d = String(donVi ?? "").trim();
   if (!d) return anh;
+  if (d.startsWith(TIEN_TO_PHAN)) {
+    const ma = d.slice(TIEN_TO_PHAN.length);
+    return anh.filter((a) => nhomCuaBoPhan(a.maDonVi) === ma);
+  }
   return anh.filter((a) => a.donVi === d);
+}
+
+/**
+ * Điểm bán có ảnh trong một phần của BNC, để bày ô chọn thứ hai.
+ *
+ * Trả rỗng khi phần đó chỉ có đúng một bộ phận (Ngoại giao, HTKD, Chi phí
+ * khác): bày một ô chọn có đúng một dòng thì chỉ làm rối, chọn hay không cũng
+ * ra cùng bộ ảnh.
+ */
+export function danhSachBoPhanBNC(anh: AnhThuVien[]): string[] {
+  const co = new Set<string>();
+  anh.forEach((a) => {
+    if (!laBoPhanBNC(a.maDonVi)) return;
+    const d = String(a.donVi ?? "").trim();
+    if (d) co.add(d);
+  });
+  if (co.size < 2) return [];
+  return Array.from(co).sort((a, b) => a.localeCompare(b, "vi"));
+}
+
+/** Tên hiển thị của một giá trị lọc, để nói rõ đang lọc cái gì. */
+export function tenLocDonVi(gia: string): string {
+  const d = String(gia ?? "").trim();
+  if (!d) return "";
+  if (d.startsWith(TIEN_TO_PHAN)) {
+    const ten = tenNhomBNC(
+      d.slice(TIEN_TO_PHAN.length) as Parameters<typeof tenNhomBNC>[0],
+    );
+    return ten ? `BNC · ${ten}` : d;
+  }
+  return d;
 }

@@ -4,7 +4,13 @@
  */
 
 import type { ImportSlip, Transaction } from "../../types";
-import { danhSachDonVi, dungAnhThuVien, locTheoDonVi } from "../thuVienAnh";
+import {
+  danhSachBoPhanBNC,
+  danhSachDonVi,
+  dungAnhThuVien,
+  locTheoDonVi,
+  tenLocDonVi,
+} from "../thuVienAnh";
 
 let pass = 0;
 let fail = 0;
@@ -65,12 +71,40 @@ const transactions: Transaction[] = [
     type: "OUT",
     date: "2026-08-10T08:00:00.000Z",
     productName: "Bia A",
+    partnerId: "AD0103-1901",
     partnerName: "BNC · 1901",
     evidencePhotoUrl: U(1),
     evidencePhotoUrls: [U(1), U(2)],
   }),
   // Xuất kho không có ảnh.
   tx({ id: "t5", type: "OUT", date: "2026-08-11T08:00:00.000Z" }),
+  // Điểm bán thứ hai của phần Nội bộ — để có cái mà soi tiếp.
+  tx({
+    id: "t6",
+    type: "OUT",
+    date: "2026-08-12T08:00:00.000Z",
+    partnerId: "AD0103-CV",
+    partnerName: "BNC · Cầu Vàng",
+    evidencePhotoUrl: U(11),
+  }),
+  // Một phần khác của BNC, phần này chỉ có đúng một bộ phận.
+  tx({
+    id: "t7",
+    type: "OUT",
+    date: "2026-08-13T08:00:00.000Z",
+    partnerId: "AD0103-NG",
+    partnerName: "BNC · Ngoại giao",
+    evidencePhotoUrl: U(12),
+  }),
+  // Đơn vị ngoài BNC — vẫn phải là một dòng riêng trong ô chọn.
+  tx({
+    id: "t8",
+    type: "OUT",
+    date: "2026-08-14T08:00:00.000Z",
+    partnerId: "AC0107",
+    partnerName: "FV",
+    evidencePhotoUrl: U(13),
+  }),
 ];
 
 const slips: ImportSlip[] = [
@@ -134,12 +168,20 @@ const xuat = dungAnhThuVien({
   tuKhoa: "",
 });
 // Lấy cả mảng nhiều ảnh, và không đếm hai lần tấm nằm ở cả hai trường.
-kiemTra("xuat kho gom ca mang anh", xuat.length, 2);
+//
+// Giao dịch t4 mang U(1) ở `evidencePhotoUrl` VÀ [U(1), U(2)] ở
+// `evidencePhotoUrls` — phải ra đúng hai tấm, không phải ba. Soi riêng t4 chứ
+// không đếm cả bộ: thêm dữ liệu mẫu cho việc khác là con số tổng lại đổi, mà ý
+// của phép kiểm này thì không liên quan gì tới những giao dịch ấy.
 kiemTra(
   "khong lap tam trung o hai truong",
-  xuat.map((a) => a.url),
+  xuat.filter((a) => a.id.startsWith("tx-t4-")).map((a) => a.url),
   [U(1), U(2)],
 );
+// Không tấm nào bị lặp trong cả lưới.
+kiemTra("khong co tam nao lap lai", new Set(xuat.map((a) => a.url)).size, xuat.length);
+// Xuất kho không có ảnh thì không sinh ra dòng nào (t5).
+kiemTra("giao dich khong anh khong sinh dong", xuat.some((a) => a.id.startsWith("tx-t5-")), false);
 
 
 // Khoảng ngày: hai đầu biên phải TÍNH VÀO, không loại ra.
@@ -274,19 +316,63 @@ kiemTra(
   const ds = danhSachDonVi(anh);
   kiemTra("danh sach don vi khong rong", ds.length > 0, true);
   kiemTra(
-    "moi don vi trong danh sach deu co anh",
-    ds.every((d) => locTheoDonVi(anh, d).length > 0),
+    "moi muc trong danh sach deu co anh",
+    ds.every((d) => locTheoDonVi(anh, d.gia).length > 0),
     true,
   );
-  kiemTra("khong co ten trung", new Set(ds).size === ds.length, true);
-  kiemTra("khong co ten rong", ds.every((d) => d.trim() !== ""), true);
-  // Xep theo bang chu cai tieng Viet.
-  kiemTra("da xep thu tu", [...ds].sort((a, b) => a.localeCompare(b, "vi")), ds);
+  kiemTra("khong co gia tri trung", new Set(ds.map((d) => d.gia)).size, ds.length);
+  kiemTra(
+    "khong co ten rong",
+    ds.every((d) => d.ten.trim() !== "" && d.gia.trim() !== ""),
+    true,
+  );
 
-  // Loc dung mot don vi thi moi tam deu cua don vi ay.
-  const mot = ds[0];
-  const loc = locTheoDonVi(anh, mot);
-  kiemTra("loc ra dung don vi do", loc.every((a) => a.donVi === mot), true);
+  // BNC GOP THANH PHAN, khong bay tung diem ban o o thu nhat: du lieu mau co
+  // hai diem ban Noi bo + mot Ngoai giao + mot don vi ngoai BNC, nen o chon
+  // phai ra ba dong chu khong phai bon.
+  kiemTra("BNC gop thanh phan", ds.map((d) => d.ten), [
+    "BNC · Nội bộ",
+    "BNC · Ngoại giao",
+    "FV",
+  ]);
+  kiemTra(
+    "phan cua BNC dat len dau",
+    ds.slice(0, 2).every((d) => d.gia.startsWith("BNC:")),
+    true,
+  );
+  // Phan khong co anh thi khong bay: HTKD va Chi phi khac khong phat sinh.
+  kiemTra(
+    "phan khong co anh thi khong bay",
+    ds.some((d) => d.ten.includes("HTKD")),
+    false,
+  );
+  // Don vi ngoai BNC xep theo bang chu cai tieng Viet.
+  {
+    const ngoai = ds.filter((d) => !d.gia.startsWith("BNC:")).map((d) => d.ten);
+    kiemTra("don vi ngoai BNC da xep thu tu", [...ngoai].sort((a, b) => a.localeCompare(b, "vi")), ngoai);
+  }
+
+  // Loc mot phan cua BNC thi ra dung anh cua phan ay, gom ca hai diem ban.
+  {
+    const noiBo = locTheoDonVi(anh, "BNC:NB");
+    kiemTra(
+      "loc Noi bo ra ca hai diem ban",
+      [...new Set(noiBo.map((a) => a.donVi))].sort(),
+      ["BNC · 1901", "BNC · Cầu Vàng"],
+    );
+    const ngoaiGiao = locTheoDonVi(anh, "BNC:NG");
+    kiemTra(
+      "loc Ngoai giao khong lot diem ban",
+      ngoaiGiao.every((a) => a.maDonVi === "AD0103-NG"),
+      true,
+    );
+    kiemTra("phan khong co anh thi loc ra rong", locTheoDonVi(anh, "BNC:CPK").length, 0);
+  }
+
+  // Loc dung mot don vi ngoai BNC thi moi tam deu cua don vi ay.
+  const mot = ds[ds.length - 1];
+  const loc = locTheoDonVi(anh, mot.gia);
+  kiemTra("loc ra dung don vi do", loc.every((a) => a.donVi === mot.ten), true);
   kiemTra("loc ra it hon hoac bang tat ca", loc.length <= anh.length, true);
 
   // De trong la lay het — de nut "tat ca" khong phai xu ly rieng.
@@ -294,14 +380,37 @@ kiemTra(
   kiemTra("chi co khoang trang cung la lay het", locTheoDonVi(anh, "   ").length, anh.length);
   // Don vi khong ton tai thi ra rong, khong ra tat ca.
   kiemTra("don vi la thi ra rong", locTheoDonVi(anh, "Khong Co Don Vi Nay").length, 0);
+  // Ten phan la chu nguoi doc, khong duoc dung lam gia tri loc: neu co don vi
+  // that ten "Noi bo" thi hai thu se lan nhau.
+  kiemTra("ten phan khong phai gia tri loc", locTheoDonVi(anh, "BNC · Nội bộ").length, 0);
 
-  // Tong so anh cua tung don vi phai bang tong so anh co don vi.
-  const tong = ds.reduce((n, d) => n + locTheoDonVi(anh, d).length, 0);
+  // Tong so anh cua tung muc phai bang tong so anh co don vi — phep chan bat
+  // duoc loi mot bo phan roi ra ngoai moi muc.
+  const tong = ds.reduce((n, d) => n + locTheoDonVi(anh, d.gia).length, 0);
   kiemTra(
-    "cong tung don vi lai bang tong",
+    "cong tung muc lai bang tong",
     tong,
     anh.filter((a) => a.donVi.trim() !== "").length,
   );
+
+  // O CHON THU HAI — diem ban, chi co nghia khi phan co tu hai bo phan.
+  kiemTra(
+    "Noi bo co hai diem ban de soi tiep",
+    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NB")),
+    ["BNC · 1901", "BNC · Cầu Vàng"],
+  );
+  kiemTra(
+    "phan mot bo phan thi khong bay o thu hai",
+    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NG")),
+    [],
+  );
+  kiemTra("don vi ngoai BNC khong co o thu hai", danhSachBoPhanBNC(loc), []);
+
+  // Ten hien thi cua gia tri loc.
+  kiemTra("ten cua phan", tenLocDonVi("BNC:NG"), "BNC · Ngoại giao");
+  kiemTra("ten cua don vi thuong", tenLocDonVi("FV"), "FV");
+  kiemTra("de trong thi ten rong", tenLocDonVi(""), "");
+  kiemTra("ma phan la thi tra ve nguyen chuoi", tenLocDonVi("BNC:XX"), "BNC:XX");
 
   // Bo anh rong thi danh sach cung rong, khong vo.
   kiemTra("bo anh rong", danhSachDonVi([]), []);
