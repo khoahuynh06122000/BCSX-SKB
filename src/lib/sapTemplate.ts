@@ -231,6 +231,8 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
     taiKhoan: string,
     tien: number,
     opt: {
+      /** Tên đơn vị, điền vào cột Reference Doc. */
+      donVi?: string;
       customer?: string;
       taxAmt?: number;
       taxBase?: number;
@@ -248,6 +250,10 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
     dat("BUKRS", chu(c.compCode));
     dat("WAERS", chu(c.currency));
     dat("BUPLA", chu(c.businessPlace));
+    // XBLNR (Reference Doc) — tên đơn vị mua, để mở tệp ra là biết ngay chứng
+    // từ này của ai. Cắt còn 16 ký tự vì tệp mẫu khai trường này là C(16); tên
+    // đơn vị trong app là mã ngắn (BNC, FV) nên trên thực tế không bị cắt.
+    if (opt.donVi) dat("XBLNR", chu(opt.donVi.slice(0, 16)));
     // BKTXT khai C(25) nhưng tệp mẫu ghi nguyên cả câu, xem ghi chú ở dưới.
     dat("BKTXT", chu(tieuDe));
     dat("BSCHL", chu(postingKey));
@@ -283,12 +289,13 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
     const tongCong = truocThue + vat;
 
     // 1. Nợ phải thu — tổng đã gồm thuế.
-    oDong.push(khung(tieuDe, "01", c.taiKhoanPhaiThu, tongCong));
+    oDong.push(khung(tieuDe, "01", c.taiKhoanPhaiThu, tongCong, { donVi }));
 
     // 2. Có doanh thu — mỗi mặt hàng một dòng.
     dongTron.forEach((d) => {
       oDong.push(
         khung(d.tenHangHoa, "50", c.taiKhoanDoanhThu, d.tien, {
+          donVi,
           customer: c.taiKhoanPhaiThu,
           soLuong: d.soLuong,
           dvt: d.dvt,
@@ -299,6 +306,7 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
     // 3. Có thuế GTGT.
     oDong.push(
       khung(tieuDe, "50", c.taiKhoanThue, vat, {
+        donVi,
         customer: c.taiKhoanPhaiThu,
         taxAmt: vat,
         taxBase: truocThue,

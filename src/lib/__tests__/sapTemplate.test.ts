@@ -125,7 +125,7 @@ eq("BLART", o("BLART"), { t: "s", v: "DR" });
 eq("BUKRS", o("BUKRS"), { t: "s", v: "S132" });
 eq("WAERS", o("WAERS"), { t: "s", v: "VND" });
 eq("BUPLA", o("BUPLA"), { t: "s", v: "B182" });
-eq("XBLNR de trong", o("XBLNR"), { t: "s", v: "" });
+eq("XBLNR la ten don vi", o("XBLNR"), { t: "s", v: "BNC" });
 eq("BSCHL la chuoi 01", o("BSCHL"), { t: "s", v: "01" });
 eq("HKONT phai thu", o("HKONT"), { t: "s", v: "AK0101" });
 eq("WRBTR = tong da gom thue", o("WRBTR"), { t: "n", v: 179_566_200 });
@@ -275,6 +275,42 @@ eq(
   eq("va cong dong tien", motDot.chungTu[0].truocThue, 900_000);
 }
 
+
+// -------------------------------------------------- XBLNR (Reference Doc)
+
+// Moi dong cua mot chung tu deu phai mang ten don vi cua chinh chung tu do:
+// mo tep ra la biet ngay dong nay cua ai, khong phai do theo tieu de.
+{
+  const iX = MA_TRUONG_SAP.indexOf("XBLNR");
+  const iB = MA_TRUONG_SAP.indexOf("BSCHL");
+  const iH = MA_TRUONG_SAP.indexOf("HKONT");
+  const theoDonVi = new Map<string, number>();
+  let dong = 0;
+  tep.chungTu.forEach((ct) => {
+    // 1 dong No + so dong hang + 1 dong thue.
+    for (let k = 0; k < ct.soDongHang + 2; k++) {
+      const d = tep.oDong[dong++];
+      if (String(d[iX]?.v) !== ct.donVi) {
+        theoDonVi.set(ct.donVi, (theoDonVi.get(ct.donVi) ?? 0) + 1);
+      }
+    }
+  });
+  eq("moi dong deu co ten don vi o XBLNR", Array.from(theoDonVi.entries()), []);
+  eq("da soat het so dong cua tep", dong, tep.oDong.length);
+  // Ca dong No lan dong Co deu co, khong chi mot phia.
+  const coX = (bschl: string) =>
+    tep.oDong.filter((d) => String(d[iB]?.v) === bschl).every((d) => !!String(d[iX]?.v ?? ""));
+  eq("dong No co XBLNR", coX("01"), true);
+  eq("dong Co co XBLNR", coX("50"), true);
+  // Dong thue cua don vi thu hai phai la ten don vi thu hai, khong dinh ten cu.
+  const cuoi = tep.oDong[tep.oDong.length - 1];
+  eq("dong thue cuoi la tai khoan thue", cuoi[iH], { t: "s", v: "3331110000" });
+  eq(
+    "dong thue cuoi mang ten don vi cuoi",
+    cuoi[iX],
+    { t: "s", v: tep.chungTu[tep.chungTu.length - 1].donVi },
+  );
+}
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
