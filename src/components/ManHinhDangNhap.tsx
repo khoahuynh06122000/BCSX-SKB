@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, Loader2, ShieldCheck, UserPlus } from "lucide-react";
 import LonXoay from "./LonXoay";
 
 /**
@@ -660,17 +660,54 @@ export default function ManHinhDangNhap({
               </button>
             </div>
 
-            <div className="mt-auto flex max-w-md items-start gap-3">
-              <div className="dn-kinh flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
-                <ShieldCheck className="h-5 w-5 text-white/80" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[0.7rem] uppercase tracking-[0.15em] text-white/60">
-                  Cần được phê duyệt
+            {/*
+              ĐĂNG KÝ TÀI KHOẢN MỚI.
+
+              App đăng nhập bằng Google nên KHÔNG có form đăng ký riêng: lần đầu
+              bấm nút trên chính là đăng ký. Nhưng màn hình cũ không nói ra, nên
+              người mới nhìn vào tưởng app thiếu chỗ đăng ký rồi đi hỏi — đúng
+              chuyện đã xảy ra.
+
+              Nói thành ba bước chứ không viết một câu: điều người mới cần biết
+              không phải "bấm nút nào" mà là "bấm xong rồi sao nữa" — họ sẽ dừng
+              ở màn hình chờ duyệt và cần biết đó là bình thường.
+            */}
+            <div className="dn-kinh mt-auto max-w-md rounded-2xl p-5">
+              <div className="flex items-center gap-2.5">
+                <UserPlus className="h-4 w-4 text-white/70" />
+                <span className="text-[0.7rem] font-bold uppercase tracking-[0.15em] text-white/70">
+                  Chưa có tài khoản?
                 </span>
-                <span className="text-[0.8rem] font-semibold leading-snug text-white/85">
-                  Lần đầu đăng nhập, tài khoản ở trạng thái chờ cho tới khi chủ
-                  sở hữu duyệt.
+              </div>
+
+              <p className="mt-2.5 text-[0.8rem] leading-relaxed text-white/75">
+                Không cần đăng ký riêng và không phải đặt mật khẩu mới — bấm
+                <strong className="text-white"> Đăng nhập bằng Google</strong> ở
+                trên là tài khoản được tạo luôn.
+              </p>
+
+              <ol className="mt-4 space-y-2.5">
+                {[
+                  "Đăng nhập bằng tài khoản Google của bạn.",
+                  "Tài khoản vào trạng thái CHỜ DUYỆT — chưa xem được số liệu, đây là bình thường.",
+                  "Báo chủ sở hữu duyệt. Duyệt xong chỉ cần tải lại trang.",
+                ].map((buoc, i) => (
+                  <li key={buoc} className="flex gap-3">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[0.65rem] font-black text-white/90">
+                      {i + 1}
+                    </span>
+                    <span className="text-[0.78rem] leading-snug text-white/75">
+                      {buoc}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="mt-4 flex items-start gap-2.5 border-t border-white/10 pt-3.5">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-white/60" />
+                <span className="text-[0.72rem] leading-snug text-white/60">
+                  Bước duyệt là để người ngoài không vào được sổ kho. Tài khoản
+                  chờ duyệt không đọc và không ghi được gì.
                 </span>
               </div>
             </div>
