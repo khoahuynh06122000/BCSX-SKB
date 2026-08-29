@@ -19,6 +19,7 @@ import fs from "node:fs";
 import XLSX from "xlsx";
 import { INITIAL_PARTNERS, INITIAL_PRODUCTS } from "../../constants";
 import {
+  CHUA_CO_MA_KHO,
   CO_DINH,
   COT,
   dungFileDieuChuyen,
@@ -95,19 +96,41 @@ eq("Ga 10", KHO_DIEM_BAN["AD0103-GA10"], { plant: "1050", slog: "2036", viet: "G
 eq("Hoi An", KHO_DIEM_BAN["AD0103-HOIAN"], { plant: "1052", slog: "2049", viet: "HỘI AN" });
 eq("Cong Thanh 1", KHO_DIEM_BAN["AD0103-CT1"].slog, "2044");
 eq("4 Mua", KHO_DIEM_BAN["AD0103-4M"], { plant: "2228", slog: "2001", viet: "4SS" });
+// Lau Dai va Shushi Rosa cung slog 2000, khac plant — cap moi phan biet duoc.
+eq("Lau Dai", KHO_DIEM_BAN["AD0103-LAUDAI"], { plant: "2118", slog: "2000", viet: "LÂU ĐÀI" });
+eq("Shushi Rosa", KHO_DIEM_BAN["AD0103-SUSHI"], { plant: "2117", slog: "2000", viet: "SHUSHI ROSA" });
 
 
-// DU CA 17 DIEM BAN NOI BO deu co ma kho. Thieu mot diem la don cua diem do bi
-// giu lai am tham moi thang, ma khong ai doi chieu 17 cai ten bang mat.
+// MOI DIEM BAN NOI BO phai co ma kho, TRU nhung diem dang cho bo phan cap ma va
+// da ghi ten trong CHUA_CO_MA_KHO. Thieu ma kho ma khong ghi ten thi don cua
+// diem do bi giu lai am tham moi thang, khong ai doi chieu bang mat duoc.
 {
   const noiBo = INITIAL_PARTNERS.filter((p) => nhomCuaBoPhan(p.id) === "NB");
-  eq("Noi bo co 17 diem ban", noiBo.length, 17);
+  eq("Noi bo co 18 diem ban", noiBo.length, 18);
   eq(
-    "moi diem ban Noi bo deu co ma kho",
-    noiBo.filter((p) => !KHO_DIEM_BAN[p.id]).map((p) => p.name),
+    "diem thieu ma kho ma chua ghi ten vao danh sach cho",
+    noiBo
+      .filter((p) => !KHO_DIEM_BAN[p.id] && !CHUA_CO_MA_KHO.includes(p.id))
+      .map((p) => p.name),
     [],
   );
-  eq("bang ma kho khong co diem nao la", Object.keys(KHO_DIEM_BAN).length, noiBo.length);
+  // Danh sach cho khong duoc chua ten la: ghi bua vao day la tat mat bo kiem.
+  eq(
+    "danh sach cho toan diem ban Noi bo that",
+    CHUA_CO_MA_KHO.filter((id) => nhomCuaBoPhan(id) !== "NB"),
+    [],
+  );
+  eq(
+    "diem da co ma kho thi khong con trong danh sach cho",
+    CHUA_CO_MA_KHO.filter((id) => KHO_DIEM_BAN[id]),
+    [],
+  );
+  eq(
+    "bang ma kho cong danh sach cho la du",
+    Object.keys(KHO_DIEM_BAN).length + CHUA_CO_MA_KHO.length,
+    noiBo.length,
+  );
+  eq("bang ma kho co du 18 diem", Object.keys(KHO_DIEM_BAN).length, 18);
 }
 
 // ------------------------------------------------------------ khung mot dong
@@ -422,15 +445,15 @@ eq(
     const hangCua = (x: string) => (x.match(/<row r="(\d+)"/g) ?? []).join(",");
     eq("lam dep khong them bo mot hang nao", hangCua(depXml), hangCua(sheetXml));
   }
-  // An hang so thu tu cot va khoi chu huong dan.
-  [4, 5].forEach((r) => {
+  // KHONG AN HANG NAO: bo phan can thay ca nam hang tieu de de doi chieu voi
+  // bang mo ta truong.
+  [1, 2, 3, 4, 5, 6].forEach((r) => {
     dung(
-      `an hang ${r}`,
-      new RegExp(`<row r="${r}"[^>]*hidden="1"`).test(depXml),
+      `khong an hang ${r}`,
+      !new RegExp(`<row r="${r}"[^>]*hidden="1"`).test(depXml),
     );
   });
-  dung("khong an hang tieu de tieng Anh", !/<row r="1"[^>]*hidden="1"/.test(depXml));
-  dung("khong an hang du lieu dau", !/<row r="6"[^>]*hidden="1"/.test(depXml));
+  eq("ca sheet khong co hang nao bi an", (depXml.match(/<row [^>]*hidden="1"/g) ?? []).length, 0);
 
   // Bang cot cua tep mau giu nguyen: khong an cot nao, khong doi do rong.
   {
@@ -594,8 +617,8 @@ eq(
   // 1. KHONG AN COT NAO. Bo phan can thay du 28 cot de doi chieu voi bang mo ta
   // truong; cot an thi luc kiem tep khong ai biet la no van o do.
   eq("khong an cot nao", (dep.match(/<col [^>]*hidden="1"/g) ?? []).length, 0);
-  // Van an hai hang tai lieu.
-  eq("van an hai hang tai lieu", (dep.match(/<row [^>]*hidden="1"/g) ?? []).length, 2);
+  // KHONG AN HANG NAO. Bo phan can thay ca nam hang tieu de.
+  eq("khong an hang nao", (dep.match(/<row [^>]*hidden="1"/g) ?? []).length, 0);
 
   // 2. SO LUONG DE DANG GENERAL, khong gan ma dinh dang so nao.
   {
@@ -645,6 +668,47 @@ eq(
       ),
     );
   }
+}
+
+// ------------------------- bo phan BNC khong thuoc Noi bo
+
+// Loai dung theo thiet ke, nhung phai NOI RA. Thang 8/2026 da mat cong do:
+// "Shushi Rosa" trong sheet T Kho duoc gan vao Chi phi khac nen bien mat khoi
+// tep ma khong cho nao nhac, nhin tep thi tuong app bo sot.
+{
+  eq("ba phan kia deu duoc dem ra", f.ngoaiNoiBo.length, 3);
+  eq(
+    "noi ro ten tung phan",
+    f.ngoaiNoiBo.map((o) => o.ten).sort(),
+    ["BNC · Chi phí khác", "BNC · HTKD", "BNC · Ngoại giao"],
+  );
+  const ng = f.ngoaiNoiBo.find((o) => o.ten === "BNC · Ngoại giao");
+  eq("dem dung so luong Ngoai giao", ng?.soLuong, 100);
+  eq("dem dung so dong Ngoai giao", ng?.soDong, 1);
+  // Khong duoc dem lan sang don vi NGOAI BNC (FV) hay sang chinh Noi bo.
+  dung(
+    "khong dem don vi ngoai BNC",
+    !f.ngoaiNoiBo.some((o) => o.ten === "FV"),
+  );
+  dung(
+    "khong dem diem ban Noi bo",
+    !f.ngoaiNoiBo.some((o) => o.ten.includes("Lễ Hội")),
+  );
+  // Va van khong co dong nao cua ba phan do trong tep.
+  eq(
+    "khong dong nao cua ba phan kia lot vao tep",
+    f.dong.filter((d) => nhomCuaBoPhan(d.partnerId) !== "NB").length,
+    0,
+  );
+  // Ngoai khoang ngay thi khong bao gi ca.
+  eq(
+    "ngoai khoang ngay thi khong bao",
+    dungFileDieuChuyen({
+      transactions, products: INITIAL_PRODUCTS,
+      tuNgay: "2026-09-01", denNgay: "2026-09-30",
+    }).ngoaiNoiBo.length,
+    0,
+  );
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

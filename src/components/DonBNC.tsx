@@ -876,6 +876,25 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         thiếu mã kho là thiếu vĩnh viễn cho tới khi bộ phận cấp mã, mà tệp xuất
         ra thì trông vẫn bình thường.
       */}
+      {tepDieuChuyen.ngoaiNoiBo.length > 0 && (
+        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex gap-2 items-start">
+          <Building2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <div className="text-[11px] font-bold text-slate-500 leading-relaxed">
+            <p>
+              Không điều chuyển vì không thuộc phần Nội bộ — đúng theo thiết kế,
+              nhưng nói ra để khỏi tưởng app bỏ sót:
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {tepDieuChuyen.ngoaiNoiBo.map((o) => (
+                <li key={o.ten}>
+                  · <strong>{o.ten}</strong> — {o.soDong} dòng, {so(o.soLuong)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {(tepDieuChuyen.thieuMaKho.length > 0 ||
         tepDieuChuyen.thieuMaVatTu.length > 0) && (
         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">

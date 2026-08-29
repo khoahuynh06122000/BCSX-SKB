@@ -54,12 +54,12 @@ export interface KhoDiemBan {
  * Vàng và Ga 10 dùng chung plant 1050, khác nhau ở slog (2037 / 2036). Hội An
  * và Cổng Thành 1 cũng chung plant 1052.
  *
- * Bốn điểm KHÔNG có trong Sheet4 — Bulgogi, Rosa Gà Rán, Arapang, Lâu Đài —
- * do bộ phận gửi bổ sung ngày 27/08/2026. Ghi ra đây để sau này biết chúng
+ * Năm điểm KHÔNG có trong Sheet4 — Bulgogi, Rosa Gà Rán, Arapang, Lâu Đài,
+ * Shushi Rosa — do bộ phận gửi bổ sung ngày 27/08/2026. Ghi ra đây để sau này biết chúng
  * không đến từ Sheet4 mà đến từ đâu.
  *
- * Đủ cả 17 điểm bán Nội bộ. Điểm nào về sau mở mới mà chưa có trong bảng này
- * thì đơn của nó bị giữ lại và báo ra, chứ không xuất bừa.
+ * Điểm nào chưa có trong bảng này thì đơn của nó bị giữ lại và báo ra, chứ
+ * không xuất bừa — xem `CHUA_CO_MA_KHO` ngay dưới.
  */
 export const KHO_DIEM_BAN: Record<string, KhoDiemBan> = {
   "AD0103-1901": { plant: "2329", slog: "1000", viet: "1901" },
@@ -79,7 +79,22 @@ export const KHO_DIEM_BAN: Record<string, KhoDiemBan> = {
   "AD0103-ROSA": { plant: "2116", slog: "2001", viet: "ROSA GÀ RÁN" },
   "AD0103-ARAPANG": { plant: "1032", slog: "2001", viet: "ARAPANG" },
   "AD0103-LAUDAI": { plant: "2118", slog: "2000", viet: "LÂU ĐÀI" },
+  "AD0103-SUSHI": { plant: "2117", slog: "2000", viet: "SHUSHI ROSA" },
 };
+
+/**
+ * ĐIỂM BÁN NỘI BỘ ĐANG CHỜ BỘ PHẬN CẤP MÃ KHO.
+ *
+ * Ghi ra thành danh sách chứ không để nó lặng lẽ thiếu: bộ kiểm đối chiếu danh
+ * mục đơn vị với bảng mã kho, điểm nào thiếu mà KHÔNG có tên ở đây thì bộ kiểm
+ * đỏ. Nhờ vậy mở quán mới mà quên xin mã kho là biết ngay, còn quán đang chờ
+ * mã thì không làm bộ kiểm đỏ oan.
+ *
+ * Xin được mã thì thêm vào `KHO_DIEM_BAN` và xoá tên khỏi đây.
+ *
+ * Hiện đang rỗng: cả 18 điểm bán Nội bộ đều có mã kho.
+ */
+export const CHUA_CO_MA_KHO: string[] = [];
 
 /**
  * Những giá trị cố định của tệp, theo đúng phần giải thích ở Sheet3.
@@ -166,6 +181,14 @@ export interface FileDieuChuyen {
   thieuMaKho: MucThieu[];
   /** Mặt hàng chưa có mã vật tư trong danh mục. */
   thieuMaVatTu: MucThieu[];
+  /**
+   * Bộ phận BNC bị loại vì KHÔNG thuộc Nội bộ, gom theo phần.
+   *
+   * Loại đúng theo thiết kế, nhưng phải nói ra. Tháng 8/2026 đã mất công dò:
+   * "Shushi Rosa" trong sheet T Kho được gán vào Chi phí khác nên biến mất khỏi
+   * tệp mà không chỗ nào nhắc — nhìn tệp thì tưởng app bỏ sót.
+   */
+  ngoaiNoiBo: MucThieu[];
   /** Số đơn (chuyến giao) đã gom được. */
   soDon: number;
 }
@@ -249,6 +272,24 @@ export function dungFileDieuChuyen(
 
   const tu = input.tuNgay.trim();
   const den = input.denNgay.trim();
+
+  // Bộ phận BNC không thuộc Nội bộ: đếm lại để nói ra, rồi mới loại.
+  const ngoai = new Map<string, MucThieu>();
+  input.transactions.forEach((t) => {
+    if (t.type !== "OUT") return;
+    const n = nhomCuaBoPhan(t.partnerId);
+    if (!n || n === "NB") return;
+    const sl = Number(t.quantity) || 0;
+    if (sl <= 0) return;
+    const ngay = ngayCua(t.date);
+    if (tu && ngay < tu) return;
+    if (den && ngay > den) return;
+    themThieu(
+      ngoai,
+      input.tenBoPhan?.get(t.partnerId) || t.partnerName || t.partnerId,
+      sl,
+    );
+  });
 
   const cua = input.transactions.filter((t) => {
     if (t.type !== "OUT") return false;
@@ -348,6 +389,7 @@ export function dungFileDieuChuyen(
     toNen,
     thieuMaKho: xepThieu(thieuKho),
     thieuMaVatTu: xepThieu(thieuMa),
+    ngoaiNoiBo: xepThieu(ngoai),
     soDon: don.size,
   };
 }

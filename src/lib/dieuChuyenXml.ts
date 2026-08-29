@@ -205,10 +205,9 @@ export function tenTepDieuChuyen(tuNgay: string, denNgay: string): string {
  * Hai sheet sau là tài liệu để người viết tệp tra, không phải thứ đem đi nạp —
  * người nhận tệp mở lên thấy ba tab thì phải đoán tab nào là thật.
  *
- * Phần chỉnh cho dễ nhìn CHỈ ĐỔI CÁCH HIỂN THỊ: ẩn hàng, ẩn cột, khoá dòng
- * tiêu đề. Không xoá hàng, không dồn cột, không đổi vị trí một ô nào — hệ thống
- * bên kia đọc theo vị trí nên đổi vị trí là tệp bị từ chối. Ẩn thì bấm bỏ ẩn
- * là thấy lại.
+ * Phần chỉnh cho dễ nhìn CHỈ ĐỔI CÁCH HIỂN THỊ: khoá dòng tiêu đề, đưa màn
+ * hình về ô A1. Không xoá hàng, không dồn cột, không đổi vị trí một ô nào — hệ
+ * thống bên kia đọc theo vị trí nên đổi vị trí là tệp bị từ chối.
  * =================================================================== */
 
 /** Mục ZIP của hai sheet phụ, phải bỏ khỏi tệp. */
@@ -216,9 +215,6 @@ export const SHEET_PHU = [
   "xl/worksheets/sheet2.xml",
   "xl/worksheets/sheet3.xml",
 ];
-
-/** Hàng ẩn đi cho gọn: (4) là dòng số thứ tự cột, (5) là khối chữ hướng dẫn. */
-const HANG_AN = [4, 5];
 
 /**
  * Bỏ hai sheet phụ khỏi phần khai báo của tệp.
@@ -308,15 +304,14 @@ function boKieuHang(thuocTinh: string): string {
 /**
  * Chỉnh phần nhìn của sheet dữ liệu.
  *
- * Ba việc, toàn bộ là hiển thị:
+ * Hai việc, toàn bộ là hiển thị:
  *   · Mở tệp lên nhìn thấy ô A1. Tệp mẫu lưu sẵn `topLeftCell="O1"` nên mở ra
  *     là màn hình đã nhảy sang giữa bảng, tưởng tệp trống.
  *   · Khoá năm hàng tiêu đề để cuộn xuống vẫn biết cột nào là cột gì.
- *   · Ẩn hàng số thứ tự cột và khối chữ hướng dẫn cao 78pt.
  *
- * KHÔNG ẩn cột nào, kể cả 13 cột luôn để trống: bộ phận cần thấy đủ 28 cột để
- * đối chiếu với bảng mô tả trường, và cột ẩn thì lúc kiểm tệp không ai biết là
- * nó vẫn ở đó.
+ * KHÔNG ẩn gì cả — không ẩn cột, không ẩn hàng. Bộ phận cần thấy đủ 28 cột và
+ * cả năm hàng tiêu đề để đối chiếu với bảng mô tả trường; ẩn đi thì lúc kiểm
+ * tệp không ai biết là nó vẫn ở đó.
  */
 export function lamDepSheet(
   sheetXml: string,
@@ -350,13 +345,6 @@ export function lamDepSheet(
       `<selection pane="bottomLeft" activeCell="A${HANG_DAU_DU_LIEU}" sqref="A${HANG_DAU_DU_LIEU}"/>` +
       "</sheetView></sheetViews>",
   );
-
-  HANG_AN.forEach((r) => {
-    x = x.replace(
-      new RegExp(`<row r="${r}"((?:(?!hidden=)[^>])*)>`),
-      `<row r="${r}"$1 hidden="1">`,
-    );
-  });
 
   return x;
 }

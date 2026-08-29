@@ -7,7 +7,7 @@
  * BỐN NHÓM CỦA BNC
  *
  * Phép kiểm quan trọng nhất ở đây: MỌI bộ phận của BNC trong danh mục phải rơi
- * vào đúng một nhóm, và 17 điểm bán mà bộ phận liệt kê phải nằm trong Nội bộ.
+ * vào đúng một nhóm, và 18 điểm bán mà bộ phận liệt kê phải nằm trong Nội bộ.
  * Kiểm bằng chính `INITIAL_PARTNERS` chứ không bằng danh sách tự bịa — chia
  * nhóm đúng trên dữ liệu giả mà sai trên danh mục thật thì vô nghĩa.
  */
@@ -80,7 +80,7 @@ eq("khong co nhom thi ten rong", tenNhomBNC(null), "");
 // ------------------------------------------------------------ tren danh muc that
 
 const boPhanBNC = INITIAL_PARTNERS.filter((p) => laBoPhanBNC(p.id));
-eq("danh muc co 20 bo phan BNC", boPhanBNC.length, 20);
+eq("danh muc co 21 bo phan BNC", boPhanBNC.length, 21);
 
 // Khong bo phan nao khong co nhom.
 eq(
@@ -89,13 +89,13 @@ eq(
   [],
 );
 
-// Dem theo nhom: 17 diem ban + moi nhom con lai dung mot bo phan.
+// Dem theo nhom: 18 diem ban + moi nhom con lai dung mot bo phan.
 const dem = new Map<MaNhomBNC, string[]>();
 boPhanBNC.forEach((p) => {
   const n = nhomCuaBoPhan(p.id) as MaNhomBNC;
   dem.set(n, [...(dem.get(n) ?? []), p.name]);
 });
-eq("Noi bo co 17 diem ban", dem.get("NB")?.length, 17);
+eq("Noi bo co 18 diem ban", dem.get("NB")?.length, 18);
 eq("Ngoai giao dung mot bo phan", dem.get("NG")?.length, 1);
 eq("HTKD dung mot bo phan", dem.get("HTKD")?.length, 1);
 eq("Chi phi khac dung mot bo phan", dem.get("CPK")?.length, 1);
@@ -108,7 +108,7 @@ eq(
   boPhanBNC.length,
 );
 
-// Dung 17 diem ban ma bo phan liet ke, khong thieu khong thua.
+// Dung 18 diem ban ma bo phan liet ke, khong thieu khong thua.
 {
   const mong = [
     "1901",
@@ -123,6 +123,7 @@ eq(
     "Cầu Vàng",
     "Ga 10",
     "Rosa Gà Rán",
+    "Shushi Rosa",
     "B8",
     "Lâu Đài",
     "Bulgogi",
@@ -131,7 +132,7 @@ eq(
   ];
   const thuc = (dem.get("NB") ?? []).map((t) => t.replace(/^BNC · /, ""));
   eq(
-    "Noi bo dung 17 diem ban bo phan liet ke",
+    "Noi bo dung 18 diem ban bo phan liet ke",
     [...thuc].sort((a, b) => a.localeCompare(b, "vi")),
     [...mong].sort((a, b) => a.localeCompare(b, "vi")),
   );

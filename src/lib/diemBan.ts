@@ -68,7 +68,7 @@ export const DIEM_BAN: DiemBanEntry[] = [
   { ten: "Quang Hanh Quảng Ninh", partnerId: "AC0129", note: "" },
   { ten: "Sân Gôn", partnerId: "AC0118", note: "" },
   { ten: "SBVH", partnerId: "AD0103-SBVH", note: "Sunbun Vạn Hoa" },
-  { ten: "Shushi Rosa", partnerId: "AD0103-CPK", note: "Chi phí khác" },
+  { ten: "Shushi Rosa", partnerId: "AD0103-SUSHI", note: "Shushi Rosa" },
   { ten: "SPT Nha Trang", partnerId: "AD0103-NG", note: "Ngoại giao" },
   { ten: "SPT Vũng Tàu", partnerId: "AD0103-NG", note: "Ngoại giao" },
   { ten: "Sun bun VH", partnerId: "AD0103-SBVH", note: "Sunbun Vạn Hoa" },

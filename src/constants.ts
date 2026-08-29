@@ -30,24 +30,26 @@ export const INITIAL_PRODUCTS: Product[] = [
 /**
  * Đơn vị nhận bia — chốt theo danh sách bộ phận gửi 20/08/2026.
  *
- * BNC ĐƯỢC CHIA LÀM 20 BỘ PHẬN, theo danh mục bộ phận gửi ngày 22/08/2026.
+ * BNC ĐƯỢC CHIA LÀM 21 BỘ PHẬN, theo danh mục bộ phận gửi ngày 22/08/2026 và
+ * bổ sung "Shushi Rosa" ngày 27/08/2026.
  * Cả 20 cùng mã SAP `AD0103` vì với SAP thì đó vẫn là một khách hàng; chia ở
  * đây để biết bia đi tới đâu trong khu:
  *
- *   17 điểm bán       — 1901, Plaza, Lễ Hội Bia, 4 Mùa, Kavkaz, Taiga, Hội An,
+ *   18 điểm bán       — 1901, Plaza, Lễ Hội Bia, 4 Mùa, Kavkaz, Taiga, Hội An,
  *                       Cổng Thành 1, Sunbun Vạn Hoa, Cầu Vàng, Ga 10,
- *                       Rosa Gà Rán, B8, Lâu Đài, Bulgogi, Arapang, Gastrobup
+ *                       Rosa Gà Rán, Shushi Rosa, B8, Lâu Đài, Bulgogi,
+ *                       Arapang, Gastrobup
  *   BNC · Ngoại giao  — hàng đối ngoại, biếu tặng
  *   BNC · HTKD        — điểm hợp tác kinh doanh (El Fresco, Mini Mart)
  *   BNC · Chi phí khác — phần không thuộc các bộ phận trên
  *
- * Trước đây 17 điểm bán trên bị gom hết vào một mục "Nội bộ" — nhìn báo cáo
+ * Trước đây các điểm bán trên bị gom hết vào một mục "Nội bộ" — nhìn báo cáo
  * chỉ thấy một dòng 53.026 lít mà không biết quán nào uống bao nhiêu. Tách ra
  * thì mỗi điểm bán là một dòng riêng.
  *
  * Không còn mục "BNC" trơn: mọi lần xuất cho BNC đều thuộc đúng một bộ phận.
  *
- * Cả 20 cố ý xếp liền nhau trong mảng — ô chọn đơn vị gộp chúng thành một dòng
+ * Cả 21 cố ý xếp liền nhau trong mảng — ô chọn đơn vị gộp chúng thành một dòng
  * "BNC" đặt đúng vị trí này, rồi hiện bộ phận thành các nút bên dưới.
  */
 export const INITIAL_PARTNERS: Partner[] = [
@@ -65,7 +67,7 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AC0105', sapCode: 'AC0105', name: 'PVD', type: 'AGENT' },
   { id: 'AD0114', sapCode: 'AD0114', name: 'Hà Nam', type: 'AGENT' },
 
-  // BNC — 20 bộ phận, cùng mã SAP AD0103. Thứ tự theo danh mục bộ phận gửi.
+  // BNC — 21 bộ phận, cùng mã SAP AD0103. Thứ tự theo danh mục bộ phận gửi.
   { id: 'AD0103-1901', sapCode: 'AD0103', name: 'BNC · 1901', type: 'AGENT' },
   { id: 'AD0103-PLAZA', sapCode: 'AD0103', name: 'BNC · Plaza', type: 'AGENT' },
   { id: 'AD0103-LHB', sapCode: 'AD0103', name: 'BNC · Lễ Hội Bia', type: 'AGENT' },
@@ -78,6 +80,7 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AD0103-CV', sapCode: 'AD0103', name: 'BNC · Cầu Vàng', type: 'AGENT' },
   { id: 'AD0103-GA10', sapCode: 'AD0103', name: 'BNC · Ga 10', type: 'AGENT' },
   { id: 'AD0103-ROSA', sapCode: 'AD0103', name: 'BNC · Rosa Gà Rán', type: 'AGENT' },
+  { id: 'AD0103-SUSHI', sapCode: 'AD0103', name: 'BNC · Shushi Rosa', type: 'AGENT' },
   { id: 'AD0103-B8', sapCode: 'AD0103', name: 'BNC · B8', type: 'AGENT' },
   { id: 'AD0103-LAUDAI', sapCode: 'AD0103', name: 'BNC · Lâu Đài', type: 'AGENT' },
   { id: 'AD0103-BULGOGI', sapCode: 'AD0103', name: 'BNC · Bulgogi', type: 'AGENT' },
