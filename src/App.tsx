@@ -44,7 +44,6 @@ import {
   RefreshCw,
   ShieldCheck,
   RotateCcw,
-  Package2,
   FileUp,
   Beer,
   Sun,
@@ -6279,7 +6278,15 @@ export default function App() {
             {activeTab === "dashboard" && (
               <>
                 {userRole === "OWNER" && (
-                  <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-5">
+                  /*
+                    Còn HAI thẻ. Ba thẻ kia — Tỷ lệ lấy đầy, Độ chính xác tồn
+                    kho, Chi phí lưu kho — ghi số cứng trong mã, không đọc dữ
+                    liệu nào cả: 98,5% / 99,8% / 12,4 hiện y nguyên dù kho có gì
+                    đi nữa. Số giả nằm cạnh số thật là loại sai khó chịu nhất,
+                    vì nhìn vào ai cũng tin, và chụp màn hình gửi lãnh đạo là
+                    báo cáo một con số không có thật.
+                  */
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
                     <StatCard
                       title="TỔNG DOANH THU"
                       value={formatNumber(
@@ -6307,134 +6314,28 @@ export default function App() {
                       unit="x"
                       icon={RefreshCw}
                       color="primary"
-                      target="4.5x"
-                      trend="+0.3"
-                      chartData={[
-                        { value: 4.0 },
-                        { value: 4.1 },
-                        { value: 3.9 },
-                        { value: 4.2 },
-                        { value: 4.2 },
-                      ]}
-                    />
-                    <StatCard
-                      title="TỶ LỆ LẤY ĐẦY (FILL RATE)"
-                      value="98.5"
-                      unit="%"
-                      icon={Layers}
-                      color="green"
-                      target="98%"
-                      trend="+1.2%"
-                      chartData={[
-                        { value: 95 },
-                        { value: 96 },
-                        { value: 97.5 },
-                        { value: 98 },
-                        { value: 98.5 },
-                      ]}
-                    />
-                    <StatCard
-                      title="ĐỘ CHÍNH XÁC TỒN KHO"
-                      value="99.8"
-                      unit="%"
-                      icon={ShieldCheck}
-                      color="primary"
-                      target="100%"
-                      trend="Ổn định"
-                      chartData={[
-                        { value: 99.5 },
-                        { value: 99.7 },
-                        { value: 99.8 },
-                        { value: 99.6 },
-                        { value: 99.8 },
-                      ]}
-                    />
-                    <StatCard
-                      title="CHI PHÍ LƯU KHO"
-                      value="12.4"
-                      unit="%"
-                      icon={Package2}
-                      color="rose"
-                      target="Giảm 2% so với Q1"
-                      trend="-2.1%"
-                      chartData={[
-                        { value: 14.5 },
-                        { value: 14.0 },
-                        { value: 13.2 },
-                        { value: 12.8 },
-                        { value: 12.4 },
-                      ]}
+                      subtitle="Xuất chia tồn bình quân"
                     />
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   {/* Operations & Storage Center */}
-                  <Card
-                    title="Vận hành Kho & Bảo quản"
-                    className="lg:col-span-8"
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                      <div className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-500">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                          Nhiệt độ kho lạnh
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                          <h5 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            4.2°C
-                          </h5>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">
-                            Celsius
-                          </span>
-                        </div>
-                        <div className="mt-3 sm:mt-4 flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                          <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">
-                            OPTIMAL
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-500">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                          Độ ẩm trung bình
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                          <h5 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            65%
-                          </h5>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">
-                            Humidity
-                          </span>
-                        </div>
-                        <div className="mt-3 sm:mt-4 flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                          <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">
-                            NORMAL
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-500">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                          Sử dụng diện tích
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                          <h5 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            78.5%
-                          </h5>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">
-                            Capacity
-                          </span>
-                        </div>
-                        <div className="mt-3 sm:mt-4 flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                          <span className="text-[9px] sm:text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none">
-                            STABLE
-                          </span>
-                        </div>
-                      </div>
-
+                  {/*
+                    Đổi tên thẻ theo đúng thứ còn lại. Tên cũ "Vận hành Kho &
+                    Bảo quản" là để gọi ba ô cảm biến; bỏ chúng đi mà giữ tên
+                    thì tiêu đề hứa nhiều hơn nội dung.
+                  */}
+                  <Card title="Lô hàng tồn lâu" className="lg:col-span-8">
+                    <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                      {/*
+                        Ba ô ở đây — Nhiệt độ kho lạnh 4,2°C, Độ ẩm 65%, Sử
+                        dụng diện tích 78,5% — đã bỏ ngày 27/08/2026. Chúng ghi
+                        số cứng trong mã: kho không có cảm biến nào, app cũng
+                        không biết diện tích kho, nên ba con số ấy hiện y nguyên
+                        mãi mãi. Để lại là bày một thứ không có thật ngay cạnh
+                        số thật.
+                      */}
                       <div className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-500">
                         <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                           Lô hàng chậm (Aging &gt; 15 ngày)
