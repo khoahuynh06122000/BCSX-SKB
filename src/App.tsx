@@ -7218,8 +7218,19 @@ export default function App() {
                           >
                             Chờ ký
                           </th>
-                          <th className="font-bold text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right">
-                            Phòng kho
+                          {/*
+                            Cột này VẪN LÀ CỘT CŨ, chỉ đặt lại tên cho đúng thứ
+                            nó hiện: `totalLiters` = tồn × hệ số quy đổi × dung
+                            tích. Tên "Phòng kho" đi theo từ bản dựng đầu tiên
+                            của app và không liên quan gì tới con số bên dưới —
+                            1.200 lon 330ml hiện ra 396 L, không phải tên một
+                            cái phòng nào.
+                          */}
+                          <th
+                            className="font-bold text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right"
+                            title="Tồn quy về lít: số tồn × dung tích mỗi đơn vị. Để cộng được bia hơi với bia lon vào một con số."
+                          >
+                            Lít quy đổi
                           </th>
                           <th className="font-bold text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest py-3 sm:py-4 px-3 sm:px-6 text-right">
                             Cảnh báo
@@ -7283,9 +7294,20 @@ export default function App() {
                                 L
                               </span>
                             </td>
+                            {/*
+                              Cảnh báo theo ĐỊNH MỨC của từng mặt hàng, không
+                              theo con số 50 viết cứng như trước. Bảng nhập ·
+                              xuất · tồn ngay trên đã dùng định mức, hai bảng
+                              cùng màn hình mà nói khác nhau về cùng một mặt
+                              hàng là chỗ khó chịu nhất: không biết tin bảng nào.
+                            */}
                             <td className="py-4 px-6 text-right">
-                              {item.stock <= 50 ? (
-                                <span className="bg-rose-50 text-rose-600 border border-rose-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">
+                              {item.minStock > 0 &&
+                              item.stock < item.minStock ? (
+                                <span
+                                  className="bg-rose-50 text-rose-600 border border-rose-100 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse"
+                                  title={`Dưới định mức ${formatNumber(item.minStock)}`}
+                                >
                                   MỨC THẤP
                                 </span>
                               ) : (
