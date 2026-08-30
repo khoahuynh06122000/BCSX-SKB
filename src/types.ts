@@ -24,17 +24,19 @@ export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
 /**
  * Vai trò của tài khoản.
  *
- * `NHAP_KHO` và `XUAT_KHO` là hai vai trò MỘT CHIỀU thêm ngày 27/08/2026: xem
- * được hết nhưng chỉ ghi được đúng chiều của mình. `STAFF` và `VIEWER` là hai
- * vai trò cũ, vẫn ghi được cả hai chiều — xem `src/lib/quyen.ts`.
+ * `NHAP_KHO` và `XUAT_KHO` là hai vai trò MỘT CHIỀU: xem được hết nhưng chỉ ghi
+ * được đúng chiều của mình. `DNC` là khối cung ứng — chỉ XEM, và chỉ xem được
+ * dữ liệu chiều xuất. Xem `src/lib/quyen.ts`.
+ *
+ * Hai vai trò cũ `STAFF` và `VIEWER` đã bỏ ngày 30/08/2026 (không tài khoản nào
+ * mang chúng). Tài liệu nào còn ghi hai tên đó là tài liệu cũ.
  */
 export type UserRole =
   | 'OWNER'
   | 'KE_TOAN'
   | 'NHAP_KHO'
   | 'XUAT_KHO'
-  | 'STAFF'
-  | 'VIEWER'
+  | 'DNC'
   | 'PENDING';
 
 /**

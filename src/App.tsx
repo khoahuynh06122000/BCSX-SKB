@@ -144,6 +144,7 @@ import {
   deleteDoc,
   onSnapshot,
   query,
+  where,
   orderBy,
   getDocFromServer,
   getDoc,
@@ -1030,17 +1031,34 @@ export default function App() {
     };
     testConnection();
 
-    // Sync Transactions
-    const qTransactions = query(
-      collection(db, "transactions"),
-      orderBy("date", "desc"),
-    );
+    /*
+     * Sync Transactions.
+     *
+     * DNC — khối cung ứng chỉ đọc được giao dịch chiều XUẤT, và luật Firestore
+     * chặn thật ở chỗ này. Nhưng Firestore KHÔNG lọc từng tài liệu khi trả về
+     * một danh sách: nó xét CÂU TRUY VẤN. Truy vấn không có ràng buộc thì bị từ
+     * chối cả cụm chứ không trả về một phần — nên phải tự thêm ràng buộc.
+     *
+     * Cố ý không kèm `orderBy` cho DNC: lọc bằng `in` rồi sắp theo một trường
+     * khác thì Firestore đòi một chỉ mục ghép phải tạo tay trong Console. Sắp
+     * xếp ở máy người dùng thì không cần chỉ mục nào, mà vài nghìn dòng thì
+     * không đáng kể.
+     */
+    const chiXemChieuXuat = quyenCua(userRole).xemXuat && !quyenCua(userRole).xemKho;
+    const qTransactions = chiXemChieuXuat
+      ? query(collection(db, "transactions"), where("type", "in", ["OUT", "LOSS"]))
+      : query(collection(db, "transactions"), orderBy("date", "desc"));
     const unsubTransactions = onSnapshot(
       qTransactions,
       (snapshot) => {
         const data = snapshot.docs.map(
           (doc) => ({ ...doc.data(), id: doc.id }) as Transaction,
         );
+        // Truy vấn của DNC không kèm `orderBy` nên phải tự sắp ở đây, để mọi
+        // màn hình vẫn nhận danh sách mới nhất trước như các vai trò khác.
+        if (chiXemChieuXuat) {
+          data.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        }
         // Firestore tra ve rong thi de rong luon - truoc day roi ve
         // INITIAL_TRANSACTIONS nhung mang do von rong nen khong khac gi.
         setTransactions(data);
@@ -1080,8 +1098,15 @@ export default function App() {
     // mỗi lần mở app bớt hẳn một collection phải tải, và kho với doanh thu
     // không bao giờ lệch nhau được nữa.
 
-    // Sync phieu nhap kho (chi trang thai + anh ky, noi dung suy tu transactions)
-    const unsubSlips = onSnapshot(
+    /*
+     * Sync phieu nhap kho (chi trang thai + anh ky, noi dung suy tu transactions).
+     *
+     * Bỏ qua với DNC: phiếu nhập là chuyện của kho, luật đã chặn đọc, nên đăng
+     * ký cũng chỉ sinh lỗi permission-denied trong console chứ không được gì.
+     */
+    let unsubSlips = () => {};
+    if (!chiXemChieuXuat) {
+    unsubSlips = onSnapshot(
       collection(db, "slips"),
       (snapshot) => {
         setSlips(
@@ -1096,6 +1121,7 @@ export default function App() {
         );
       },
     );
+    }
 
     /*
      * Bảng gán điểm bán -> đối tác.
@@ -5480,7 +5506,10 @@ export default function App() {
       {
         id: "overview",
         title: "Tổng quan",
-        items: [
+        // Bảng điều khiển và Tồn kho là số của kho tổng — DNC không xem.
+        items: !quyen.xemKho
+          ? []
+          : [
           {
             id: "dashboard",
             label: "Bảng điều khiển",
@@ -5493,7 +5522,7 @@ export default function App() {
             icon: Package,
             color: "#f59e0b",
           },
-        ],
+            ],
       },
       {
         id: "operations",
@@ -5551,13 +5580,17 @@ export default function App() {
         id: "reports",
         title: "Báo cáo",
         items: [
-          // Báo cáo: Owner, Staff và Viewer đều xem được
-          {
-            id: "reports",
-            label: "Báo cáo tổng hợp",
-            icon: TrendingUp,
-            color: "#f43f5e",
-          },
+          // Báo cáo tổng hợp trộn cả hai chiều nên là số của kho — DNC không xem.
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "reports",
+                  label: "Báo cáo tổng hợp",
+                  icon: TrendingUp,
+                  color: "#f43f5e",
+                },
+              ]
+            : []),
           {
             id: "debt",
             label: "Công nợ · Hóa đơn",
@@ -5572,14 +5605,19 @@ export default function App() {
             icon: Building2,
             color: "#0284c7",
           },
-          // Doanh thu: ai cũng XEM được; riêng thao tác thì chỉ kế toán,
-          // chặn ở trong tab chứ không chặn ở menu.
-          {
-            id: "revenue-mgmt",
-            label: "Doanh thu",
-            icon: FileSpreadsheet,
-            color: "#8b5cf6",
-          },
+          // Doanh thu: ai xem được dữ liệu kho thì XEM được; riêng thao tác
+          // thì chỉ kế toán, chặn ở trong tab chứ không chặn ở menu. DNC không
+          // xem — doanh thu không phải việc của khối cung ứng.
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "revenue-mgmt",
+                  label: "Doanh thu",
+                  icon: FileSpreadsheet,
+                  color: "#8b5cf6",
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -5972,15 +6010,10 @@ export default function App() {
                         Chức danh
                       </p>
                       <p className="text-sm font-bold text-slate-900">
-                        {userRole === "OWNER"
-                          ? "Thẩm quyền tối cao"
-                          : userRole === "KE_TOAN"
-                            ? "Kế toán"
-                            : userRole === "STAFF"
-                              ? "Chuyên viên Vận hành"
-                              : userRole === "VIEWER"
-                                ? "Người xem phân tích"
-                                : "Chờ phê duyệt"}
+                        {/* Tên vai trò lấy từ src/lib/quyen.ts, không viết
+                            lại ở đây — thêm vai trò mà quên sửa chỗ này thì
+                            người dùng thấy tên của một vai trò khác. */}
+                        {tenVaiTro(userRole)}
                       </p>
                     </div>
                     <div
@@ -6185,13 +6218,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-emerald-500" />
                     <p className="text-[11px] font-semibold text-slate-400 truncate">
-                      {userRole === "OWNER"
-                        ? "Chủ sở hữu"
-                        : userRole === "KE_TOAN"
-                          ? "Kế toán"
-                          : userRole === "STAFF"
-                            ? "Vận hành"
-                            : "Chỉ xem"}
+                      {tenVaiTro(userRole)}
                     </p>
                   </div>
                 </div>

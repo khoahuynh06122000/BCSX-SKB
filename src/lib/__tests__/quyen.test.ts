@@ -41,8 +41,7 @@ const MOI_VAI_TRO: UserRole[] = [
   "KE_TOAN",
   "NHAP_KHO",
   "XUAT_KHO",
-  "STAFF",
-  "VIEWER",
+  "DNC",
   "PENDING",
 ];
 
@@ -82,7 +81,8 @@ eq("chuoi rong", laChieuNhap("") || laChieuXuat(""), false);
 }
 
 eq("chu so huu toan quyen", quyenCua("OWNER"), {
-  xem: true,
+  xemXuat: true,
+  xemKho: true,
   ghiNhap: true,
   ghiXuat: true,
   doanhThu: true,
@@ -91,7 +91,8 @@ eq("chu so huu toan quyen", quyenCua("OWNER"), {
 });
 
 eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
-  xem: true,
+  xemXuat: true,
+  xemKho: true,
   ghiNhap: true,
   ghiXuat: true,
   doanhThu: true,
@@ -99,9 +100,10 @@ eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
   quanTri: false,
 });
 
-// HAI VAI TRO MOT CHIEU — phan chinh cua lan sua nay.
+// HAI VAI TRO MOT CHIEU: xem het, chi ghi mot chieu.
 eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
-  xem: true,
+  xemXuat: true,
+  xemKho: true,
   ghiNhap: true,
   ghiXuat: false,
   doanhThu: false,
@@ -109,7 +111,8 @@ eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
   quanTri: false,
 });
 eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
-  xem: true,
+  xemXuat: true,
+  xemKho: true,
   ghiNhap: false,
   ghiXuat: true,
   doanhThu: false,
@@ -117,22 +120,48 @@ eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
   quanTri: false,
 });
 
-// Ba vai tro cu GIU NGUYEN quyen ghi ca hai chieu: ha quyen mot tai khoan dang
-// chay viec thi hom sau co nguoi khong lam duoc viec ma khong hieu vi sao.
+// DNC — KHOI CUNG UNG: vai tro duy nhat bi chan ca phan XEM.
+eq("DNC chi xem chieu xuat", quyenCua("DNC"), {
+  xemXuat: true,
+  xemKho: false,
+  ghiNhap: false,
+  ghiXuat: false,
+  doanhThu: false,
+  napFile: false,
+  quanTri: false,
+});
+// DNC KHONG duoc ghi bat cu thu gi: ho la ben nhan hoa don, khong dung vao so.
+{
+  const q = quyenCua("DNC");
+  dung("DNC khong ghi duoc gi", !q.ghiNhap && !q.ghiXuat && !q.doanhThu && !q.napFile);
+  dung("DNC khong quan tri", !q.quanTri);
+}
+
+// HAI VAI TRO CU DA BO. Tai khoan nao con mang ten do phai roi vao dien chua
+// duyet, khong duoc huong quyen nao — de vai tro bi bo van chay tiep la cho
+// nguy hiem nhat khi don phan quyen.
 ["STAFF", "VIEWER"].forEach((r) => {
-  const q = quyenCua(r);
-  dung(`${r} van ghi duoc ca hai chieu`, q.ghiNhap && q.ghiXuat);
-  dung(`${r} khong dung toi doanh thu`, !q.doanhThu);
-  dung(`${r} khong nap duoc tep`, !q.napFile);
-  dung(`${r} khong quan tri`, !q.quanTri);
+  eq(`${r} da bo, khong con quyen nao`, Object.values(quyenCua(r)).filter(Boolean).length, 0);
 });
 
 // ------------------------------------------------------------ chan dung nguoi
 
-// Ai XEM duoc: moi vai tro tru cho duyet.
+// Ai xem duoc du lieu XUAT: moi vai tro tru cho duyet.
 MOI_VAI_TRO.forEach((r) => {
-  eq(`${r} xem duoc?`, quyenCua(r).xem, r !== "PENDING");
+  eq(`${r} xem duoc chieu xuat?`, quyenCua(r).xemXuat, r !== "PENDING");
 });
+
+// Ai xem duoc du lieu KHO: moi vai tro tru cho duyet VA tru DNC.
+eq(
+  "DNC khong xem duoc du lieu kho",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).xemKho),
+  ["OWNER", "KE_TOAN", "NHAP_KHO", "XUAT_KHO"],
+);
+// Khong ai xem duoc kho ma lai khong xem duoc xuat: khong co vai tro nao nhu the.
+dung(
+  "xem duoc kho thi tat nhien xem duoc xuat",
+  MOI_VAI_TRO.every((r) => !quyenCua(r).xemKho || quyenCua(r).xemXuat),
+);
 
 // Ai NAP TEP duoc: chi ke toan va chu so huu.
 eq(
@@ -151,6 +180,17 @@ eq(
   "chi chu so huu quan tri",
   MOI_VAI_TRO.filter((r) => quyenCua(r).quanTri),
   ["OWNER"],
+);
+// Ai GHI duoc: DNC khong nam trong bat ky nhom nao.
+eq(
+  "ai ghi duoc chieu nhap",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).ghiNhap),
+  ["OWNER", "KE_TOAN", "NHAP_KHO"],
+);
+eq(
+  "ai ghi duoc chieu xuat",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).ghiXuat),
+  ["OWNER", "KE_TOAN", "XUAT_KHO"],
 );
 
 // ------------------------------------------------------------ ghi theo loai
@@ -171,8 +211,8 @@ dung("xuat kho KHONG ghi duoc OPENING", !ghiDuocGiaoDich("XUAT_KHO", "OPENING"))
 ["IN", "OPENING", "OUT", "LOSS"].forEach((t) => {
   dung(`cho duyet khong ghi duoc ${t}`, !ghiDuocGiaoDich("PENDING", t));
 });
-// Ba vai tro cu ghi duoc het.
-["OWNER", "KE_TOAN", "STAFF", "VIEWER"].forEach((r) => {
+// Chu so huu va ke toan ghi duoc het.
+["OWNER", "KE_TOAN"].forEach((r) => {
   ["IN", "OPENING", "OUT", "LOSS"].forEach((t) => {
     dung(`${r} ghi duoc ${t}`, ghiDuocGiaoDich(r, t));
   });
@@ -180,8 +220,12 @@ dung("xuat kho KHONG ghi duoc OPENING", !ghiDuocGiaoDich("XUAT_KHO", "OPENING"))
 // Loai giao dich la: chi chu so huu, de khong ai loi dung mot loai bia dat ra
 // de ghi vong qua hai chieu.
 dung("loai la thi chu so huu van ghi duoc", ghiDuocGiaoDich("OWNER", "ABC"));
-["KE_TOAN", "NHAP_KHO", "XUAT_KHO", "STAFF", "VIEWER"].forEach((r) => {
+["KE_TOAN", "NHAP_KHO", "XUAT_KHO", "DNC"].forEach((r) => {
   dung(`${r} khong ghi duoc loai la`, !ghiDuocGiaoDich(r, "ABC"));
+});
+// DNC khong ghi duoc loai nao het.
+["IN", "OPENING", "OUT", "LOSS"].forEach((t) => {
+  dung(`DNC khong ghi duoc ${t}`, !ghiDuocGiaoDich("DNC", t));
 });
 
 // ------------------------------------------------------------ danh sach vai tro
@@ -199,17 +243,25 @@ dung(
   "moi vai tro deu co ten va cau mo ta",
   DANH_SACH_VAI_TRO.every((v) => v.ten.trim() !== "" && v.moTa.trim() !== ""),
 );
-// Hai vai tro moi dat len truoc hai vai tro cu: day la cai nen chon.
+// Hai vai tro cu KHONG duoc con trong o chon: con trong danh sach la co ngay
+// ai do cap nham, ma cap xong thi nguoi do khong vao duoc app.
 {
-  const thuTu = DANH_SACH_VAI_TRO.map((v) => v.ma);
-  dung("nhap kho dung truoc STAFF", thuTu.indexOf("NHAP_KHO") < thuTu.indexOf("STAFF"));
-  dung("xuat kho dung truoc VIEWER", thuTu.indexOf("XUAT_KHO") < thuTu.indexOf("VIEWER"));
+  const ma = DANH_SACH_VAI_TRO.map((v) => v.ma as string);
+  dung("khong con STAFF trong o chon", !ma.includes("STAFF"));
+  dung("khong con VIEWER trong o chon", !ma.includes("VIEWER"));
 }
-// Nhan cua VIEWER khong duoc noi la "chi xem": no ghi duoc ca so kho, ai doc
-// nhan ma cap quyen thi cap rong hon minh tuong.
+// Nhan cua DNC phai noi ro la CHI XEM: ai doc nhan ma cap quyen thi phai biet
+// minh dang cap gi.
 {
-  const viewer = DANH_SACH_VAI_TRO.find((v) => v.ma === "VIEWER")!;
-  dung("nhan VIEWER noi ro la ghi duoc", viewer.ten.includes("ghi cả hai chiều"));
+  const dnc = DANH_SACH_VAI_TRO.find((v) => v.ma === "DNC")!;
+  dung("nhan DNC noi ro chi xem", dnc.moTa.includes("CHỈ XEM"));
+  dung("nhan DNC noi ro khong thay ton kho", dnc.moTa.includes("Không thấy tồn kho"));
+}
+// Nhan cua "Cho duyet" phai noi ca hai cong dung: trang thai cua tai khoan moi,
+// va cach thu hoi quyen cua tai khoan cu.
+{
+  const cho = DANH_SACH_VAI_TRO.find((v) => v.ma === "PENDING")!;
+  dung("nhan Cho duyet noi ca cach thu hoi quyen", cho.moTa.includes("thu hồi quyền"));
 }
 
 eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên nhập kho");

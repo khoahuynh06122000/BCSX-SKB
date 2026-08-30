@@ -69,49 +69,61 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // MOI TAI KHOAN DA DUOC DUYET DEU DUNG DUOC TOAN BO PHAN HE.
+    // CANH CUA THAT SU LA BUOC DUYET.
     //
-    // Truoc day chia ba muc: VIEWER chi doc, STAFF ghi duoc kho, OWNER them
-    // doanh thu. Nay chu so huu quyet dinh bo phan cap: da vao duoc app thi
-    // dung het chuc nang, vi hai lop dang nhap Google + ma PIN da du chan
-    // nguoi ngoai.
-    //
-    // CANH CUA THAT SU CON LAI LA BUOC DUYET. Tai khoan Google nao cung dang
-    // nhap duoc, nhung vao thi o trang thai PENDING va PENDING KHONG doc ghi
-    // duoc gi ca - phai co chu so huu bam duyet. Ai bo canh cua do thi ca the
-    // gioi ghi duoc vao so kho nay.
+    // Tai khoan Google nao cung dang nhap duoc, nhung vao thi o trang thai
+    // PENDING va PENDING KHONG doc ghi duoc gi ca - phai co chu so huu bam
+    // duyet. Ai bo canh cua do thi ca the gioi ghi duoc vao so kho nay.
     //
     // HAI VIEC VAN RIENG CHU SO HUU, co y giu lai:
     //   - Doi vai tro nguoi dung: mo ra thi nguoi vua duoc duyet lai di duyet
     //     nguoi khac, canh cua duy nhat con lai tu no mo toang.
     //   - Xoa du lieu: sai mot lan la mat, khong lay lai duoc.
+    // -------------------------------------------------------------------------
+
+    // Da duoc duyet: xem duoc it nhat mot phan du lieu.
     function isApproved() {
       return isOwner() ||
         (isSignedIn() &&
-          (role() == 'KE_TOAN' || role() == 'STAFF' || role() == 'VIEWER' ||
-           role() == 'NHAP_KHO' || role() == 'XUAT_KHO'));
+          (role() == 'KE_TOAN' || role() == 'NHAP_KHO' ||
+           role() == 'XUAT_KHO' || role() == 'DNC'));
     }
 
     // -------------------------------------------------------------------------
-    // HAI VAI TRO MOT CHIEU (27/08/2026)
+    // PHAN QUYEN THEO CHIEU
     //
     // NHAP_KHO chi ghi duoc chieu nhap, XUAT_KHO chi ghi duoc chieu xuat. Ca hai
     // VAN XEM DUOC HET: ton kho, bao cao, lich su deu tron ca hai chieu nen chan
     // xem thi nguoi nhap kho khong tra noi mot lo hang.
     //
-    // Ba vai tro cu (VIEWER, STAFF, KE_TOAN) GIU NGUYEN quyen ghi ca hai chieu.
-    // Ha quyen mot tai khoan dang chay viec thi hom sau co nguoi khong lam duoc
-    // viec ma khong hieu vi sao; muon siet ai thi doi vai tro nguoi do.
+    // DNC chi XEM, va chi xem chieu xuat - vai tro duy nhat bi chan ca phan xem.
     //
     // Phai khop dung voi src/lib/quyen.ts - do la bang giao dien dung de an hien
     // nut. Lech ben nao cung sinh loi.
     // -------------------------------------------------------------------------
 
-    // Ghi duoc CA HAI CHIEU: chu so huu, ke toan, va hai vai tro cu.
+    // Ghi duoc CA HAI CHIEU: chu so huu va ke toan.
+    //
+    // Hai vai tro cu STAFF va VIEWER da bo ngay 30/08/2026 (khong tai khoan nao
+    // mang chung). Tai khoan nao con mang mot trong hai ten do se roi vao dien
+    // chua duyet - dung nhu y do.
     function isToanQuyenKho() {
-      return isOwner() ||
-        (isSignedIn() &&
-          (role() == 'KE_TOAN' || role() == 'STAFF' || role() == 'VIEWER'));
+      return isOwner() || (isSignedIn() && role() == 'KE_TOAN');
+    }
+
+    // DNC - khoi cung ung. CHI XEM, va chi xem du lieu chieu xuat.
+    //
+    // DNC nhan hoa don bia tu kho tong roi xuat tiep cho tung don vi, nen phai
+    // doi chieu lai don hang va bien ban giao nhan. Nhung so ton va so nhap cua
+    // kho tong khong phai viec cua ho.
+    function laDNC() {
+      return isSignedIn() && role() == 'DNC';
+    }
+
+    // Xem duoc du lieu KHO: ton kho, nhap kho, phieu nhap, bao cao.
+    // Moi vai tro da duyet TRU DNC.
+    function xemKho() {
+      return isApproved() && !laDNC();
     }
 
     // Ghi duoc chieu NHAP: nhap kho, ton dau ky, phieu nhap va anh phieu da ky.
@@ -148,8 +160,8 @@ service cloud.firestore {
       return isOwner() || (isSignedIn() && role() == 'KE_TOAN');
     }
 
-    // Doc du lieu: ai da duoc duyet cung xem duoc, ke ca hai vai tro mot chieu.
-    // Giu ten cu de doc luat ben duoi khong phai nho mot bang doi ten trong dau.
+    // Doc du lieu chung. Giu ten cu de doc luat ben duoi khong phai nho mot bang
+    // doi ten trong dau.
     function isViewer() {
       return isApproved();
     }
@@ -207,8 +219,21 @@ service cloud.firestore {
       allow read: if isSignedIn();
     }
 
+    /*
+     * CHO DUY NHAT LUAT CHAN CA PHAN XEM.
+     *
+     * DNC chi doc duoc giao dich chieu XUAT. Nhung Firestore khong loc tung tai
+     * lieu khi tra ve mot danh sach: no xet CAU TRUY VAN. Neu luat doi
+     * `resource.data.type` thi truy van phai co rang buoc tuong ung, khong thi
+     * Firestore tu choi CA truy van chu khong tra ve mot phan.
+     *
+     * Nen ung dung phai truy van kem `where('type','in',['OUT','LOSS'])` khi
+     * nguoi dang nhap la DNC. Xem cho dang ky transactions trong src/App.tsx —
+     * hai ben phai khop nhau, lech mot ben la DNC mo app len thay man hinh loi.
+     */
     match /transactions/{transactionId} {
-      allow read: if isViewer();
+      allow read: if xemKho()
+        || (laDNC() && laChieuXuat(resource.data.get('type', '')));
 
       // Ghi theo CHIEU cua chinh ban ghi do.
       allow create: if isToanQuyenKho()
@@ -245,7 +270,8 @@ service cloud.firestore {
     //
     // Xem: ai da duoc duyet. Sua/xoa: ke toan.
     match /revenue/{recordId} {
-      allow read: if isApproved();
+      // Doanh thu khong phai viec cua DNC.
+      allow read: if xemKho();
       allow create, update, delete: if isAccountant();
     }
 
@@ -259,7 +285,8 @@ service cloud.firestore {
     // Khong cho xoa: mot lenh da xuat hoa don la dau vet phai giu. Muon bo thi
     // chuyen trang thai sang 'cancelled', van con thay ai huy va vi sao.
     match /sap_jobs/{jobId} {
-      allow read: if isApproved();
+      // Lenh xuat hoa don la viec noi bo cua ke toan, DNC khong doc.
+      allow read: if xemKho();
       allow create, update: if isAccountant();
       allow delete: if false;
     }
@@ -272,6 +299,8 @@ service cloud.firestore {
      * đó âm thầm rơi khỏi lần nạp sau, mà không có gì báo.
      */
     match /diem_ban/{key} {
+      // DNC doc duoc: bang nay dich ten diem ban ra don vi, khong co no thi don
+      // xuat hien ra khong biet cua ai.
       allow read: if isViewer();
       // Gan diem ban -> doi tac la viec cua nguoi xuat kho.
       allow create, update: if ghiXuatKho();
@@ -311,7 +340,8 @@ service cloud.firestore {
     // Firestore truc tiep la lam duoc. Dieu kien duoi day chan that: so anh sau
     // khi sua khong duoc it hon truoc khi sua, tru khi la chu so huu.
     match /slips/{slipId} {
-      allow read: if isViewer();
+      // Phieu nhap la chuyen cua kho, DNC khong doc.
+      allow read: if xemKho();
       allow create: if ghiNhapKho();
       allow update: if isOwner()
         || (
