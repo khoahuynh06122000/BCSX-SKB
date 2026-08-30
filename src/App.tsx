@@ -21,6 +21,7 @@ import {
   User,
   Download,
   LogOut,
+  CheckCircle2,
   ChevronRight,
   ChevronDown,
   TrendingUp,
@@ -198,6 +199,7 @@ import {
 import { stableHash } from "./lib/hash";
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
 import { dungBangTonKy, moTaKy } from "./lib/tonKho";
+import { NHAN_MUC_DO, phanTichKho } from "./lib/phanTich";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
@@ -4925,6 +4927,49 @@ export default function App() {
     XLSXDep.writeFile(wb, `Nhap xuat ton ${tonTuNgay} den ${tonDenNgay}.xlsx`);
   };
 
+  /* ---------------- Phan tich kho cho bang dieu khien ---------------- */
+
+  /**
+   * Khoảng ngày của bảng điều khiển, mặc định 30 ngày gần nhất.
+   *
+   * Riêng của màn hình này. Bảng điều khiển trả lời "kho đang chạy thế nào",
+   * mà nhịp độ thì phải đo trên một khoảng — tồn hiện tại chia cho lượng xuất
+   * mỗi ngày mới ra được "còn đủ bán mấy ngày".
+   */
+  const [ptTuNgay, setPtTuNgay] = useState(() =>
+    format(subDays(new Date(), 29), "yyyy-MM-dd"),
+  );
+  const [ptDenNgay, setPtDenNgay] = useState(() =>
+    format(new Date(), "yyyy-MM-dd"),
+  );
+
+  const phanTich = useMemo(
+    () =>
+      phanTichKho({
+        giaoDichTinhTon: countedTransactions,
+        giaoDichChoKy: pendingSlipTransactions(transactions, approvedSlips),
+        loTon: batches.map((b) => ({
+          productId: b.productId,
+          batchNumber: b.batchNumber,
+          stock: b.stock,
+          importDate: b.importDate,
+        })),
+        products,
+        tuNgay: ptTuNgay,
+        denNgay: ptDenNgay,
+        homNay: format(new Date(), "yyyy-MM-dd"),
+      }),
+    [
+      countedTransactions,
+      transactions,
+      approvedSlips,
+      batches,
+      products,
+      ptTuNgay,
+      ptDenNgay,
+    ],
+  );
+
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
 
@@ -6277,6 +6322,316 @@ export default function App() {
 
             {activeTab === "dashboard" && (
               <>
+                {/*
+                  KHOẢNG NGÀY CỦA BẢNG ĐIỀU KHIỂN.
+
+                  Bảng này trả lời "kho đang chạy thế nào", mà nhịp độ thì phải
+                  đo trên một khoảng: tồn hiện tại chia cho lượng xuất mỗi ngày
+                  mới ra được "còn đủ bán mấy ngày".
+                */}
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      Nhịp độ đo trong kỳ
+                    </p>
+                    <p className="text-sm font-black text-slate-900">
+                      {moTaKy(ptTuNgay, ptDenNgay)} ·{" "}
+                      {phanTich.thongSo.soNgayTrongKy} ngày
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={ptTuNgay}
+                      max={ptDenNgay || undefined}
+                      onChange={(e) => setPtTuNgay(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                    />
+                    <span className="text-slate-300 font-black">—</span>
+                    <input
+                      type="date"
+                      value={ptDenNgay}
+                      min={ptTuNgay || undefined}
+                      onChange={(e) => setPtDenNgay(e.target.value)}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                    />
+                    {[
+                      { nhan: "30 ngày", ngay: 29 },
+                      { nhan: "90 ngày", ngay: 89 },
+                    ].map((o) => (
+                      <button
+                        key={o.nhan}
+                        onClick={() => {
+                          setPtTuNgay(
+                            format(subDays(new Date(), o.ngay), "yyyy-MM-dd"),
+                          );
+                          setPtDenNgay(format(new Date(), "yyyy-MM-dd"));
+                        }}
+                        className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
+                      >
+                        {o.nhan}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/*
+                  NĂM CON SỐ, TẤT CẢ TÍNH TỪ DỮ LIỆU THẬT.
+
+                  "Còn đủ bán bao nhiêu ngày" thay cho "vòng quay tồn kho" của
+                  bản cũ: vòng quay phải quy đổi trong đầu mới hiểu, còn số ngày
+                  thì đọc là hành động được ngay — và với bia thì so thẳng được
+                  với hạn dùng.
+                */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+                  {[
+                    {
+                      nhan: "Tồn hiện tại",
+                      so: formatNumber(phanTich.thongSo.tonLit),
+                      donVi: "lít quy đổi",
+                      mau: "text-slate-900",
+                    },
+                    {
+                      nhan: "Còn đủ bán",
+                      so:
+                        phanTich.thongSo.soNgayConBan === null
+                          ? "—"
+                          : formatNumber(phanTich.thongSo.soNgayConBan),
+                      donVi:
+                        phanTich.thongSo.soNgayConBan === null
+                          ? "kỳ này chưa xuất"
+                          : "ngày, theo nhịp hiện tại",
+                      mau: "text-primary",
+                    },
+                    {
+                      nhan: "Xuất mỗi ngày",
+                      so: formatNumber(phanTich.thongSo.xuatMoiNgayLit),
+                      donVi: "lít quy đổi",
+                      mau: "text-slate-900",
+                    },
+                    {
+                      nhan: "Hao hụt",
+                      so: `${(phanTich.thongSo.tyLeHaoHut * 100).toFixed(1)}%`,
+                      donVi: `${formatNumber(phanTich.thongSo.haoHutLit)} lít`,
+                      mau:
+                        phanTich.thongSo.tyLeHaoHut > 0.02
+                          ? "text-rose-600"
+                          : "text-slate-900",
+                    },
+                    {
+                      nhan: "Chứng từ thiếu",
+                      so: formatNumber(
+                        phanTich.thongSo.donThieuAnh +
+                          phanTich.thongSo.phieuChoKyLau +
+                          phanTich.thongSo.donDiDuongLau,
+                      ),
+                      donVi: "đơn và phiếu",
+                      mau:
+                        phanTich.thongSo.donThieuAnh +
+                          phanTich.thongSo.phieuChoKyLau +
+                          phanTich.thongSo.donDiDuongLau >
+                        0
+                          ? "text-amber-600"
+                          : "text-emerald-600",
+                    },
+                  ].map((o) => (
+                    <div
+                      key={o.nhan}
+                      className="p-3 sm:p-4 rounded-2xl bg-white border border-slate-200"
+                    >
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        {o.nhan}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-lg sm:text-xl font-black mt-1 tabular-nums leading-none",
+                          o.mau,
+                        )}
+                      >
+                        {o.so}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-400 mt-1">
+                        {o.donVi}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ĐỀ XUẤT — biến số liệu thành việc phải làm. */}
+                <Card title="Đề xuất · việc cần xử">
+                  {phanTich.kienNghi.length === 0 ? (
+                    <div className="py-8 text-center space-y-2">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                      <p className="text-sm font-black text-slate-900">
+                        Không có việc nào cần xử
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-500">
+                        Kho đủ hàng, chứng từ đủ, không lô nào tồn lâu.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {phanTich.kienNghi.map((k) => {
+                        const m = NHAN_MUC_DO[k.mucDo];
+                        return (
+                          <div
+                            key={k.ma}
+                            className={cn(
+                              "p-3 sm:p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-start gap-3",
+                              m.mau === "rose"
+                                ? "bg-rose-50 border-rose-200"
+                                : m.mau === "amber"
+                                  ? "bg-amber-50 border-amber-200"
+                                  : "bg-slate-50 border-slate-200",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "shrink-0 self-start px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest",
+                                m.mau === "rose"
+                                  ? "bg-rose-600 text-white"
+                                  : m.mau === "amber"
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-slate-500 text-white",
+                              )}
+                            >
+                              {m.ten}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[13px] font-black text-slate-900 leading-snug">
+                                {k.tieuDe}
+                              </p>
+                              <p className="text-[11px] font-bold text-slate-500 mt-0.5 leading-relaxed">
+                                {k.chiTiet}
+                              </p>
+                              <p className="text-[11px] font-black text-slate-700 mt-1.5 leading-relaxed">
+                                → {k.viecCanLam}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card title="Còn đủ bán bao nhiêu ngày" noPadding>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left whitespace-nowrap">
+                        <thead>
+                          <tr className="bg-slate-50/50">
+                            {["Mặt hàng", "Tồn", "Xuất/ngày", "Còn"].map(
+                              (h, i) => (
+                                <th
+                                  key={h}
+                                  className={cn(
+                                    "font-bold text-[9px] uppercase tracking-widest text-slate-400 py-2.5 px-3",
+                                    i > 0 && "text-right",
+                                  )}
+                                >
+                                  {h}
+                                </th>
+                              ),
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {phanTich.duBan.map((d) => (
+                            <tr
+                              key={d.productId}
+                              className="text-[11px] font-bold text-slate-600"
+                            >
+                              <td className="py-2 px-3 text-slate-900">
+                                {d.tenHang}
+                              </td>
+                              <td className="py-2 px-3 text-right tabular-nums">
+                                {formatNumber(d.ton)} {d.unit}
+                              </td>
+                              <td className="py-2 px-3 text-right tabular-nums">
+                                {d.xuatMoiNgay > 0
+                                  ? formatNumber(d.xuatMoiNgay)
+                                  : "—"}
+                              </td>
+                              <td
+                                className={cn(
+                                  "py-2 px-3 text-right tabular-nums font-black",
+                                  d.soNgayConBan === null
+                                    ? "text-slate-300"
+                                    : d.soNgayConBan < 7
+                                      ? "text-rose-600"
+                                      : d.soNgayConBan < 14
+                                        ? "text-amber-600"
+                                        : "text-slate-900",
+                                )}
+                                title={
+                                  d.soNgayConBan === null
+                                    ? "Kỳ này không xuất lần nào nên không tính được"
+                                    : undefined
+                                }
+                              >
+                                {d.soNgayConBan === null
+                                  ? "—"
+                                  : `${formatNumber(d.soNgayConBan)} ngày`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+
+                  <div className="space-y-4">
+                    <Card title="Tuổi lô hàng còn tồn" noPadding>
+                      <div className="divide-y divide-slate-100">
+                        {phanTich.tuoiLo.map((n, i) => (
+                          <div
+                            key={n.nhan}
+                            className="px-4 py-2.5 flex items-center justify-between text-[11px] font-bold"
+                          >
+                            <span
+                              className={cn(
+                                i === 3 && n.soLo > 0
+                                  ? "text-rose-600"
+                                  : "text-slate-600",
+                              )}
+                            >
+                              {n.nhan}
+                            </span>
+                            <span className="tabular-nums text-slate-900 font-black">
+                              {n.soLo} lô · {formatNumber(n.ton)} lít
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+
+                    <Card title="Đơn vị nhận nhiều nhất trong kỳ" noPadding>
+                      {phanTich.topDonVi.length === 0 ? (
+                        <p className="py-6 text-center text-xs font-bold text-slate-400">
+                          Kỳ này chưa có đơn xuất nào.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {phanTich.topDonVi.map((o) => (
+                            <div
+                              key={o.ten}
+                              className="px-4 py-2.5 flex items-center justify-between gap-3 text-[11px] font-bold"
+                            >
+                              <span className="text-slate-900 truncate">
+                                {o.ten}
+                              </span>
+                              <span className="tabular-nums text-slate-500 shrink-0">
+                                {formatNumber(o.litQuyDoi)} lít · {o.soDon} đơn
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                </div>
+
                 {userRole === "OWNER" && (
                   /*
                     Còn HAI thẻ. Ba thẻ kia — Tỷ lệ lấy đầy, Độ chính xác tồn
