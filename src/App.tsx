@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, ReactNode, useRef } from "react";
+import React, { useState, useMemo, useEffect, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import {
   Building2,
@@ -14,7 +14,6 @@ import {
   Users,
   History,
   Search,
-  Filter,
   ArrowUpRight,
   ArrowDownLeft,
   Calendar,
@@ -86,16 +85,11 @@ import {
   parseISO,
   format,
   differenceInDays,
-  addDays,
   subDays,
-  addWeeks,
   subWeeks,
-  addMonths,
   subMonths,
-  addYears,
   subYears,
 } from "date-fns";
-import { vi } from "date-fns/locale";
 import {
   Transaction,
   Product,
@@ -882,9 +876,19 @@ export default function App() {
    * nên mọi phép so sánh với "day"/"year" đều bị TypeScript coi là vô nghĩa và
    * không còn ai canh giúp khi gõ sai tên bộ lọc.
    */
-  const [timeFilter, setTimeFilter] = useState<
-    "all" | "day" | "week" | "month" | "year"
-  >("all");
+  /*
+    Bỏ thanh chọn kỳ (Tất cả / Ngày / Tuần / Tháng / Năm) ngày 27/08/2026 theo
+    yêu cầu: nó nằm trên đầu năm màn hình khác nhau, mà mỗi màn hình lại đã có
+    bộ lọc riêng đúng với việc của nó — tồn kho có khoảng ngày, thư viện ảnh có
+    khoảng ngày, Đơn BNC có khoảng ngày. Hai tầng lọc chồng nhau thì số trên
+    màn hình phụ thuộc một ô người dùng đã quên là mình đặt.
+
+    Giữ lại biến ở dạng HẰNG SỐ "all" thay vì gỡ hết 34 chỗ đọc nó: gỡ hết là
+    sửa vào phép tính của bảng điều khiển, đồ thị và báo cáo doanh thu — nhiều
+    hơn hẳn việc được nhờ. Khai kiểu tường minh để những phép so sánh với
+    "day"/"month" ở dưới vẫn hợp lệ.
+  */
+  const timeFilter: "all" | "day" | "week" | "month" | "year" = "all";
 
   /**
    * Mốc thời gian đang xem. Là Date vì mọi nơi đều đưa thẳng vào date-fns
@@ -892,12 +896,13 @@ export default function App() {
    * "yyyy-MM-dd" rồi các nút lại gán Date vào — chạy được nhờ date-fns tự đổi
    * chuỗi thành Date, nhưng kiểu thì sai và rất dễ vỡ về sau.
    */
-  const [filterBaseDate, setFilterBaseDate] = useState<Date>(new Date());
+  // Mốc thời gian của thanh lọc cũ. Không còn ai đổi được nữa nhưng vẫn phải có
+  // giá trị vì các phép tính bên dưới nhận nó làm tham số. Dựng một lần để
+  // không sinh Date mới mỗi lần vẽ lại, kéo theo tính lại mọi memo.
+  const filterBaseDate = useMemo(() => new Date(), []);
   const [selectedInventoryProduct, setSelectedInventoryProduct] = useState<
     string | null
   >(null);
-
-  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   // Cac o nhap mat khau / PIN da duoc go bo: viec xac thuc nay do Google lo.
@@ -4090,50 +4095,6 @@ export default function App() {
     });
   }, [filteredRevenueByTime, revenuePartnerSearch]);
 
-  const periodLabel = useMemo(() => {
-    if (timeFilter === "all") return "Tất cả thời gian";
-    if (timeFilter === "day")
-      return format(filterBaseDate, "'Ngày' dd/MM/yyyy", { locale: vi });
-    if (timeFilter === "week") {
-      const start = startOfWeek(filterBaseDate, { weekStartsOn: 1 });
-      const end = endOfWeek(filterBaseDate, { weekStartsOn: 1 });
-      return `Tuần ${format(start, "dd/MM")} - ${format(end, "dd/MM/yyyy")}`;
-    }
-    if (timeFilter === "month")
-      return format(filterBaseDate, "'Tháng' MM/yyyy", { locale: vi });
-    if (timeFilter === "year")
-      return format(filterBaseDate, "'Năm' yyyy", { locale: vi });
-    return "";
-  }, [timeFilter, filterBaseDate]);
-
-  const moveFilterDate = (direction: "prev" | "next") => {
-    if (timeFilter === "all") return;
-
-    let newDate: Date;
-    if (timeFilter === "day")
-      newDate =
-        direction === "prev"
-          ? subDays(filterBaseDate, 1)
-          : addDays(filterBaseDate, 1);
-    else if (timeFilter === "week")
-      newDate =
-        direction === "prev"
-          ? subWeeks(filterBaseDate, 1)
-          : addWeeks(filterBaseDate, 1);
-    else if (timeFilter === "month")
-      newDate =
-        direction === "prev"
-          ? subMonths(filterBaseDate, 1)
-          : addMonths(filterBaseDate, 1);
-    else
-      newDate =
-        direction === "prev"
-          ? subYears(filterBaseDate, 1)
-          : addYears(filterBaseDate, 1);
-
-    setFilterBaseDate(newDate);
-  };
-
   // Derived State: Batches (Tracking stock per batch) - OPTIMIZED O(N)
   const batches = useMemo(() => {
     // Chi tinh tren giao dich da duyet: hang chua co anh phieu ky thi chua co
@@ -6288,122 +6249,32 @@ export default function App() {
               </div>
             )}
 
-            {/* Global Filter Bar for Analytical Tabs */}
-            {[
-              "dashboard",
-              "inventory",
-              "reports",
-              "revenue-mgmt",
-              "history",
-            ].includes(activeTab) && (
-              <div className="bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex bg-slate-100/50 p-1 rounded-xl sm:rounded-2xl border border-slate-100 w-full md:w-auto overflow-x-auto no-scrollbar">
-                  {(
-                    [
-                      { id: "all", label: "Tất cả" },
-                      { id: "day", label: "Ngày thực tế" },
-                      { id: "week", label: "Tuần thực tế" },
-                      { id: "month", label: "Tháng thực tế" },
-                      { id: "year", label: "Năm thực tế" },
-                    ] as const
-                  ).map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => setTimeFilter(f.id)}
-                      className={cn(
-                        "flex-1 md:flex-none px-3 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                        timeFilter === f.id
-                          ? "bg-white text-primary shadow-sm ring-1 ring-slate-200"
-                          : "text-slate-400 hover:text-slate-600",
-                      )}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
+            {/*
+              THANH LỌC KỲ ĐÃ BỎ (27/08/2026).
+
+              Chỗ này từng là dải "Tất cả / Ngày / Tuần / Tháng / Năm" cộng ô
+              chọn mốc ngày, hiện trên năm màn hình. Bỏ vì mỗi màn hình đã có bộ
+              lọc riêng đúng với việc của nó, hai tầng lọc chồng nhau thì con số
+              phụ thuộc một ô người dùng đã quên là mình đặt.
+
+              Chỉ còn nút nạp Excel tồn kho — nó vốn nằm nhờ trong thanh này chứ
+              không thuộc về bộ lọc, nên giữ lại và cho đứng riêng.
+            */}
+            {isAuthorizedFull &&
+              quyen.napFile &&
+              activeTab === "dashboard" && (
+                <div className="flex justify-end">
+                  <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
+                    <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleImportInventoryExcel}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
-
-                {timeFilter !== "all" && (
-                  <div className="flex items-center gap-4 bg-slate-50/50 px-6 py-2 rounded-2xl border border-slate-100">
-                    <button
-                      onClick={() => moveFilterDate("prev")}
-                      className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-primary transition-all"
-                    >
-                      <ChevronRight className="w-5 h-5 rotate-180" />
-                    </button>
-
-                    <div className="flex flex-col items-center min-w-[140px] relative group px-2">
-                      <button
-                        onClick={() => {
-                          if (dateInputRef.current) {
-                            dateInputRef.current.click();
-                            dateInputRef.current.focus();
-                          }
-                        }}
-                        className="flex flex-col items-center hover:scale-105 transition-transform"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3 h-3 text-primary opacity-60" />
-                          <span className="text-xs font-black text-slate-900 uppercase tracking-widest">
-                            {periodLabel}
-                          </span>
-                        </div>
-                      </button>
-                      <input
-                        ref={dateInputRef}
-                        type="date"
-                        className="absolute inset-0 opacity-0 pointer-events-none"
-                        value={format(filterBaseDate, "yyyy-MM-dd")}
-                        onChange={(e) => {
-                          if (e.target.value)
-                            setFilterBaseDate(parseISO(e.target.value));
-                        }}
-                      />
-                      <button
-                        onClick={() => setFilterBaseDate(new Date())}
-                        className="text-[9px] font-bold text-primary hover:underline mt-0.5"
-                      >
-                        Về hôm nay
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => moveFilterDate("next")}
-                      className="p-1.5 rounded-lg hover:bg-white hover:shadow-sm text-slate-400 hover:text-primary transition-all"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  {isAuthorizedFull && activeTab === "dashboard" && (
-                    <div className="flex gap-2">
-                      <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
-                        <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          onChange={handleImportInventoryExcel}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  )}
-
-                  <div className="text-right hidden sm:block">
-                    <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">
-                      Phạm vi dữ liệu
-                    </p>
-                    <p className="text-[11px] font-black text-slate-900 mt-1 uppercase">
-                      Đã tối ưu hóa
-                    </p>
-                  </div>
-                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 border border-emerald-100">
-                    <Filter className="w-4 h-4" />
-                  </div>
-                </div>
-              </div>
-            )}
+              )}
 
             {activeTab === "dashboard" && (
               <>
