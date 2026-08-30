@@ -204,6 +204,7 @@ import {
 } from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
+import { dungBangTonKy, moTaKy } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
@@ -4863,6 +4864,107 @@ export default function App() {
     };
   }, [transactions, approvedSlips, products]);
 
+  /* ---------------- Ton kho theo ky ---------------- */
+
+  /**
+   * Khoảng ngày của màn hình tồn kho, mặc định từ đầu tháng tới hôm nay.
+   *
+   * Riêng của màn hình này, KHÔNG dùng chung `dateRange` với bảng điều khiển:
+   * hai chỗ trả lời hai câu khác nhau, dùng chung thì đổi ở đây là đổi luôn số
+   * trên bảng điều khiển mà không ai ngờ.
+   */
+  const [tonTuNgay, setTonTuNgay] = useState(() =>
+    format(new Date(new Date().setDate(1)), "yyyy-MM-dd"),
+  );
+  const [tonDenNgay, setTonDenNgay] = useState(() =>
+    format(new Date(), "yyyy-MM-dd"),
+  );
+  const [tonTuKhoa, setTonTuKhoa] = useState("");
+
+  const bangTonKy = useMemo(
+    () =>
+      dungBangTonKy({
+        giaoDichTinhTon: countedTransactions,
+        giaoDichChoKy: pendingSlipTransactions(transactions, approvedSlips),
+        products,
+        tuNgay: tonTuNgay,
+        denNgay: tonDenNgay,
+        tuKhoa: tonTuKhoa,
+        dinhMucChung: DEFAULT_MIN_STOCK,
+      }),
+    [
+      countedTransactions,
+      transactions,
+      approvedSlips,
+      products,
+      tonTuNgay,
+      tonDenNgay,
+      tonTuKhoa,
+    ],
+  );
+
+  /** Tải bảng nhập · xuất · tồn đang xem ra Excel. */
+  const taiTonKhoExcel = () => {
+    if (!bangTonKy.dong.length) return;
+    const wb = XLSXDep.utils.book_new();
+    const lam1 = (n: number) => Math.round(n * 10) / 10;
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: [
+          "NHẬP · XUẤT · TỒN",
+          `${moTaKy(tonTuNgay, tonDenNgay)}${tonTuKhoa ? ` · lọc "${tonTuKhoa}"` : ""}`,
+        ],
+        tieuDe: [
+          "STT",
+          "Mặt hàng",
+          "ĐVT",
+          "Đầu kỳ",
+          "Nhập",
+          "Xuất bán",
+          "Hao hụt",
+          "Cuối kỳ",
+          "Chờ ký",
+        ],
+        cot: [
+          { rong: 6, kieu: "giua" },
+          { rong: 40 },
+          { rong: 8, kieu: "giua" },
+          { rong: 13, kieu: "so" },
+          { rong: 13, kieu: "so" },
+          { rong: 13, kieu: "so" },
+          { rong: 12, kieu: "so" },
+          { rong: 13, kieu: "so" },
+          { rong: 12, kieu: "so" },
+        ],
+        hang: bangTonKy.dong.map((d, i) => [
+          i + 1,
+          d.tenHang,
+          d.unit,
+          lam1(d.dauKy),
+          lam1(d.nhap),
+          lam1(d.xuatBan),
+          lam1(d.haoHut),
+          lam1(d.cuoiKy),
+          lam1(d.choKy),
+        ]),
+        dongTong: [
+          "",
+          "TỔNG CỘNG",
+          "",
+          lam1(bangTonKy.tong.dauKy),
+          lam1(bangTonKy.tong.nhap),
+          lam1(bangTonKy.tong.xuatBan),
+          lam1(bangTonKy.tong.haoHut),
+          lam1(bangTonKy.tong.cuoiKy),
+          lam1(bangTonKy.tong.choKy),
+        ],
+      }),
+      "Nhap xuat ton",
+    );
+    XLSXDep.writeFile(wb, `Nhap xuat ton ${tonTuNgay} den ${tonDenNgay}.xlsx`);
+  };
+
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
 
@@ -6872,18 +6974,229 @@ export default function App() {
 
             {activeTab === "inventory" && (
               <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="relative max-w-md w-full group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors hover:text-primary" />
+                {/*
+                  KHOẢNG NGÀY + TRA CỨU.
+
+                  Ô tra cứu trước đây không nối vào gì cả — không có `value`,
+                  không có `onChange` — nên gõ vào không lọc được gì. Nút xuất
+                  Excel cũng không có `onClick`. Nay cả ba đều chạy thật.
+                */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="relative group lg:col-span-2">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                     <input
-                      placeholder="Tìm kiếm sản phẩm trong kho..."
+                      value={tonTuKhoa}
+                      onChange={(e) => setTonTuKhoa(e.target.value)}
+                      placeholder="Tìm mặt hàng hoặc mã vật tư..."
                       className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none text-sm transition-all premium-shadow"
                     />
                   </div>
-                  <Button variant="outline" className="bg-white">
+                  <label className="block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      Từ ngày
+                    </span>
+                    <input
+                      type="date"
+                      value={tonTuNgay}
+                      max={tonDenNgay || undefined}
+                      onChange={(e) => setTonTuNgay(e.target.value)}
+                      className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      Đến ngày
+                    </span>
+                    <input
+                      type="date"
+                      value={tonDenNgay}
+                      min={tonTuNgay || undefined}
+                      onChange={(e) => setTonDenNgay(e.target.value)}
+                      className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {/* Bỏ chặn ngày để xem tồn tới hiện tại, không phải chỉnh
+                        tay hai ô về rỗng. */}
+                    <button
+                      onClick={() => {
+                        setTonTuNgay("");
+                        setTonDenNgay("");
+                      }}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
+                    >
+                      Toàn bộ thời gian
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTonTuNgay(
+                          format(new Date(new Date().setDate(1)), "yyyy-MM-dd"),
+                        );
+                        setTonDenNgay(format(new Date(), "yyyy-MM-dd"));
+                      }}
+                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
+                    >
+                      Tháng này
+                    </button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="bg-white"
+                    onClick={taiTonKhoExcel}
+                    disabled={bangTonKy.dong.length === 0}
+                  >
                     <Download className="w-4 h-4" /> Xuất báo cáo Excel
                   </Button>
                 </div>
+
+                {/*
+                  BỐN CON SỐ CỦA KỲ. Tồn là một MỐC chứ không phải một khoảng:
+                  chọn khoảng ngày nghĩa là đầu kỳ — nhập — xuất — cuối kỳ, chứ
+                  không có con số nào tên là "tồn trong khoảng".
+                */}
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                  {[
+                    { nhan: "Đầu kỳ", giaTri: bangTonKy.tong.dauKy, mau: "text-slate-900" },
+                    { nhan: "Nhập trong kỳ", giaTri: bangTonKy.tong.nhap, mau: "text-emerald-600" },
+                    { nhan: "Xuất bán", giaTri: bangTonKy.tong.xuatBan, mau: "text-rose-600" },
+                    { nhan: "Hao hụt", giaTri: bangTonKy.tong.haoHut, mau: "text-amber-600" },
+                    { nhan: "Cuối kỳ", giaTri: bangTonKy.tong.cuoiKy, mau: "text-slate-900" },
+                  ].map((o) => (
+                    <div
+                      key={o.nhan}
+                      className="p-3 rounded-xl bg-white border border-slate-200"
+                    >
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        {o.nhan}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-sm font-black mt-0.5 tabular-nums",
+                          o.mau,
+                        )}
+                      >
+                        {formatNumber(Math.round(o.giaTri * 10) / 10)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <Card
+                  title={`Nhập · Xuất · Tồn — ${moTaKy(tonTuNgay, tonDenNgay)}`}
+                  noPadding
+                >
+                  {bangTonKy.dong.length === 0 ? (
+                    <p className="py-10 text-center text-xs font-bold text-slate-400">
+                      Không có mặt hàng nào khớp.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left whitespace-nowrap">
+                        <thead>
+                          <tr className="bg-slate-50/50">
+                            {[
+                              "Mặt hàng",
+                              "ĐVT",
+                              "Đầu kỳ",
+                              "Nhập",
+                              "Xuất bán",
+                              "Hao hụt",
+                              "Cuối kỳ",
+                              "Chờ ký",
+                            ].map((h, i) => (
+                              <th
+                                key={h}
+                                className={cn(
+                                  "font-bold text-[9px] sm:text-[10px] uppercase tracking-widest py-3 px-3 sm:px-4",
+                                  h === "Chờ ký"
+                                    ? "text-amber-600"
+                                    : "text-slate-400",
+                                  i >= 2 && "text-right",
+                                )}
+                                title={
+                                  h === "Chờ ký"
+                                    ? "Đã điền trong kỳ nhưng chưa có ảnh phiếu ký. CHƯA nằm trong bốn cột bên trái."
+                                    : undefined
+                                }
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {bangTonKy.dong.map((d) => {
+                            const duoiDinhMuc =
+                              d.minStock > 0 && d.cuoiKy < d.minStock;
+                            return (
+                              <tr
+                                key={d.productId}
+                                onClick={() =>
+                                  setSelectedInventoryProduct(d.productId)
+                                }
+                                className="hover:bg-slate-50 transition-colors cursor-pointer text-[11px] sm:text-xs font-bold text-slate-600"
+                              >
+                                <td className="py-2.5 px-3 sm:px-4">
+                                  <p className="font-bold text-slate-900 leading-tight">
+                                    {d.tenHang}
+                                  </p>
+                                  {duoiDinhMuc && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">
+                                      Dưới định mức {formatNumber(d.minStock)}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-slate-400">
+                                  {d.unit}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums">
+                                  {formatNumber(Math.round(d.dauKy * 10) / 10)}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-emerald-600">
+                                  {d.nhap > 0
+                                    ? formatNumber(Math.round(d.nhap * 10) / 10)
+                                    : "—"}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-rose-600">
+                                  {d.xuatBan > 0
+                                    ? formatNumber(
+                                        Math.round(d.xuatBan * 10) / 10,
+                                      )
+                                    : "—"}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-amber-600">
+                                  {d.haoHut > 0
+                                    ? formatNumber(
+                                        Math.round(d.haoHut * 10) / 10,
+                                      )
+                                    : "—"}
+                                </td>
+                                <td
+                                  className={cn(
+                                    "py-2.5 px-3 sm:px-4 text-right tabular-nums text-sm font-black",
+                                    duoiDinhMuc
+                                      ? "text-rose-600"
+                                      : "text-slate-900",
+                                  )}
+                                >
+                                  {formatNumber(Math.round(d.cuoiKy * 10) / 10)}
+                                </td>
+                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-amber-600">
+                                  {d.choKy > 0
+                                    ? `+${formatNumber(Math.round(d.choKy * 10) / 10)}`
+                                    : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
 
                 <Card title="Trạng thái tồn kho chi tiết" noPadding>
                   <div className="overflow-x-auto">
