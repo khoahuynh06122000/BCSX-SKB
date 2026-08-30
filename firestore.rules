@@ -88,7 +88,54 @@ service cloud.firestore {
     function isApproved() {
       return isOwner() ||
         (isSignedIn() &&
+          (role() == 'KE_TOAN' || role() == 'STAFF' || role() == 'VIEWER' ||
+           role() == 'NHAP_KHO' || role() == 'XUAT_KHO'));
+    }
+
+    // -------------------------------------------------------------------------
+    // HAI VAI TRO MOT CHIEU (27/08/2026)
+    //
+    // NHAP_KHO chi ghi duoc chieu nhap, XUAT_KHO chi ghi duoc chieu xuat. Ca hai
+    // VAN XEM DUOC HET: ton kho, bao cao, lich su deu tron ca hai chieu nen chan
+    // xem thi nguoi nhap kho khong tra noi mot lo hang.
+    //
+    // Ba vai tro cu (VIEWER, STAFF, KE_TOAN) GIU NGUYEN quyen ghi ca hai chieu.
+    // Ha quyen mot tai khoan dang chay viec thi hom sau co nguoi khong lam duoc
+    // viec ma khong hieu vi sao; muon siet ai thi doi vai tro nguoi do.
+    //
+    // Phai khop dung voi src/lib/quyen.ts - do la bang giao dien dung de an hien
+    // nut. Lech ben nao cung sinh loi.
+    // -------------------------------------------------------------------------
+
+    // Ghi duoc CA HAI CHIEU: chu so huu, ke toan, va hai vai tro cu.
+    function isToanQuyenKho() {
+      return isOwner() ||
+        (isSignedIn() &&
           (role() == 'KE_TOAN' || role() == 'STAFF' || role() == 'VIEWER'));
+    }
+
+    // Ghi duoc chieu NHAP: nhap kho, ton dau ky, phieu nhap va anh phieu da ky.
+    function ghiNhapKho() {
+      return isToanQuyenKho() || (isSignedIn() && role() == 'NHAP_KHO');
+    }
+
+    // Ghi duoc chieu XUAT: xuat kho, hao hut, doi tac va diem ban.
+    function ghiXuatKho() {
+      return isToanQuyenKho() || (isSignedIn() && role() == 'XUAT_KHO');
+    }
+
+    // Giao dich nhap va xuat nam CHUNG mot bang, phan biet bang truong `type`.
+    // Nen khong chan duoc theo bang, phai xet noi dung tung ban ghi.
+    //
+    // Ton dau ky tinh la NHAP vi no cung lam tang ton. Hao hut tinh la XUAT theo
+    // yeu cau cua bo phan: keg giao thuc te 20,6 lit ma bien ban ghi tron 20,
+    // phan le ay phat sinh dung luc giao hang.
+    function laChieuNhap(t) {
+      return t == 'IN' || t == 'OPENING';
+    }
+
+    function laChieuXuat(t) {
+      return t == 'OUT' || t == 'LOSS';
     }
 
     // KE TOAN - lam duoc moi viec nghiep vu, ke ca THAO TAC DOANH THU.
@@ -101,13 +148,8 @@ service cloud.firestore {
       return isOwner() || (isSignedIn() && role() == 'KE_TOAN');
     }
 
-    // Hai ten cu van duoc dung o cac luat ben duoi. Giu lai de doc luat khong
-    // phai nho mot bang doi ten trong dau, va de sau nay muon siet lai thi chi
-    // sua dinh nghia o day.
-    function isStaff() {
-      return isApproved();
-    }
-
+    // Doc du lieu: ai da duoc duyet cung xem duoc, ke ca hai vai tro mot chieu.
+    // Giu ten cu de doc luat ben duoi khong phai nho mot bang doi ten trong dau.
     function isViewer() {
       return isApproved();
     }
@@ -167,11 +209,32 @@ service cloud.firestore {
 
     match /transactions/{transactionId} {
       allow read: if isViewer();
-      allow create, update: if isStaff();
+
+      // Ghi theo CHIEU cua chinh ban ghi do.
+      allow create: if isToanQuyenKho()
+        || (ghiNhapKho() && laChieuNhap(request.resource.data.get('type', '')))
+        || (ghiXuatKho() && laChieuXuat(request.resource.data.get('type', '')));
+
+      // Sua thi xet CA HAI: loai cu va loai moi. Chi xet loai moi thi nguoi
+      // nhap kho doi mot phieu xuat thanh phieu nhap la sua duoc no; chi xet
+      // loai cu thi doi phieu nhap thanh phieu xuat.
+      allow update: if isToanQuyenKho()
+        || (
+          ghiNhapKho()
+          && laChieuNhap(resource.data.get('type', ''))
+          && laChieuNhap(request.resource.data.get('type', ''))
+        )
+        || (
+          ghiXuatKho()
+          && laChieuXuat(resource.data.get('type', ''))
+          && laChieuXuat(request.resource.data.get('type', ''))
+        );
+
       // Xoa la viec khong lay lai duoc nen van siet: nguoi thuong chi xoa duoc
-      // phieu dang tren duong van chuyen, thu chua vao so ton kho.
+      // phieu dang tren duong van chuyen, thu chua vao so ton kho. Don di duong
+      // la viec cua chieu xuat.
       allow delete: if isOwner() ||
-        (isApproved() && resource.data.get('status', '') == 'in_transit');
+        (ghiXuatKho() && resource.data.get('status', '') == 'in_transit');
     }
 
     // Doanh thu: MOI NGUOI XEM, CHI KE TOAN THAO TAC.
@@ -210,7 +273,8 @@ service cloud.firestore {
      */
     match /diem_ban/{key} {
       allow read: if isViewer();
-      allow create, update: if isStaff();
+      // Gan diem ban -> doi tac la viec cua nguoi xuat kho.
+      allow create, update: if ghiXuatKho();
       allow delete: if false;
     }
 
@@ -229,7 +293,8 @@ service cloud.firestore {
 
     match /partners/{partnerId} {
       allow read: if isViewer();
-      allow create, update: if isStaff();
+      // Them va sua don vi nhan hang la viec cua nguoi xuat kho.
+      allow create, update: if ghiXuatKho();
       allow delete: if isOwner();
     }
 
@@ -247,10 +312,10 @@ service cloud.firestore {
     // khi sua khong duoc it hon truoc khi sua, tru khi la chu so huu.
     match /slips/{slipId} {
       allow read: if isViewer();
-      allow create: if isStaff();
+      allow create: if ghiNhapKho();
       allow update: if isOwner()
         || (
-          isStaff()
+          ghiNhapKho()
           && request.resource.data.get('signedPhotoUrls', []).size()
                >= resource.data.get('signedPhotoUrls', []).size()
         );

@@ -203,6 +203,7 @@ import {
   type MaNhomBNC,
 } from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
+import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
@@ -5332,8 +5333,17 @@ export default function App() {
    */
   const daDuocDuyet = useMemo(() => userRole !== "PENDING", [userRole]);
 
+  /**
+   * Vai trò này làm được những gì — một nơi duy nhất, ở `src/lib/quyen.ts`.
+   *
+   * Trước đây `canWrite` chỉ là "đã được duyệt", vì mọi vai trò đều ghi được cả
+   * hai chiều. Nay có hai vai trò một chiều nên phải hỏi riêng từng chiều.
+   */
+  const quyen = useMemo(() => quyenCua(userRole), [userRole]);
+
   const isAuthorizedFull = daDuocDuyet;
-  const canWrite = daDuocDuyet;
+  /** Ghi được ít nhất một chiều — dùng để bày nhóm menu Nhập · Xuất. */
+  const canWrite = quyen.ghiNhap || quyen.ghiXuat;
 
   /**
    * Ai được THAO TÁC doanh thu.
@@ -5393,34 +5403,42 @@ export default function App() {
          * firestore.rules đã cảnh báo, chỉ khác chiều: lần này giao diện hứa
          * rộng hơn luật cho phép.
          */
-        items: canWrite
-          ? [
-              {
-                id: "import",
-                label: "Nhập kho",
-                icon: PlusCircle,
-                color: "#10b981",
-              },
-              {
-                id: "slips",
-                label: "Phiếu nhập",
-                icon: FileText,
-                color: "#0ea5e9",
-              },
-              {
-                id: "export",
-                label: "Xuất kho",
-                icon: MinusCircle,
-                color: "#f97316",
-              },
-              {
-                id: "in-transit",
-                label: "Đơn đi đường",
-                icon: Truck,
-                color: "#fbbf24",
-              },
-            ]
-          : [],
+        items: [
+          // Mỗi mục theo đúng chiều của nó: người nhập kho không thấy màn hình
+          // xuất kho và ngược lại. Đơn đi đường là việc của chiều xuất.
+          ...(quyen.ghiNhap
+            ? [
+                {
+                  id: "import",
+                  label: "Nhập kho",
+                  icon: PlusCircle,
+                  color: "#10b981",
+                },
+                {
+                  id: "slips",
+                  label: "Phiếu nhập",
+                  icon: FileText,
+                  color: "#0ea5e9",
+                },
+              ]
+            : []),
+          ...(quyen.ghiXuat
+            ? [
+                {
+                  id: "export",
+                  label: "Xuất kho",
+                  icon: MinusCircle,
+                  color: "#f97316",
+                },
+                {
+                  id: "in-transit",
+                  label: "Đơn đi đường",
+                  icon: Truck,
+                  color: "#fbbf24",
+                },
+              ]
+            : []),
+        ],
       },
       {
         id: "reports",
@@ -9436,21 +9454,26 @@ export default function App() {
             {/* Ẩn menu thôi chưa đủ: tab có thể đang mở sẵn từ trước khi vai
                 trò bị hạ. Chặn cả ở đây để không bao giờ hiện ra một biểu mẫu
                 mà bấm lưu chắc chắn hỏng. */}
-            {(activeTab === "import" || activeTab === "export") && !canWrite && (
+            {((activeTab === "import" && !quyen.ghiNhap) ||
+              (activeTab === "export" && !quyen.ghiXuat)) && (
               <div className="max-w-lg mx-auto text-center py-20 space-y-3">
                 <ShieldCheck className="w-10 h-10 text-slate-300 mx-auto" />
                 <p className="text-sm font-black text-slate-900">
-                  Tài khoản này chỉ được xem
+                  {activeTab === "import"
+                    ? "Tài khoản này không ghi được chiều nhập"
+                    : "Tài khoản này không ghi được chiều xuất"}
                 </p>
                 <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
-                  Nhập kho và xuất kho cần vai trò STAFF hoặc OWNER. Nhờ chủ sở
-                  hữu vào mục Người dùng cấp quyền, rồi đăng xuất và đăng nhập
-                  lại.
+                  Vai trò hiện tại là <strong>{tenVaiTro(userRole)}</strong> —
+                  vẫn xem được mọi số liệu, chỉ không ghi được ở chiều này. Cần
+                  ghi thì nhờ chủ sở hữu đổi vai trò trong mục Người dùng, rồi
+                  đăng xuất và đăng nhập lại.
                 </p>
               </div>
             )}
 
-            {(activeTab === "import" || activeTab === "export") && canWrite && (
+            {((activeTab === "import" && quyen.ghiNhap) ||
+              (activeTab === "export" && quyen.ghiXuat)) && (
               <div className="max-w-4xl mx-auto space-y-6">
                 <div className="text-center space-y-2 mb-8">
                   <div
@@ -9487,7 +9510,12 @@ export default function App() {
                   một bước chép tay ở giữa, và chép tay là chỗ sinh sai số.
                   Nay đọc thẳng sheet "T Kho" trong tệp gốc.
                 */}
-                {activeTab === "export" && canWrite && (
+                {/*
+                  Nạp tệp hàng loạt CHỈ kế toán và chủ sở hữu: đổ hàng loạt vào
+                  sổ, sai một lần là hỏng nhiều dòng cùng lúc và phải dò ngược
+                  từng dòng để gỡ.
+                */}
+                {activeTab === "export" && quyen.napFile && (
                   <Card title="Nạp xuất kho từ file BBGN">
                     <TkhoImport
                       products={products}
@@ -10587,11 +10615,17 @@ export default function App() {
                                             con hon de ho ngoi do khong hieu vi
                                             sao.
                                           */
+                                          const nhan = DANH_SACH_VAI_TRO.find(
+                                            (v) => v.ma === newRole,
+                                          );
                                           if (
-                                            (newRole === "OWNER" ||
-                                              newRole === "KE_TOAN") &&
+                                            newRole !== "PENDING" &&
                                             !window.confirm(
-                                              `Cấp quyền ${newRole === "OWNER" ? "toàn quyền" : "kế toán"} cho ${profile.email}?\n\n${newRole === "OWNER" ? "Họ làm được mọi thứ như chủ sở hữu, kể cả duyệt người dùng và xóa dữ liệu." : "Họ làm được mọi việc nghiệp vụ, kể cả thao tác doanh thu và tạo lệnh xuất hóa đơn lên SAP. Không duyệt được người dùng."}\n\nQUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa dán lại firestore.rules trong Firebase Console thì người này sẽ MẤT HẾT quyền thay vì được thêm.`,
+                                              `Đổi vai trò của ${profile.email} thành "${nhan?.ten ?? newRole}"?
+
+${nhan?.moTa ?? ""}
+
+QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa dán lại firestore.rules trong Firebase Console thì người này sẽ MẤT HẾT quyền thay vì được thêm.`,
                                             )
                                           ) {
                                             e.target.value = profile.role;
@@ -10625,21 +10659,21 @@ export default function App() {
                                         }}
                                         className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black outline-none focus:border-primary"
                                       >
-                                        <option value="PENDING">
-                                          Chờ duyệt
-                                        </option>
-                                        <option value="VIEWER">
-                                          VIEWER — Chỉ xem
-                                        </option>
-                                        <option value="STAFF">
-                                          STAFF — Nhập/xuất kho
-                                        </option>
-                                        <option value="KE_TOAN">
-                                          KẾ TOÁN — Làm được mọi việc
-                                        </option>
-                                        <option value="OWNER">
-                                          OWNER — Toàn quyền, như chủ sở hữu
-                                        </option>
+                                        {/*
+                                          Danh sách và câu mô tả lấy từ
+                                          src/lib/quyen.ts — cùng một nơi giao
+                                          diện dùng để ẩn hiện nút, nên nhãn
+                                          không thể nói khác quyền thật.
+                                        */}
+                                        {DANH_SACH_VAI_TRO.map((v) => (
+                                          <option
+                                            key={v.ma}
+                                            value={v.ma}
+                                            title={v.moTa}
+                                          >
+                                            {v.ten}
+                                          </option>
+                                        ))}
                                       </select>
 
                                       {profile.pinHash && (

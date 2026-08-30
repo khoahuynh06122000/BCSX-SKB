@@ -21,7 +21,21 @@ export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
  * ra thì người vừa được duyệt lại đi duyệt người khác, cánh cửa duy nhất còn
  * lại tự nó mở toang.
  */
-export type UserRole = 'OWNER' | 'KE_TOAN' | 'STAFF' | 'VIEWER' | 'PENDING';
+/**
+ * Vai trò của tài khoản.
+ *
+ * `NHAP_KHO` và `XUAT_KHO` là hai vai trò MỘT CHIỀU thêm ngày 27/08/2026: xem
+ * được hết nhưng chỉ ghi được đúng chiều của mình. `STAFF` và `VIEWER` là hai
+ * vai trò cũ, vẫn ghi được cả hai chiều — xem `src/lib/quyen.ts`.
+ */
+export type UserRole =
+  | 'OWNER'
+  | 'KE_TOAN'
+  | 'NHAP_KHO'
+  | 'XUAT_KHO'
+  | 'STAFF'
+  | 'VIEWER'
+  | 'PENDING';
 
 /**
  * Hồ sơ người dùng, lưu ở collection `users`, khoá là Firebase Auth UID.
