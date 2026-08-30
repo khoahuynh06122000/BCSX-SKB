@@ -5739,11 +5739,16 @@ export default function App() {
             {needsSetup ? "Đặt mã PIN" : "Mở khoá"}
           </Button>
 
+          {/*
+            Noi ro la doi duoc tai khoan: nguoi ngoi vao may dung chung nhin
+            thay man hinh PIN cua nguoi truoc thi tuong bi ket, khong biet nut
+            nay dan ra man hinh dang nhap.
+          */}
           <button
             onClick={handleLogout}
             className="w-full text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors py-2"
           >
-            Đăng xuất
+            Đăng xuất · đổi tài khoản khác
           </button>
 
           {!needsSetup && (

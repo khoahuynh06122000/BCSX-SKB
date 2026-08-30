@@ -57,7 +57,26 @@ export const db = initializeFirestore(app, {
 export const firebaseProjectId = firebaseConfig.projectId as string;
 
 export const auth = getAuth(app);
+
+/**
+ * Đăng nhập Google — LUÔN HỎI CHỌN TÀI KHOẢN.
+ *
+ * Mặc định, khi trình duyệt chỉ đang đăng nhập một tài khoản Google thì
+ * `signInWithPopup` KHÔNG hỏi gì cả: cửa sổ bật lên rồi tự đóng, đăng nhập
+ * thẳng vào đúng tài khoản đó. Người dùng bấm Đăng xuất rồi bấm Đăng nhập lại
+ * vẫn quay về tài khoản cũ, không có cách nào đổi sang tài khoản khác —
+ * đúng chuyện đã gặp.
+ *
+ * Chú ý: `signOut` của app chỉ kết thúc phiên CỦA APP. Phiên Google trong
+ * trình duyệt là của Google, app không đụng tới được — nên phải hỏi ở chỗ này
+ * chứ không sửa được ở chỗ đăng xuất.
+ *
+ * `prompt: "select_account"` bắt Google bày màn hình chọn tài khoản mỗi lần,
+ * kể cả khi chỉ có một tài khoản. Mất thêm một cú bấm, đổi lấy việc máy dùng
+ * chung luôn đổi được người.
+ */
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export {
   collection,
