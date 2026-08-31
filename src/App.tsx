@@ -134,6 +134,8 @@ import {
   db,
   auth,
   googleProvider,
+  firebaseProjectId,
+  firestoreDatabaseId,
   signInWithPopup,
   signOut,
   onAuthStateChanged,
@@ -2775,26 +2777,43 @@ export default function App() {
        *
        * Người dùng chụp màn hình gửi lên là biết ngay phải làm gì.
        */
-      const nhanVaiTro: Record<string, string> = {
-        OWNER: "OWNER (toàn quyền)",
-        KE_TOAN: "KẾ TOÁN (làm được mọi việc)",
-        STAFF: "STAFF (nhập/xuất kho)",
-        VIEWER: "VIEWER (chỉ xem)",
-        PENDING: "PENDING (chờ duyệt)",
-      };
-      const duocGhi = userRole !== "PENDING";
+      /*
+        Tên vai trò và quyền lấy từ `src/lib/quyen.ts`, không viết lại ở đây.
+        Bảng cũ viết cứng năm vai trò nên vai trò mới hiện ra dưới dạng mã thô
+        ("NHAP_KHO"), và câu "lẽ ra ghi được" thì suy từ `role !== PENDING` nên
+        nói sai với DNC — vai trò vốn KHÔNG được ghi gì.
+      */
+      const q = quyenCua(userRole);
+      const daDuyet = q.xemKho || q.xemXuat;
+      const laViecGhi = viec.includes("ghi") || viec.includes("lưu");
+
+      /*
+        NÓI LUÔN PROJECT VÀ CƠ SỞ DỮ LIỆU. Firebase cho nhiều cơ sở dữ liệu
+        trong một project và MỖI CÁI CÓ BỘ RULES RIÊNG — publish nhầm cái khác
+        thì bao nhiêu lần cũng không có tác dụng, mà màn hình vẫn báo y hệt.
+        Dự án này KHÔNG dùng `(default)`.
+      */
+      const cho =
+        `Project: ${firebaseProjectId}\n` +
+        `Cơ sở dữ liệu: ${firestoreDatabaseId}`;
+
       return (
         `Tài khoản ${auth.currentUser?.email || "này"} chưa đủ quyền ${viec}` +
         `${path ? ` mục "${path}"` : ""}.\n\n` +
-        `Vai trò hiện tại: ${nhanVaiTro[userRole] || userRole}\n\n` +
-        (duocGhi
-          ? "Vai trò này lẽ ra ghi được, nên vướng ở phân quyền của máy chủ.\n\n" +
-            "Chủ sở hữu vào Firebase Console → Firestore Database → tab Rules, " +
-            "dán lại nội dung tệp firestore.rules mới nhất rồi bấm Publish. " +
-            "Xong thì đăng xuất rồi đăng nhập lại."
-          : "Vai trò này không được ghi dữ liệu.\n\n" +
-            "Chủ sở hữu vào mục Người dùng duyệt tài khoản này (chọn KẾ TOÁN " +
-            "nếu cần làm mọi việc). Đổi xong thì đăng xuất rồi đăng nhập lại.")
+        `Vai trò hiện tại: ${tenVaiTro(userRole)}\n\n` +
+        (!daDuyet
+          ? "Vai trò này chưa được duyệt nên không đọc và không ghi được gì.\n\n" +
+            "Chủ sở hữu vào mục Người dùng chọn vai trò cho tài khoản này. " +
+            "Đổi xong thì đăng xuất rồi đăng nhập lại."
+          : laViecGhi && !q.ghiNhap && !q.ghiXuat
+            ? "Vai trò này CHỈ XEM, không ghi được dữ liệu. Nếu cần ghi thì " +
+              "nhờ chủ sở hữu đổi vai trò trong mục Người dùng."
+            : "Vai trò này lẽ ra làm được việc này, nên vướng ở phân quyền của " +
+              "máy chủ — luật trên Firebase còn là bản cũ, chưa biết vai trò " +
+              `mới.\n\nChủ sở hữu vào Firebase Console → Firestore Database → ` +
+              "tab Rules, dán lại nội dung tệp firestore.rules mới nhất rồi bấm " +
+              `Publish.\n\nPHẢI ĐÚNG CƠ SỞ DỮ LIỆU NÀY:\n${cho}\n\n` +
+              "Xong thì đăng xuất rồi đăng nhập lại.")
       );
     }
 
