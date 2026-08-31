@@ -8910,7 +8910,7 @@ export default function App() {
                     {daDuocDuyet && selectedInTransitIds.length > 0 && (
                         <button
                           onClick={handleBulkConfirm}
-                          className="px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                          className="hidden md:flex px-6 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all items-center gap-3"
                         >
                           <ShieldCheck className="w-4 h-4" />
                           Xác nhận {selectedInTransitIds.length} đơn đã chọn
@@ -8919,7 +8919,184 @@ export default function App() {
                   </div>
                 </div>
 
-                <Card noPadding className="premium-shadow overflow-hidden">
+                {/*
+                  TRÊN ĐIỆN THOẠI: mỗi đơn một THẺ, không phải một hàng bảng.
+
+                  Bảng có 7 cột nên trên máy 375px chỉ hiện được ba cột rưỡi;
+                  muốn thấy số lượng gửi và nút xác nhận phải lướt ngang, xem
+                  xong lại lướt ngược về mới tích được ô chọn. Vy phản ánh
+                  đúng chỗ này. Thẻ xếp dọc thì mọi thông tin của một đơn nằm
+                  gọn trong một khung, không còn lướt ngang lần nào.
+
+                  Bảng vẫn giữ nguyên cho màn hình lớn (md trở lên) — ở đó bảy
+                  cột vừa đủ, và nhìn nhiều đơn một lúc lại nhanh hơn thẻ.
+                */}
+                <div className="md:hidden space-y-3">
+                  {inTransitGroups.length > 0 ? (
+                    <>
+                      {daDuocDuyet && (
+                        <label className="flex items-center gap-3 px-4 py-3 bg-white rounded-2xl border border-slate-100 premium-shadow">
+                          <input
+                            type="checkbox"
+                            className="w-5 h-5 text-primary rounded border-slate-300 focus:ring-primary/20"
+                            checked={
+                              selectedInTransitIds.length ===
+                                inTransitGroups.length &&
+                              inTransitGroups.length > 0
+                            }
+                            onChange={(e) => {
+                              setSelectedInTransitIds(
+                                e.target.checked
+                                  ? inTransitGroups.map((g) => g.id)
+                                  : [],
+                              );
+                            }}
+                          />
+                          <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                            Chọn tất cả ({inTransitGroups.length} đơn)
+                          </span>
+                        </label>
+                      )}
+
+                      {inTransitGroups.map(({ id, group, sheetNumber }) => {
+                        const firstTrx = group[0];
+                        const totalQty = group.reduce(
+                          (sum, t) => sum + t.quantity,
+                          0,
+                        );
+                        const combinedNotes = Array.from(
+                          new Set(group.map((t) => t.notes).filter(Boolean)),
+                        ).join(", ");
+                        const dangChon = selectedInTransitIds.includes(id);
+
+                        return (
+                          <div
+                            key={id}
+                            className={cn(
+                              "bg-white rounded-2xl border premium-shadow overflow-hidden transition-all",
+                              dangChon
+                                ? "border-primary/40 ring-2 ring-primary/15"
+                                : "border-slate-100",
+                            )}
+                          >
+                            {/* Bấm chỗ nào trong khối trên cũng tích được ô
+                                chọn — ô vuông 20px một mình thì khó trúng. */}
+                            <label className="flex items-start gap-3 p-4 pb-3">
+                              {daDuocDuyet && (
+                                <input
+                                  type="checkbox"
+                                  className="w-5 h-5 mt-0.5 shrink-0 text-primary rounded border-slate-300 focus:ring-primary/20"
+                                  checked={dangChon}
+                                  onChange={() => {
+                                    setSelectedInTransitIds((prev) =>
+                                      prev.includes(id)
+                                        ? prev.filter((x) => x !== id)
+                                        : [...prev, id],
+                                    );
+                                  }}
+                                />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="font-black text-slate-900 text-base leading-none">
+                                    Phiếu {sheetNumber}
+                                  </span>
+                                  <span className="font-mono font-black text-base text-amber-600 leading-none shrink-0">
+                                    {formatNumber(totalQty)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 mt-1.5">
+                                  <span className="text-[10px] font-mono font-bold text-slate-400">
+                                    {formatDate(firstTrx.date)}
+                                  </span>
+                                  <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest shrink-0">
+                                    SL gửi
+                                  </span>
+                                </div>
+                              </div>
+                            </label>
+
+                            <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5">
+                              <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-tighter text-slate-700 max-w-full truncate">
+                                {firstTrx.partnerName}
+                              </span>
+                              <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-tighter text-slate-500">
+                                {group.length} mặt hàng
+                              </span>
+                            </div>
+
+                            {combinedNotes && (
+                              <p className="px-4 pb-3 text-[11px] text-slate-500 font-medium italic leading-snug">
+                                {combinedNotes}
+                              </p>
+                            )}
+
+                            <div className="flex items-stretch gap-2 px-4 pb-4">
+                              <button
+                                onClick={() => {
+                                  setSelectedInTransitGroup(group);
+                                  const qtyMap: Record<string, number> = {};
+                                  group.forEach((t) => {
+                                    qtyMap[t.productId] = parseFloat(
+                                      (
+                                        (qtyMap[t.productId] || 0) + t.quantity
+                                      ).toFixed(4),
+                                    );
+                                  });
+                                  setActualReceivedQtyMap(qtyMap);
+                                  setShowLossModal(true);
+                                }}
+                                className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                Xác nhận cả phiếu
+                              </button>
+                              {daDuocDuyet && (
+                                <button
+                                  onClick={() =>
+                                    handleDeleteInTransitGroup(group)
+                                  }
+                                  className="px-4 bg-rose-50 text-rose-500 rounded-xl active:scale-95 transition-all"
+                                  title="Xóa toàn bộ đơn"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Chừa chỗ cho thanh xác nhận dán đáy. */}
+                      {daDuocDuyet && selectedInTransitIds.length > 0 && (
+                        <div className="h-20" />
+                      )}
+                    </>
+                  ) : (
+                    <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-[0.2em] text-xs bg-white rounded-2xl border border-slate-100">
+                      Không có đơn hàng nào đang đi đường.
+                    </div>
+                  )}
+                </div>
+
+                {/*
+                  Thanh xác nhận hàng loạt dán đáy màn hình điện thoại. Nút ở
+                  đầu trang thì tích xong mười đơn phải cuộn ngược lên mới bấm
+                  được; dán đáy thì lúc nào cũng trong tầm ngón cái.
+                */}
+                {daDuocDuyet && selectedInTransitIds.length > 0 && (
+                  <div className="md:hidden fixed inset-x-0 bottom-0 z-40 p-3 bg-white/90 backdrop-blur-xl border-t border-slate-200">
+                    <button
+                      onClick={handleBulkConfirm}
+                      className="w-full py-3.5 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-3"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      Xác nhận {selectedInTransitIds.length} đơn đã chọn
+                    </button>
+                  </div>
+                )}
+
+                <Card noPadding className="hidden md:block premium-shadow overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead>
