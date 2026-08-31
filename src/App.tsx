@@ -53,6 +53,8 @@ import {
   FlaskConical,
   Receipt,
   Loader2,
+  Calculator,
+  FileSearch,
 } from "lucide-react";
 import {
   BarChart,
@@ -206,6 +208,7 @@ import { NHAN_MUC_DO, phanTichKho } from "./lib/phanTich";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
+import TraCuuHoaDon from "./components/TraCuuHoaDon";
 import DonBNC from "./components/DonBNC";
 import ManHinhDangNhap from "./components/ManHinhDangNhap";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
@@ -786,6 +789,22 @@ export default function App() {
    */
   const [reportSubTab, setReportSubTab] = useState<"summary" | "in" | "out">(
     "summary",
+  );
+
+  /*
+   * Phân hệ Công nợ · Hóa đơn có hai việc, tách làm hai thẻ.
+   *
+   *   "ket-xuat" — gom xuất kho theo đợt, tải tệp mang đi phát hành, rồi điền
+   *                số và ngày hóa đơn thật vào app.
+   *   "tra-cuu"  — xem lại những hóa đơn ĐÃ điền số, và in ra tệp mẫu Chốt.
+   *
+   * Trước đây chỉ có việc thứ nhất, nên số đã điền nằm im: muốn tra lại phải
+   * dựng đúng biên đợt cũ trên màn hình kết xuất mới thấy — mà biên đợt lưu ở
+   * localStorage của một máy. Thẻ tra cứu tự dựng lại đợt từ chính các hóa đơn
+   * đã ghi, xem `src/lib/traCuuHoaDon.ts`.
+   */
+  const [theCongNo, setTheCongNo] = useState<"ket-xuat" | "tra-cuu">(
+    "ket-xuat",
   );
 
   const [historySearchQuery, setHistorySearchQuery] = useState("");
@@ -11153,24 +11172,69 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
 
             {activeTab === "debt" && daDuocDuyet && (
               <div className="space-y-6">
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                    Công nợ · Hóa đơn
-                  </h2>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                    Gom xuất kho theo kỳ · tính thuế · kết xuất mẫu Chốt
-                  </p>
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div className="space-y-1">
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                      Công nợ · Hóa đơn
+                    </h2>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                      {theCongNo === "ket-xuat"
+                        ? "Gom xuất kho theo kỳ · tính thuế · kết xuất mẫu Chốt"
+                        : "Xem lại hóa đơn đã phát hành · in ra mẫu Chốt"}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 p-1.5 bg-white border border-slate-100 rounded-2xl w-fit premium-shadow">
+                    {(
+                      [
+                        {
+                          id: "ket-xuat",
+                          label: "Kết xuất · điền số",
+                          icon: Calculator,
+                        },
+                        {
+                          id: "tra-cuu",
+                          label: "Tra cứu đã xuất",
+                          icon: FileSearch,
+                        },
+                      ] as const
+                    ).map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setTheCongNo(t.id)}
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+                          theCongNo === t.id
+                            ? "bg-slate-900 text-white shadow-xl shadow-slate-200"
+                            : "text-slate-400 hover:text-slate-900 hover:bg-slate-50",
+                        )}
+                      >
+                        <t.icon className="w-4 h-4" />
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
                 <Card>
-                  <DebtExport
-                    transactions={transactions}
-                    products={products}
-                    /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
-                       ma thieu ma BP la hoa don sai khach. */
-                    partners={donVi}
-                    hoaDon={hoaDon}
-                    onSaveHoaDon={handleSaveHoaDon}
-                  />
+                  {theCongNo === "ket-xuat" ? (
+                    <DebtExport
+                      transactions={transactions}
+                      products={products}
+                      /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
+                         ma thieu ma BP la hoa don sai khach. */
+                      partners={donVi}
+                      hoaDon={hoaDon}
+                      onSaveHoaDon={handleSaveHoaDon}
+                    />
+                  ) : (
+                    <TraCuuHoaDon
+                      transactions={transactions}
+                      products={products}
+                      partners={donVi}
+                      hoaDon={hoaDon}
+                    />
+                  )}
                 </Card>
               </div>
             )}
