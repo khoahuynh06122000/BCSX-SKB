@@ -270,11 +270,29 @@ gan(
 gan("tong so hoa don", kq.tong.soHoaDon, 3);
 gan("tong so dong", kq.tong.soDong, 4);
 
-// Thuế TTĐB và doanh thu 511 bóc từ thành tiền chặng SKB, cộng lại phải đủ.
+// Không mang theo hai cột file bộ phận đã bỏ.
+dung(
+  "tong khong co cot Thue TTDB / Doanh thu 511",
+  !("thueTtdb" in kq.tong) && !("doanhThu511" in kq.tong),
+);
+dung(
+  "hoa don khong co cot Thue TTDB / Doanh thu 511",
+  kq.hoaDon.every((h) => !("thueTtdb" in h) && !("doanhThu511" in h)),
+);
+
+// VAT đúng 10% cả hai chặng, và sau thuế = thành tiền + VAT.
+gan("VAT SKB dung 10%", kq.tong.vatSkb, kq.tong.thanhTienSkb * 0.1, 2);
 gan(
-  "ttdb cong 511 bang thanh tien SKB",
-  kq.tong.thueTtdb + kq.tong.doanhThu511,
-  kq.tong.thanhTienSkb,
+  "sau thue SKB = thanh tien + VAT",
+  kq.tong.sauThueSkb,
+  kq.tong.thanhTienSkb + kq.tong.vatSkb,
+  2,
+);
+gan("VAT DNC dung 10%", kq.tong.vatDnc, kq.tong.thanhTienDnc * 0.1, 2);
+gan(
+  "sau thue DNC = thanh tien + VAT",
+  kq.tong.sauThueDnc,
+  kq.tong.thanhTienDnc + kq.tong.vatDnc,
   2,
 );
 

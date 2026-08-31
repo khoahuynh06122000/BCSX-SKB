@@ -34,15 +34,18 @@
  *
  * HAI CHẶNG GIÁ nằm cạnh nhau trong cùng một dòng — xem `invoice.ts`.
  *
- * KHÔNG CÓ CỘT THUẾ TTĐB VÀ DOANH THU 511 trong file T8 (file T7 thì có). Bảng
- * kết xuất bám theo file T8. Hai số đó vẫn tính, nhưng để xem trên màn hình,
- * không ghi vào sheet — thêm cột lạ vào file là kế toán phải xóa tay mỗi tháng.
+ * ĐÚNG 18 CỘT, KHÔNG THÊM CỘT NÀO. File T7 từng có thêm "Đơn vị xuất", "Thuế
+ * TTĐB", "Doanh thu 511"; T8 đã bỏ và bộ phận chốt là bỏ hẳn. Nên app cũng
+ * không hiện, không tính, không ghi ba số đó — thêm một cột mà file gốc không
+ * có là mỗi tháng kế toán phải xóa tay một lần.
+ *
+ * (Phép bóc thuế TTĐB vẫn còn ở `invoice.ts` vì phân hệ doanh thu dùng tới; chỉ
+ * riêng bảng công nợ là không dùng.)
  */
 
 import type { Partner, Product, Transaction } from "../types";
 import {
   breakdown,
-  exciseSplit,
   invoiceUnitOf,
   PRICE_TABLE,
   type InvoiceUnit,
@@ -144,13 +147,6 @@ export interface DongCongNo {
   vatDnc: number;
   sauThueDnc: number;
   maBp: string;
-
-  /**
-   * Hai số dưới đây KHÔNG ghi vào file (file T8 không có cột này), chỉ để hiện
-   * trên màn hình và cộng tổng. Bóc từ thành tiền chặng SKB.
-   */
-  thueTtdb: number;
-  doanhThu511: number;
   /** Khoá các dòng xuất kho đã gộp vào đây — để tra ngược khi số lệch. */
   nguon: string[];
 }
@@ -255,8 +251,6 @@ export interface BangCongNo {
     thanhTienDnc: number;
     vatDnc: number;
     sauThueDnc: number;
-    thueTtdb: number;
-    doanhThu511: number;
   };
   /** Số hóa đơn kế tiếp, để điền sẵn cho tháng sau. */
   soHoaDonTiepTheo: number;
@@ -438,7 +432,6 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
     const gia = PRICE_TABLE[g.dvt];
     const skb = breakdown(g.soLuong, gia.skbToDnc);
     const dnc = breakdown(g.soLuong, gia.dncToMember);
-    const { revenue511, exciseTax } = exciseSplit(skb.amount);
     return {
       ngayGiaoBia: nhanNgayGiao(d.tuNgay, d.denNgay),
       ngayHoaDon:
@@ -460,8 +453,6 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       vatDnc: dnc.vat,
       sauThueDnc: dnc.amountWithVat,
       maBp: g.maBp,
-      thueTtdb: exciseTax,
-      doanhThu511: revenue511,
       nguon: g.nguon,
     };
   });
@@ -578,8 +569,6 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       thanhTienDnc: cong((r) => r.thanhTienDnc),
       vatDnc: cong((r) => r.vatDnc),
       sauThueDnc: cong((r) => r.sauThueDnc),
-      thueTtdb: cong((r) => r.thueTtdb),
-      doanhThu511: cong((r) => r.doanhThu511),
     },
     soHoaDonTiepTheo: soChay,
     chuaCoSoThat,

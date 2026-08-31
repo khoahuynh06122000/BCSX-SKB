@@ -79,8 +79,13 @@ export function sheetChot(bang: BangCongNo): XLSX.WorkSheet {
     alignment: { horizontal: "center", vertical: "center" },
     border: VIEN,
   });
-  dat(8, 0, "SKB xuất hóa đơn cho DNC", "s", daiChang(MAU_CHANG_SKB));
-  dat(13, 0, "DNC xuất hóa đơn cho đơn vị khác", "s", daiChang(MAU_CHANG_DNC));
+  /*
+   * Chữ trên hai dải chép ĐÚNG ô I1 và N1 của file gốc, không viết lại cho dễ
+   * hiểu hơn. Kế toán dán bảng này vào file tháng, chữ khác một chữ là nhìn ra
+   * ngay đây không phải file của họ.
+   */
+  dat(8, 0, "SKB - DNC", "s", daiChang(MAU_CHANG_SKB));
+  dat(13, 0, "DNC xuất BNC và ĐVTV", "s", daiChang(MAU_CHANG_DNC));
 
   // --- Hàng 2: tên cột ---
   COT_CHOT.forEach((ten, c) => {

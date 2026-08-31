@@ -17,6 +17,7 @@
  */
 
 import type { Partner, Product, Transaction } from "../../types";
+import { exciseSplit } from "../invoice";
 import {
   dungBangCongNo,
   hangMatHang,
@@ -242,9 +243,23 @@ kiemTra("dong 1 so hoa don", d1.soHoaDon, "C26TKB#00000192");
 kiemTra("dong 1 ngay giao", d1.ngayGiaoBia, "01.08-12.08");
 kiemTra("dong 1 ngay hoa don", d1.ngayHoaDon, "15.08.2026");
 kiemTra("dong 1 gop 2 nguon", d1.nguon.length, 2);
-// Bóc thuế tiêu thụ đặc biệt: 294.402.000 / 1,65
-gan("dong 1 doanh thu 511", d1.doanhThu511, 178_425_454.5, 1);
-gan("dong 1 thue TTDB", d1.thueTtdb, 115_976_545.5, 1);
+
+/*
+ * Bảng công nợ KHÔNG còn hai cột "Thuế TTĐB" và "Doanh thu 511" — file T8 của
+ * bộ phận đã bỏ, T7 mới có. Nhưng phép bóc thuế vẫn còn ở `invoice.ts` cho phân
+ * hệ doanh thu, và hai con số neo dưới đây vẫn chép từ ô T3/U3 của file T8 nên
+ * giữ lại để canh phép tính: 294.402.000 / 1,65 = 178.425.454,5.
+ */
+{
+  const { revenue511, exciseTax } = exciseSplit(d1.thanhTienSkb);
+  gan("doanh thu 511 cua dong 1", revenue511, 178_425_454.5, 1);
+  gan("thue TTDB cua dong 1", exciseTax, 115_976_545.5, 1);
+}
+if ("thueTtdb" in d1 || "doanhThu511" in d1) {
+  fail++;
+  console.log("SAI  bang cong no khong duoc mang cot Thue TTDB / Doanh thu 511");
+} else pass++;
+kiemTra("dung 18 cot, khong hon", oCuaDong(d1).length, 18);
 
 // Hàng lon của BNC phải nằm ngay sau hàng lít của BNC, cùng số hóa đơn.
 kiemTra("dong 2 la hang lon cua BNC", [bang.dong[1].donVi, bang.dong[1].dvt], [

@@ -64,8 +64,6 @@ export interface HoaDonDaXuat {
   thanhTienDnc: number;
   vatDnc: number;
   sauThueDnc: number;
-  thueTtdb: number;
-  doanhThu511: number;
   /** Ai điền số vào app và điền lúc nào — để truy khi số bị sai. */
   ghiLuc?: string;
   ghiBoi?: string;
@@ -90,8 +88,6 @@ export interface KetQuaTraCuu {
     thanhTienDnc: number;
     vatDnc: number;
     sauThueDnc: number;
-    thueTtdb: number;
-    doanhThu511: number;
   };
   /**
    * Hóa đơn đã ghi số nhưng không dựng lại được dòng nào.
@@ -199,8 +195,6 @@ function ketQuaRong(): KetQuaTraCuu {
         thanhTienDnc: 0,
         vatDnc: 0,
         sauThueDnc: 0,
-        thueTtdb: 0,
-        doanhThu511: 0,
       },
       soHoaDonTiepTheo: 0,
       chuaCoSoThat: 0,
@@ -215,8 +209,6 @@ function ketQuaRong(): KetQuaTraCuu {
       thanhTienDnc: 0,
       vatDnc: 0,
       sauThueDnc: 0,
-      thueTtdb: 0,
-      doanhThu511: 0,
     },
     thieuDong: [],
   };
@@ -347,8 +339,6 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
       thanhTienDnc: cong((d) => d.thanhTienDnc),
       vatDnc: cong((d) => d.vatDnc),
       sauThueDnc: cong((d) => d.sauThueDnc),
-      thueTtdb: cong((d) => d.thueTtdb),
-      doanhThu511: cong((d) => d.doanhThu511),
       ghiLuc: h.updatedAt,
       ghiBoi: h.updatedBy,
     });
@@ -395,8 +385,6 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
     thanhTienDnc: congXuat((d) => d.thanhTienDnc),
     vatDnc: congXuat((d) => d.vatDnc),
     sauThueDnc: congXuat((d) => d.sauThueDnc),
-    thueTtdb: congXuat((d) => d.thueTtdb),
-    doanhThu511: congXuat((d) => d.doanhThu511),
   };
 
   /* Thống kê theo đơn vị, gộp cả kỳ đang xem. */
@@ -445,8 +433,6 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
         thanhTienDnc: tong.thanhTienDnc,
         vatDnc: tong.vatDnc,
         sauThueDnc: tong.sauThueDnc,
-        thueTtdb: tong.thueTtdb,
-        doanhThu511: tong.doanhThu511,
       },
       soHoaDonTiepTheo: 0,
       chuaCoSoThat: 0,
