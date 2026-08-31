@@ -929,7 +929,19 @@ export default function App() {
    * PENDING -> chu so huu duyet -> vao duoc app.
    */
   useEffect(() => {
+    /**
+     * Gỡ theo dõi hồ sơ của phiên trước. Đổi tài khoản mà không gỡ thì hai
+     * người cùng ghi vào một chỗ, và vai trò của người trước đè lên người sau.
+     */
+    let boTheoDoiHoSo = () => {};
+    /** Vai trò lần trước, để biết khi nào nó vừa đổi mà báo cho người dùng. */
+    let vaiTroTruoc: UserRole | null = null;
+
     const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
+      boTheoDoiHoSo();
+      boTheoDoiHoSo = () => {};
+      vaiTroTruoc = null;
+
       if (!fbUser) {
         setUser(null);
         setUserRole("PENDING");
@@ -941,27 +953,21 @@ export default function App() {
       const uid = fbUser.uid;
       const emailLower = (fbUser.email || "").toLowerCase();
       setUser(fbUser.displayName || fbUser.email || "Người dùng");
+      const ref = doc(db, "users", uid);
 
+      /*
+       * BƯỚC 1 — LẦN ĐẦU ĐĂNG NHẬP THÌ TẠO HỒ SƠ CHỜ DUYỆT.
+       *
+       * Phải đọc một lần để biết đã có hồ sơ chưa. Luật Firestore chỉ cho tạo
+       * với vai trò PENDING nên không thể tự nâng quyền từ đây.
+       *
+       * ĐỌC MÁY CHỦ TRƯỚC, BẢN ĐỆM SAU. `getDocFromServer` bắt buộc đi ra mạng,
+       * không có đường lùi. Trên điện thoại sóng yếu — đúng cảnh dùng app ngoài
+       * kho — lệnh này hỏng thường xuyên. Hỏng thì thử bản đệm trong máy, vẫn
+       * hỏng thì báo ra màn hình chứ KHÔNG tự hạ vai trò của ai: suy ra một vai
+       * trò thấp hơn từ một lần mạng hỏng là đoán bừa về quyền.
+       */
       try {
-        const ref = doc(db, "users", uid);
-
-        /*
-         * ĐỌC HỒ SƠ: MÁY CHỦ TRƯỚC, BẢN ĐỆM SAU.
-         *
-         * `getDocFromServer` bắt buộc phải đi ra mạng, KHÔNG có đường lùi về
-         * bản đệm. Trên điện thoại sóng yếu hoặc 4G chập chờn — đúng cảnh dùng
-         * app ngoài kho — lệnh này hỏng thường xuyên, trong khi cùng tài khoản
-         * đó trên máy tính nối wifi thì chạy ngon.
-         *
-         * Bản trước hỏng là rơi thẳng vào nhánh bắt lỗi rồi ĐẶT VAI TRÒ THÀNH
-         * PENDING. Người đang là quản trị bỗng thành tài khoản chờ duyệt: mất
-         * hết tab, không lên dữ liệu, mà lỗi thì chỉ nằm im trong console. Suy
-         * ra một vai trò thấp hơn từ một lần mạng hỏng là đoán bừa về quyền —
-         * thà nói không đọc được còn hơn.
-         *
-         * Nay hỏng thì thử tiếp bản đệm trong máy (`getDoc`). Vẫn hỏng thì báo
-         * ra màn hình cho người dùng thử lại, không tự hạ vai trò của ai.
-         */
         let snap;
         try {
           snap = await getDocFromServer(ref);
@@ -969,11 +975,7 @@ export default function App() {
           console.warn("Doc ho so tu may chu that bai, thu ban dem:", loiMang);
           snap = await getDoc(ref);
         }
-
         if (!snap.exists()) {
-          // Lan dau dang nhap: tao ho so cho duyet.
-          // Quy tac Firestore chi cho tao voi role PENDING nen khong the
-          // tu nang quyen tu day.
           const fresh: UserProfile = {
             uid,
             email: emailLower,
@@ -983,16 +985,6 @@ export default function App() {
             createdAt: new Date().toISOString(),
           };
           await setDoc(ref, fresh);
-          setCurrentUserProfile(fresh);
-          setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
-        } else {
-          const data = snap.data() as UserProfile;
-          setCurrentUserProfile(data);
-          // Chu so huu duoc nhan dien bang email, khong phu thuoc du lieu
-          // trong Firestore - trung khop voi firestore.rules.
-          setUserRole(
-            emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING",
-          );
         }
       } catch (err: any) {
         console.error("Khong doc duoc ho so nguoi dung:", err);
@@ -1006,12 +998,69 @@ export default function App() {
               : "Không tải được hồ sơ người dùng. Mạng đang chập chờn.",
           );
         }
-      } finally {
         setLoading(false);
       }
+
+      /*
+       * BƯỚC 2 — THEO DÕI HỒ SƠ LIÊN TỤC, KHÔNG ĐỌC MỘT LẦN RỒI THÔI.
+       *
+       * Đây là chỗ quyết định "được duyệt là dùng được ngay". Bản cũ đọc hồ sơ
+       * đúng một lần lúc đăng nhập, nên chủ sở hữu duyệt xong thì người kia vẫn
+       * ngồi nhìn màn hình chờ duyệt cho tới khi tự đăng xuất rồi đăng nhập
+       * lại — mà không có gì bảo họ phải làm thế.
+       *
+       * Nay theo dõi tài liệu: chủ sở hữu đổi vai trò là màn hình bên kia đổi
+       * theo trong khoảng một giây. Cũng đúng theo chiều ngược lại — thu hồi
+       * quyền là mất quyền ngay, không phải chờ họ đăng xuất.
+       *
+       * Việc này KHÔNG liên quan tới `firestore.rules`. Luật đọc vai trò từ
+       * `users/{uid}` mỗi lần có yêu cầu, nên phía máy chủ vốn đã có hiệu lực
+       * tức thì; chỗ chậm nãy giờ chỉ là bản sao vai trò nằm trong máy người
+       * dùng.
+       */
+      boTheoDoiHoSo = onSnapshot(
+        ref,
+        (snap) => {
+          setLoading(false);
+          if (!snap.exists()) return;
+          const data = snap.data() as UserProfile;
+          setCurrentUserProfile(data);
+          // Chu so huu goc nhan dien bang EMAIL, khong phu thuoc du lieu trong
+          // Firestore - trung khop voi firestore.rules.
+          const vaiTro: UserRole =
+            emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING";
+          setUserRole(vaiTro);
+          setLoiHoSo("");
+
+          // Đổi vai trò giữa chừng thì nói ra: màn hình vừa mọc thêm hoặc mất
+          // bớt vài mục, không nói gì thì người dùng tưởng app lỗi.
+          if (vaiTroTruoc && vaiTroTruoc !== vaiTro) {
+            showNotification(
+              vaiTro === "PENDING"
+                ? "Quyền truy cập của bạn vừa bị thu hồi."
+                : `Quyền vừa được cập nhật: ${tenVaiTro(vaiTro)}`,
+              vaiTro === "PENDING" ? "error" : "success",
+            );
+          }
+          vaiTroTruoc = vaiTro;
+        },
+        (err) => {
+          console.error("Khong theo doi duoc ho so nguoi dung:", err);
+          setLoading(false);
+          // KHÔNG hạ vai trò khi mất kết nối — giữ nguyên cái đang có.
+          if (emailLower !== OWNER_EMAIL) {
+            setLoiHoSo(
+              "Mất kết nối tới hồ sơ người dùng. Quyền đang dùng là bản đọc được gần nhất.",
+            );
+          }
+        },
+      );
     });
 
-    return () => unsubAuth();
+    return () => {
+      boTheoDoiHoSo();
+      unsubAuth();
+    };
   }, []);
 
   // FIRESTORE SYNC
@@ -2804,7 +2853,7 @@ export default function App() {
         (!daDuyet
           ? "Vai trò này chưa được duyệt nên không đọc và không ghi được gì.\n\n" +
             "Chủ sở hữu vào mục Người dùng chọn vai trò cho tài khoản này. " +
-            "Đổi xong thì đăng xuất rồi đăng nhập lại."
+            "Duyệt xong là dùng được ngay, không phải đăng nhập lại."
           : laViecGhi && !q.ghiNhap && !q.ghiXuat
             ? "Vai trò này CHỈ XEM, không ghi được dữ liệu. Nếu cần ghi thì " +
               "nhờ chủ sở hữu đổi vai trò trong mục Người dùng."
@@ -2813,7 +2862,10 @@ export default function App() {
               `mới.\n\nChủ sở hữu vào Firebase Console → Firestore Database → ` +
               "tab Rules, dán lại nội dung tệp firestore.rules mới nhất rồi bấm " +
               `Publish.\n\nPHẢI ĐÚNG CƠ SỞ DỮ LIỆU NÀY:\n${cho}\n\n` +
-              "Xong thì đăng xuất rồi đăng nhập lại.")
+              // Publish rules xong thì phải TẢI LẠI TRANG: những đăng ký đã bị
+              // máy chủ từ chối thì Firestore đóng luôn, không tự thử lại.
+              // Nhưng không cần đăng xuất — phiên đăng nhập vẫn tốt.
+              "Xong thì tải lại trang (Ctrl + Shift + R).")
       );
     }
 
@@ -5803,7 +5855,7 @@ export default function App() {
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
             <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
               Vui lòng liên hệ quản trị viên để được cấp quyền truy cập. Sau khi
-              được duyệt, bạn chỉ cần tải lại trang là vào được.
+              được duyệt, màn hình này tự mở ra — không phải tải lại trang.
             </p>
           </div>
 
@@ -9595,8 +9647,8 @@ export default function App() {
                 <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
                   Vai trò hiện tại là <strong>{tenVaiTro(userRole)}</strong> —
                   vẫn xem được mọi số liệu, chỉ không ghi được ở chiều này. Cần
-                  ghi thì nhờ chủ sở hữu đổi vai trò trong mục Người dùng, rồi
-                  đăng xuất và đăng nhập lại.
+                  ghi thì nhờ chủ sở hữu đổi vai trò trong mục Người dùng — đổi
+                  xong là màn hình này tự mở ra.
                 </p>
               </div>
             )}

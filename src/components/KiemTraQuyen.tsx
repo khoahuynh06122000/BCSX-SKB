@@ -184,7 +184,7 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       );
     } else if (!duQuyen) {
       setKetLuan(
-        `Vai trò máy chủ đang lưu là ${vaiTroMayChu} — tài khoản chưa được duyệt nên không đọc ghi được gì. Chủ sở hữu vào mục Người dùng duyệt tài khoản này, rồi đăng xuất và đăng nhập lại.`,
+        `Vai trò máy chủ đang lưu là ${vaiTroMayChu} — tài khoản chưa được duyệt nên không đọc ghi được gì. Chủ sở hữu vào mục Người dùng duyệt tài khoản này — duyệt xong là dùng được ngay, không phải đăng nhập lại.`,
       );
     } else if (!u.emailVerified && vaiTroMayChu === "OWNER") {
       setKetLuan(
