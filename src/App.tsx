@@ -789,7 +789,19 @@ export default function App() {
   );
 
   const [historySearchQuery, setHistorySearchQuery] = useState("");
-  const [batchSearchQuery, setBatchSearchQuery] = useState("");
+  /*
+   * KHOẢNG NGÀY CỦA BÁO CÁO.
+   *
+   * Thay cho ô "Lọc theo Mã lô" cũ. Mã lô là thứ tra cứu một lần khi cần truy
+   * nguồn một chuyến hàng cụ thể, còn báo cáo Nhập – Xuất – Tồn thì lần nào
+   * cũng phải hỏi "từ ngày nào đến ngày nào" — nên chỗ này để khoảng ngày.
+   *
+   * Rỗng cả hai = xem toàn bộ. Không đặt sẵn tháng hiện tại: mở báo cáo ra mà
+   * số đã bị cắt theo một khoảng mình không chọn thì dễ đọc nhầm là kho ít
+   * hàng, trong khi chỉ là bộ lọc đang bật.
+   */
+  const [reportTuNgay, setReportTuNgay] = useState("");
+  const [reportDenNgay, setReportDenNgay] = useState("");
   const [revenuePartnerSearch, setRevenuePartnerSearch] = useState("");
   const [reportPartnerSearch, setReportPartnerSearch] = useState("");
 
@@ -2537,7 +2549,7 @@ export default function App() {
       bang = {
         tieuDeTren: [
           "BÁO CÁO NHẬP XUẤT TỒN",
-          `Kỳ: ${timeFilter === "all" ? "Tất cả" : timeFilter} · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
+          `Kỳ: ${moTaKyBaoCao} · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
         ],
         tieuDe,
         cot: [
@@ -4320,8 +4332,29 @@ export default function App() {
     }
   }, [activeTab, partners, newTransaction.partnerId]);
 
+  /**
+   * Mốc cuối của khoảng ngày báo cáo, tính tới HẾT ngày đó.
+   *
+   * `parseISO("2026-08-31")` ra 00:00 sáng, so bằng `<=` thì mất sạch giao
+   * dịch trong chính ngày cuối — người dùng chọn "đến 31/08" mà không thấy đơn
+   * ngày 31 thì tưởng mất dữ liệu.
+   */
+  const reportHetNgayDen = useMemo(
+    () => (reportDenNgay ? endOfDay(parseISO(reportDenNgay)) : null),
+    [reportDenNgay],
+  );
+
+  /** Câu mô tả kỳ báo cáo, dùng chung cho màn hình và tiêu đề tệp Excel. */
+  const moTaKyBaoCao = useMemo(() => {
+    const ten = (iso: string) => format(parseISO(iso), "dd/MM/yyyy");
+    if (reportTuNgay && reportDenNgay)
+      return `${ten(reportTuNgay)} — ${ten(reportDenNgay)}`;
+    if (reportTuNgay) return `Từ ${ten(reportTuNgay)}`;
+    if (reportDenNgay) return `Đến hết ${ten(reportDenNgay)}`;
+    return "Toàn bộ dữ liệu";
+  }, [reportTuNgay, reportDenNgay]);
+
   const filteredTransactionsForReport = useMemo(() => {
-    const bq = batchSearchQuery.toLowerCase().trim();
     const pq = reportPartnerSearch.toLowerCase().trim();
 
     // Bao cao phai khop voi ton kho, nen cung bo hang chua co anh phieu ky.
@@ -4329,10 +4362,13 @@ export default function App() {
     // giai thich duoc, va file Excel xuat ra cung sai theo.
     let filtered = countedTransactionsByTime;
 
-    if (bq) {
-      filtered = filtered.filter((t) =>
-        t.batchNumber?.toLowerCase().includes(bq),
-      );
+    if (reportTuNgay) {
+      const tu = startOfDay(parseISO(reportTuNgay));
+      filtered = filtered.filter((t) => parseISO(t.date) >= tu);
+    }
+
+    if (reportHetNgayDen) {
+      filtered = filtered.filter((t) => parseISO(t.date) <= reportHetNgayDen);
     }
 
     if (pq) {
@@ -4342,7 +4378,12 @@ export default function App() {
     }
 
     return filtered;
-  }, [countedTransactionsByTime, batchSearchQuery, reportPartnerSearch]);
+  }, [
+    countedTransactionsByTime,
+    reportTuNgay,
+    reportHetNgayDen,
+    reportPartnerSearch,
+  ]);
 
   /*
    * ẢNH CHO THƯ VIỆN — xem `src/lib/thuVienAnh.ts`.
@@ -4725,40 +4766,6 @@ export default function App() {
     [transactions, slips, galleryFilter],
   );
 
-  const batchLifecycle = useMemo(() => {
-    const bq = batchSearchQuery.toLowerCase().trim();
-    if (!bq || bq.length < 2) return null;
-
-    // Dung giao dich da duyet de con so "Con lai" khop voi ton kho thuc.
-    const allMatches = countedTransactions.filter((t) =>
-      t.batchNumber?.toLowerCase().includes(bq),
-    );
-    if (allMatches.length === 0) return null;
-
-    const imports = allMatches.filter(
-      (t) => t.type === "IN" || t.type === "OPENING",
-    );
-    const exports = allMatches.filter(
-      (t) => t.type === "OUT" && t.status !== "in_transit",
-    );
-
-    const totalIn = imports.reduce((sum, t) => sum + t.quantity, 0);
-    const totalOut = exports.reduce((sum, t) => sum + t.quantity, 0);
-
-    return {
-      batchNumber: bq,
-      imports,
-      exports,
-      totalIn,
-      totalOut,
-      balance: totalIn - totalOut,
-      productName: allMatches[0].productName,
-      unit:
-        products.find((p) => p.id === allMatches[0].productId)?.unit ||
-        "Đơn vị",
-    };
-  }, [countedTransactions, batchSearchQuery, products]);
-
   // Derived State: Import/Export Flow Summary
   const flowSummary = useMemo(() => {
     const summaryMap = new Map<
@@ -4852,24 +4859,22 @@ export default function App() {
     */
 
     // 2. Calculate Closing Stock (Stock at the end of period)
-    const baseTransactions = batchSearchQuery.trim()
-      ? countedTransactions.filter((t) =>
-          t.batchNumber
-            ?.toLowerCase()
-            .includes(batchSearchQuery.toLowerCase().trim()),
-        )
-      : countedTransactions;
-
-    baseTransactions.forEach((t) => {
+    /*
+     * Tồn cuối tính trên TOÀN BỘ sổ, không phải trên phần đã lọc theo ngày:
+     * hàng nhập trước khoảng ngày vẫn đang nằm trong kho. Chỉ chặn ở mốc cuối
+     * — đúng nghĩa "tồn tại thời điểm ngày đến".
+     */
+    countedTransactions.forEach((t) => {
       // Don't subtract from closing stock if it's still in transit
       if (t.type === "OUT" && t.status === "in_transit") return;
 
       const entry = summaryMap.get(t.productId);
       if (entry) {
         const transDate = parseISO(t.date);
-        // If "all" time, closing stock is current stock
-        // If filtered, closing stock is stock up to end of period
-        const isBeforeOrAtEnd = !dateRange || transDate <= dateRange.end;
+        // Không chọn ngày đến thì tồn cuối là tồn hiện tại.
+        const isBeforeOrAtEnd =
+          (!dateRange || transDate <= dateRange.end) &&
+          (!reportHetNgayDen || transDate <= reportHetNgayDen);
 
         if (isBeforeOrAtEnd) {
           const multiplier = t.type === "IN" || t.type === "OPENING" ? 1 : -1;
@@ -4883,22 +4888,14 @@ export default function App() {
       entry.openingStock = entry.closingStock - entry.in + entry.out;
     });
 
-    return Array.from(summaryMap.values()).filter((item) => {
-      if (!batchSearchQuery.trim()) return true;
-      return (
-        item.in > 0 ||
-        item.out > 0 ||
-        item.closingStock > 0 ||
-        item.openingStock > 0
-      );
-    });
+    return Array.from(summaryMap.values());
   }, [
     filteredTransactionsForReport,
     filteredRevenueByTime,
     countedTransactions,
     products,
     dateRange,
-    batchSearchQuery,
+    reportHetNgayDen,
   ]);
 
   /**
@@ -7330,23 +7327,41 @@ export default function App() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                      <div className="relative w-full sm:w-64">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                          <Search className="w-4 h-4" />
+                      {/* Khoảng ngày báo cáo — thay ô lọc mã lô cũ. */}
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:w-40">
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <input
+                            type="date"
+                            aria-label="Từ ngày"
+                            value={reportTuNgay}
+                            max={reportDenNgay || undefined}
+                            onChange={(e) => setReportTuNgay(e.target.value)}
+                            className="w-full pl-10 pr-2 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+                          />
                         </div>
-                        <input
-                          type="text"
-                          placeholder="Lọc theo Mã lô..."
-                          value={batchSearchQuery}
-                          onChange={(e) => setBatchSearchQuery(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all"
-                        />
-                        {batchSearchQuery && (
+                        <span className="text-slate-300 font-black shrink-0">
+                          —
+                        </span>
+                        <div className="relative flex-1 sm:w-40">
+                          <input
+                            type="date"
+                            aria-label="Đến ngày"
+                            value={reportDenNgay}
+                            min={reportTuNgay || undefined}
+                            onChange={(e) => setReportDenNgay(e.target.value)}
+                            className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+                          />
+                        </div>
+                        {(reportTuNgay || reportDenNgay) && (
                           <button
-                            onClick={() => setBatchSearchQuery("")}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-500 transition-colors"
+                            onClick={() => {
+                              setReportTuNgay("");
+                              setReportDenNgay("");
+                            }}
+                            className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            Tất cả
                           </button>
                         )}
                       </div>
@@ -7376,7 +7391,17 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-4">
+                    {/* Nói rõ đang xem kỳ nào. Đọc một bảng số mà không biết
+                        nó cắt theo khoảng nào là chỗ dễ hiểu nhầm nhất. */}
+                    <div className="text-right hidden lg:block">
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] leading-none">
+                        Kỳ báo cáo
+                      </p>
+                      <p className="text-[11px] font-black text-slate-600 uppercase tracking-widest mt-1 leading-none">
+                        {moTaKyBaoCao}
+                      </p>
+                    </div>
                     <Button
                       variant="secondary"
                       className="px-6 py-2.5 bg-white border border-slate-100"
@@ -7386,149 +7411,6 @@ export default function App() {
                     </Button>
                   </div>
                 </div>
-
-                {batchLifecycle && (
-                  <div className="bg-white border-2 border-slate-900 rounded-3xl overflow-hidden shadow-2xl shadow-slate-200">
-                    <div className="bg-slate-900 px-8 py-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-amber-400 flex items-center justify-center">
-                          <ShieldCheck className="w-6 h-6 text-slate-900" />
-                        </div>
-                        <div>
-                          <h3 className="text-white text-xl font-black uppercase tracking-tight italic font-serif">
-                            TRUY XUẤT NGUỒN GỐC LÔ HÀNG
-                          </h3>
-                          <p className="text-amber-400 text-[10px] font-black uppercase tracking-[0.2em] mt-0.5">
-                            Mã lô: {batchLifecycle.batchNumber}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex gap-3">
-                        <div className="px-4 py-2 bg-white/10 rounded-xl backdrop-blur-md border border-white/10">
-                          <p className="text-[9px] font-bold text-white/50 uppercase tracking-widest leading-none mb-1">
-                            Tồn kho lô
-                          </p>
-                          <p className="text-sm font-black text-white">
-                            {formatNumber(batchLifecycle.balance)}{" "}
-                            <span className="text-[10px] font-bold text-white/60">
-                              {batchLifecycle.unit}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 bg-slate-50/30">
-                      {/* Lịch sử Nhập */}
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <PlusCircle className="w-4 h-4 text-emerald-600" />
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">
-                            Lịch sử Nhập hàng
-                          </h4>
-                        </div>
-                        <div className="space-y-3">
-                          {batchLifecycle.imports.length > 0 ? (
-                            batchLifecycle.imports.map((imp) => (
-                              <div
-                                key={imp.id}
-                                className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm flex justify-between items-center group hover:border-emerald-300 transition-all"
-                              >
-                                <div className="flex items-center gap-4">
-                                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs">
-                                    {format(parseISO(imp.date), "dd/MM")}
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-                                      Từ: {imp.partnerName}
-                                    </p>
-                                    <h5 className="text-xs font-bold text-slate-900">
-                                      {imp.productName}
-                                    </h5>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-black text-emerald-600">
-                                    +{formatNumber(imp.quantity)}
-                                  </p>
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase">
-                                    {/* Giao dịch không lưu đơn vị tính; đơn vị
-                                        lấy từ danh mục sản phẩm. Bản cũ đọc
-                                        imp.unit — trường không tồn tại nên
-                                        luôn rơi về nhánh sau. */}
-                                    {products.find(
-                                      (p) => p.id === imp.productId,
-                                    )?.unit || batchLifecycle.unit}
-                                  </p>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="py-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest italic border-2 border-dashed border-slate-200 rounded-2xl">
-                              Không tìm thấy dữ liệu nhập của lô này
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Lịch sử Xuất */}
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <MinusCircle className="w-4 h-4 text-rose-600" />
-                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">
-                            Lịch sử Xuất hàng
-                          </h4>
-                        </div>
-                        <div className="space-y-3">
-                          {batchLifecycle.exports.length > 0 ? (
-                            batchLifecycle.exports.map((exp) => (
-                              <div
-                                key={exp.id}
-                                className="bg-white p-4 rounded-2xl border border-rose-100 shadow-sm flex justify-between items-center group hover:border-rose-300 transition-all"
-                              >
-                                <div className="flex items-center gap-4">
-                                  <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 font-black text-xs">
-                                    {format(parseISO(exp.date), "dd/MM")}
-                                  </div>
-                                  <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-                                      Đến: {exp.partnerName}
-                                    </p>
-                                    <h5 className="text-xs font-bold text-slate-900">
-                                      {exp.productName}
-                                    </h5>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-black text-rose-600">
-                                    -{formatNumber(exp.quantity)}
-                                  </p>
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase">
-                                    {products.find(
-                                      (p) => p.id === exp.productId,
-                                    )?.unit || batchLifecycle.unit}
-                                  </p>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="py-8 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest italic border-2 border-dashed border-slate-200 rounded-2xl">
-                              Lô này chưa phát sinh giao dịch xuất kho
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 p-4 px-8 border-t border-slate-100 flex items-center gap-4">
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                        Truy xuất dữ liệu trên toàn bộ hệ thống (Bao gồm dữ liệu
-                        ngoài khoảng thời gian đang lọc)
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {reportSubTab === "summary" && (
                   <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -8073,25 +7955,21 @@ export default function App() {
                                     <td className="py-4 px-6 text-xs font-bold text-slate-600 uppercase tracking-tight">
                                       {t.partnerName}
                                     </td>
+                                    {/* Trước đây bấm vào mã lô là lọc cả báo
+                                        cáo theo lô đó. Bộ lọc mã lô đã bỏ nên
+                                        ô này chỉ còn để đọc — bấm được mà
+                                        không xảy ra gì thì khó hiểu hơn. */}
                                     <td className="py-4 px-6 text-center">
-                                      <button
-                                        onClick={() => {
-                                          if (t.batchNumber) {
-                                            setBatchSearchQuery(t.batchNumber);
-                                            setReportSubTab(
-                                              t.type === "OUT" ? "out" : "in",
-                                            );
-                                          }
-                                        }}
+                                      <span
                                         className={cn(
-                                          "inline-block px-2 py-1 rounded text-[10px] font-black font-mono transition-all",
+                                          "inline-block px-2 py-1 rounded text-[10px] font-black font-mono",
                                           t.batchNumber
-                                            ? "bg-slate-100 text-slate-600 hover:bg-slate-900 hover:text-white cursor-pointer"
+                                            ? "bg-slate-100 text-slate-600"
                                             : "text-slate-300",
                                         )}
                                       >
                                         {t.batchNumber || "—"}
-                                      </button>
+                                      </span>
                                     </td>
                                     <td className="py-4 px-6">
                                       <div className="flex items-center gap-2 min-w-[100px]">
