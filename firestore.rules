@@ -351,5 +351,52 @@ service cloud.firestore {
         );
       allow delete: if isOwner();
     }
+
+    /*
+     * SO SO PHIEU - moi phieu nhap / xuat kho mot so co dinh.
+     *
+     * Khoa tai lieu = so phieu (51260001...). Quy tac danh so o
+     * src/lib/soPhieu.ts, phan cap so chong trung o src/lib/soPhieuKho.ts.
+     *
+     * KHONG AI XOA DUOC, ke ca chu so huu. So chung tu da cap thi da in ra
+     * giay va da gui di; xoa mot dong la so nhay so, va so nhay so la cau hoi
+     * dau tien cua kiem toan. Huy mot phieu thi sinh PHIEU HUY ghi am, phieu
+     * goc van nam nguyen trong so.
+     *
+     * KHONG SUA DUOC SO PHIEU, ngay ca chu so huu: doi so tren mot chung tu da
+     * in ra giay la lam sai lech chung tu. Chi cho phep DOI TRANG THAI sang
+     * da_huy (kem so phieu da huy no) - dung mot duong duy nhat de mot phieu
+     * ngung hieu luc.
+     *
+     * Doc thi ai xem duoc kho deu doc: tra mot so phieu la viec ai trong kho
+     * cung phai lam duoc. DNC khong doc - so phieu la chuyen noi bo cua kho.
+     */
+    match /so_phieu/{soPhieu} {
+      allow read: if xemKho();
+      allow create: if ghiNhapKho() || ghiXuatKho();
+      // Chi duoc danh dau da huy. Moi truong khac phai giu nguyen.
+      allow update: if (ghiNhapKho() || ghiXuatKho())
+        && request.resource.data.soPhieu == resource.data.soPhieu
+        && request.resource.data.loai == resource.data.loai
+        && request.resource.data.documentDate == resource.data.documentDate
+        && request.resource.data.enteredOn == resource.data.enteredOn
+        && request.resource.data.nguon == resource.data.nguon
+        && request.resource.data.soLuong == resource.data.soLuong
+        && request.resource.data.trangThai == 'da_huy';
+      allow delete: if false;
+    }
+
+    /*
+     * BO DEM SO PHIEU - mot tai lieu cho moi (dau so x nam), giu so ke tiep.
+     *
+     * Phai ghi duoc trong cung giao dich voi lan cap so, nen ai ghi duoc kho
+     * thi ghi duoc day. Khong xoa duoc: xoa bo dem la lan cap so sau bat dau
+     * lai tu 0001 va trung voi so da in ra giay.
+     */
+    match /bo_dem/{khoa} {
+      allow read: if xemKho();
+      allow create, update: if ghiNhapKho() || ghiXuatKho();
+      allow delete: if false;
+    }
   }
 }

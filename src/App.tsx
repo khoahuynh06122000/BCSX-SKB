@@ -55,6 +55,7 @@ import {
   Loader2,
   Calculator,
   FileSearch,
+  Hash,
 } from "lucide-react";
 import {
   BarChart,
@@ -209,9 +210,12 @@ import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import TraCuuHoaDon from "./components/TraCuuHoaDon";
+import SoPhieuManHinh from "./components/SoPhieu";
 import DonBNC from "./components/DonBNC";
 import ManHinhDangNhap from "./components/ManHinhDangNhap";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
+import type { GhiSoPhieu } from "./lib/soPhieu";
+import { KHO_SO_PHIEU, capSoPhieu, huyPhieu } from "./lib/soPhieuKho";
 
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
@@ -734,6 +738,15 @@ export default function App() {
    * Xem `src/lib/hoaDon.ts`.
    */
   const [hoaDon, setHoaDon] = useState<HoaDonGhiNhan[]>([]);
+  /**
+   * SỔ SỐ PHIẾU — mỗi phiếu nhập / xuất một số cố định.
+   *
+   * Số KHÔNG lưu trên tài liệu giao dịch mà lưu ở sổ riêng, nối với chứng từ
+   * qua trường `nguon` (mã phiếu nhập, hoặc `referenceGroupId` của lượt xuất).
+   * Nhờ vậy bật tính năng này không phải sửa một tài liệu giao dịch nào —
+   * không có bước chuyển đổi dữ liệu nào để làm hỏng.
+   */
+  const [soPhieu, setSoPhieu] = useState<GhiSoPhieu[]>([]);
   const [sapJobs, setSapJobs] = useState<SapJob[]>([]);
   const [sapBusy, setSapBusy] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1244,6 +1257,22 @@ export default function App() {
       },
     );
 
+    const unsubSoPhieu = onSnapshot(
+      collection(db, KHO_SO_PHIEU),
+      (snapshot) => {
+        setSoPhieu(
+          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as GhiSoPhieu),
+        );
+        ghiNhanLoiDoc(KHO_SO_PHIEU, null);
+      },
+      (error) => {
+        ghiNhanLoiDoc(
+          KHO_SO_PHIEU,
+          handleFirestoreError(error, OperationType.GET, KHO_SO_PHIEU),
+        );
+      },
+    );
+
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
@@ -1283,6 +1312,7 @@ export default function App() {
       unsubSlips();
       unsubDiemBan();
       unsubHoaDon();
+      unsubSoPhieu();
       unsubUsers();
       unsubSapJobs();
     };
@@ -2206,6 +2236,79 @@ export default function App() {
    * nó, không sinh bản trùng. Ghi cả tên đơn vị lúc điền để sau này đọc sổ
    * không phải tra ngược mã.
    */
+  /**
+   * Hủy một số phiếu — sinh phiếu hủy ghi âm, giữ nguyên phiếu gốc.
+   *
+   * Ném lỗi lên trên chứ không nuốt: màn hình đang chờ `await` để đóng hộp
+   * thoại, nuốt lỗi ở đây là hộp thoại đóng lại như vừa hủy thành công.
+   */
+  const handleHuyPhieu = async (
+    soGoc: string,
+    documentDate: string,
+    lyDo: string,
+  ) => {
+    try {
+      const g = await huyPhieu(db, soGoc, {
+        documentDate,
+        lyDo,
+        createdBy: user || "Guest",
+      });
+      showNotification(`Đã hủy ${soGoc} bằng phiếu ${g.soPhieu}`);
+    } catch (e) {
+      alert(
+        `Không hủy được phiếu ${soGoc}.\n\n${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+      throw e;
+    }
+  };
+
+  /**
+   * Cấp bù số phiếu cho những chứng từ đã lưu mà chưa có số.
+   *
+   * CẤP TUẦN TỰ, không chạy song song: bộ đếm là một tài liệu, bắn hàng chục
+   * yêu cầu cùng lúc vào nó thì Firestore phải thử lại liên tục và có cái sẽ
+   * thua. Chậm hơn vài giây nhưng không sót phiếu nào.
+   *
+   * Hỏng giữa chừng thì DỪNG LẠI, không cố chạy tiếp: những cái đã cấp vẫn
+   * giữ, và bấm lại lần nữa là chạy nốt phần còn lại — vì danh sách "chưa có
+   * số" tự tính lại.
+   */
+  const handleCapBuSoPhieu = async (
+    ds: {
+      loai: "NHAP" | "XUAT";
+      nguon: string;
+      documentDate: string;
+      donVi: string;
+      soDong: number;
+      soLuong: number;
+    }[],
+  ) => {
+    let xong = 0;
+    try {
+      for (const c of ds) {
+        await capSoPhieu(db, {
+          loai: c.loai,
+          documentDate: c.documentDate,
+          nguon: c.nguon,
+          donVi: c.donVi,
+          soDong: c.soDong,
+          soLuong: c.soLuong,
+          createdBy: user || "Guest",
+        });
+        xong += 1;
+      }
+      showNotification(`Đã cấp số cho ${xong} chứng từ`);
+    } catch (e) {
+      alert(
+        `Đã cấp được ${xong}/${ds.length} chứng từ rồi dừng lại.\n\n${
+          e instanceof Error ? e.message : String(e)
+        }\n\nBấm "Cấp số" lần nữa để chạy nốt phần còn lại.`,
+      );
+    }
+  };
+
   const handleSaveHoaDon = async (ds: HoaDonGhiNhan[]) => {
     if (!ds.length) return;
     try {
@@ -5476,6 +5579,64 @@ export default function App() {
 
       await batch.commit();
 
+      /*
+       * CẤP SỐ PHIẾU — SAU KHI CHỨNG TỪ ĐÃ LƯU XONG, KHÔNG CẤP TRƯỚC.
+       *
+       * Cấp trước rồi lưu hỏng thì sổ có một số trỏ vào chỗ trống, đúng cái
+       * "nhảy số" mà kiểm toán hỏi đầu tiên. Cấp sau thì tệ nhất là chứng từ
+       * tạm thời chưa có số, và màn hình Sổ số phiếu có nút cấp bù.
+       *
+       * Cũng vì vậy lỗi ở đây KHÔNG làm hỏng cả lần lưu: hàng đã vào sổ kho
+       * rồi, bắt người dùng nhập lại từ đầu chỉ để lấy một con số là tệ hơn.
+       *
+       * Tồn đầu kỳ (`OPENING`) không cấp số: nó là số dư mang sang, không có
+       * lượt giao nhận nào để in ra một tờ phiếu.
+       */
+      let soPhieuVuaCap = "";
+      try {
+        if (type === "IN" && slipCode) {
+          const g = await capSoPhieu(db, {
+            loai: "NHAP",
+            documentDate: transactionDate.slice(0, 10),
+            nguon: slipCode,
+            donVi: par?.name || "",
+            soDong: validItems.length,
+            soLuong: validItems.reduce(
+              (t, it) => t + (Number(it.quantity) || 0),
+              0,
+            ),
+            createdBy: user || "Guest",
+          });
+          soPhieuVuaCap = g.soPhieu;
+        } else if (type === "OUT") {
+          const g = await capSoPhieu(db, {
+            loai: "XUAT",
+            documentDate: transactionDate.slice(0, 10),
+            nguon: referenceGroupId,
+            donVi: par?.name || "",
+            soDong: validItems.length,
+            // Cộng cả hao hụt: hàng ra khỏi kho là cả hai phần, và tờ phiếu
+            // giấy cũng ghi cả hai.
+            soLuong: validItems.reduce(
+              (t, it) =>
+                t +
+                (Number(it.quantity) || 0) +
+                (Number(it.lossQuantity) || 0),
+              0,
+            ),
+            createdBy: user || "Guest",
+          });
+          soPhieuVuaCap = g.soPhieu;
+        }
+      } catch (e) {
+        console.error("Cap so phieu that bai", e);
+        alert(
+          `Đã lưu chứng từ, nhưng CHƯA CẤP ĐƯỢC SỐ PHIẾU.\n\n${
+            e instanceof Error ? e.message : String(e)
+          }\n\nVào mục "Sổ số phiếu" bấm "Cấp số cho chứng từ chưa có số" để cấp bù.`,
+        );
+      }
+
       const inTransit = newTransaction.isInTransit;
 
       // Immediate state updates
@@ -5502,8 +5663,10 @@ export default function App() {
       setLoading(false);
       showNotification(
         slipCode
-          ? `Đã tạo phiếu ${slipCode} — in ra cho hai bên ký, có ảnh ký thì hàng mới vào tồn`
-          : "Hệ thống cập nhật data thành công",
+          ? `Phiếu ${soPhieuVuaCap || slipCode} — in ra cho hai bên ký, có ảnh ký thì hàng mới vào tồn`
+          : soPhieuVuaCap
+            ? `Đã lưu, số phiếu ${soPhieuVuaCap}`
+            : "Hệ thống cập nhật data thành công",
       );
     } catch (err) {
       setLoading(false);
@@ -5552,6 +5715,23 @@ export default function App() {
    * luật rộng hơn giao diện thì mở DevTools là làm được thứ màn hình không cho.
    */
   const daDuocDuyet = useMemo(() => userRole !== "PENDING", [userRole]);
+
+  /**
+   * Tra số phiếu theo chứng từ gốc: mã phiếu nhập, hoặc `referenceGroupId` của
+   * lượt xuất.
+   *
+   * Bỏ qua phiếu hủy — chúng dùng chung `nguon` với phiếu gốc, gộp vào bảng tra
+   * thì một chứng từ tra ra số hủy thay vì số của chính nó.
+   */
+  const soPhieuTheoNguon = useMemo(() => {
+    const m = new Map<string, string>();
+    soPhieu.forEach((g) => {
+      if (g?.nguon && g.soPhieu && g.loai !== "HUY_NHAP" && g.loai !== "HUY_XUAT") {
+        m.set(g.nguon, g.soPhieu);
+      }
+    });
+    return m;
+  }, [soPhieu]);
 
   /**
    * Vai trò này làm được những gì — một nơi duy nhất, ở `src/lib/quyen.ts`.
@@ -5658,6 +5838,22 @@ export default function App() {
                   label: "Đơn đi đường",
                   icon: Truck,
                   color: "#fbbf24",
+                },
+              ]
+            : []),
+          /*
+           * Sổ số phiếu cho MỌI vai trò xem được kho, không riêng người ghi.
+           * Đây là sổ chứng từ: tra một số phiếu là việc ai trong kho cũng
+           * phải làm được. Còn hủy phiếu và cấp bù số thì mới cần quyền ghi —
+           * chặn ở trong màn hình bằng `duocGhi`.
+           */
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "so-phieu",
+                  label: "Sổ số phiếu",
+                  icon: Hash,
+                  color: "#8b5cf6",
                 },
               ]
             : []),
@@ -8907,7 +9103,15 @@ export default function App() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-baseline justify-between gap-2">
                                   <span className="font-black text-slate-900 text-base leading-none">
-                                    Phiếu {sheetNumber}
+                                    {/* Số phiếu thật nếu đã cấp; chưa cấp thì
+                                        mới rơi về số đếm tạm. */}
+                                    {soPhieuTheoNguon.get(id) ? (
+                                      <span className="font-mono">
+                                        {soPhieuTheoNguon.get(id)}
+                                      </span>
+                                    ) : (
+                                      <>Phiếu {sheetNumber}</>
+                                    )}
                                   </span>
                                   <span className="font-mono font-black text-base text-amber-600 leading-none shrink-0">
                                     {formatNumber(totalQty)}
@@ -9102,7 +9306,13 @@ export default function App() {
                                 </td>
                                 <td className="py-4 px-6">
                                   <div className="font-bold text-slate-900 text-sm leading-tight">
-                                    Phiếu số: {sheetNumber}
+                                    {soPhieuTheoNguon.get(id) ? (
+                                      <span className="font-mono">
+                                        {soPhieuTheoNguon.get(id)}
+                                      </span>
+                                    ) : (
+                                      <>Phiếu số: {sheetNumber}</>
+                                    )}
                                   </div>
                                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">
                                     {group.length} mặt hàng khác nhau
@@ -11246,6 +11456,30 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       hoaDon={hoaDon}
                     />
                   )}
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "so-phieu" && daDuocDuyet && quyen.xemKho && (
+              <div className="space-y-6">
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                    Sổ số phiếu
+                  </h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Mỗi phiếu nhập · xuất một số cố định · ngày biên bản và ngày
+                    vào hệ thống
+                  </p>
+                </div>
+                <Card>
+                  <SoPhieuManHinh
+                    soPhieu={soPhieu}
+                    transactions={transactions}
+                    slips={slips}
+                    duocGhi={quyen.ghiNhap || quyen.ghiXuat}
+                    onHuy={handleHuyPhieu}
+                    onCapBu={handleCapBuSoPhieu}
+                  />
                 </Card>
               </div>
             )}
