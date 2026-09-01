@@ -13,11 +13,14 @@
  */
 
 import {
+  COS_NGHIENG,
   GOC_SANG,
   MEP_MIENG,
   NHAN_CUOI,
   NHAN_DAU,
+  NGHIENG,
   RANH_DUOI,
+  SIN_NGHIENG,
   TRAN_DGOC,
   VANH_DUOI,
   VANH_TREN,
@@ -26,6 +29,7 @@ import {
   cotNhan,
   doSang,
   dungBangS,
+  napLon,
   sangDauLon,
 } from "../lonXoay";
 
@@ -206,6 +210,74 @@ dung(
   eq("khong bac nao vuot tran", qua, 0);
   // Càng ra mép càng nén — đó là lý do phải lấy trung bình cả khoảng.
   dung("cang ra mep cang nen", b.dGoc[1000] > b.dGoc[700] && b.dGoc[700] > b.dGoc[512]);
+}
+
+// ------------------------------------------- nhìn chếch từ trên xuống
+
+gan("sin khop goc chech", SIN_NGHIENG, Math.sin(NGHIENG), 1e-12);
+gan("cos khop goc chech", COS_NGHIENG, Math.cos(NGHIENG), 1e-12);
+/*
+ * Phải chếch THẬT nhưng đừng nhiều. Bằng 0 thì nắp nằm đúng cạnh, không tài
+ * nào thấy cái khoen — đúng cái tật khiến đỉnh lon trông như bị cắt cụt. Quá
+ * 30° thì thành nhìn từ trên xuống, thân lon bị bóp ngắn và nhãn mất chỗ.
+ */
+dung("goc chech nam trong khoang dung", NGHIENG > 0.2 && NGHIENG < 0.55);
+
+// ---------------------------------------------------------- nắp lon
+
+/*
+ * Ánh sáng trên nắp phải theo TOẠ ĐỘ MÀN HÌNH, còn chi tiết dập nổi theo toạ
+ * độ trong mặt nắp. Lấy nhầm hệ thì vệt sáng bám dính lấy cái khoen và quay
+ * vòng vòng cùng nó, nhìn rất giả.
+ */
+dung(
+  "mep xa sang hon mep gan",
+  napLon(0.5, 2.2, 0, -0.5) > napLon(0.5, 2.2, 0, 0.5),
+);
+// Cùng một chỗ trên màn hình, xoay lon đi thì chi tiết đổi — khoen quay theo.
+dung(
+  "chi tiet dap noi xoay theo lon",
+  Math.abs(napLon(0.45, 0, 0, 0.45) - napLon(0.45, PI, 0, 0.45)) > 0.05,
+);
+/*
+ * Rãnh chìm quanh nắp phải tối hơn cả mặt nắp lẫn mép ghép mí.
+ *
+ * Lấy điểm so sánh ở psi = π/2, tức lệch hẳn sang bên — chỗ đó là mặt nắp
+ * trơn. Lấy psi = 0 thì rơi trúng cái khoen, và tệ hơn là trúng lỗ móc ngón
+ * tay, vốn cố ý tối.
+ */
+dung(
+  "ranh chim toi hon mat nap",
+  napLon(0.9, PI / 2, 0.9, 0) < napLon(0.6, PI / 2, 0.6, 0),
+);
+dung(
+  "ranh chim toi hon mep ghep mi",
+  napLon(0.9, PI / 2, 0.9, 0) < napLon(0.95, PI / 2, 0.95, 0),
+);
+// Đinh tán giữa nắp là chỗ bắt sáng rõ nhất.
+dung(
+  "dinh tan sang hon than khoen",
+  napLon(0.02, 0, 0, 0.02) > napLon(0.3, 0, 0, 0.3),
+);
+// Lỗ móc ngón tay nhìn xuyên xuống nên tối hơn thân khoen.
+dung(
+  "lo moc tay toi hon than khoen",
+  napLon(0.44, 0, 0, 0.44) < napLon(0.2, 0, 0, 0.2),
+);
+{
+  let am = 0;
+  let vot = 0;
+  for (let i = 0; i <= 60; i++) {
+    for (let j = 0; j < 24; j++) {
+      const rho = i / 60;
+      const psi = (j / 24) * 2 * PI;
+      const h = napLon(rho, psi, rho * Math.sin(psi), rho * Math.cos(psi));
+      if (!(h > 0)) am++;
+      if (h > 2) vot++;
+    }
+  }
+  eq("he so sang cua nap luon duong", am, 0);
+  eq("he so sang cua nap khong vot qua cao", vot, 0);
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

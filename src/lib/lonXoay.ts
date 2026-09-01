@@ -215,3 +215,110 @@ export function cotNhan(goc: number): number {
   const v = goc / (2 * Math.PI) + 0.5;
   return v - Math.floor(v);
 }
+
+/* ---------------------------------------------------- nhìn chếch từ trên */
+
+/**
+ * GÓC NHÌN CHẾCH TỪ TRÊN XUỐNG.
+ *
+ * Bản trước nhìn NGANG TUYỆT ĐỐI — mắt đặt đúng giữa thân lon. Ở góc ấy nắp lon
+ * nằm đúng cạnh nên chỉ còn một vạch, không tài nào thấy được cái nắp khui. Đó
+ * là lý do đỉnh lon trông như bị cắt cụt.
+ *
+ * Mọi ảnh chụp lon bia đều chếch từ trên xuống, đủ để thấy mặt nắp thành một
+ * hình bầu dục.
+ *
+ * 22° là chỗ vừa. Thử 12° thì nắp dẹt còn một phần năm bề ngang, cái khoen bị
+ * bóp lại thành một cục không đọc ra hình gì. Quá 30° thì thành nhìn từ trên
+ * xuống, thân lon bị bóp ngắn và nhãn mất chỗ. 22° thấy rõ cả cái nắp khui mà
+ * thân chỉ ngắn đi bảy phần trăm.
+ *
+ * Hệ quả quan trọng: MỌI ĐƯỜNG NGANG TRÊN NHÃN THÀNH MỘT CUNG CONG. Một vòng
+ * tròn nằm ngang, nhìn chếch, chiếu ra thành hình bầu dục — nên mép trên của
+ * nhãn võng xuống ở phía gần mắt và cong lên ở phía xa. Chính cái võng ấy làm
+ * mắt đọc ra vật tròn xoay, chứ không phải một cái ống dán giấy.
+ */
+export const NGHIENG = (22 * Math.PI) / 180;
+export const SIN_NGHIENG = Math.sin(NGHIENG);
+export const COS_NGHIENG = Math.cos(NGHIENG);
+
+/**
+ * NẮP LON NHÌN TỪ TRÊN XUỐNG — trả hệ số sáng tại một điểm trên mặt nắp.
+ *
+ * Nhận HAI hệ toạ độ, và đó là chỗ dễ nhầm nhất:
+ *
+ *   · `rho`, `psi` — toạ độ TRONG MẶT NẮP, xoay theo lon. Mọi chi tiết dập nổi
+ *     dùng hệ này: cái khoen gắn chặt vào nắp nên phải quay theo lon.
+ *   · `u`, `v` — toạ độ TRÊN MÀN HÌNH, đứng yên. Ánh sáng dùng hệ này: đèn
+ *     không quay theo lon. Lấy nhầm hệ thì vệt sáng bám dính lấy cái khoen và
+ *     quay vòng vòng cùng nó, nhìn rất giả.
+ *
+ * Dựng theo đúng cấu tạo nắp lon 202 loại giật (khoen ở lại trên nắp):
+ *
+ *   mép ghép mí cuộn tròn → rãnh chìm quanh nắp → mặt nắp hơi lõm
+ *   → đường khắc hình giọt nước → khoen: đinh tán giữa, mũi đè lên đường khắc,
+ *     đuôi loe ra có lỗ móc ngón tay
+ */
+export function napLon(rho: number, psi: number, u: number, v: number): number {
+  /*
+   * ÁNH SÁNG MÔI TRƯỜNG TRÊN MẶT NẮP.
+   *
+   * Mặt nắp nằm ngang nên xét thuần theo hướng thì chỗ nào cũng sáng như nhau,
+   * và ra một mảng bạc phẳng lì. Nắp thật không vậy: nó hơi lõm và bóng, nên
+   * soi cả bầu trời phía trên — mép xa sáng, mép gần tối dần. Chính dải chuyển
+   * ấy làm mắt đọc ra mặt kim loại chứ không phải miếng bìa xám.
+   */
+  const moiTruong = 0.86 + 0.26 * (0.5 - v * 0.5);
+
+  // Mép ghép mí: hai vòng, vòng ngoài hơi tối, đỉnh mí bắt sáng.
+  if (rho > 0.975) return 0.86 * moiTruong;
+  if (rho > 0.935) return 1.16 * moiTruong;
+  // Rãnh chìm quanh nắp — vòng tối rõ nhất trên cả cái nắp.
+  if (rho > 0.875) return 0.48 * moiTruong;
+  if (rho > 0.84) return 1.02 * moiTruong;
+
+  // Mặt nắp hơi lõm: giữa tối hơn rìa một chút.
+  let sang = (0.78 + 0.2 * rho * rho) * moiTruong;
+  // Vệt chói chéo, đứng yên theo màn hình.
+  sang += 0.16 * Math.exp(-Math.pow((u * 0.7 + v * 0.7 + 0.25) * 2.4, 2));
+
+  // Toạ độ vuông góc TRONG MẶT NẮP; khoen nằm dọc trục py, đuôi về phía dương.
+  const px = rho * Math.sin(psi);
+  const py = rho * Math.cos(psi);
+
+  /*
+   * Đường khắc hình giọt nước, nằm ở nửa đối diện với lỗ móc tay. Chỉ tô ĐƯỜNG
+   * VIỀN chứ không tô ruột: trên nắp thật đó là một rãnh khắc chìm, không phải
+   * một mảng khác màu.
+   */
+  const dKhac = Math.hypot(px / 0.85, (py + 0.28) / 1.15);
+  if (py < -0.14 && Math.abs(dKhac - 0.32) < 0.026) sang *= 0.74;
+
+  /*
+   * Thân khoen: loe dần từ mũi ra đuôi, không phải một thanh đều. Nửa bề rộng
+   * đi từ 0,095 ở mũi lên 0,21 ở đuôi — đó là cái làm nó ra hình cái khoen chứ
+   * không phải cái que.
+   */
+  const trong = py > -0.5 && py < 0.76;
+  if (trong) {
+    const doc = (py + 0.5) / 1.26; // 0 ở mũi, 1 ở đuôi
+    const nuaRong = 0.115 + 0.115 * doc * doc;
+    const ngoaiRia = Math.abs(px) - nuaRong;
+    if (ngoaiRia < 0) {
+      sang *= 1.14;
+      // Viền khoen dập nổi: một vạch mảnh tối chạy quanh mép.
+      if (ngoaiRia > -0.022) sang *= 0.66;
+    }
+  }
+
+  // Lỗ móc ngón tay ở đuôi khoen — nhìn xuyên xuống mặt nắp nên tối.
+  const dLo = Math.hypot(px / 0.1, (py - 0.44) / 0.2);
+  if (dLo < 1) sang *= dLo > 0.8 ? 0.62 : 0.4;
+
+  // Đinh tán giữa nắp: núm nhôm dập nổi, bắt sáng rõ nhất trên cả cái nắp.
+  const dTan = Math.hypot(px, py);
+  if (dTan < 0.062) sang *= 1.3;
+  else if (dTan < 0.086) sang *= 0.66;
+
+  return sang;
+}
