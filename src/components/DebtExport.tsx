@@ -12,10 +12,9 @@ import { format } from "date-fns";
 import type { Transaction, Product, Partner } from "../types";
 import { PRICE_TABLE, invoiceUnitOf } from "../lib/invoice";
 import {
-  COT_CHOT,
   dungBangCongNo,
   nhanNgayGiao,
-  oCuaDong as oCuaDongChot,
+  type DongCongNo,
   type DotChot,
 } from "../lib/congNo";
 import {
@@ -73,17 +72,14 @@ interface Props {
 }
 
 /*
- * Cột nào là SỐ, cột nào là TIỀN — theo chỉ số cột của `COT_CHOT`.
+ * Cột nào canh phải, theo chỉ số của bảng 13 cột TRÊN MÀN HÌNH (không phải 18
+ * cột của tệp):
  *
- *   0 Ngày giao · 1 Ngày hóa đơn · 2 STT · 3 Đơn vị · 4 Mã vật tư ·
- *   5 Tên hàng hóa · 6 ĐVT · 7 Số lượng ·
- *   8..11  Đơn giá / Thành tiền / VAT / Sau thuế — chặng SKB → DNC
- *   12 Số hóa đơn
- *   13..16 Đơn giá / Thành tiền / VAT / Sau thuế — chặng DNC → ĐVTV
- *   17 Mã BP
+ *   0 STT · 1 Mã vật tư · 2 Tên hàng hóa · 3 ĐVT · 4 Số lượng
+ *   5..8  Đơn giá / Thành tiền / VAT / Sau thuế — chặng SKB → DNC
+ *   9..12 Đơn giá / Thành tiền / VAT / Sau thuế — chặng DNC → ĐVTV
  */
-const COT_TIEN = [8, 9, 10, 11, 13, 14, 15, 16];
-const COT_SO = [7, ...COT_TIEN];
+const COT_SO = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const KHOA_LUU = "bcsx.congno.dot";
 const KHOA_LUU_SO = "bcsx.congno.sohoadon";
@@ -172,6 +168,33 @@ export default function DebtExport({
    * Kèm tổng tiền để người điền đối chiếu với tờ hóa đơn đang cầm trước khi gõ
    * số vào — gõ nhầm số sang đơn vị khác thì đối chiếu thuế sau này mới lộ.
    */
+  /**
+   * Gom các dòng của cùng MỘT hóa đơn lại thành một khối.
+   *
+   * Sheet "Chốt" lặp lại năm cột trên từng dòng — ngày giao, ngày hóa đơn, đơn
+   * vị, số hóa đơn, mã BP — vì Excel không có cách nào khác. Trên màn hình thì
+   * không cần: năm cột ấy giống hệt nhau trong cả một hóa đơn, mà chúng ăn gần
+   * một nửa bề ngang và đẩy khối giá chặng DNC ra ngoài màn hình.
+   *
+   * Đưa năm cột đó lên một dải đầu khối, bảng còn 13 cột và vừa màn hình, không
+   * phải kéo ngang lần nào. TỆP TẢI VỀ KHÔNG ĐỔI — vẫn đúng 18 cột phẳng như
+   * file bộ phận.
+   *
+   * Gom theo dòng LIỀN KỀ chứ không gom bằng Map: bảng đã xếp sẵn theo đợt rồi
+   * tới đơn vị, gom bằng Map sẽ kéo hai đợt cách xa nhau về chung một khối và
+   * hỏng thứ tự file gốc.
+   */
+  const khoiHoaDon = useMemo(() => {
+    const ra: { khoa: string; dau: DongCongNo; dong: DongCongNo[] }[] = [];
+    bang.dong.forEach((d) => {
+      const khoa = `${d.ngayGiaoBia}|${d.maBp || d.donVi}|${d.soHoaDon}`;
+      const cuoi = ra[ra.length - 1];
+      if (cuoi && cuoi.khoa === khoa) cuoi.dong.push(d);
+      else ra.push({ khoa, dau: d, dong: [d] });
+    });
+    return ra;
+  }, [bang.dong]);
+
   const daGhi = useMemo(() => bangHoaDon(hoaDon), [hoaDon]);
   const canDien = useMemo(
     () =>
@@ -846,124 +869,189 @@ export default function DebtExport({
         </p>
       ) : (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          {/* Chỉ còn cuộn DỌC. Bảng đã vừa bề ngang nên bỏ overflow-x. */}
+          <div className="max-h-[520px] overflow-y-auto">
             {/*
-              BẢNG NÀY LÀ CHÍNH FILE, KHÔNG PHẢI MỘT BẢN RÚT GỌN.
+              MÀN HÌNH GOM THEO HÓA ĐƠN, TỆP THÌ VẪN PHẲNG 18 CỘT.
 
-              Bản trước tự liệt kê 12 cột nên thiếu hẳn "Ngày hóa đơn", "Thành
-              tiền sau thuế" và cả khối giá chặng DNC — xem trước thấy một hình,
-              tải tệp về thấy một hình khác, và người đọc không có cách nào biết
-              trước là thiếu.
+              Sheet "Chốt" lặp lại ngày giao, ngày hóa đơn, đơn vị, số hóa đơn
+              và mã BP trên TỪNG dòng — Excel không có cách nào khác. Nhưng năm
+              cột ấy chiếm gần nửa bề ngang, đẩy cả khối giá chặng DNC ra ngoài
+              màn hình, nên đọc một dòng phải kéo ngang rồi kéo ngược về.
 
-              Nay lấy thẳng `COT_CHOT` và `oCuaDong()` — đúng hai thứ mà bộ ghi
-              tệp dùng. Thêm hay bớt cột thì cả hai đổi cùng lúc, không lệch
-              được nữa.
+              Nay năm cột đó thành một dải đầu mỗi hóa đơn, bảng còn 13 cột và
+              vừa màn hình. Không mất thông tin nào — chỉ thôi lặp lại thứ vốn
+              giống hệt nhau trong cả một hóa đơn.
 
-              Hai khối giá tô hai màu như trong tệp: bảng có hai bộ cột
-              Đơn giá / Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng
-              chỉ lệch nhau vài phần trăm nên đọc nhầm cũng không lộ ra.
+              Hai khối giá vẫn tô hai màu như trong tệp: hai bộ cột Đơn giá /
+              Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng chỉ lệch
+              vài phần trăm nên đọc nhầm cũng không lộ ra.
             */}
-            <table className="w-full text-left whitespace-nowrap">
+            <table className="w-full text-left table-fixed">
+              <colgroup>
+                <col className="w-10" />
+                <col className="w-[86px]" />
+                <col />
+                <col className="w-12" />
+                <col className="w-20" />
+                <col className="w-[62px]" />
+                <col className="w-[92px]" />
+                <col className="w-[82px]" />
+                <col className="w-[96px]" />
+                <col className="w-[62px]" />
+                <col className="w-[92px]" />
+                <col className="w-[82px]" />
+                <col className="w-[96px]" />
+              </colgroup>
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
-                  <th colSpan={8} className="bg-slate-50" />
+                  <th colSpan={5} className="bg-slate-50" />
                   <th
-                    colSpan={5}
-                    className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center"
+                    colSpan={4}
+                    className="px-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center"
                   >
                     SKB - DNC
                   </th>
                   <th
-                    colSpan={5}
-                    className="px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center"
+                    colSpan={4}
+                    className="px-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center"
                   >
                     DNC xuất BNC và ĐVTV
                   </th>
                 </tr>
                 <tr>
-                  {COT_CHOT.map((h, i) => (
+                  {[
+                    "STT",
+                    "Mã vật tư",
+                    "Tên hàng hóa",
+                    "ĐVT",
+                    "Số lượng",
+                    "Đơn giá",
+                    "Thành tiền",
+                    "VAT",
+                    "Sau thuế",
+                    "Đơn giá",
+                    "Thành tiền",
+                    "VAT",
+                    "Sau thuế",
+                  ].map((h, i) => (
                     <th
                       key={i}
                       className={cn(
-                        "px-3 py-2 text-[9px] font-black uppercase tracking-widest",
-                        i >= 8 && i <= 12
+                        "px-2 py-2 text-[9px] font-black uppercase tracking-widest",
+                        COT_SO.includes(i) && "text-right",
+                        i >= 5 && i <= 8
                           ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
-                          : i >= 13
+                          : i >= 9
                             ? "bg-[#6B4E71]/10 text-[#6B4E71]"
                             : "text-slate-400",
-                        COT_SO.includes(i) && "text-right",
                       )}
                     >
-                      {h.trim()}
+                      {h}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {bang.dong.map((r) => {
-                  const o = oCuaDongChot(r);
-                  return (
+
+              {khoiHoaDon.map((k) => (
+                <tbody key={k.khoa} className="border-t-2 border-slate-200">
+                  {/* Dải đầu hóa đơn: năm cột không lặp lại nữa. */}
+                  <tr className="bg-slate-100/70">
+                    <td
+                      colSpan={13}
+                      className="px-2 py-1.5 text-[10px] font-black text-slate-600"
+                    >
+                      <span className="text-slate-900">{k.dau.donVi}</span>
+                      <span className="text-slate-300 mx-1.5">·</span>
+                      <span className="font-mono text-slate-500">
+                        {k.dau.maBp || "chưa có mã BP"}
+                      </span>
+                      <span className="text-slate-300 mx-1.5">·</span>
+                      <span className="font-mono text-[10px] text-slate-700">
+                        {k.dau.soHoaDon}
+                      </span>
+                      <span className="text-slate-300 mx-1.5">·</span>
+                      <span className="font-normal text-slate-400">
+                        giao {k.dau.ngayGiaoBia} · HĐ {k.dau.ngayHoaDon}
+                      </span>
+                    </td>
+                  </tr>
+
+                  {k.dong.map((r) => (
                     <tr
                       key={r.stt}
                       className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
                     >
-                      {o.map((v, c) => (
-                        <td
-                          key={c}
-                          className={cn(
-                            "px-3 py-1.5",
-                            COT_SO.includes(c) && "text-right tabular-nums",
-                            // Cột số lượng và hai cột thành tiền là số người ta
-                            // đọc trước nhất, cho đậm lên.
-                            (c === 7 || c === 9 || c === 14) && "text-slate-900",
-                            (c === 4 || c === 12 || c === 17) &&
-                              "font-mono text-[10px]",
-                            c === 2 && "text-slate-400",
-                            c === 3 && "text-slate-900",
-                            c >= 13 && c <= 16 && "bg-[#6B4E71]/5",
-                            c >= 8 && c <= 11 && "bg-[#1F4E5F]/5",
-                          )}
-                        >
-                          {c === 7
-                            ? formatNumber(r.soLuong)
-                            : COT_TIEN.includes(c)
-                              ? tien(Number(v))
-                              : v}
-                        </td>
-                      ))}
+                      <td className="px-2 py-1.5 text-slate-400">{r.stt}</td>
+                      <td className="px-2 py-1.5 font-mono text-[10px]">
+                        {r.maVatTu}
+                      </td>
+                      {/* Cột duy nhất co giãn, và là cột duy nhất được xuống
+                          dòng — tên bia dài nhất cũng chỉ ăn hai dòng. */}
+                      <td className="px-2 py-1.5 leading-tight">
+                        {r.tenHangHoa}
+                      </td>
+                      <td className="px-2 py-1.5 text-slate-400">{r.dvt}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">
+                        {formatNumber(r.soLuong)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#1F4E5F]/5">
+                        {formatNumber(r.donGiaSkb)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
+                        {tien(r.thanhTienSkb)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#1F4E5F]/5">
+                        {tien(r.vatSkb)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
+                        {tien(r.sauThueSkb)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#6B4E71]/5">
+                        {formatNumber(r.donGiaDnc)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
+                        {tien(r.thanhTienDnc)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#6B4E71]/5">
+                        {tien(r.vatDnc)}
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
+                        {tien(r.sauThueDnc)}
+                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
+                  ))}
+                </tbody>
+              ))}
+
               <tfoot className="sticky bottom-0">
                 <tr className="bg-slate-100 border-t-2 border-slate-300 text-[11px] font-black text-slate-900">
-                  {COT_CHOT.map((_, c) => (
-                    <td
-                      key={c}
-                      className={cn(
-                        "px-3 py-2",
-                        COT_SO.includes(c) && "text-right tabular-nums",
-                      )}
-                    >
-                      {c === 0
-                        ? "TỔNG CỘNG"
-                        : c === 7
-                          ? formatNumber(bang.tong.soLuong)
-                          : c === 9
-                            ? tien(bang.tong.thanhTienSkb)
-                            : c === 10
-                              ? tien(bang.tong.vatSkb)
-                              : c === 11
-                                ? tien(bang.tong.sauThueSkb)
-                                : c === 14
-                                  ? tien(bang.tong.thanhTienDnc)
-                                  : c === 15
-                                    ? tien(bang.tong.vatDnc)
-                                    : c === 16
-                                      ? tien(bang.tong.sauThueDnc)
-                                      : ""}
-                    </td>
-                  ))}
+                  <td colSpan={4} className="px-2 py-2">
+                    TỔNG CỘNG
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {formatNumber(bang.tong.soLuong)}
+                  </td>
+                  <td />
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.thanhTienSkb)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.vatSkb)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.sauThueSkb)}
+                  </td>
+                  <td />
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.thanhTienDnc)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.vatDnc)}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {tien(bang.tong.sauThueDnc)}
+                  </td>
                 </tr>
               </tfoot>
             </table>

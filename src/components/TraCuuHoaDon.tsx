@@ -356,10 +356,27 @@ function TheHoaDon({
 
       {mo && (
         <div className="border-t border-slate-100">
-          {/* Bảng ngang nhiều cột nên cho cuộn trong khung của chính nó,
-              không để cả trang phải lướt ngang. */}
+          {/*
+            Bề rộng cột đặt cứng, chỉ cột tên hàng hóa co giãn — đó là cột duy
+            nhất được xuống dòng. Nhờ vậy bảng vừa bề ngang thẻ, không phải kéo
+            ngang; trên khung hẹp (điện thoại) thì mới cuộn.
+          */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[900px]">
+            <table className="w-full text-left table-fixed min-w-[860px]">
+              <colgroup>
+                <col className="w-[86px]" />
+                <col />
+                <col className="w-12" />
+                <col className="w-20" />
+                <col className="w-[62px]" />
+                <col className="w-[92px]" />
+                <col className="w-[82px]" />
+                <col className="w-[96px]" />
+                <col className="w-[62px]" />
+                <col className="w-[92px]" />
+                <col className="w-[82px]" />
+                <col className="w-[96px]" />
+              </colgroup>
               <thead>
                 {/* Hai khối giá tô hai màu như trong tệp — hai bộ cột giống
                     hệt nhau, không phân biệt thì rất dễ đọc nhầm chặng. */}
@@ -396,7 +413,7 @@ function TheHoaDon({
                     <th
                       key={i}
                       className={cn(
-                        "py-2.5 px-3 font-black text-[9px] uppercase tracking-widest whitespace-nowrap",
+                        "py-2 px-2 font-black text-[9px] uppercase tracking-widest whitespace-nowrap",
                         i >= 3 && "text-right",
                         i >= 4 && i <= 7
                           ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
@@ -413,40 +430,40 @@ function TheHoaDon({
               <tbody className="divide-y divide-slate-50">
                 {h.dong.map((d) => (
                   <tr key={`${d.maVatTu}|${d.dvt}`}>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-bold text-slate-500 whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-500 whitespace-nowrap">
                       {d.maVatTu || "—"}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-bold text-slate-800">
+                    <td className="py-2 px-2 text-[11px] font-bold text-slate-800 leading-tight">
                       {d.tenHangHoa}
                     </td>
-                    <td className="py-2.5 px-3 text-[10px] font-black text-slate-400 uppercase">
+                    <td className="py-2 px-2 text-[10px] font-black text-slate-400 uppercase">
                       {d.dvt}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                       {formatNumber(d.soLuong)}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
                       {formatNumber(d.donGiaSkb)}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.thanhTienSkb))}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.vatSkb))}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.sauThueSkb))}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono text-slate-400 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[11px] font-mono text-slate-400 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(d.donGiaDnc)}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.thanhTienDnc))}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.vatDnc))}
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.sauThueDnc))}
                     </td>
                   </tr>
@@ -456,31 +473,31 @@ function TheHoaDon({
                 <tr className="bg-slate-50 border-t border-slate-200">
                   <td
                     colSpan={3}
-                    className="py-2.5 px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest"
+                    className="py-2 px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest"
                   >
                     Tổng tờ này
                   </td>
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(h.soLuong)}
                   </td>
                   <td />
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.thanhTienSkb))}
                   </td>
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.vatSkb))}
                   </td>
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.sauThueSkb))}
                   </td>
                   <td />
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.thanhTienDnc))}
                   </td>
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.vatDnc))}
                   </td>
-                  <td className="py-2.5 px-3 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.sauThueDnc))}
                   </td>
                 </tr>

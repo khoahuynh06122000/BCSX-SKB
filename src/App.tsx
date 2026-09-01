@@ -6382,9 +6382,20 @@ export default function App() {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-slate-50/30">
+          {/*
+            Rộng 1600px chứ không phải max-w-7xl (1280px).
+
+            Trên màn hình 1920 thì thanh bên chiếm 288px, còn lại chừng 1630px —
+            cắt về 1280 là bỏ không hơn 350px mỗi bên, đúng hai khoảng trắng
+            Khoa chỉ ra. Mà bảng công nợ 18 cột lại đang phải kéo ngang.
+
+            Không để tràn hết bề ngang: trên màn hình siêu rộng thì một dòng chữ
+            dài 2000px đọc rất mỏi mắt. 1600 là chỗ vừa đủ cho bảng rộng nhất
+            trong app mà chữ vẫn ngắt dòng hợp lý.
+          */}
           <div
             key={activeTab}
-            className="max-w-7xl mx-auto space-y-4 sm:space-y-8 pb-24"
+            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24"
           >
             {/*
               MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
