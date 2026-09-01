@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Loader2, ShieldCheck, UserPlus } from "lucide-react";
-import LonXoay from "./LonXoay";
 
 /**
  * MÀN HÌNH ĐĂNG NHẬP
@@ -34,25 +33,38 @@ interface Props {
 type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
- * Ô NHÃN TRẢI PHẲNG — trọn một vòng 360° quanh thân lon.
+ * BA ẢNH LON TĨNH — dựng sẵn từ file bao bì của bộ phận.
  *
- * KHÔNG phải ảnh chụp lon: đây là chính tấm nhãn 208 × 107 mm trong file bao bì
- * của bộ phận, cắt ra bằng `scripts/lay-nhan-tu-bao-bi.py`. Lon trên màn hình
- * do `LonXoay` cuộn tấm này quanh một hình trụ mà thành.
+ * `scripts/dung-anh-lon.py` cuộn ô nhãn trải phẳng 208 × 107 mm quanh một hình
+ * trụ rồi chụp ngang, đúng như ba tấm ảnh chụp lon thật.
  *
- * Trước đây mỗi loại cần hai ảnh chụp — mặt trước và mặt sau — rồi trộn lại khi
- * xoay. Cách ấy để lại vệt nhoè ở hai hông, vì phần vỏ ở đó nằm đúng chỗ nhìn
- * nghiêng hết cỡ nên cả một vòng cung chỉ còn dăm cột ảnh.
+ * TRƯỚC ĐÂY LÀ MỘT LON QUAY 3D, dựng lại từng khung hình bằng canvas. Đã làm ba
+ * vòng: ảnh chụp mặt trước/mặt sau (nhoè ở hai hông), cuộn nhãn 360° (hết nhoè
+ * nhưng đỉnh và đáy không ra dáng lon), rồi nhìn chếch có nắp khui (đúng dáng
+ * nhưng đủ rồi). Chủ sở hữu quyết định bỏ.
+ *
+ * Đổi lại được ba thứ: màn hình đăng nhập hết một vòng vẽ chạy liên tục, ba lon
+ * cùng hiện nên nói được đúng cái cần nói — đây là ba vị bia của Bà Nà — và bộ
+ * mã nhẹ đi gần một nghìn dòng.
  *
  * Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
- * trắng. Bắt lỗi bằng `onerror` chứ không kiểm tra trước: không có cách nào hỏi
+ * trắng. Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi
  * trình duyệt "tệp này có tồn tại không" mà không tải thử.
  */
-const NHAN_LON: Record<LoaiBia, string> = {
-  caubang: "/nhan-cau-vang.png",
-  laudai: "/nhan-lau-dai-mat-trang.png",
-  atlas: "/nhan-suc-manh-atlas.png",
+const ANH_LON: Record<LoaiBia, string> = {
+  caubang: "/lon-cau-vang.webp",
+  laudai: "/lon-lau-dai-mat-trang.webp",
+  atlas: "/lon-suc-manh-atlas.webp",
 };
+
+/**
+ * Thứ tự ba lon đứng trên màn hình, từ trái sang phải.
+ *
+ * CỐ ĐỊNH, không xếp lại theo loại đang chọn. Xếp lại thì mỗi lần đổi loại là
+ * ba lon nhảy chỗ, mắt phải bám theo — mà chúng chỉ là hình minh hoạ. Loại đang
+ * chọn chỉ bước lên trước và sáng lên.
+ */
+const THU_TU_LON: LoaiBia[] = ["laudai", "caubang", "atlas"];
 
 /**
  * Màu bia trong ly khi chưa có ảnh lon, lấy theo đúng tông của từng lon:
@@ -549,31 +561,58 @@ export default function ManHinhDangNhap({
         {veHat(hatSau, hatTruoc.length, 0.55)}
       </div>
 
-      {/* Lon bia ở giữa — ảnh thật nếu có, không thì hình vẽ */}
+      {/* Ba lon bia ở giữa — ảnh thật nếu có, không thì hình vẽ */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
         <div
           ref={lyRef}
-          className="dn-ly h-[58vh] max-h-[560px] w-auto"
-          style={{ aspectRatio: "280 / 400" }}
+          className="dn-ly h-[52vh] max-h-[520px] w-auto"
+          style={{ aspectRatio: "760 / 460" }}
         >
           {/* Hai lớp lồng nhau: lớp ngoài hiện lên lúc vào trang, lớp trong
               lắc không ngừng. Phải tách vì hoạt ảnh CSS đè transform đặt bằng
               style — gộp lại là mất phần nghiêng theo con trỏ mà vòng rAF ghi
               vào `.dn-ly`. Xem chú thích trong index.css. */}
-          <div className="dn-vao">
-            <div className="dn-lac">
-              {anhHong[loai] ? (
-                <LyBia loai={loai} />
-              ) : (
-                <LonXoay
-                  nhan={NHAN_LON}
-                  loai={loai}
-                  ten={TEN_BIA}
-                  onLoiAnh={(id) =>
-                    setAnhHong((t) => ({ ...t, [id as LoaiBia]: true }))
-                  }
-                />
-              )}
+          <div className="dn-vao h-full">
+            <div className="dn-lac h-full">
+              <div className="flex h-full items-end justify-center">
+                {THU_TU_LON.map((id) => {
+                  const dangChon = id === loai;
+                  return (
+                    <div
+                      key={id}
+                      className="h-full transition-all duration-700 ease-out"
+                      style={{
+                        /*
+                          Lon đang chọn cao hết khung và đứng trước; hai lon kia
+                          thấp hơn, lùi vào và mờ đi. Chồng mép âm để ba lon
+                          đứng sát nhau như xếp trên kệ, chứ không rời ra thành
+                          ba tấm ảnh dán cạnh nhau.
+                        */
+                        height: dangChon ? "100%" : "78%",
+                        marginInline: dangChon ? "-3.5%" : "-4.5%",
+                        opacity: dangChon ? 1 : 0.62,
+                        filter: dangChon
+                          ? "drop-shadow(0 26px 44px rgba(0,0,0,0.55))"
+                          : "drop-shadow(0 16px 28px rgba(0,0,0,0.45)) saturate(0.8)",
+                        zIndex: dangChon ? 2 : 1,
+                      }}
+                    >
+                      {anhHong[id] ? (
+                        <LyBia loai={id} />
+                      ) : (
+                        <img
+                          src={ANH_LON[id]}
+                          alt={`Lon ${TEN_BIA[id]}`}
+                          className="h-full w-auto object-contain"
+                          onError={() =>
+                            setAnhHong((t) => ({ ...t, [id]: true }))
+                          }
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

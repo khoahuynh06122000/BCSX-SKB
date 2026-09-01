@@ -292,8 +292,10 @@
    `.dn-ly` vừa mang hoạt ảnh vừa nhận transform từ vòng rAF, nên phần nghiêng
    theo con trỏ không bao giờ hiện ra.
 
-   Bản thân cú xoay của lon KHÔNG nằm ở đây: lon được vẽ lại từng khung hình
-   trên canvas theo phép chiếu hình trụ, xem `src/components/LonXoay.tsx`. */
+   Hai lớp này bọc CẢ BA lon, không phải một lon. Ba lon là ảnh tĩnh dựng sẵn
+   từ file bao bì — xem `public/README-anh-lon.md`. Phần bước lên trước và sáng
+   lên của lon đang chọn đặt bằng style trong `ManHinhDangNhap.tsx`, vì nó phụ
+   thuộc trạng thái React chứ không phải một hoạt ảnh chạy vòng. */
 .dn-vao {
   animation: dn-hien-len 1.2s ease-out 0.2s both;
   height: 100%;

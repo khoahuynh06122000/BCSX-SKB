@@ -1,15 +1,14 @@
-# Nhãn lon bia cho màn hình đăng nhập
-
-Ba tấm PNG dưới đây **không phải ảnh chụp lon**. Chúng là chính **ô nhãn trải
-phẳng 208 × 107 mm** trong file bao bì của bộ phận — trọn một vòng 360° quanh
-thân lon. Lon trên màn hình do `src/components/LonXoay.tsx` cuộn tấm này quanh
-một hình trụ mà thành, vẽ lại từng khung hình.
+# Ba ảnh lon bia cho màn hình đăng nhập
 
 | Loại bia | Tệp |
 |---|---|
-| Cầu Vàng — Golden Bridge Helles Lager | `nhan-cau-vang.png` |
-| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `nhan-lau-dai-mat-trang.png` |
-| Sức Mạnh Atlas — Atlas Wings Dark Lager | `nhan-suc-manh-atlas.png` |
+| Cầu Vàng — Golden Bridge Helles Lager | `lon-cau-vang.webp` |
+| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `lon-lau-dai-mat-trang.webp` |
+| Sức Mạnh Atlas — Atlas Wings Dark Lager | `lon-suc-manh-atlas.webp` |
+
+Ba tấm này **không phải ảnh chụp**. Chúng do `scripts/dung-anh-lon.py` dựng ra:
+cuộn ô nhãn trải phẳng 208 × 107 mm trong file bao bì của bộ phận quanh một
+hình trụ, rồi chụp ngang — đúng như ảnh chụp lon thật.
 
 Thiếu tệp nào thì **riêng loại đó** quay về hình vẽ SVG — không vỡ, không ô
 trắng, hai loại kia vẫn hiện bình thường.
@@ -20,32 +19,17 @@ Xin bộ phận file PDF bao bì (bản dieline), bỏ cả ba file vào một t
 chạy:
 
 ```bash
-python scripts/lay-nhan-tu-bao-bi.py "C:\Users\khoahd\Downloads\vỏ"
+python scripts/dung-anh-lon.py "C:\Users\khoahd\Downloads\vỏ"
 ```
 
 Script tự nhận loại bia theo tên file (`Atlas…`, `GoldenBridge…`, `Lunar…`) và
-ghi đè ba tấm PNG ở thư mục này. **Không phải sửa dòng code nào.**
+ghi đè ba tấm ở thư mục này. **Không phải sửa dòng code nào.**
 
 Cần `pymupdf`, `numpy`, `pillow`:
 
 ```bash
 python -m pip install pymupdf numpy pillow
 ```
-
-## Vì sao không dùng ảnh chụp lon
-
-Bản trước dùng **hai ảnh chụp** cho mỗi loại — mặt trước và mặt sau — rồi trộn
-lại khi xoay. Cách ấy có một chỗ hỏng không chữa được:
-
-> Phần vỏ ở hai hông lon nằm đúng chỗ ống kính nhìn nghiêng hết cỡ, nên cả một
-> vòng cung chỉ còn dăm cột ảnh. Xoay ra chính diện thì dăm cột ấy phải trải kín
-> mấy chục cột màn hình — và thành **vệt nhoè**.
-
-Cả một mớ chắp vá quanh chỗ hỏng đó cũng phải nuôi theo: dải hông tự dựng, hệ
-số tô tối dải hông, bản làm mờ dọc cho chỗ nối, trần độ nén.
-
-Cuộn thẳng từ nhãn 360° thì **không góc nào thiếu dữ liệu**, nên không cần chắp
-vá gì. Đó cũng là điều Khoa nói: chỉ cần nối ảnh thành một vòng tròn.
 
 ## Script làm gì
 
@@ -56,16 +40,42 @@ vá gì. Đó cũng là điều Khoa nói: chỉ cần nối ảnh thành một 
 2. **Xén 0,4 mm hai mép.** Đúng hai mép của ô nhãn gặp nhau khi cuộn quanh lon;
    sát mép còn đường đánh dấu chỗ cắt, để nguyên thì chỗ nối hiện ra một vạch
    dọc.
-3. **Xoá mấy đường đứt màu hồng** đánh dấu chỗ cắt và chỗ gấp. Chúng nằm đè lên
-   hình vẽ chứ không phải một lớp riêng nên không tắt được lúc kết xuất.
-4. **Ghi ra bằng bảng màu 256.** Nhãn là hình vẽ vector — ít màu, mảng màu lớn
-   và phẳng — nên bảng màu vừa đủ: từ 1,3 MB xuống 440 KB mỗi tấm mà nhìn không
-   ra khác biệt. Đáng giá vì màn hình đăng nhập tải cả ba tấm trước khi ai kịp
-   bấm gì.
+3. **Xoá mấy đường đứt màu hồng** đánh dấu chỗ cắt. Chúng nằm đè lên hình vẽ
+   chứ không phải một lớp riêng nên không tắt được lúc kết xuất.
+4. **Cuộn quanh hình trụ và chụp ngang.** Bán kính suy từ chính chu vi nhãn —
+   208 mm ÷ 2π = 33,1 mm, đúng lon 330 ml. Cổ lon thóp 17,81 mm như file ghi.
+   Kim loại trần ở vành miệng và đáy là **vàng champagne**, đúng như ảnh lon
+   thật, không phải bạc.
+5. **Ghi ra WebP chất lượng 92.** Cùng một tấm: PNG 833 KB, WebP 200 KB, mà
+   nhìn không ra khác biệt. Đáng giá vì màn hình đăng nhập tải cả ba tấm trước
+   khi ai kịp bấm gì.
 
-## Dáng hình lon nằm ở đâu
+## Vì sao không còn lon quay 3D
 
-Không nằm trong ảnh — nằm trong `src/lib/lonXoay.ts`, hàm `banKinhTheoHang()`
-và `sangDauLon()`. Vành miệng, cổ thóp 17,81 mm, rãnh, vành đáy và đáy cuộn vào
-đều dựng bằng phép tính theo đúng tỉ lệ lon 330 ml thật (rộng 66,3 mm trên
-115,2 mm cao). Muốn sửa dáng lon thì sửa ở đó.
+Trước đây màn hình đăng nhập quay một lon bia, dựng lại từng khung hình bằng
+canvas. Đã làm ba vòng:
+
+1. **Hai ảnh chụp mặt trước / mặt sau**, trộn lại khi xoay. Phần vỏ ở hai hông
+   nằm đúng chỗ nhìn nghiêng hết cỡ nên cả một vòng cung chỉ còn dăm cột ảnh —
+   xoay ra chính diện thì thành vệt nhoè.
+2. **Cuộn nhãn 360° trực tiếp.** Hết nhoè, nhưng đỉnh và đáy không ra dáng lon
+   vì góc nhìn ngang tuyệt đối thì nắp lon nằm đúng cạnh.
+3. **Nhìn chếch 22° có nắp khui.** Đúng dáng lon, nhưng đủ rồi.
+
+Chủ sở hữu quyết định bỏ. Đổi lại được ba thứ: màn hình đăng nhập hết một vòng
+vẽ chạy liên tục, ba lon cùng hiện nên nói được đúng cái cần nói — đây là ba vị
+bia của Bà Nà — và bộ mã nhẹ đi gần một nghìn dòng.
+
+Lịch sử ba vòng ấy còn trong git, tới commit `b87e5f3`.
+
+## Nếu muốn thay bằng ảnh chụp thật
+
+Cứ thay đúng ba tên tệp trên. Yêu cầu:
+
+- **Nền trong** (đã tách nền). Ảnh còn phông sẽ lộ ra một khối chữ nhật trên
+  nền tối, hỏng hết hiệu ứng lon lơ lửng.
+- Dựng đứng, cao từ **1000 px** trở lên.
+- **Chữ trên lon phải đọc xuôi.** Ảnh xuất từ file dựng bao bì đôi khi bị lật
+  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết.
+- Ba lon nên chụp cùng khoảng cách và cùng ánh sáng — chúng đứng cạnh nhau nên
+  lệch cỡ hay lệch sáng là thấy ngay.
