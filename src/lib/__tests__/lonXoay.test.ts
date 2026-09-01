@@ -156,16 +156,36 @@ dung("day lon thop lai", banKinhTheoHang(0.999) < 0.75);
 
 // ------------------------------------------------- dải sáng hai đầu lon
 
+/*
+ * Kiểm QUAN HỆ giữa các dải, không kiểm con số tuyệt đối.
+ *
+ * Bản trước chốt cứng "phải tối hơn 0,5". Đến lúc chỉnh lại cho khớp ảnh lon
+ * thật — đáy lon thật là dải vàng nhạt chứ không phải vệt gần đen — thì bốn
+ * phép kiểm ấy sai hết, dù hình vẽ ra đẹp hơn hẳn. Con số tuyệt đối là chuyện
+ * thẩm mỹ, còn thứ đáng canh là thứ tự sáng tối: rãnh phải tối hơn vành, vành
+ * phải sáng hơn mép, mép dưới cùng phải tối nhất.
+ */
 gan("than lon khong bi to them", sangDauLon(0.5), 1, 1e-9);
-dung("mep mieng toi", sangDauLon(0.002) < 0.5);
-dung("vanh mieng sang hon mep", sangDauLon(VANH_TREN * 0.6) > sangDauLon(0.002));
-dung("ranh duoi vanh toi lai", sangDauLon((VANH_TREN + NHAN_DAU) / 2) < 0.5);
-dung("ranh day toi", sangDauLon((NHAN_CUOI + RANH_DUOI) / 2) < 0.5);
-dung(
-  "vanh day sang hon ranh day",
-  sangDauLon((RANH_DUOI + VANH_DUOI) / 2) > sangDauLon((NHAN_CUOI + RANH_DUOI) / 2),
-);
-dung("mep duoi cung toi nhat", sangDauLon(1) < 0.15);
+
+const VANH_TREN_GIUA = (MEP_MIENG + VANH_TREN) / 2;
+const RANH_TREN_GIUA = (VANH_TREN + NHAN_DAU) / 2;
+const RANH_DAY_GIUA = (NHAN_CUOI + RANH_DUOI) / 2;
+const VANH_DAY_GIUA = (RANH_DUOI + VANH_DUOI) / 2;
+
+dung("mep mieng toi hon than", sangDauLon(0.002) < 1);
+dung("vanh mieng sang hon mep", sangDauLon(VANH_TREN_GIUA) > sangDauLon(0.002));
+dung("ranh duoi vanh toi hon vanh", sangDauLon(RANH_TREN_GIUA) < sangDauLon(VANH_TREN_GIUA));
+dung("ranh duoi vanh toi hon than", sangDauLon(RANH_TREN_GIUA) < 1);
+dung("ranh day toi hon than", sangDauLon(RANH_DAY_GIUA) < 1);
+dung("vanh day sang hon ranh day", sangDauLon(VANH_DAY_GIUA) > sangDauLon(RANH_DAY_GIUA));
+{
+  // Mép dưới cùng phải là chỗ tối nhất trên cả cái lon.
+  let sangHon = 0;
+  for (let i = 0; i < 2000; i++) {
+    if (sangDauLon(i / 2000) <= sangDauLon(1)) sangHon++;
+  }
+  eq("mep duoi cung toi nhat", sangHon, 0);
+}
 // Vành đáy hướng xuống nên không được chói bằng vành miệng.
 dung(
   "vanh day diu hon vanh mieng",

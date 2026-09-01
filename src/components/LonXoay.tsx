@@ -46,8 +46,16 @@ const CHU_KY_LAC = 9000;
 /** Biên độ lắc, radian. Khoảng 23 độ mỗi bên. */
 const BIEN_LAC = 0.4;
 
-/** Màu nhôm trần ở vành miệng và đáy lon, nơi không có nhãn. */
-const NHOM = [206, 208, 213];
+/**
+ * MÀU KIM LOẠI TRẦN ở vành miệng và đáy lon, nơi không có nhãn.
+ *
+ * VÀNG CHAMPAGNE, không phải bạc. Lon Sun KraftBeer phủ một lớp sơn lót màu
+ * vàng nhạt — nhìn ba tấm ảnh chụp lon thật của bộ phận thì đáy cả ba lon đều
+ * ánh vàng ấm, kể cả lon trắng Lâu Đài Mặt Trăng và lon đen Sức Mạnh Atlas.
+ *
+ * Bản trước để màu xám bạc, nên hai đầu lon lạc hẳn tông so với nhãn.
+ */
+const NHOM = [222, 199, 158];
 
 /** Một ô nhãn đã dựng sẵn bảng cộng dồn để lấy trung bình một khoảng bất kỳ. */
 interface Nhan {
@@ -181,7 +189,14 @@ const BAN_THAN_PX = (CAO_THAN * TI_LE_LON) / 2;
 const Y_DINH = LE + BAN_NAP * BAN_THAN_PX * SIN_NGHIENG;
 
 /** Màu nhôm của nắp lon — sáng hơn thân một chút vì nó hứng trọn ánh sáng. */
-const NHOM_NAP = [201, 204, 210];
+/**
+ * Nắp lon: cũng vàng nhưng NHẠT HƠN THÂN.
+ *
+ * Nắp là một chi tiết rời, dập từ tấm nhôm khác và không phủ cùng lớp sơn với
+ * thân, nên trên ảnh thật nó luôn bạc hơn — chỉ ánh vàng nhẹ chứ không vàng
+ * hẳn. Cho nó vàng bằng thân thì cả cái đỉnh lon dính thành một khối.
+ */
+const NHOM_NAP = [219, 209, 189];
 
 /**
  * BẢNG TÍNH SẴN CHO TỪNG ĐIỂM ẢNH CỦA KHUNG VẼ.

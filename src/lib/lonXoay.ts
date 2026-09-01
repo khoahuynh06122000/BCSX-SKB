@@ -76,12 +76,12 @@ export function doSang(goc: number): number {
 const CAO_MM = 115.2;
 const mm = (v: number) => v / CAO_MM;
 
-export const MEP_MIENG = mm(0.9); // mép trên cùng, nhìn nghiêng thấy tối
-export const VANH_TREN = mm(2.1); // vành miệng sáng loáng
-export const NHAN_DAU = mm(2.7); // nhãn bắt đầu ngay dưới rãnh miệng
-export const NHAN_CUOI = mm(109.7); // 2,7 + 107
-export const RANH_DUOI = mm(110.8);
-export const VANH_DUOI = mm(112.4);
+export const MEP_MIENG = mm(0.7); // mép trên cùng, nhìn nghiêng thấy tối
+export const VANH_TREN = mm(1.6); // vành miệng sáng loáng
+export const NHAN_DAU = mm(2.1); // nhãn bắt đầu ngay dưới rãnh miệng
+export const NHAN_CUOI = mm(109.1); // 2,1 + 107
+export const RANH_DUOI = mm(110.2);
+export const VANH_DUOI = mm(111.9);
 
 /** Bán kính thân lon, theo phần của nửa bề rộng khung vẽ. */
 const BAN_THAN = 1.0;
@@ -144,23 +144,28 @@ export function banKinhTheoHang(t: number): number {
  * và ở đáy thì đúng như vậy lật ngược.
  */
 export function sangDauLon(t: number): number {
-  if (t < MEP_MIENG) return 0.34;
+  if (t < MEP_MIENG) return 0.64;
   if (t < VANH_TREN) {
     const u = (t - MEP_MIENG) / (VANH_TREN - MEP_MIENG);
-    return 0.62 + 0.55 * Math.sin(u * Math.PI);
+    return 0.78 + 0.34 * Math.sin(u * Math.PI);
   }
-  if (t < NHAN_DAU) return 0.4;
+  if (t < NHAN_DAU) return 0.74;
   if (t <= NHAN_CUOI) return 1;
-  if (t <= RANH_DUOI) return 0.42;
+  if (t <= RANH_DUOI) return 0.72;
   if (t <= VANH_DUOI) {
     const u = (t - RANH_DUOI) / (VANH_DUOI - RANH_DUOI);
     // Bớt chói so với vành miệng: đáy lon hướng xuống nên ít đón sáng hơn.
-    return 0.5 + 0.34 * Math.sin(u * Math.PI);
+    return 0.72 + 0.26 * Math.sin(u * Math.PI);
   }
+  /*
+   * Đáy tối dần nhưng KHÔNG chìm hẳn vào bóng như bản trước.
+   *
+   * Nhìn ba tấm ảnh lon thật: đáy là một dải vàng NHẠT và sáng đều, chỉ tối
+   * nhẹ ở mép dưới cùng. Bản trước tối tới 0,1 nên hai đầu lon ra hai vệt gần
+   * đen, nhìn như lon bị cháy xém.
+   */
   const u = Math.min(1, (t - VANH_DUOI) / (1 - VANH_DUOI));
-  // Tối nhanh dần: mép dưới cùng gần như chìm hẳn vào bóng, nhờ vậy lon có vẻ
-  // đặt trên một mặt phẳng chứ không lơ lửng.
-  return 0.46 - 0.36 * Math.pow(u, 0.7);
+  return 0.86 - 0.42 * Math.pow(u, 0.8);
 }
 
 /** Nhãn phủ tới độ cao này không. */
@@ -271,11 +276,15 @@ export function napLon(rho: number, psi: number, u: number, v: number): number {
   const moiTruong = 0.86 + 0.26 * (0.5 - v * 0.5);
 
   // Mép ghép mí: hai vòng, vòng ngoài hơi tối, đỉnh mí bắt sáng.
-  if (rho > 0.975) return 0.86 * moiTruong;
-  if (rho > 0.935) return 1.16 * moiTruong;
-  // Rãnh chìm quanh nắp — vòng tối rõ nhất trên cả cái nắp.
-  if (rho > 0.875) return 0.48 * moiTruong;
-  if (rho > 0.84) return 1.02 * moiTruong;
+  if (rho > 0.975) return 0.95 * moiTruong;
+  if (rho > 0.935) return 1.14 * moiTruong;
+  /*
+   * Rãnh chìm quanh nắp — vòng tối nhất trên cả cái nắp, nhưng ĐỪNG tối quá.
+   * Để 0,48 thì nó cộng với dải tối của vành miệng bên dưới thành một vòng
+   * gần đen, trong khi ảnh lon thật chỉ có một nét sẫm mảnh.
+   */
+  if (rho > 0.88) return 0.66 * moiTruong;
+  if (rho > 0.85) return 1.0 * moiTruong;
 
   // Mặt nắp hơi lõm: giữa tối hơn rìa một chút.
   let sang = (0.78 + 0.2 * rho * rho) * moiTruong;
