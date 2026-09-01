@@ -53,7 +53,26 @@ SAI_SO_MM = 1.5
 # Lon 330ml tieu chuan.
 LON_CAO_MM = 115.2
 BAN_KINH_MM = NHAN_RONG_MM / (2 * math.pi)  # 33.1 mm, suy tu chinh chu vi nhan
-NHAN_DINH_MM = 2.0                          # nhan bat dau cach dinh lon 2mm
+
+"""
+MOC CAO DO CUA CAC PHAN TREN LON, tinh tu dinh xuong (mm).
+
+Ban truoc chi co "nhan" va "nhom tron", nen hai dau lon ra hai khoi xam det -
+Khoa noi dung: chang giong lon bia gi ca. Lon that co nhung chi tiet rat nho
+nhung mat nhan ra ngay: mep mieng toi, ngay duoi la vanh sang loang, roi mot
+ranh toi ngan cach vanh voi co lon; duoi day cung vay, mot ranh toi, mot vanh
+sang, roi day lom vao va toi han.
+
+May dai nay chi day vai milimet nhung chinh chung lam cho khoi kim loai doc ra
+la mot cai lon chu khong phai mot ong tru.
+"""
+MEP_MIENG_MM = 0.9      # mep tren cung, nhin nghieng thay toi
+VANH_TREN_MM = 2.1      # vanh mieng sang loang
+RANH_TREN_MM = 2.7      # ranh toi duoi vanh
+NHAN_DINH_MM = 2.7      # nhan bat dau ngay duoi ranh
+NHAN_CUOI_MM = NHAN_DINH_MM + NHAN_CAO_MM   # 109,7
+RANH_DUOI_MM = NHAN_CUOI_MM + 1.1           # ranh toi cuoi than
+VANH_DUOI_MM = RANH_DUOI_MM + 1.6           # vanh day sang
 CO_HET_MM = NHAN_DINH_MM + 17.81            # 17,81mm o co, dung nhu file ghi
 
 # ------------------------------------------------------------------- bong sang
@@ -91,8 +110,6 @@ CA SAU (ba loai bia, moi loai mat truoc va mat sau) truoc khi ai kip bam gi.
 Vy dung 3G thi do la gan nam giay nhin man hinh trong.
 """
 CAO_PX = 900
-SS = 6   # lay mau day them theo chieu ngang, roi thu nho lai
-SSY = 2
 
 PX_MM = CAO_PX / LON_CAO_MM
 BAN_KINH_PX = BAN_KINH_MM * PX_MM
@@ -109,25 +126,42 @@ def ban_kinh_theo_hang(y_mm):
     """
     r = np.full_like(y_mm, BAN_KINH_MM, dtype=np.float64)
 
-    # Vanh mieng lon.
-    m = y_mm < 1.0
-    r[m] = 26.2 + 1.0 * (y_mm[m] / 1.0)
+    # Mep mieng: vanh nhom cuon lai, nho nhat lon.
+    m = y_mm < MEP_MIENG_MM
+    r[m] = 25.6 + 0.5 * (y_mm[m] / MEP_MIENG_MM)
 
-    # Vai lon: no ra rat nhanh tu vanh sang co.
-    m = (y_mm >= 1.0) & (y_mm < NHAN_DINH_MM)
-    t = (y_mm[m] - 1.0) / (NHAN_DINH_MM - 1.0)
-    r[m] = 27.2 + (28.6 - 27.2) * t
+    # Vanh mieng: phinh ra mot chut roi thot lai - do la net cuon cua vanh.
+    m = (y_mm >= MEP_MIENG_MM) & (y_mm < VANH_TREN_MM)
+    t = (y_mm[m] - MEP_MIENG_MM) / (VANH_TREN_MM - MEP_MIENG_MM)
+    r[m] = 26.1 + 0.9 * np.sin(t * math.pi)
+
+    # Ranh duoi vanh: thot vao, cho hep nhat cua ca cai lon.
+    m = (y_mm >= VANH_TREN_MM) & (y_mm < RANH_TREN_MM)
+    r[m] = 25.9
 
     # Co lon: 17,81mm dung nhu file bao bi ghi, no dan ra bang than.
     m = (y_mm >= NHAN_DINH_MM) & (y_mm < CO_HET_MM)
     t = (y_mm[m] - NHAN_DINH_MM) / (CO_HET_MM - NHAN_DINH_MM)
     # Duong cong lom, khong phai duong thang: vai lon that phinh dan.
-    r[m] = 28.6 + (BAN_KINH_MM - 28.6) * np.sqrt(t)
+    r[m] = 25.9 + (BAN_KINH_MM - 25.9) * np.sqrt(t)
 
-    # Day lon.
-    m = y_mm >= 108.0
-    t = np.clip((y_mm[m] - 108.0) / (LON_CAO_MM - 108.0), 0, 1)
-    r[m] = BAN_KINH_MM - (BAN_KINH_MM - 25.5) * (t ** 2.2)
+    # Goc duoi cua than, ngay truoc ranh day.
+    m = (y_mm >= NHAN_CUOI_MM - 2.0) & (y_mm < RANH_DUOI_MM)
+    t = (y_mm[m] - (NHAN_CUOI_MM - 2.0)) / (RANH_DUOI_MM - (NHAN_CUOI_MM - 2.0))
+    r[m] = BAN_KINH_MM - 1.4 * t
+
+    # Ranh day roi vanh day: cung mot net cuon nhu tren mieng, lat nguoc lai.
+    m = (y_mm >= RANH_DUOI_MM) & (y_mm < VANH_DUOI_MM)
+    t = (y_mm[m] - RANH_DUOI_MM) / (VANH_DUOI_MM - RANH_DUOI_MM)
+    r[m] = 31.7 + 0.6 * np.sin(t * math.pi)
+
+    # Day lon lom vao: thot rat nhanh, nen mat doc ra la mat day chu khong
+    # phai lon bi cat cut.
+    m = y_mm >= VANH_DUOI_MM
+    t = np.clip((y_mm[m] - VANH_DUOI_MM) / (LON_CAO_MM - VANH_DUOI_MM), 0, 1)
+    # Cung tron chu khong phai ham mu: ham mu cho ra day gan vuong, con day lon
+    # that cuon vao theo mot cung.
+    r[m] = 31.7 * (1.0 - 0.32 * (1.0 - np.sqrt(np.maximum(0.0, 1.0 - t * t))))
 
     return r
 
@@ -266,56 +300,130 @@ def dung_lon(nhan_rgb, phi):
     a = beta + phi. Nhan la mot vong 360 do nen cot can lay la
     ((a/2pi) + 0.5) mod 1 - cong 0,5 de goc 0 roi vao GIUA o nhan, tuc mat
     truoc cua lon.
+
+    LAY TRUNG BINH CA KHOANG GOC MA MOT DIEM ANH CHE, khong lay mau tai mot
+    diem. Day la cho ban truoc lam sai va sinh ra vet nhoe o hai men.
+
+    Cang ra men lon, be mat cang nghieng: mot cot diem anh o sat men gom toi
+    gan mot phan tu vong nhan, tuc hang tram cot cua anh nhan goc. Cham mot
+    diem giua khoang do thi moi hang lay trung mot cho khac nhau - ra vet soc
+    doc lem nhem, dung thu Khoa goi la "nhoe". Lay day them vai mau roi trung
+    binh cung khong cuu duoc: vai mau tren hang tram cot van la lay bua.
+
+    Cach dung: tinh dung hai men goc cua tung diem anh roi lay TRUNG BINH TOAN
+    BO cac cot nhan nam giua hai men do. Lam bang bang cong don theo chieu
+    ngang nen du khoang rong bao nhieu cung chi hai phep tru - khong ton them
+    gi so voi cham mot diem.
     """
     Hn, Wn = nhan_rgb.shape[:2]
 
-    hs = CAO_PX * SSY
-    ws = RONG_PX * SS
-    y_mm = (np.arange(hs) + 0.5) / hs * LON_CAO_MM
-    r_mm = ban_kinh_theo_hang(y_mm)
-    r_px = (r_mm * PX_MM * SS)[:, None]
+    # ---- 1. Ep anh nhan ve dung so hang no chiem tren lon ----
+    # Lam mot lan bang LANCZOS, thay vi lay bua mot hang cho moi hang man hinh.
+    so_hang_nhan = max(2, int(round(NHAN_CAO_MM * PX_MM)))
+    nhan_hang = np.asarray(
+        Image.fromarray(nhan_rgb).resize(
+            (Wn, so_hang_nhan), Image.Resampling.LANCZOS
+        ),
+        dtype=np.float64,
+    )
 
-    x = (np.arange(ws) + 0.5) - ws / 2.0
-    s = np.clip(x[None, :] / r_px, -1.0, 1.0)
-    trong = np.abs(x[None, :]) <= r_px
+    # ---- 2. Bang cong don theo chieu ngang, de trung binh mot khoang bat ky ----
+    cong_don = np.zeros((so_hang_nhan, Wn + 1, 3), dtype=np.float64)
+    np.cumsum(nhan_hang, axis=1, out=cong_don[:, 1:, :])
+    tong_hang = cong_don[:, -1, :]          # tong ca vong nhan, cho luc vong qua men
 
-    beta = np.arcsin(s)
-    a = beta + phi
-    u = (((a / (2 * math.pi)) + 0.5) % 1.0) * (Wn - 1)
+    # ---- 3. Luoi diem anh dau ra ----
+    y_mm = (np.arange(CAO_PX) + 0.5) / CAO_PX * LON_CAO_MM
+    r_px = (ban_kinh_theo_hang(y_mm) * PX_MM)[:, None]
 
-    # Hang cua nhan: chi phan than lon moi co nhan.
-    v = (y_mm - NHAN_DINH_MM) / NHAN_CAO_MM
-    co_nhan = (v >= 0) & (v <= 1)
-    vi = np.clip((v * (Hn - 1)).astype(np.int32), 0, Hn - 1)
+    x = (np.arange(RONG_PX) + 0.5) - RONG_PX / 2.0
+    x = x[None, :]
 
-    ui = u.astype(np.int32)
-    mau = nhan_rgb[vi[:, None], ui]           # (hs, ws, 3)
+    # Hai men cua tung diem anh, khong phai tam diem anh.
+    s_giua = np.clip(x / r_px, -1.0, 1.0)
+    s_trai = np.clip((x - 0.5) / r_px, -1.0, 1.0)
+    s_phai = np.clip((x + 0.5) / r_px, -1.0, 1.0)
+
+    beta = np.arcsin(s_giua)
+    a_trai = np.arcsin(s_trai) + phi
+    a_phai = np.arcsin(s_phai) + phi
+
+    # Doi ra don vi "cot cua anh nhan".
+    u_trai = (((a_trai / (2 * math.pi)) + 0.5) % 1.0) * Wn
+    rong = (a_phai - a_trai) / (2 * math.pi) * Wn      # luon >= 0
+    u_phai = u_trai + rong
+
+    i0 = np.clip(np.floor(u_trai).astype(np.int64), 0, Wn)
+    i1 = np.clip(np.ceil(u_phai).astype(np.int64), 0, 2 * Wn)
+    # Khoang hep hon mot cot thi van phai lay tron mot cot.
+    i1 = np.maximum(i1, i0 + 1)
+
+    hang = np.clip(
+        ((y_mm - NHAN_DINH_MM) / NHAN_CAO_MM * (so_hang_nhan - 1)),
+        0,
+        so_hang_nhan - 1,
+    ).astype(np.int64)[:, None]
+    hang = np.broadcast_to(hang, i0.shape)
+
+    vong = i1 > Wn                                    # khoang vat qua men phai
+    i1_kep = np.where(vong, Wn, i1)
+    i1_du = np.where(vong, i1 - Wn, 0)
+
+    tong = cong_don[hang, i1_kep] - cong_don[hang, i0]
+    tong = tong + np.where(
+        vong[..., None], cong_don[hang, i1_du] - cong_don[hang, 0], 0.0
+    )
+    dem = (i1_kep - i0) + i1_du
+    mau = tong / dem[..., None]
+
+    # ---- 4. Vanh mieng va day lon: khong co nhan, la nhom tran ----
+    co_nhan = (y_mm >= NHAN_DINH_MM) & (y_mm <= NHAN_CUOI_MM)
+    nhom = np.array([206, 208, 213], dtype=np.float64)
+    mau = np.where(co_nhan[:, None, None], mau, nhom)
 
     """
-    VANH MIENG VA DAY LON.
+    DAI TOI VA DAI SANG O HAI DAU.
 
-    Hai phan nay khong co nhan. De mau nhom tron mot mau thi ra hai khoi xam
-    det, nhin nhu lon bi cat cut. Them mot dai toi dan ve sat mep tren va mep
-    duoi thi mat doc ra ngay la vanh tron nhin hoi cheo.
+    Chi doi ban kinh thoi thi hai dau van la hai khoi xam det. Lon that co mot
+    mep toi o tren cung, mot vanh sang ngay duoi, mot ranh toi ngan cach vanh
+    voi co - va o day thi dung nhu vay lat nguoc. May dai nay chi day vai
+    milimet nhung chinh chung lam mat doc ra day la cai lon.
     """
-    nhom = np.array([198, 200, 206], dtype=np.float64)
-    mau = np.where(co_nhan[:, None, None], mau.astype(np.float64), nhom)
-
     doc = np.ones_like(y_mm)
-    m = y_mm < NHAN_DINH_MM                       # vanh mieng
-    doc[m] = 0.52 + 0.48 * (y_mm[m] / NHAN_DINH_MM)
-    m = y_mm > 109.0                              # day lon
-    t = np.clip((y_mm[m] - 109.0) / (LON_CAO_MM - 109.0), 0, 1)
-    doc[m] = 1.0 - 0.55 * (t ** 1.6)
+
+    m = y_mm < MEP_MIENG_MM                                   # mep mieng
+    doc[m] = 0.34
+    m = (y_mm >= MEP_MIENG_MM) & (y_mm < VANH_TREN_MM)        # vanh sang
+    t = (y_mm[m] - MEP_MIENG_MM) / (VANH_TREN_MM - MEP_MIENG_MM)
+    doc[m] = 0.62 + 0.55 * np.sin(t * math.pi)
+    m = (y_mm >= VANH_TREN_MM) & (y_mm < RANH_TREN_MM)        # ranh toi
+    doc[m] = 0.40
+
+    m = (y_mm > NHAN_CUOI_MM) & (y_mm <= RANH_DUOI_MM)        # ranh toi cuoi than
+    doc[m] = 0.42
+    m = (y_mm > RANH_DUOI_MM) & (y_mm <= VANH_DUOI_MM)        # vanh day sang
+    t = (y_mm[m] - RANH_DUOI_MM) / (VANH_DUOI_MM - RANH_DUOI_MM)
+    # Bot choi so voi vanh mieng: day lon huong xuong nen it don anh sang hon.
+    doc[m] = 0.50 + 0.34 * np.sin(t * math.pi)
+    m = y_mm > VANH_DUOI_MM                                   # day lom, toi han
+    t = np.clip((y_mm[m] - VANH_DUOI_MM) / (LON_CAO_MM - VANH_DUOI_MM), 0, 1)
+    # Toi nhanh dan: mep duoi cung gan nhu chim han vao bong, nho vay lon co ve
+    # dat tren mot mat phang chu khong lo lung.
+    doc[m] = 0.46 - 0.36 * (t ** 0.7)
 
     sang = (do_sang(beta) * doc[:, None])[:, :, None]
     rgb = np.clip(mau * sang, 0, 255)
 
-    alpha = np.where(trong, 255.0, 0.0)
+    """
+    VIEN LON: do phu tinh thang, khong lay mau day them.
 
-    # Thu nho lai: vien lon va cho nen sat mep tu min di, khong con rang cua.
-    rgb = rgb.reshape(CAO_PX, SSY, RONG_PX, SS, 3).mean(axis=(1, 3))
-    alpha = alpha.reshape(CAO_PX, SSY, RONG_PX, SS).mean(axis=(1, 3))
+    Mot diem anh nam vat qua men lon thi chi phu mot phan. Tinh thang phan ay
+    ra do duc thi vien min tuyet doi, ma khong phai dung anh lon gap sau lan
+    roi thu nho - vua nhanh hon vua khong con vet rang cua o cho ban kinh doi
+    dot ngot (ranh mieng, vanh day).
+    """
+    phu = np.clip(r_px - np.abs(x) + 0.5, 0.0, 1.0)
+    alpha = phu * 255.0
 
     ra = np.zeros((CAO_PX, RONG_PX, 4), dtype=np.uint8)
     ra[..., :3] = np.round(rgb).astype(np.uint8)
