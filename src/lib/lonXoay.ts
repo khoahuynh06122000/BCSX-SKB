@@ -6,45 +6,37 @@
 /**
  * PHÉP TÍNH CHO LON BIA XOAY 3D
  *
- * Ta chỉ có ẢNH CHỤP PHẲNG của lon, không có mô hình 3D. Lật ảnh phẳng bằng
- * `rotateY` thì trông như tấm bìa quay chứ không phải lon: chữ vẫn thẳng hàng,
- * nhãn không cuộn quanh thân, vệt sáng chạy theo ảnh.
+ * Đầu vào là Ô NHÃN TRẢI PHẲNG — đúng tấm 208 × 107 mm trong file bao bì của
+ * bộ phận, tức trọn một vòng 360° quanh thân lon. `scripts/lay-nhan-tu-bao-bi.py`
+ * cắt nó ra từ file PDF.
  *
- * Cách làm ở đây coi ảnh chụp như NHÃN ĐÃ DÁN SẴN trên một mặt tròn xoay nhìn
- * từ chính diện, rồi vẽ lại từng điểm theo phép chiếu của mặt đó:
+ * Ta cuộn tấm ấy quanh một hình trụ rồi vẽ lại theo phép chiếu nhìn từ chính
+ * diện:
  *
  *   - Điểm ở vị trí ngang s (−1 mép trái, +1 mép phải) nằm trên phần mặt
  *     nghiêng một góc β = asin(s) so với hướng nhìn.
  *   - Lon xoay đi góc φ thì chỗ ấy mang phần nhãn ở góc a = β + φ.
- *   - Nhãn ở góc a nằm tại cột nào của ảnh gốc? Chính là cx + r·sin(a).
+ *   - Nhãn là một vòng tròn nên cột cần lấy là ((a/2π) + 0,5) mod 1, nhân bề
+ *     rộng nhãn. Cộng 0,5 để góc 0 rơi vào GIỮA ô nhãn, tức mặt trước lon.
  *
- * Hệ quả quan trọng: khi φ = 0 thì a = β nên cột nguồn trùng đúng cột đích, và
- * độ sáng chỉnh lại cũng đúng bằng 1 — ảnh đứng yên hiện ra Y HỆT ảnh gốc. Còn
- * khi φ khác 0 thì nhãn tự cuộn và tự nén ở hai mép, như nhãn trên lon thật.
+ * VÌ SAO BỎ CÁCH DÙNG HAI ẢNH CHỤP. Bản trước nhận hai ảnh — mặt trước và mặt
+ * sau — rồi trộn lại khi xoay. Cách ấy có một chỗ hỏng không chữa được: phần vỏ
+ * ở hai hông lon nằm đúng chỗ ống kính nhìn nghiêng hết cỡ, cả một vòng cung
+ * chỉ còn dăm cột ảnh. Xoay ra chính diện thì dăm cột ấy phải trải kín mấy chục
+ * cột màn hình — và thành vệt nhoè.
  *
- * BÁN KÍNH TÍNH THEO TỪNG HÀNG. Lon không phải hình trụ đều: nó thóp lại ở cổ
- * và ở đáy. Lấy một bán kính chung cho cả lon thì khi xoay, phần cổ và đáy bị
- * kéo tràn ra ngoài bóng lon, dáng lon vỡ ra thành những vệt ngang. Mỗi hàng
- * một bán kính riêng thì bóng lon đứng yên tuyệt đối trong lúc xoay — đúng như
- * mọi vật tròn xoay.
+ * Cả một mớ chắp vá quanh chỗ hỏng đó cũng đi theo: dải hông tự dựng, hệ số tô
+ * tối dải hông, bản làm mờ dọc cho chỗ nối, trần độ nén. Cuộn thẳng từ nhãn
+ * 360° thì không góc nào thiếu dữ liệu, nên không cần chắp vá gì.
  *
- * MẶT SAU LÀ ẢNH THẬT. Mỗi loại bia cần hai ảnh: mặt trước và mặt sau (lon
- * xoay đúng 180°). Trước đây chỉ có mặt trước nên phải bịa mặt sau bằng cách
- * hoà hai dải màu ở hai mép — ra một mảng trơn lì, không chữ không mã vạch,
- * nhìn không ra lon bia.
+ * LẤY TRUNG BÌNH CẢ KHOẢNG GÓC MÀ MỘT ĐIỂM ẢNH CHE, không lấy màu tại một
+ * điểm. Càng ra mép lon bề mặt càng nghiêng: một cột điểm ảnh sát mép gom tới
+ * gần một phần tư vòng nhãn, tức hàng trăm cột ảnh gốc. Chấm một điểm giữa
+ * khoảng đó thì mỗi hàng trúng một chỗ khác nhau, ra vệt sọc dọc lem nhem.
  *
- * Ảnh mặt sau chụp cùng cái lon đã quay nửa vòng, nên phần nhãn ở góc a xuất
- * hiện trong ảnh ấy tại cột `cxSau − rSau·sin(a)` — vẫn công thức cũ, chỉ đổi
- * dấu. Nhờ vậy hai mép nối liền nhau đúng theo hình học: tại a = π/2, mặt
- * trước chạm mép phải của nó thì mặt sau cũng chạm mép trái của nó, cùng một
- * đường trên vỏ lon thật.
- *
- * CHỈNH SÁNG. Ảnh chụp đã có sẵn bóng của lon: sáng giữa, tối dần ra mép. Cứ
- * thế xoay thì mảng tối chạy theo nhãn, nhìn như nhãn bị bẩn. Nên mỗi điểm
- * phải nhân với `doSang(β)/doSang(a)` — bỏ đi độ sáng ứng với chỗ nhãn ĐANG
- * NẰM trên ảnh gốc, thay bằng độ sáng ứng với chỗ nó ĐANG HIỆN trên màn hình.
- * Vệt sáng vì vậy đứng yên một chỗ trong khi nhãn cuộn qua — đây mới là thứ
- * khiến mắt tin đó là vật tròn đang xoay.
+ * BẢNG TRA THEO s, KHÔNG THEO CỘT MÀN HÌNH. Mọi thứ chỉ phụ thuộc s = x/r, mà
+ * bán kính r đổi theo từng hàng. Tra theo s thì một bảng dùng chung cho cả lon;
+ * tra theo cột thì mỗi hàng một bảng.
  */
 
 /** Hướng nguồn sáng, radian. Âm là lệch sang trái người nhìn. */
@@ -57,35 +49,6 @@ const TAN_XA = 0.7;
 const CHOI = 0.32;
 /** Số mũ của vệt chói: càng lớn vệt càng hẹp và gắt. */
 const MU_CHOI = 16;
-
-/**
- * Trần của hệ số chỉnh sáng.
- *
- * Phần nhãn vốn nằm sát mép ảnh rất tối; xoay ra chính diện thì hệ số đòi kéo
- * sáng gấp ba. Chỗ ấy trong ảnh gốc chỉ rộng vài điểm nên chẳng còn chi tiết
- * gì, kéo sáng lên chỉ được một dải bệt trắng chạy dọc thân lon — thà để nó
- * hơi tối hơn thực tế mà chìm đi. Lúc đứng yên hệ số luôn đúng bằng 1 nên trần
- * này không đụng gì tới ảnh tĩnh.
- */
-export const TRAN_SANG = 1.2;
-
-
-/**
- * Bề rộng dải hoà từ nhãn sang mặt sau, tính theo cos của góc nhãn.
- *
- * Không hoà thì chỗ nhãn hết hiện ra một vạch dọc cắt ngang thân lon, nhìn
- * như nhãn bị rách.
- */
-export const DAI_HOA = 0.3;
-
-/**
- * Trần của độ nén, tính bằng số điểm ảnh nguồn dồn vào một điểm ảnh đích.
- *
- * Sát mép lon độ nén tiến ra vô cùng, không chặn thì vòng lấy mẫu chạy mãi.
- * Lấy ít quá thì dải sát mép hiện ra thành vệt sọc nhấp nháy lúc lon quay, nên
- * để rộng tay; dải đó hẹp nên tốn thêm không đáng kể.
- */
-export const TRAN_NEN = 14;
 
 function thoRaw(goc: number): number {
   const c = Math.cos(goc - GOC_SANG);
@@ -101,137 +64,154 @@ export function doSang(goc: number): number {
   return thoRaw(goc) / DINH;
 }
 
-export interface DiemLay {
-  /** Góc bề mặt so với hướng nhìn, quyết định độ sáng trên màn hình. */
-  beta: number;
-  /** Góc của phần nhãn đang hiện ra ở đây, đưa về (−π; π]. */
-  gocNhan: number;
-  /** cos của góc nhãn. Âm là đã vòng ra mặt sau. */
-  cosNhan: number;
-  /** Điểm này thuộc mặt sau của lon (ảnh chụp không có dữ liệu). */
-  sau: boolean;
-  /**
-   * Mặt trước: vị trí ngang trên ảnh gốc, −1 mép trái .. +1 mép phải.
-   * Mặt sau: tham số vòng ra sau, 0 tại mép phải .. 1 tại mép trái.
-   */
-  u: number;
-}
+/* ------------------------------------------------------------ dáng hình lon */
 
 /**
- * Với một vị trí ngang trên bóng lon, tra xem phải lấy màu ở đâu trên nhãn.
+ * MỐC CAO ĐỘ CỦA TỪNG PHẦN TRÊN LON, tính theo phần của chiều cao (0 ở đỉnh).
  *
- * @param s vị trí ngang, −1 mép trái .. +1 mép phải
- * @param phi góc lon đã xoay, radian
+ * Lon 330ml tiêu chuẩn cao 115,2mm; nhãn cao 107mm và bắt đầu cách đỉnh 2,7mm.
+ * Mấy dải ở hai đầu chỉ dày vài milimet nhưng chính chúng làm mắt đọc ra đây là
+ * cái lon chứ không phải một ống trụ.
  */
-export function mauLay(s: number, phi: number): DiemLay {
-  const kep = s < -1 ? -1 : s > 1 ? 1 : s;
-  const beta = Math.asin(kep);
-  const cosBeta = Math.sqrt(1 - kep * kep);
-  const cp = Math.cos(phi);
-  const sp = Math.sin(phi);
-  // Khai triển sin(β+φ) và cos(β+φ) để khỏi gọi lượng giác lần nữa.
-  const sinNhan = kep * cp + cosBeta * sp;
-  const cosNhan = cosBeta * cp - kep * sp;
-  const gocNhan = Math.atan2(sinNhan, cosNhan);
-  if (cosNhan >= 0) {
-    return { beta, gocNhan, cosNhan, sau: false, u: sinNhan };
+const CAO_MM = 115.2;
+const mm = (v: number) => v / CAO_MM;
+
+export const MEP_MIENG = mm(0.9); // mép trên cùng, nhìn nghiêng thấy tối
+export const VANH_TREN = mm(2.1); // vành miệng sáng loáng
+export const NHAN_DAU = mm(2.7); // nhãn bắt đầu ngay dưới rãnh miệng
+export const NHAN_CUOI = mm(109.7); // 2,7 + 107
+export const RANH_DUOI = mm(110.8);
+export const VANH_DUOI = mm(112.4);
+
+/** Bán kính thân lon, theo phần của nửa bề rộng khung vẽ. */
+const BAN_THAN = 1.0;
+/** Bán kính vành miệng: 26,1 / 33,1 của lon 330ml thật. */
+const BAN_VANH = 0.789;
+
+/**
+ * Bán kính của lon tại độ cao `t` (0 ở đỉnh, 1 ở đáy), theo phần của bán kính
+ * thân.
+ *
+ * Lon không phải hình trụ đều: nó thóp lại ở cổ và ở đáy. Lấy một bán kính
+ * chung thì hai đầu lon hiện ra vuông chằn chặn, nhìn như ống nước.
+ */
+export function banKinhTheoHang(t: number): number {
+  if (t < MEP_MIENG) {
+    // Mép miệng: vành nhôm cuộn lại, nhỏ nhất lon.
+    return BAN_VANH * (0.982 + 0.018 * (t / MEP_MIENG));
   }
-  const vong = 2 * Math.PI;
-  const t = ((((gocNhan - Math.PI / 2) % vong) + vong) % vong) / Math.PI;
-  return { beta, gocNhan, cosNhan, sau: true, u: t > 1 ? 1 : t };
-}
-
-/**
- * Bảng tra sẵn cho một góc xoay, để vòng vẽ không phải gọi lượng giác từng
- * điểm ảnh. Mỗi khung hình dựng một bảng rồi hàng trăm nghìn điểm dùng chung.
- */
-export interface BangChieu {
-  /** Mặt trước: sin của góc nhãn. Mặt sau: tham số 0..1. */
-  u: Float32Array;
-  /** Tỉ lệ hoà sang mặt sau, 0 là nhãn thuần, 1 là mặt sau thuần. */
-  hoa: Float32Array;
-  /** 1 nếu chỗ này thuộc mặt sau, 0 nếu là mặt trước. */
-  sau: Uint8Array;
-  /**
-   * Độ nén tại chỗ: một điểm ảnh trên màn hình gánh bao nhiêu điểm ảnh nguồn.
-   *
-   * Lớn hơn 1 là NÉN — hay gặp ở sát mép lon. Không tính tới thì chỗ nén chỉ
-   * lấy đúng một điểm nguồn, bỏ qua những điểm bên cạnh, sinh vệt răng cưa
-   * nhấp nháy lúc lon quay. Biết độ nén thì lấy trung bình đúng chừng ấy điểm.
-   *
-   * Nhỏ hơn 1 là GIÃN, và giãn rất mạnh ở đúng chỗ nối hai ảnh: phần vỏ quanh
-   * góc ±π/2 bị chụp nghiêng gần hết cỡ nên cả một vòng cung chỉ nằm gọn trong
-   * dăm cột ảnh; xoay ra chính diện thì dăm cột ấy phải trải kín mấy chục cột
-   * màn hình. Xem `veLon` để biết cách làm dịu chỗ đó.
+  if (t < VANH_TREN) {
+    // Vành miệng phình ra một chút rồi thót — đó là nét cuộn của vành.
+    const u = (t - MEP_MIENG) / (VANH_TREN - MEP_MIENG);
+    return BAN_VANH * (1 + 0.034 * Math.sin(u * Math.PI));
+  }
+  if (t < NHAN_DAU) {
+    // Rãnh dưới vành: chỗ hẹp nhất của cả cái lon.
+    return BAN_VANH * 0.992;
+  }
+  if (t < NHAN_DAU + mm(17.81)) {
+    /*
+     * Cổ lon: 17,81mm đúng như file bao bì ghi, nở dần ra bằng thân.
+     * Đường cong lõm chứ không phải đường thẳng — vai lon thật phình dần.
+     */
+    const u = (t - NHAN_DAU) / mm(17.81);
+    return BAN_VANH * 0.992 + (BAN_THAN - BAN_VANH * 0.992) * Math.sqrt(u);
+  }
+  if (t < RANH_DUOI - mm(2)) return BAN_THAN;
+  if (t < RANH_DUOI) {
+    // Góc dưới của thân, ngay trước rãnh đáy.
+    const u = (t - (RANH_DUOI - mm(2))) / mm(2);
+    return BAN_THAN - 0.042 * u;
+  }
+  if (t < VANH_DUOI) {
+    // Rãnh đáy rồi vành đáy: cùng nét cuộn như trên miệng, lật ngược lại.
+    const u = (t - RANH_DUOI) / (VANH_DUOI - RANH_DUOI);
+    return 0.958 + 0.018 * Math.sin(u * Math.PI);
+  }
+  /*
+   * Đáy lon cuộn vào theo một CUNG TRÒN, không phải hàm mũ: hàm mũ cho ra đáy
+   * gần vuông, còn đáy lon thật cuốn vào theo một cung.
    */
-  nen: Float32Array;
-  /** Độ sáng theo vị trí TRÊN MÀN HÌNH. */
-  sangManHinh: Float32Array;
-  /** Độ sáng đã có sẵn trong ảnh tại chỗ lấy nhãn. */
-  sangNhan: Float32Array;
-  /** Hệ số nhân màu nhãn, đã chặn trần. Tra sẵn để vòng vẽ khỏi phải chia. */
-  heSoNhan: Float32Array;
-  /** Hệ số nhân màu lấy từ ảnh mặt sau, đã chặn trần. */
-  heSoSau: Float32Array;
-}
-
-/** Cấp phát một bảng rỗng để dùng lại qua các khung hình. */
-export function bangRong(soBuc: number): BangChieu {
-  return {
-    u: new Float32Array(soBuc),
-    hoa: new Float32Array(soBuc),
-    sau: new Uint8Array(soBuc),
-    nen: new Float32Array(soBuc),
-    sangManHinh: new Float32Array(soBuc),
-    sangNhan: new Float32Array(soBuc),
-    heSoNhan: new Float32Array(soBuc),
-    heSoSau: new Float32Array(soBuc),
-  };
+  const u = Math.min(1, (t - VANH_DUOI) / (1 - VANH_DUOI));
+  return 0.958 * (1 - 0.32 * (1 - Math.sqrt(Math.max(0, 1 - u * u))));
 }
 
 /**
- * Dựng bảng tra cho góc xoay `phi`, chia đều theo vị trí ngang.
+ * Hệ số sáng riêng của hai đầu lon, nhân thêm vào độ sáng theo góc.
  *
- * Ghi đè vào `ra` chứ không cấp phát mới: hàm này chạy mỗi khung hình, cấp
- * phát bảy mảng mỗi lần là bắt bộ dọn rác làm việc suốt lúc lon đang quay.
+ * Chỉ đổi bán kính thôi thì hai đầu vẫn là hai khối xám dẹt. Lon thật có một
+ * mép tối ở trên cùng, một vành sáng ngay dưới, một rãnh tối ngăn vành với cổ —
+ * và ở đáy thì đúng như vậy lật ngược.
  */
-export function bangChieu(phi: number, ra: BangChieu): BangChieu {
-  const soBuc = ra.u.length;
-  const cp = Math.cos(phi);
-  const sp = Math.sin(phi);
+export function sangDauLon(t: number): number {
+  if (t < MEP_MIENG) return 0.34;
+  if (t < VANH_TREN) {
+    const u = (t - MEP_MIENG) / (VANH_TREN - MEP_MIENG);
+    return 0.62 + 0.55 * Math.sin(u * Math.PI);
+  }
+  if (t < NHAN_DAU) return 0.4;
+  if (t <= NHAN_CUOI) return 1;
+  if (t <= RANH_DUOI) return 0.42;
+  if (t <= VANH_DUOI) {
+    const u = (t - RANH_DUOI) / (VANH_DUOI - RANH_DUOI);
+    // Bớt chói so với vành miệng: đáy lon hướng xuống nên ít đón sáng hơn.
+    return 0.5 + 0.34 * Math.sin(u * Math.PI);
+  }
+  const u = Math.min(1, (t - VANH_DUOI) / (1 - VANH_DUOI));
+  // Tối nhanh dần: mép dưới cùng gần như chìm hẳn vào bóng, nhờ vậy lon có vẻ
+  // đặt trên một mặt phẳng chứ không lơ lửng.
+  return 0.46 - 0.36 * Math.pow(u, 0.7);
+}
+
+/** Nhãn phủ tới độ cao này không. */
+export function coNhan(t: number): boolean {
+  return t >= NHAN_DAU && t <= NHAN_CUOI;
+}
+
+/* ---------------------------------------------------------------- bảng tra */
+
+/**
+ * Bảng tra theo vị trí ngang s ∈ [−1; 1], dựng một lần lúc khởi động.
+ *
+ * `beta` là góc mặt nghiêng, `sang` là độ sáng tại đó, `dGoc` là đạo hàm
+ * dβ/ds — dùng để biết một điểm ảnh che bao nhiêu radian nhãn.
+ */
+export interface BangS {
+  beta: Float32Array;
+  sang: Float32Array;
+  dGoc: Float32Array;
+}
+
+/**
+ * Đạo hàm dβ/ds = 1/√(1−s²) tiến ra vô cùng ở hai mép.
+ *
+ * Chặn lại ở đây để bề rộng lấy mẫu không vọt lên vô hạn. 60 rad/đơn vị ứng
+ * với s ≈ 0,99986 — sát mép tới mức một điểm ảnh cũng không phân biệt được,
+ * mà vẫn đủ để phần trung bình bao trọn dải cuối.
+ */
+export const TRAN_DGOC = 60;
+
+export function dungBangS(soBuc: number): BangS {
+  const beta = new Float32Array(soBuc);
+  const sang = new Float32Array(soBuc);
+  const dGoc = new Float32Array(soBuc);
   for (let i = 0; i < soBuc; i++) {
-    const s = -1 + (2 * i) / (soBuc - 1);
-    const m = mauLay(s, phi);
-    const sMh = doSang(m.beta);
-    // Ảnh mặt sau chụp lon đã quay nửa vòng, nên phần nhãn ở góc a nằm ở chỗ
-    // ứng với góc a∓π trong ảnh đó, và mang sẵn bóng của góc ấy.
-    const gocSau = m.gocNhan > 0 ? m.gocNhan - Math.PI : m.gocNhan + Math.PI;
-    ra.u[i] = Math.sin(m.gocNhan);
-    ra.sau[i] = m.sau ? 1 : 0;
-    ra.hoa[i] =
-      m.cosNhan <= 0
-        ? 1
-        : m.cosNhan >= DAI_HOA
-          ? 0
-          : (DAI_HOA - m.cosNhan) / DAI_HOA;
-    ra.sangManHinh[i] = sMh;
-    ra.sangNhan[i] = doSang(m.gocNhan);
-    ra.heSoNhan[i] = Math.min(TRAN_SANG, sMh / ra.sangNhan[i]);
-    ra.heSoSau[i] = Math.min(TRAN_SANG, sMh / doSang(gocSau));
-    // du/ds = cos φ − s·sin φ / √(1−s²). Ra vô cùng ở đúng mép lon nên chặn.
-    const cosBeta = Math.sqrt(1 - s * s);
-    // Số hạng s·sinφ/cosβ chỉ vọt lên vô cùng khi lon ĐANG xoay. Lon đứng yên
-    // thì sinφ = 0, độ nén đúng bằng 1 ở khắp nơi kể cả sát mép — không tách
-    // riêng trường hợp này thì hai cột ngoài cùng bị làm mờ oan lúc đứng yên.
-    const dao =
-      Math.abs(sp) < 1e-9
-        ? Math.abs(cp)
-        : cosBeta < 1e-6
-          ? TRAN_NEN
-          : Math.abs(cp - (s * sp) / cosBeta);
-    // Chỉ chặn đầu trên. Giữ nguyên phần nhỏ hơn 1 vì đó chính là tín hiệu
-    // cho biết chỗ nào đang bị kéo giãn.
-    ra.nen[i] = dao > TRAN_NEN ? TRAN_NEN : dao;
+    const s = (i / (soBuc - 1)) * 2 - 1;
+    const b = Math.asin(s < -1 ? -1 : s > 1 ? 1 : s);
+    beta[i] = b;
+    sang[i] = doSang(b);
+    const con = 1 - s * s;
+    dGoc[i] = con <= 0 ? TRAN_DGOC : Math.min(TRAN_DGOC, 1 / Math.sqrt(con));
   }
-  return ra;
+  return { beta, sang, dGoc };
+}
+
+/**
+ * Đưa một góc nhãn về cột trên ô nhãn, theo phần của bề rộng (0 ≤ u < 1).
+ *
+ * Cộng 0,5 để góc 0 — mặt trước lon — rơi vào giữa ô nhãn, đúng chỗ có logo.
+ */
+export function cotNhan(goc: number): number {
+  const v = goc / (2 * Math.PI) + 0.5;
+  return v - Math.floor(v);
 }

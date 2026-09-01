@@ -3,15 +3,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * KIỂM TRA PHÉP TÍNH LON XOAY
+ *
+ * Thứ phải giữ bằng mọi giá: nhãn là một VÒNG TRÒN LIỀN, nên xoay bao nhiêu
+ * vòng cũng phải về đúng chỗ cũ, và không góc nào rơi ra ngoài ô nhãn. Đó
+ * chính là điều mà cách dùng hai ảnh chụp không làm được — chỗ nối hai ảnh
+ * không có dữ liệu nên nhoè.
+ */
+
 import {
-  DAI_HOA,
   GOC_SANG,
-  TRAN_NEN,
-  TRAN_SANG,
-  bangChieu,
-  bangRong,
+  MEP_MIENG,
+  NHAN_CUOI,
+  NHAN_DAU,
+  RANH_DUOI,
+  TRAN_DGOC,
+  VANH_DUOI,
+  VANH_TREN,
+  banKinhTheoHang,
+  coNhan,
+  cotNhan,
   doSang,
-  mauLay,
+  dungBangS,
+  sangDauLon,
 } from "../lonXoay";
 
 let pass = 0;
@@ -35,190 +50,163 @@ const dung = (ten: string, x: boolean) => eq(ten, x, true);
 
 const PI = Math.PI;
 
-// ------------------------------------------------------- do sang
+// ------------------------------------------------------------- độ sáng
 
 gan("dinh sang dung tai huong nguon sang", doSang(GOC_SANG), 1);
-dung("khong cot nao sang hon dinh", [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) <= 1 + 1e-12));
-dung("luon duong", [...Array(721)].every((_, i) => doSang(-PI + (i * PI) / 360) > 0));
-dung("chinh dien sang hon mep", doSang(0) > doSang(PI / 2));
-dung("mep trai sang hon mep phai vi den lech trai", doSang(-PI / 2) > doSang(PI / 2));
+dung("do sang luon duong", doSang(0) > 0 && doSang(PI) > 0);
+dung("quay lung lai thi toi nhat", doSang(GOC_SANG + PI) < doSang(GOC_SANG));
+dung("chinh dien sang hon nghieng 60 do", doSang(0) > doSang(PI / 3));
+// Nền môi trường 0,3 nên mặt khuất vẫn không đen kịt — lon không thủng lỗ.
+dung("mat khuat van con anh sang nen", doSang(PI) > 0.1);
 
-// ------------------------------------------------------- lay mau
+// ------------------------------------------------- nhãn là một vòng tròn
 
-// Dung yen thi cot nguon trung cot dich: anh khong meo mo gi.
-for (const s of [-1, -0.7, -0.2, 0, 0.35, 0.8, 1]) {
-  const m = mauLay(s, 0);
-  gan(`phi=0 lay dung cot cua no tai s=${s}`, m.u, s, 1e-12);
-  eq(`phi=0 khong cham mat sau tai s=${s}`, m.sau, false);
-}
+eq("goc 0 roi vao giua o nhan", cotNhan(0), 0.5);
+gan("nua vong roi vao mep", cotNhan(PI), 0);
+gan("quay tron mot vong ve cho cu", cotNhan(2 * PI), 0.5);
+gan("quay ba vong van ve cho cu", cotNhan(6 * PI), 0.5, 1e-12);
+gan("quay nguoc mot vong ve cho cu", cotNhan(-2 * PI), 0.5, 1e-12);
+gan("mot phan tu vong", cotNhan(PI / 2), 0.75);
+gan("nguoc mot phan tu vong", cotNhan(-PI / 2), 0.25);
 
-// Goc be mat chi phu thuoc vi tri tren man hinh, khong phu thuoc lon xoay bao nhieu.
-for (const phi of [0, 0.8, 2.5, -1.9]) {
-  gan(`beta khong doi theo phi=${phi}`, mauLay(0.5, phi).beta, Math.asin(0.5), 1e-12);
-}
-
-// Xoay sang phai thi nhan truot sang phai: phan nhan o giua di ve mep phai.
-{
-  const truoc = mauLay(0, 0).u;
-  const sau = mauLay(0, 0.5).u;
-  dung("xoay duong lam nhan truot ve mot phia", sau > truoc);
-}
-
-// Mat sau bi lo ra ngay khi lon chom xoay, va lo ve dung mot phia.
-{
-  const m = mauLay(0.999, 0.3);
-  eq("xoay duong thi mep phai thanh mat sau", m.sau, true);
-  eq("cung luc do mep trai van la mat truoc", mauLay(-0.999, 0.3).sau, false);
-}
-
-// Noi lien mep: hai ben duong ghep phai tra ve cung mot cho tren nhan, khong
-// thi thay mot vach doc chay quanh lon.
-{
-  const phi = 0.6;
-  // Tim s ngay truoc va ngay sau diem a = pi/2.
-  const sGhep = Math.sin(PI / 2 - phi);
-  const a = mauLay(sGhep - 1e-6, phi);
-  const b = mauLay(sGhep + 1e-6, phi);
-  eq("mot ben ghep la mat truoc", a.sau, false);
-  eq("ben kia ghep la mat sau", b.sau, true);
-  gan("mat truoc cham dung mep phai cua anh", a.u, 1, 1e-5);
-  gan("mat sau bat dau dung tu mep phai", b.u, 0, 1e-5);
-}
-{
-  // Xoay nguoc lai thi lo duong ghep ben kia, o mep trai.
-  const phi = -0.6;
-  const sGhep = Math.sin(-PI / 2 - phi);
-  const a = mauLay(sGhep + 1e-6, phi);
-  const b = mauLay(sGhep - 1e-6, phi);
-  eq("ben trong duong ghep trai la mat truoc", a.sau, false);
-  gan("mat truoc cham dung mep trai cua anh", a.u, -1, 1e-5);
-  eq("ben ngoai la mat sau", b.sau, true);
-  gan("mat sau ket thuc dung o mep trai", b.u, 1, 1e-5);
-}
-
-// Mot luc chi lo duoc MOT duong ghep: xoay mot chieu thi mep ben kia van con
-// nam trong nua truoc, chua vong toi.
-{
-  let caHai = 0;
-  for (let i = 1; i <= 60; i++) {
-    const phi = (i * 1.2) / 60;
-    if (mauLay(-1, phi).sau && mauLay(1, phi).sau) caHai++;
-  }
-  eq("xoay vua phai thi chi lo mot ben", caHai, 0);
-}
-
-// Quay tron mot vong thi tro lai y nguyen.
-for (const s of [-0.6, 0, 0.4]) {
-  gan(`quay tron 2pi tro lai cho cu tai s=${s}`, mauLay(s, 2 * PI).u, mauLay(s, 0).u, 1e-9);
-  gan(`quay lui 2pi tro lai cho cu tai s=${s}`, mauLay(s, -2 * PI).u, mauLay(s, 0).u, 1e-9);
-}
-
-// Quay nua vong thi ca lon la mat sau — luc nay doi anh sang loai khac se
-// khong ai thay, do chinh la cho de thay nhan.
-dung(
-  "quay nua vong thi toan bo la mat sau",
-  [-0.95, -0.5, 0, 0.5, 0.95].every((s) => mauLay(s, PI).sau),
-);
-
-// u cua mat sau luon nam trong 0..1, khong bao gio troi ra ngoai bang mau.
+// Không góc nào rơi ra ngoài ô nhãn — đây là điều kiện để không có chỗ nào
+// thiếu dữ liệu, tức không có chỗ nào nhoè.
 {
   let ngoai = 0;
-  for (let i = 0; i <= 400; i++) {
-    const phi = -4 * PI + (i * 8 * PI) / 400;
-    for (const s of [-1, -0.5, 0, 0.5, 1]) {
-      const m = mauLay(s, phi);
-      if (m.sau && (m.u < 0 || m.u > 1)) ngoai++;
-      if (!m.sau && (m.u < -1 || m.u > 1)) ngoai++;
-    }
+  for (let i = -720; i <= 720; i++) {
+    const u = cotNhan((i / 40) * PI);
+    if (!(u >= 0 && u < 1)) ngoai++;
   }
-  eq("khong co diem lay nao troi ra ngoai bang mau", ngoai, 0);
+  eq("moi goc deu roi trong o nhan", ngoai, 0);
 }
 
-// Vao ngoai khoang cung khong lam vo phep tinh.
-eq("s ngoai khoang bi kep lai", mauLay(5, 0).u, 1);
-eq("s am ngoai khoang bi kep lai", mauLay(-5, 0).u, -1);
+// ------------------------------------------------------- dáng hình lon
 
-// ------------------------------------------------------- bang tra
+// Mốc cao độ phải xếp đúng thứ tự từ đỉnh xuống đáy.
+dung(
+  "moc cao do dung thu tu",
+  0 < MEP_MIENG &&
+    MEP_MIENG < VANH_TREN &&
+    VANH_TREN < NHAN_DAU &&
+    NHAN_DAU < NHAN_CUOI &&
+    NHAN_CUOI < RANH_DUOI &&
+    RANH_DUOI < VANH_DUOI &&
+    VANH_DUOI < 1,
+);
+
+// Nhãn cao 107mm trên lon cao 115,2mm.
+gan("nhan chiem dung 107/115,2 chieu cao", NHAN_CUOI - NHAN_DAU, 107 / 115.2, 1e-9);
+
+eq("dinh lon khong co nhan", coNhan(0), false);
+eq("giua than co nhan", coNhan(0.5), true);
+eq("day lon khong co nhan", coNhan(0.999), false);
+
+// Vành miệng phải hẹp hơn thân rõ rệt — lon 330ml that la 26,1 / 33,1.
+dung("vanh mieng hep hon than", banKinhTheoHang(0.004) < 0.85);
+gan("giua than la ban kinh day du", banKinhTheoHang(0.5), 1, 1e-9);
+dung("day lon thop lai", banKinhTheoHang(0.999) < 0.75);
+
+// Bán kính không bao giờ vượt thân: vượt là lon phình ra ngoài khung vẽ.
+{
+  let vuot = 0;
+  let am = 0;
+  for (let i = 0; i <= 2000; i++) {
+    const r = banKinhTheoHang(i / 2000);
+    if (r > 1.000001) vuot++;
+    if (r <= 0) am++;
+  }
+  eq("ban kinh khong vuot than", vuot, 0);
+  eq("ban kinh luon duong", am, 0);
+}
+
+/*
+ * Bóng lon phải LIỀN, không nhảy bậc: nhảy một cái là thấy ngay lúc quay.
+ *
+ * Chừa hai phần nghìn cuối: đáy lon cuộn theo một cung tròn nên ở đúng mép
+ * dưới cùng, tiếp tuyến dựng đứng và bán kính tụt rất nhanh. Đó là hình dáng
+ * thật của đáy lon chứ không phải chỗ đứt, nên kiểm riêng bên dưới.
+ */
+{
+  let nhay = 0;
+  let truoc = banKinhTheoHang(0);
+  for (let i = 1; i <= 3990; i++) {
+    const r = banKinhTheoHang(i / 4000);
+    if (Math.abs(r - truoc) > 0.02) nhay++;
+    truoc = r;
+  }
+  eq("bong lon khong nhay bac", nhay, 0);
+}
+
+// Đáy cuộn vào một chiều, không phình ra rồi thót lại.
+{
+  let phinh = 0;
+  let truoc = banKinhTheoHang(VANH_DUOI);
+  for (let i = 1; i <= 200; i++) {
+    const t = VANH_DUOI + ((1 - VANH_DUOI) * i) / 200;
+    const r = banKinhTheoHang(t);
+    if (r > truoc + 1e-9) phinh++;
+    truoc = r;
+  }
+  eq("day chi cuon vao, khong phinh ra", phinh, 0);
+}
+
+// ------------------------------------------------- dải sáng hai đầu lon
+
+gan("than lon khong bi to them", sangDauLon(0.5), 1, 1e-9);
+dung("mep mieng toi", sangDauLon(0.002) < 0.5);
+dung("vanh mieng sang hon mep", sangDauLon(VANH_TREN * 0.6) > sangDauLon(0.002));
+dung("ranh duoi vanh toi lai", sangDauLon((VANH_TREN + NHAN_DAU) / 2) < 0.5);
+dung("ranh day toi", sangDauLon((NHAN_CUOI + RANH_DUOI) / 2) < 0.5);
+dung(
+  "vanh day sang hon ranh day",
+  sangDauLon((RANH_DUOI + VANH_DUOI) / 2) > sangDauLon((NHAN_CUOI + RANH_DUOI) / 2),
+);
+dung("mep duoi cung toi nhat", sangDauLon(1) < 0.15);
+// Vành đáy hướng xuống nên không được chói bằng vành miệng.
+dung(
+  "vanh day diu hon vanh mieng",
+  sangDauLon((RANH_DUOI + VANH_DUOI) / 2) <
+    sangDauLon((MEP_MIENG + VANH_TREN) / 2),
+);
+{
+  let am = 0;
+  for (let i = 0; i <= 2000; i++) if (sangDauLon(i / 2000) <= 0) am++;
+  eq("he so sang luon duong", am, 0);
+}
+
+// ----------------------------------------------------------- bảng tra
 
 {
-  const BUC = 1024;
-  const b0 = bangChieu(0, bangRong(BUC));
-  // Dung yen thi bang tra phai tra ve dung cot cua no va he so chinh sang phai
-  // bang 1 — day la dieu kien de anh dung yen hien ra y het anh goc.
-  let lechU = 0;
-  let lechF = 0;
-  for (let i = 0; i < BUC; i++) {
-const s = -1 + (2 * i) / (BUC - 1);
-lechU = Math.max(lechU, Math.abs(b0.u[i] - s));
-lechF = Math.max(lechF, Math.abs(b0.sangManHinh[i] / b0.sangNhan[i] - 1));
-  }
-  dung("phi=0: bang tra tra ve dung cot cua no", lechU < 1e-6);
-  dung("phi=0: he so chinh sang deu bang 1", lechF < 1e-6);
-  // Dung yen thi dai hoa chi duoc cham vien, khong duoc an vao giua nhan. 56
-  // bac tren 1024 la khoang 2,3% ban kinh moi ben — vai diem anh sat mep, ma
-  // ngay tai do hai anh truoc/sau cung la mot cho tren vo lon nen hoa vao nhau
-  // khong sai gi.
-  const chamHoa = [...b0.hoa].filter((h) => h > 0).length;
-  dung(`phi=0: dai hoa chi cham vien (${chamHoa} bac)`, chamHoa <= 56);
+  const b = dungBangS(1024);
+  eq("bang du bac", b.beta.length, 1024);
+  gan("mep trai la -90 do", b.beta[0], -PI / 2, 1e-6);
+  gan("giua la 0 do", b.beta[512], Math.asin(1 / 1023), 1e-6);
+  gan("mep phai la +90 do", b.beta[1023], PI / 2, 1e-6);
 
-  const b1 = bangChieu(1.0, bangRong(BUC));
-  dung("xoay thi co phan la mat sau", [...b1.hoa].some((h) => h === 1));
-  dung("xoay thi van con phan la nhan", [...b1.hoa].some((h) => h === 0));
-  dung("co vung hoa dan giua hai ben", [...b1.hoa].some((h) => h > 0 && h < 1));
-  dung("he so hoa luon trong 0..1", [...b1.hoa].every((h) => h >= 0 && h <= 1));
-  dung("co danh dau mat sau", [...b1.sau].some((v) => v === 1));
-  dung("van con danh dau mat truoc", [...b1.sau].some((v) => v === 0));
-  // Do nen chi bi chan dau tren; phan nho hon 1 phai giu vi do la tin hieu
-  // cho biet cho nao dang bi keo gian.
-  dung(
-    "do nen duong va bi chan tran",
-    [...b1.nen].every((v) => v >= 0 && v <= TRAN_NEN),
-  );
-  dung("xoay thi co cho bi keo gian manh", [...b1.nen].some((v) => v < 0.35));
-  // Dung yen thi anh khong bi nen o dau ca, vi moi cot lay dung cot cua no.
-  dung(
-    "phi=0: khong nen o bat cu dau",
-    [...b0.nen].every((v) => Math.abs(v - 1) < 1e-6),
-  );
-  // Xoay roi thi hai mep bi nen manh hon giua.
-  dung("xoay thi mep trai nen hon giua", b1.nen[1] > b1.nen[BUC >> 1]);
-  dung("xoay thi mep phai nen hon giua", b1.nen[BUC - 2] > b1.nen[BUC >> 1]);
-  dung(
-"do sang luon duong va khong vuot dinh",
-[...b1.sangManHinh, ...b1.sangNhan].every((v) => v > 0 && v <= 1),
-  );
-  // Quay nua vong thi khong con nhan nao — day la cho de doi sang loai bia khac.
-  dung(
-"quay nua vong thi toan mat sau",
-[...bangChieu(Math.PI, bangRong(BUC)).hoa].every((h) => h === 1),
-  );
-  eq("dai hoa dung hang so da khai", DAI_HOA, 0.3);
-  // He so chinh sang phai duoc chan tran, khong thi cho toi xoay ra chinh dien
-  // bi keo sang gap ba lan, bet trang.
-  dung(
-    "he so chinh sang bi chan tran",
-    [...b1.heSoNhan, ...b1.heSoSau].every((v) => v > 0 && v <= TRAN_SANG + 1e-6),
-  );
-  dung(
-    "phi=0: he so nhan deu bang 1",
-    [...b0.heSoNhan].every((v) => Math.abs(v - 1) < 1e-6),
-  );
-  // Dung lai bang cu phai cho ket qua y het bang moi, khong con sot so cu.
-  {
-    const chung = bangRong(BUC);
-    bangChieu(2.4, chung);
-    bangChieu(0.7, chung);
-    const rieng = bangChieu(0.7, bangRong(BUC));
-    let lech = 0;
-    for (let i = 0; i < BUC; i++) {
-      lech = Math.max(lech, Math.abs(chung.u[i] - rieng.u[i]));
-      lech = Math.max(lech, Math.abs(chung.hoa[i] - rieng.hoa[i]));
-      lech = Math.max(lech, Math.abs(chung.heSoSau[i] - rieng.heSoSau[i]));
-    }
-    eq("dung lai bang cu khong sot so cu", lech, 0);
+  // Góc phải tăng đều từ trái sang phải, không được quay ngược.
+  let lui = 0;
+  for (let i = 1; i < 1024; i++) if (b.beta[i] < b.beta[i - 1]) lui++;
+  eq("goc tang deu tu trai sang phai", lui, 0);
+
+  // Độ sáng trong bảng phải khớp `doSang` của chính góc đó.
+  let lech = 0;
+  for (let i = 0; i < 1024; i += 7) {
+    if (Math.abs(b.sang[i] - doSang(b.beta[i])) > 1e-6) lech++;
   }
+  eq("do sang trong bang khop doSang", lech, 0);
+
+  /*
+   * dβ/ds = 1/√(1−s²): ở giữa bằng 1, ra mép tiến ra vô cùng nên phải bị chặn.
+   * Không chặn thì bề rộng lấy mẫu vọt lên vô hạn và vòng vẽ chạy mãi.
+   */
+  gan("giua lon khong nen", b.dGoc[512], 1, 0.01);
+  eq("hai mep bi chan tran", [b.dGoc[0], b.dGoc[1023]], [TRAN_DGOC, TRAN_DGOC]);
+  let qua = 0;
+  for (let i = 0; i < 1024; i++) if (b.dGoc[i] > TRAN_DGOC + 1e-6) qua++;
+  eq("khong bac nao vuot tran", qua, 0);
+  // Càng ra mép càng nén — đó là lý do phải lấy trung bình cả khoảng.
+  dung("cang ra mep cang nen", b.dGoc[1000] > b.dGoc[700] && b.dGoc[700] > b.dGoc[512]);
 }
-
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

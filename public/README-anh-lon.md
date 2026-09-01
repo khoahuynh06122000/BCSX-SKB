@@ -1,26 +1,30 @@
-# Ảnh lon bia cho màn hình đăng nhập
+# Nhãn lon bia cho màn hình đăng nhập
 
-Sáu tấm PNG dưới đây **không vẽ tay và không chụp** — chúng được dựng từ chính
-file bao bì của bộ phận bằng `scripts/dung-lon-tu-nhan.py`. Sửa ảnh thì sửa ở
-file bao bì rồi chạy lại script, đừng chỉnh tay từng tấm.
+Ba tấm PNG dưới đây **không phải ảnh chụp lon**. Chúng là chính **ô nhãn trải
+phẳng 208 × 107 mm** trong file bao bì của bộ phận — trọn một vòng 360° quanh
+thân lon. Lon trên màn hình do `src/components/LonXoay.tsx` cuộn tấm này quanh
+một hình trụ mà thành, vẽ lại từng khung hình.
 
-| Loại bia | Mặt trước | Mặt sau |
-|---|---|---|
-| Cầu Vàng — Golden Bridge Helles Lager | `lon-cau-vang.png` | `lon-cau-vang-sau.png` |
-| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `lon-lau-dai-mat-trang.png` | `lon-lau-dai-mat-trang-sau.png` |
-| Sức Mạnh Atlas — Atlas Wings Dark Lager | `lon-suc-manh-atlas.png` | `lon-suc-manh-atlas-sau.png` |
+| Loại bia | Tệp |
+|---|---|
+| Cầu Vàng — Golden Bridge Helles Lager | `nhan-cau-vang.png` |
+| Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `nhan-lau-dai-mat-trang.png` |
+| Sức Mạnh Atlas — Atlas Wings Dark Lager | `nhan-suc-manh-atlas.png` |
+
+Thiếu tệp nào thì **riêng loại đó** quay về hình vẽ SVG — không vỡ, không ô
+trắng, hai loại kia vẫn hiện bình thường.
 
 ## Bao bì đổi mẫu thì làm gì
 
-Xin bộ phận file PDF bao bì (bản dieline, một ô nhãn trải phẳng 208 × 107 mm),
-bỏ cả ba file vào một thư mục rồi chạy:
+Xin bộ phận file PDF bao bì (bản dieline), bỏ cả ba file vào một thư mục rồi
+chạy:
 
 ```bash
-python scripts/dung-lon-tu-nhan.py "C:\Users\khoahd\Downloads\vỏ"
+python scripts/lay-nhan-tu-bao-bi.py "C:\Users\khoahd\Downloads\vỏ"
 ```
 
-Script tự nhận loại bia theo tên file (`Atlas…`, `GoldenBridge…`, `Lunar…`),
-ghi đè thẳng sáu tấm PNG ở thư mục này. **Không phải sửa dòng code nào.**
+Script tự nhận loại bia theo tên file (`Atlas…`, `GoldenBridge…`, `Lunar…`) và
+ghi đè ba tấm PNG ở thư mục này. **Không phải sửa dòng code nào.**
 
 Cần `pymupdf`, `numpy`, `pillow`:
 
@@ -28,40 +32,40 @@ Cần `pymupdf`, `numpy`, `pillow`:
 python -m pip install pymupdf numpy pillow
 ```
 
+## Vì sao không dùng ảnh chụp lon
+
+Bản trước dùng **hai ảnh chụp** cho mỗi loại — mặt trước và mặt sau — rồi trộn
+lại khi xoay. Cách ấy có một chỗ hỏng không chữa được:
+
+> Phần vỏ ở hai hông lon nằm đúng chỗ ống kính nhìn nghiêng hết cỡ, nên cả một
+> vòng cung chỉ còn dăm cột ảnh. Xoay ra chính diện thì dăm cột ấy phải trải kín
+> mấy chục cột màn hình — và thành **vệt nhoè**.
+
+Cả một mớ chắp vá quanh chỗ hỏng đó cũng phải nuôi theo: dải hông tự dựng, hệ
+số tô tối dải hông, bản làm mờ dọc cho chỗ nối, trần độ nén.
+
+Cuộn thẳng từ nhãn 360° thì **không góc nào thiếu dữ liệu**, nên không cần chắp
+vá gì. Đó cũng là điều Khoa nói: chỉ cần nối ảnh thành một vòng tròn.
+
 ## Script làm gì
 
 1. **Tìm ô nhãn bằng đường kẻ vector**, không dò màu điểm ảnh. File dieline có
-   sẵn một hình chữ nhật rộng đúng 208 mm — đó là ô nhãn. Dò màu thì mũi tên
-   và chữ ghi kích thước lọt vào, và nhãn nền trắng (Lâu Đài Mặt Trăng) không
-   tách nổi khỏi nền giấy.
-2. **Xoá mấy đường đứt màu hồng** đánh dấu chỗ cắt và chỗ gấp. Chúng nằm đè lên
-   hình vẽ chứ không phải một lớp riêng nên không tắt được lúc kết xuất; để lại
-   thì lon trên màn hình có một vạch hồng chạy ngang.
-3. **Cuộn ô nhãn quanh một hình trụ** rồi chụp hai góc: 0° (mặt trước) và 180°
-   (mặt sau). Bán kính suy từ chính chu vi nhãn — 208 mm ÷ 2π = 33,1 mm, đúng
-   lon 330 ml. Cổ lon thóp lại đúng 17,81 mm như file ghi.
-4. **Tô bóng bằng đúng công thức `doSang()`** của `src/lib/lonXoay.ts`. Phải
-   giống tuyệt đối: lúc lon quay, app chia lại phần bóng có sẵn trong ảnh để
-   thay bằng bóng mới. Lệch công thức thì vệt sáng không đứng yên mà trượt theo
-   nhãn — đúng thứ khiến mắt nhận ra đó không phải vật thật.
+   sẵn một hình chữ nhật rộng đúng 208 mm — đó là ô nhãn. Dò màu thì mũi tên và
+   chữ ghi kích thước lọt vào, và nhãn nền trắng (Lâu Đài Mặt Trăng) không tách
+   nổi khỏi nền giấy.
+2. **Xén 0,4 mm hai mép.** Đúng hai mép của ô nhãn gặp nhau khi cuộn quanh lon;
+   sát mép còn đường đánh dấu chỗ cắt, để nguyên thì chỗ nối hiện ra một vạch
+   dọc.
+3. **Xoá mấy đường đứt màu hồng** đánh dấu chỗ cắt và chỗ gấp. Chúng nằm đè lên
+   hình vẽ chứ không phải một lớp riêng nên không tắt được lúc kết xuất.
+4. **Ghi ra bằng bảng màu 256.** Nhãn là hình vẽ vector — ít màu, mảng màu lớn
+   và phẳng — nên bảng màu vừa đủ: từ 1,3 MB xuống 440 KB mỗi tấm mà nhìn không
+   ra khác biệt. Đáng giá vì màn hình đăng nhập tải cả ba tấm trước khi ai kịp
+   bấm gì.
 
-## Vì sao không cuộn thẳng trong app
+## Dáng hình lon nằm ở đâu
 
-`src/lib/lonXoay.ts` đã có sẵn phép chiếu để xoay lon, nhưng đầu vào của nó là
-**ảnh chụp** — ảnh đã mang sẵn phép chiếu trụ và đã có sẵn bóng sáng. Đưa thẳng
-nhãn phẳng vào đó thì chữ bị kéo dẹt ra hai mép. Cuộn trước ở script thì app
-không phải sửa gì, và ảnh sinh ra đúng định dạng nó vốn chờ đợi.
-
-## Nếu muốn thay bằng ảnh chụp thật
-
-Vẫn được — cứ thay đúng sáu tên file trên. Yêu cầu:
-
-- **PNG nền trong** (đã tách nền). Ảnh còn phông sẽ lộ ra một khối chữ nhật
-  trên nền tối, hỏng hết hiệu ứng lon lơ lửng.
-- Dựng đứng, cao từ **1200px** trở lên.
-- **Mặt sau phải là đúng cái lon ấy quay 180°**, chụp cùng khoảng cách và cùng
-  ánh sáng với mặt trước. Lệch sáng thì lúc quay thấy nhảy màu ở chỗ nối.
-- **Chữ trên lon phải đọc xuôi.** Ảnh xuất từ file dựng bao bì đôi khi bị lật
-  gương, nhìn lướt không thấy nhưng lên màn hình thì chữ ngược hết.
-
-Ảnh chụp còn phông thì chạy `scripts/tach-nen-anh-lon.py` (xem `--help`).
+Không nằm trong ảnh — nằm trong `src/lib/lonXoay.ts`, hàm `banKinhTheoHang()`
+và `sangDauLon()`. Vành miệng, cổ thóp 17,81 mm, rãnh, vành đáy và đáy cuộn vào
+đều dựng bằng phép tính theo đúng tỉ lệ lon 330 ml thật (rộng 66,3 mm trên
+115,2 mm cao). Muốn sửa dáng lon thì sửa ở đó.

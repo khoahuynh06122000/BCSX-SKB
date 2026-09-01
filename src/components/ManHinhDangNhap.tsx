@@ -34,32 +34,24 @@ interface Props {
 type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
- * ẢNH LON BIA THẬT — thả tệp vào `public/` là tự thay cho hình vẽ.
+ * Ô NHÃN TRẢI PHẲNG — trọn một vòng 360° quanh thân lon.
  *
- * Chỉ cần chép ba tệp PNG NỀN TRONG (đã tách nền, không phải ảnh chụp có
- * phông) vào thư mục `public/` với đúng tên dưới đây, không phải sửa dòng code
- * nào. Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
- * trắng, và loại nào có ảnh vẫn hiện ảnh thật.
+ * KHÔNG phải ảnh chụp lon: đây là chính tấm nhãn 208 × 107 mm trong file bao bì
+ * của bộ phận, cắt ra bằng `scripts/lay-nhan-tu-bao-bi.py`. Lon trên màn hình
+ * do `LonXoay` cuộn tấm này quanh một hình trụ mà thành.
  *
- * Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi trình
- * duyệt "tệp này có tồn tại không" mà không tải thử.
+ * Trước đây mỗi loại cần hai ảnh chụp — mặt trước và mặt sau — rồi trộn lại khi
+ * xoay. Cách ấy để lại vệt nhoè ở hai hông, vì phần vỏ ở đó nằm đúng chỗ nhìn
+ * nghiêng hết cỡ nên cả một vòng cung chỉ còn dăm cột ảnh.
+ *
+ * Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
+ * trắng. Bắt lỗi bằng `onerror` chứ không kiểm tra trước: không có cách nào hỏi
+ * trình duyệt "tệp này có tồn tại không" mà không tải thử.
  */
-const ANH_LON: Record<LoaiBia, string> = {
-  caubang: "/lon-cau-vang.png",
-  laudai: "/lon-lau-dai-mat-trang.png",
-  atlas: "/lon-suc-manh-atlas.png",
-};
-
-/**
- * ẢNH MẶT SAU — lon xoay đúng 180°, cũng nền trong.
- *
- * Bắt buộc phải có: lon quay tròn nên thiếu mặt sau là xoay tới đâu lòi ra
- * mảng trống tới đó. Thiếu tệp nào thì riêng loại đó về hình vẽ SVG.
- */
-const ANH_LON_SAU: Record<LoaiBia, string> = {
-  caubang: "/lon-cau-vang-sau.png",
-  laudai: "/lon-lau-dai-mat-trang-sau.png",
-  atlas: "/lon-suc-manh-atlas-sau.png",
+const NHAN_LON: Record<LoaiBia, string> = {
+  caubang: "/nhan-cau-vang.png",
+  laudai: "/nhan-lau-dai-mat-trang.png",
+  atlas: "/nhan-suc-manh-atlas.png",
 };
 
 /**
@@ -574,8 +566,7 @@ export default function ManHinhDangNhap({
                 <LyBia loai={loai} />
               ) : (
                 <LonXoay
-                  anh={ANH_LON}
-                  anhSau={ANH_LON_SAU}
+                  nhan={NHAN_LON}
                   loai={loai}
                   ten={TEN_BIA}
                   onLoiAnh={(id) =>
@@ -739,24 +730,23 @@ export default function ManHinhDangNhap({
                         boxShadow: dangChon ? `0 0 0 1px ${b.nhan}, 0 18px 40px -18px ${b.nhan}` : undefined,
                       }}
                     >
+                      {/*
+                        Ô chọn loại luôn vẽ bằng SVG, không dùng ảnh.
+
+                        Trước đây nó nhét ảnh chụp lon vào một ô cao 96px. Nay
+                        chỉ còn ô nhãn trải phẳng 1400 × 720 — ép tấm đó vào ô
+                        này thì vừa méo vừa tốn công giải mã ba tấm cỡ ấy cho
+                        ba con tem bé xíu. Hình vẽ đã lấy đúng màu thân và màu
+                        nhấn của từng loại nên vẫn phân biệt được ngay.
+                      */}
                       <div className="mx-auto mb-2.5 h-24 w-16 transition-transform duration-500 group-hover:-translate-y-2 group-hover:rotate-[-8deg] group-hover:scale-110">
-                        {anhHong[b.id] ? (
-                          <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
-                            <rect x="14" y="10" width="36" height="80" rx="8" fill={b.than} />
-                            <rect x="14" y="10" width="10" height="80" rx="5" fill="rgba(255,255,255,0.20)" />
-                            {/* Dải nhãn giữa lon, lấy đúng màu nhấn của loại. */}
-                            <rect x="14" y="40" width="36" height="18" fill={b.nhan} opacity="0.95" />
-                            <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
-                          </svg>
-                        ) : (
-                          <img
-                            src={ANH_LON[b.id]}
-                            alt=""
-                            aria-hidden="true"
-                            className="h-full w-full object-contain"
-                            onError={() => setAnhHong((t) => ({ ...t, [b.id]: true }))}
-                          />
-                        )}
+                        <svg viewBox="0 0 64 96" className="h-full w-full" aria-hidden="true">
+                          <rect x="14" y="10" width="36" height="80" rx="8" fill={b.than} />
+                          <rect x="14" y="10" width="10" height="80" rx="5" fill="rgba(255,255,255,0.20)" />
+                          {/* Dải nhãn giữa lon, lấy đúng màu nhấn của loại. */}
+                          <rect x="14" y="40" width="36" height="18" fill={b.nhan} opacity="0.95" />
+                          <ellipse cx="32" cy="10" rx="18" ry="5" fill="rgba(255,255,255,0.5)" />
+                        </svg>
                       </div>
                       <div className="flex flex-col text-[0.68rem] leading-tight">
                         <span className="font-semibold" style={{ color: dangChon ? b.nhan : undefined }}>
