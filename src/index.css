@@ -184,47 +184,18 @@
   inherits: true;
   initial-value: #b8651c;
 }
-@property --dn-giua {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #5e2a09;
-}
-@property --dn-ngoai {
-  syntax: "<color>";
-  inherits: true;
-  initial-value: #150803;
-}
+/*
+   MÀN HÌNH ĐĂNG NHẬP.
 
-/* Mặc định: Cầu Vàng — lon đỏ, hoa bia vàng. */
-.dn-nen {
-  --dn-trong: #b8651c;
-  --dn-giua: #5e2a09;
-  --dn-ngoai: #150803;
-  background: radial-gradient(
-    circle at center,
-    var(--dn-trong) 0%,
-    var(--dn-giua) 50%,
-    var(--dn-ngoai) 100%
-  );
-  transition:
-    --dn-trong 1.2s cubic-bezier(0.4, 0, 0.2, 1),
-    --dn-giua 1.2s cubic-bezier(0.4, 0, 0.2, 1),
-    --dn-ngoai 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
+   Nền là ảnh chụp nhà nấu của BaNa Brew House, đặt trong `ManHinhDangNhap.tsx`
+   chứ không ở đây: nó cần trôi theo con trỏ nên phải là một phần tử riêng có
+   transform, không phải nền của thẻ bọc.
 
-/* Lâu Đài Mặt Trăng — lon trắng ngọc, lâu đài xanh cổ vịt. */
-.dn-nen.dn-laudai {
-  --dn-trong: #1c7f7a;
-  --dn-giua: #08403f;
-  --dn-ngoai: #021211;
-}
-
-/* Sức Mạnh Atlas — lon đen, đôi cánh vàng kim. */
-.dn-nen.dn-atlas {
-  --dn-trong: #8a6a1e;
-  --dn-giua: #33270a;
-  --dn-ngoai: #0b0902;
-}
+   ĐÃ BỎ ở đây: nền chuyển màu toả tròn ba tông theo loại bia đang chọn, bọt
+   bia bay lên, và ba lớp transform bọc cái lon giữa màn hình. Màn hình không
+   còn lon, không còn thẻ chọn loại bia, và trên một tấm ảnh thật thì mấy hiệu
+   ứng ấy thành nhiễu.
+*/
 
 .dn-tieu-de {
   font-family: "Galada", cursive;
@@ -249,83 +220,14 @@
   -webkit-backdrop-filter: blur(20px);
 }
 
-@keyframes dn-bot-bay {
-  0% {
-    transform: translateY(0) translateX(0) scale(0.6);
-    opacity: 0;
-  }
-  12% { opacity: 0.55; }
-  88% { opacity: 0.55; }
-  100% {
-    transform: translateY(-110vh) translateX(28px) scale(1);
-    opacity: 0;
-  }
-}
-
-.dn-bot {
-  position: absolute;
-  border-radius: 9999px;
-  background: radial-gradient(
-    circle at 32% 28%,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(255, 255, 255, 0.35) 38%,
-    rgba(255, 255, 255, 0.06) 70%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.25);
-  pointer-events: none;
-}
-
 @keyframes dn-hien-len {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: none; }
 }
 
-/*
-   Lon giữa màn hình chồng ba lớp, MỖI LỚP GIỮ ĐÚNG MỘT NGUỒN transform:
-
-     .dn-ly    nghiêng theo con trỏ, do vòng requestAnimationFrame ghi thẳng
-     .dn-vao   hiện lên lúc mới vào trang
-     .dn-lac   lắc và nổi lên xuống không ngừng
-
-   Phải tách ra vì hoạt ảnh CSS luôn ĐÈ transform đặt bằng style. Trước đây
-   `.dn-ly` vừa mang hoạt ảnh vừa nhận transform từ vòng rAF, nên phần nghiêng
-   theo con trỏ không bao giờ hiện ra.
-
-   Hai lớp này bọc hình xưởng bia — ba thùng lên men vẽ bằng SVG, xem
-   `src/components/XuongBia.tsx`. Màu bia trong ô kính quan sát đặt bằng style
-   trong `ManHinhDangNhap.tsx`, vì nó phụ thuộc trạng thái React chứ không phải
-   một hoạt ảnh chạy vòng. */
-.dn-vao {
-  animation: dn-hien-len 1.2s ease-out 0.2s both;
-  height: 100%;
-  width: 100%;
-}
-
-/* Lon lắc nhẹ không ngừng, như đang lơ lửng chứ không đứng chết một chỗ.
-   Gốc xoay đặt gần đáy lon để trông như lon đung đưa trên chân, không phải
-   xoay quanh giữa thân. */
-@keyframes dn-lac {
-  0%,
-  100% {
-    transform: rotate(-2.6deg) translateY(0);
-  }
-  50% {
-    transform: rotate(2.6deg) translateY(-16px);
-  }
-}
-.dn-lac {
-  animation: dn-lac 6.5s ease-in-out infinite;
-  transform-origin: 50% 88%;
-  height: 100%;
-  width: 100%;
-}
-
 /* Máy yếu hoặc người dùng tắt hiệu ứng thì bỏ hết chuyển động, giữ nguyên
    bố cục. Trang đăng nhập không được đánh đổi khả năng dùng lấy cái đẹp. */
 @media (prefers-reduced-motion: reduce) {
-  .dn-bot { display: none; }
-  .dn-vao { animation: none; }
-  .dn-lac { animation: none; }
-  .dn-nen { transition: none; }
+  .dn-tieu-de,
+  .dn-kinh { animation: none !important; }
 }
