@@ -5842,24 +5842,36 @@ export default function App() {
                 },
               ]
             : []),
-          {
-            id: "debt",
-            label: "Công nợ · Hóa đơn",
-            icon: Receipt,
-            color: "#14b8a6",
-          },
-          // BNC nhận phần lớn sản lượng mà hóa đơn chỉ có một dòng, nên cần
-          // một chỗ riêng nhìn xuống từng bộ phận.
-          {
-            id: "bnc",
-            label: "Đơn BNC",
-            icon: Building2,
-            color: "#0284c7",
-          },
-          // Doanh thu: ai xem được dữ liệu kho thì XEM được; riêng thao tác
-          // thì chỉ kế toán, chặn ở trong tab chứ không chặn ở menu. DNC không
-          // xem — doanh thu không phải việc của khối cung ứng.
-          ...(quyen.xemKho
+          // Công nợ, hóa đơn và Đơn BNC là việc của bên xuất và kế toán —
+          // người nhập hàng không xem.
+          ...(quyen.xemXuat
+            ? [
+                {
+                  id: "debt",
+                  label: "Công nợ · Hóa đơn",
+                  icon: Receipt,
+                  color: "#14b8a6",
+                },
+                // BNC nhận phần lớn sản lượng mà hóa đơn chỉ có một dòng, nên
+                // cần một chỗ riêng nhìn xuống từng bộ phận.
+                {
+                  id: "bnc",
+                  label: "Đơn BNC",
+                  icon: Building2,
+                  color: "#0284c7",
+                },
+              ]
+            : []),
+          /*
+           * Doanh thu cần CẢ HAI cờ xem, vì hai vai trò bị chặn vì hai lý do
+           * khác nhau: DNC thiếu `xemKho` (số của kho tổng không phải việc của
+           * khối cung ứng), người nhập hàng thiếu `xemXuat` (doanh thu sinh từ
+           * chiều xuất). Bỏ một cờ nào cũng lọt một trong hai.
+           *
+           * Riêng THAO TÁC trên doanh thu thì chỉ kế toán, chặn ở trong tab
+           * chứ không chặn ở menu.
+           */
+          ...(quyen.xemKho && quyen.xemXuat
             ? [
                 {
                   id: "revenue-mgmt",
@@ -5874,16 +5886,37 @@ export default function App() {
       {
         id: "records",
         title: "Dữ liệu",
-        items: [
-          {
-            id: "gallery",
-            label: "Thư viện ảnh",
-            icon: ImageIcon,
-            color: "#ec4899",
-          },
-          { id: "partners", label: "Đối tác", icon: Users, color: "#6366f1" },
-          { id: "history", label: "Lịch sử", icon: History, color: "#64748b" },
-        ],
+        /*
+         * Cả nhóm đi theo cờ chiều xuất. Ba mục ở đây đều xoay quanh chiều
+         * xuất: thư viện ảnh là ảnh biên bản giao nhận, đối tác là bên mua,
+         * lịch sử là để đối chiếu đơn đã giao. Người nhập hàng không xem;
+         * nhóm hết mục thì tự ẩn luôn cả tiêu đề.
+         *
+         * DNC thì NGƯỢC LẠI — đây là nhóm chính của họ, nên đừng đem `xemKho`
+         * ra chặn ở đây.
+         */
+        items: quyen.xemXuat
+          ? [
+              {
+                id: "gallery",
+                label: "Thư viện ảnh",
+                icon: ImageIcon,
+                color: "#ec4899",
+              },
+              {
+                id: "partners",
+                label: "Đối tác",
+                icon: Users,
+                color: "#6366f1",
+              },
+              {
+                id: "history",
+                label: "Lịch sử",
+                icon: History,
+                color: "#64748b",
+              },
+            ]
+          : [],
       },
       {
         id: "system",
@@ -7945,7 +7978,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "revenue-mgmt" && daDuocDuyet && (
+            {activeTab === "revenue-mgmt" && daDuocDuyet && quyen.xemXuat && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="space-y-1">
@@ -10880,7 +10913,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "history" && (
+            {activeTab === "history" && quyen.xemXuat && (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="relative max-w-md w-full group">
@@ -11047,7 +11080,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "debt" && daDuocDuyet && (
+            {activeTab === "debt" && daDuocDuyet && quyen.xemXuat && (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                   <div className="space-y-1">
@@ -11140,7 +11173,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "bnc" && daDuocDuyet && (
+            {activeTab === "bnc" && daDuocDuyet && quyen.xemXuat && (
               <div className="space-y-6">
                 <div className="space-y-1">
                   <h2 className="text-2xl font-black text-slate-900 tracking-tight">
@@ -11208,7 +11241,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "partners" && (
+            {activeTab === "partners" && quyen.xemXuat && (
               <div className="space-y-6">
                 {isOwner && partners.length === 0 && (
                   <div className="bg-amber-50 border border-amber-200 p-6 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-6">
@@ -11317,7 +11350,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "gallery" && (
+            {activeTab === "gallery" && quyen.xemXuat && (
               <div className="space-y-8">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                   <div>

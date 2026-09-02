@@ -100,9 +100,9 @@ eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
   quanTri: false,
 });
 
-// HAI VAI TRO MOT CHIEU: xem het, chi ghi mot chieu.
+// HAI VAI TRO MOT CHIEU. Nguoi nhap kho khong xem chieu xuat (02/09/2026).
 eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
-  xemXuat: true,
+  xemXuat: false,
   xemKho: true,
   ghiNhap: true,
   ghiXuat: false,
@@ -147,9 +147,13 @@ eq("DNC chi xem chieu xuat", quyenCua("DNC"), {
 // ------------------------------------------------------------ chan dung nguoi
 
 // Ai xem duoc du lieu XUAT: moi vai tro tru cho duyet.
-MOI_VAI_TRO.forEach((r) => {
-  eq(`${r} xem duoc chieu xuat?`, quyenCua(r).xemXuat, r !== "PENDING");
-});
+// Ai bay duoc cac phan he CHIEU XUAT: khong co nguoi nhap kho, va khong co
+// nguoi cho duyet.
+eq(
+  "ai xem duoc chieu xuat",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).xemXuat),
+  ["OWNER", "KE_TOAN", "XUAT_KHO", "DNC"],
+);
 
 // Ai xem duoc du lieu KHO: moi vai tro tru cho duyet VA tru DNC.
 eq(
@@ -157,11 +161,32 @@ eq(
   MOI_VAI_TRO.filter((r) => quyenCua(r).xemKho),
   ["OWNER", "KE_TOAN", "NHAP_KHO", "XUAT_KHO"],
 );
-// Khong ai xem duoc kho ma lai khong xem duoc xuat: khong co vai tro nao nhu the.
+/*
+ * HAI CO XEM DOC LAP NHAU, va moi ben co dung mot vai tro thieu no.
+ *
+ * Chot lai bang mot phep kiem thay vi de troi: neu sau nay ai gan lai
+ * `xemXuat: true` cho NHAP_KHO thi bon phan he chieu xuat hien lai tren menu
+ * ma khong ai biet, vi giao dien khong bao gi ca.
+ */
 dung(
-  "xem duoc kho thi tat nhien xem duoc xuat",
-  MOI_VAI_TRO.every((r) => !quyenCua(r).xemKho || quyenCua(r).xemXuat),
+  "nguoi nhap kho: xem kho nhung khong xem chieu xuat",
+  quyenCua("NHAP_KHO").xemKho && !quyenCua("NHAP_KHO").xemXuat,
 );
+dung(
+  "DNC: xem chieu xuat nhung khong xem kho",
+  quyenCua("DNC").xemXuat && !quyenCua("DNC").xemKho,
+);
+
+/*
+ * CO `xemXuat` KHONG DUOC DUNG DE CHAN DOC DU LIEU.
+ *
+ * Ton kho va bao cao tron ca hai chieu — ton bang nhap tru xuat — nen nguoi
+ * nhap kho phai doc duoc giao dich chieu xuat du menu khong bay chung. Quyen
+ * doc trong `firestore.rules` di theo `xemKho()`, va day la phep kiem giu cho
+ * dieu do dung: mat `xemKho` la ton kho cua nguoi nhap hang hut di dung phan
+ * da xuat.
+ */
+dung("nguoi nhap kho van doc duoc du lieu kho", quyenCua("NHAP_KHO").xemKho);
 
 // Ai NAP TEP duoc: chi ke toan va chu so huu.
 eq(
