@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import XuongBia from "./XuongBia";
 import { AlertCircle, Loader2, ShieldCheck, UserPlus } from "lucide-react";
 
 /**
  * MÀN HÌNH ĐĂNG NHẬP
  *
- * Nền chuyển màu toả tròn, bọt bia bay lên không ngừng, ly bia ở giữa nghiêng
- * theo con trỏ, hoa bia và hạt lúa mạch trôi quanh và BỊ ĐẨY RA khi con trỏ
- * lại gần. Chọn loại bia bên phải thì cả nền lẫn ly đổi màu.
+ * Nền chuyển màu toả tròn, bọt bia bay lên không ngừng, XƯỞNG BIA ở giữa
+ * nghiêng theo con trỏ, hoa bia và hạt lúa mạch trôi quanh và BỊ ĐẨY RA khi
+ * con trỏ lại gần. Chọn loại bia bên phải thì nền đổi màu, và bia trong ô kính
+ * của ba thùng nấu cũng đổi theo.
  *
- * DÙNG ẢNH LON THẬT NẾU CÓ, KHÔNG CÓ THÌ VẼ BẰNG SVG. Thả ba tệp PNG nền
- * trong vào `public/` là ảnh tự thay cho hình vẽ, không phải sửa dòng code nào. Chưa có tệp thì quay về hình vẽ —
- * không vỡ, không ô trắng. Xem `ANH_LON` bên dưới.
- *
- * Hai loại bia lấy từ chính danh mục thật: Golden Bridge Helles Lager (bia
- * vàng) và Wings Dark Lager (bia đen).
+ * TOÀN BỘ HÌNH VẼ BẰNG SVG, KHÔNG DÙNG ẢNH. Chỗ giữa này trước đây lần lượt
+ * là: lon quay 3D dựng bằng canvas (ba vòng), lon dựng từ file bao bì, rồi ảnh
+ * chụp lon thật. Vòng nào cũng vướng chuyện ảnh — nhoè ở hai hông, cắt nền ăn
+ * vào thân lon, hạt nước đọng, viền trắng ăn sẵn vào điểm ảnh. Chủ sở hữu
+ * quyết định bỏ hẳn lon và để hình vẽ về xưởng bia. Xem `XuongBia.tsx`.
  */
 
 interface Props {
@@ -26,50 +27,16 @@ interface Props {
 
 /**
  * Ba loại bia Sun KraftBeer · Bà Nà Signature, khớp với danh mục trong app:
- *   caubang → Bia Golden Bridge Helles Lager       (Cầu Vàng, lon đỏ)
- *   laudai  → Bia Lunar Castle Dry hop Pale Ale    (Lâu Đài Mặt Trăng, lon trắng)
- *   atlas   → Bia Wings Dark Lager                 (Sức Mạnh Atlas, lon đen)
+ *   caubang → Bia Golden Bridge Helles Lager       (Cầu Vàng)
+ *   laudai  → Bia Lunar Castle Dry hop Pale Ale    (Lâu Đài Mặt Trăng)
+ *   atlas   → Bia Wings Dark Lager                 (Sức Mạnh Atlas)
  */
 type LoaiBia = "caubang" | "laudai" | "atlas";
 
 /**
- * BA ẢNH LON TĨNH — dựng sẵn từ file bao bì của bộ phận.
- *
- * ẢNH CHỤP LON THẬT của bộ phận, đã qua `scripts/chuan-hoa-anh-lon.py`: tách
- * nền trắng, lật lại tấm bị lật gương, và xoá hạt nước đọng. Xem
- * `public/README-anh-lon.md`.
- *
- * TRƯỚC ĐÂY LÀ MỘT LON QUAY 3D, dựng lại từng khung hình bằng canvas. Đã làm ba
- * vòng: ảnh chụp mặt trước/mặt sau (nhoè ở hai hông), cuộn nhãn 360° (hết nhoè
- * nhưng đỉnh và đáy không ra dáng lon), rồi nhìn chếch có nắp khui (đúng dáng
- * nhưng đủ rồi). Chủ sở hữu quyết định bỏ.
- *
- * Đổi lại được ba thứ: màn hình đăng nhập hết một vòng vẽ chạy liên tục, ba lon
- * cùng hiện nên nói được đúng cái cần nói — đây là ba vị bia của Bà Nà — và bộ
- * mã nhẹ đi gần một nghìn dòng.
- *
- * Thiếu tệp nào thì RIÊNG loại đó quay về hình vẽ SVG — không vỡ, không ô
- * trắng. Bắt lỗi bằng `onError` chứ không kiểm tra trước: không có cách nào hỏi
- * trình duyệt "tệp này có tồn tại không" mà không tải thử.
- */
-const ANH_LON: Record<LoaiBia, string> = {
-  caubang: "/lon-cau-vang.webp",
-  laudai: "/lon-lau-dai-mat-trang.webp",
-  atlas: "/lon-suc-manh-atlas.webp",
-};
-
-/**
- * Thứ tự ba lon đứng trên màn hình, từ trái sang phải.
- *
- * CỐ ĐỊNH, không xếp lại theo loại đang chọn. Xếp lại thì mỗi lần đổi loại là
- * ba lon nhảy chỗ, mắt phải bám theo — mà chúng chỉ là hình minh hoạ. Loại đang
- * chọn chỉ bước lên trước và sáng lên.
- */
-const THU_TU_LON: LoaiBia[] = ["laudai", "caubang", "atlas"];
-
-/**
- * Màu bia trong ly khi chưa có ảnh lon, lấy theo đúng tông của từng lon:
- * Cầu Vàng vàng hổ phách, Lâu Đài Mặt Trăng vàng nhạt trong, Atlas nâu đen.
+ * Màu bia đổ vào ô kính quan sát của ba thùng nấu, lấy theo đúng tông của từng
+ * loại: Cầu Vàng vàng hổ phách, Lâu Đài Mặt Trăng vàng nhạt trong, Atlas nâu
+ * đen.
  */
 const MAU_BIA: Record<LoaiBia, { dam: string; nhat: string; bot: string }> = {
   caubang: { dam: "#a8541a", nhat: "#f0a92c", bot: "#fff1d6" },
@@ -196,103 +163,6 @@ function LuaMach({ mau }: { mau: string }) {
   );
 }
 
-/** Ly bia vẽ bằng SVG: thân thuỷ tinh, lớp bia, lớp bọt, quai cầm. */
-function LyBia({ loai }: { loai: LoaiBia }) {
-  const m = MAU_BIA[loai];
-  return (
-    <svg viewBox="0 0 280 400" className="w-full h-full" aria-hidden="true">
-      <defs>
-        <linearGradient id="dn-bia" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={m.dam} />
-          <stop offset="38%" stopColor={m.nhat} />
-          <stop offset="72%" stopColor={m.dam} />
-          <stop offset="100%" stopColor={m.dam} />
-        </linearGradient>
-        <linearGradient id="dn-kinh" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.30)" />
-          <stop offset="22%" stopColor="rgba(255,255,255,0.06)" />
-          <stop offset="60%" stopColor="rgba(255,255,255,0.02)" />
-          <stop offset="88%" stopColor="rgba(255,255,255,0.22)" />
-        </linearGradient>
-        <clipPath id="dn-than">
-          <path d="M62 96h156l-16 268a20 20 0 0 1-20 19H98a20 20 0 0 1-20-19L62 96z" />
-        </clipPath>
-      </defs>
-
-      {/* Quai cầm */}
-      <path
-        d="M218 150c40 0 54 22 54 52s-16 52-56 52"
-        fill="none"
-        stroke="rgba(255,255,255,0.20)"
-        strokeWidth="17"
-        strokeLinecap="round"
-      />
-
-      {/* Bia trong ly */}
-      <g clipPath="url(#dn-than)">
-        <rect x="52" y="150" width="180" height="250" fill="url(#dn-bia)" />
-        {/* Bọt li ti nổi trong bia */}
-        {[
-          [92, 330, 5],
-          [128, 300, 4],
-          [166, 340, 6],
-          [110, 250, 3.5],
-          [180, 270, 4.5],
-          [148, 215, 3],
-          [96, 200, 4],
-          [188, 200, 3],
-        ].map(([x, y, r], i) => (
-          <circle
-            key={i}
-            cx={x}
-            cy={y}
-            r={r}
-            fill="rgba(255,255,255,0.5)"
-          />
-        ))}
-      </g>
-
-      {/* Lớp bọt trên miệng ly */}
-      <g clipPath="url(#dn-than)">
-        <path
-          d="M52 150c14-16 30 8 46-6s28 12 44 0 30 10 46-2 26 6 44-4v34H52z"
-          fill={m.bot}
-        />
-      </g>
-      <ellipse cx="140" cy="104" rx="82" ry="20" fill={m.bot} />
-      <ellipse
-        cx="140"
-        cy="99"
-        rx="82"
-        ry="20"
-        fill="#ffffff"
-        opacity="0.55"
-      />
-
-      {/* Thành ly thuỷ tinh */}
-      <path
-        d="M62 96h156l-16 268a20 20 0 0 1-20 19H98a20 20 0 0 1-20-19L62 96z"
-        fill="url(#dn-kinh)"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="3"
-      />
-      {/* Vệt sáng dọc thân */}
-      <path
-        d="M86 118l-8 232"
-        stroke="rgba(255,255,255,0.35)"
-        strokeWidth="7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M196 124l-6 216"
-        stroke="rgba(255,255,255,0.18)"
-        strokeWidth="4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 export default function ManHinhDangNhap({
   onLogin,
   isAuthenticating,
@@ -300,17 +170,6 @@ export default function ManHinhDangNhap({
   maBuild,
 }: Props) {
   const [loai, setLoai] = useState<LoaiBia>("caubang");
-  /**
-   * Loại nào không tải được ảnh thì đánh dấu lại và dùng hình vẽ.
-   *
-   * Nhớ theo TỪNG LOẠI chứ không phải một cờ chung: có thể mới có ảnh Cầu Vàng
-   * mà chưa có hai lon kia, lúc đó Cầu Vàng vẫn hiện ảnh thật.
-   */
-  const [anhHong, setAnhHong] = useState<Record<LoaiBia, boolean>>({
-    caubang: false,
-    laudai: false,
-    atlas: false,
-  });
   /** Vòng luân phiên tự động, người dùng tự bấm chọn thì dừng. */
   const [tuDong, setTuDong] = useState(true);
   const nenRef = useRef<HTMLDivElement>(null);
@@ -562,11 +421,21 @@ export default function ManHinhDangNhap({
         {veHat(hatSau, hatTruoc.length, 0.55)}
       </div>
 
-      {/* Ba lon bia ở giữa — ảnh thật nếu có, không thì hình vẽ */}
+      {/*
+        XƯỞNG BIA Ở GIỮA.
+
+        Trước đây chỗ này là lon bia — lần lượt thử lon quay 3D dựng bằng
+        canvas, lon dựng từ file bao bì, rồi ảnh chụp lon thật. Vòng nào cũng
+        vướng chuyện ảnh: nhoè ở hai hông, cắt nền ăn vào thân, hạt nước đọng,
+        viền trắng ăn sẵn vào điểm ảnh. Chủ sở hữu quyết định bỏ hẳn lon.
+
+        Nay là hình vẽ ba thùng nấu — thứ nói đúng hơn cả về nơi mọi số liệu
+        trong app này bắt đầu, và là hình vẽ nên không còn chỗ nào để hỏng.
+      */}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
         <div
           ref={lyRef}
-          className="dn-ly h-[52vh] max-h-[520px] w-auto"
+          className="dn-ly h-[50vh] max-h-[500px] w-auto"
           style={{ aspectRatio: "760 / 460" }}
         >
           {/* Hai lớp lồng nhau: lớp ngoài hiện lên lúc vào trang, lớp trong
@@ -575,50 +444,7 @@ export default function ManHinhDangNhap({
               vào `.dn-ly`. Xem chú thích trong index.css. */}
           <div className="dn-vao h-full">
             <div className="dn-lac h-full">
-              <div className="flex h-full items-end justify-center">
-                {THU_TU_LON.map((id) => {
-                  const dangChon = id === loai;
-                  return (
-                    <div
-                      key={id}
-                      className="h-full transition-all duration-700 ease-out"
-                      style={{
-                        /*
-                          Lon đang chọn cao hết khung và đứng trước; hai lon kia
-                          thấp hơn, lùi vào và mờ đi. Chồng mép âm để ba lon
-                          đứng sát nhau như xếp trên kệ, chứ không rời ra thành
-                          ba tấm ảnh dán cạnh nhau.
-                        */
-                        height: dangChon ? "100%" : "78%",
-                        marginInline: dangChon ? "-3.5%" : "-4.5%",
-                        /*
-                          Hai lon kia mờ 0,75 chứ không mờ hẳn: mờ quá thì nền
-                          ăn màu vào chúng, lon đen hoá xanh theo nền. Cũng
-                          không giảm bão hoà nữa vì lý do ấy.
-                        */
-                        opacity: dangChon ? 1 : 0.75,
-                        filter: dangChon
-                          ? "drop-shadow(0 26px 44px rgba(0,0,0,0.55))"
-                          : "drop-shadow(0 16px 28px rgba(0,0,0,0.45))",
-                        zIndex: dangChon ? 2 : 1,
-                      }}
-                    >
-                      {anhHong[id] ? (
-                        <LyBia loai={id} />
-                      ) : (
-                        <img
-                          src={ANH_LON[id]}
-                          alt={`Lon ${TEN_BIA[id]}`}
-                          className="h-full w-auto object-contain"
-                          onError={() =>
-                            setAnhHong((t) => ({ ...t, [id]: true }))
-                          }
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <XuongBia mau={mau} ten={TEN_BIA[loai]} />
             </div>
           </div>
         </div>
