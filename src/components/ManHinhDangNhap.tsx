@@ -235,8 +235,7 @@ export default function ManHinhDangNhap({
             className="mt-5 max-w-md text-[0.95rem] leading-relaxed text-white/75"
             style={{ animation: "dn-hien-len 1s ease-out 0.12s both" }}
           >
-            Hệ thống quản trị kho bia của Sun World Ba Na Hills. Nhập kho có chữ
-            ký, xuất kho theo lô, công nợ và hóa đơn — tất cả trong một chỗ.
+            Hệ thống quản trị kho bia của Sun World Ba Na Hills.
           </p>
 
           {authError && (
