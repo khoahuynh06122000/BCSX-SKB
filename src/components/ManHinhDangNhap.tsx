@@ -35,11 +35,9 @@ type LoaiBia = "caubang" | "laudai" | "atlas";
 /**
  * BA ẢNH LON TĨNH — dựng sẵn từ file bao bì của bộ phận.
  *
- * `scripts/dung-anh-lon.py` cuộn ô nhãn trải phẳng 208 × 107 mm trong file bao
- * bì quanh một hình trụ rồi chụp ngang.
- *
- * KHÔNG DÙNG ẢNH CHỤP THẬT vì ảnh nào cũng có hạt nước đọng, mà hạt nước thì
- * không tẩy khỏi ảnh được cho sạch — xem `public/README-anh-lon.md`.
+ * ẢNH CHỤP LON THẬT của bộ phận, đã qua `scripts/chuan-hoa-anh-lon.py`: tách
+ * nền trắng, lật lại tấm bị lật gương, và xoá hạt nước đọng. Xem
+ * `public/README-anh-lon.md`.
  *
  * TRƯỚC ĐÂY LÀ MỘT LON QUAY 3D, dựng lại từng khung hình bằng canvas. Đã làm ba
  * vòng: ảnh chụp mặt trước/mặt sau (nhoè ở hai hông), cuộn nhãn 360° (hết nhoè
