@@ -14,9 +14,12 @@ import { AlertCircle, Loader2, UserPlus } from "lucide-react";
  * quanh MỘT CÁI LON, trong khi thứ app này phục vụ là cả một xưởng bia. Chủ sở
  * hữu chốt: lấy ảnh xưởng bia thật rồi dựng lại cả màn hình quanh nó.
  *
- * BỎ THEO: bọt bia bay lên, hoa bia và hạt lúa mạch trôi quanh, ba thẻ chọn
- * loại bia đổi tông màn hình. Trên một tấm ảnh thật thì tất cả những thứ ấy
- * thành nhiễu — ảnh đã làm xong phần việc của chúng.
+ * BỌT BIA vẫn bay lên qua màn hình, nằm trên ảnh và dưới chữ.
+ *
+ * BỎ THEO: hoa bia và hạt lúa mạch trôi quanh, ba thẻ chọn loại bia đổi tông
+ * màn hình. Trên một tấm ảnh thật thì hai thứ ấy thành nhiễu — nhưng bọt bia
+ * thì không: nó mảnh, nó trôi chậm, và nó là thứ duy nhất trên màn hình này
+ * nói rằng đây là chỗ làm bia.
  *
  * Ảnh nằm ở `public/nen-xuong-bia.webp`, chụp tại BaNa Brew House. Thiếu tệp
  * thì nền lùi về màu nâu đồng đặc — chữ vẫn đọc được, không vỡ.
@@ -46,6 +49,7 @@ export default function ManHinhDangNhap({
   maBuild,
 }: Props) {
   const anhRef = useRef<HTMLDivElement>(null);
+  const botRef = useRef<HTMLDivElement>(null);
 
   /**
    * Ảnh nền trôi rất khẽ theo con trỏ.
@@ -83,6 +87,38 @@ export default function ManHinhDangNhap({
       window.removeEventListener("mousemove", theoChuot);
       cancelAnimationFrame(id);
     };
+  }, []);
+
+  /**
+   * Bọt bia bay lên: sinh liên tục rồi tự dọn khi bay hết màn hình.
+   *
+   * Tạo thẳng bằng DOM chứ không qua state React: mỗi bọt là một phần tử sống
+   * vài giây rồi biến mất, cho React quản thì mỗi lần sinh một bọt là dựng lại
+   * cả cây giao diện.
+   */
+  useEffect(() => {
+    const oBot = botRef.current;
+    if (!oBot) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const hen = window.setInterval(() => {
+      // Tab bị ẩn thì đừng sinh thêm: trình duyệt gom hết vào một lúc khi quay
+      // lại, màn hình đầy bọt cùng lúc rồi giật.
+      if (document.hidden) return;
+      const b = document.createElement("div");
+      b.className = "dn-bot";
+      const co = Math.random() * 18 + 8;
+      b.style.width = `${co}px`;
+      b.style.height = `${co}px`;
+      b.style.left = `${Math.random() * 100}%`;
+      b.style.bottom = "-40px";
+      const giay = Math.random() * 6 + 4;
+      b.style.animation = `dn-bot-bay ${giay}s linear forwards`;
+      oBot.appendChild(b);
+      window.setTimeout(() => b.remove(), giay * 1000);
+    }, 400);
+
+    return () => window.clearInterval(hen);
   }, []);
 
   return (
@@ -133,6 +169,16 @@ export default function ManHinhDangNhap({
           background:
             "linear-gradient(to top, rgba(12,7,2,0.8) 0%, rgba(12,7,2,0) 42%)",
         }}
+      />
+
+      {/*
+        Bọt bia — nằm trên ảnh và hai lớp phủ tối (z-10), dưới chữ (z-20).
+        Đặt dưới lớp phủ thì bọt bị dìm mất; đặt trên chữ thì bọt trôi qua mặt
+        chữ, đọc rất khó chịu.
+      */}
+      <div
+        ref={botRef}
+        className="pointer-events-none absolute inset-0 z-[15] overflow-hidden"
       />
 
       {/* Thanh trên */}

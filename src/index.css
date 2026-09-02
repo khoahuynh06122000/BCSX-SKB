@@ -220,6 +220,40 @@
   -webkit-backdrop-filter: blur(20px);
 }
 
+@keyframes dn-bot-bay {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.6);
+    opacity: 0;
+  }
+  12% { opacity: 0.5; }
+  88% { opacity: 0.5; }
+  100% {
+    transform: translateY(-110vh) translateX(28px) scale(1);
+    opacity: 0;
+  }
+}
+
+/*
+   Bọt bia bay lên qua màn hình đăng nhập.
+
+   Nằm TRÊN ảnh nhà nấu và trên hai lớp phủ tối, nhưng DƯỚI chữ — xem `z-[15]`
+   trong `ManHinhDangNhap.tsx`. Đặt dưới lớp phủ thì bọt bị dìm mất, đặt trên
+   chữ thì bọt trôi qua mặt chữ.
+*/
+.dn-bot {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 32% 28%,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(255, 255, 255, 0.35) 38%,
+    rgba(255, 255, 255, 0.06) 70%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
 @keyframes dn-hien-len {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: none; }
@@ -228,6 +262,7 @@
 /* Máy yếu hoặc người dùng tắt hiệu ứng thì bỏ hết chuyển động, giữ nguyên
    bố cục. Trang đăng nhập không được đánh đổi khả năng dùng lấy cái đẹp. */
 @media (prefers-reduced-motion: reduce) {
+  .dn-bot { display: none; }
   .dn-tieu-de,
   .dn-kinh { animation: none !important; }
 }
