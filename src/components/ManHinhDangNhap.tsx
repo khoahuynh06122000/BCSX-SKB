@@ -6,7 +6,8 @@ import { AlertCircle, Loader2, UserPlus } from "lucide-react";
  *
  * Nền là ẢNH CHỤP NHÀ NẤU của BaNa Brew House — xưởng bia thủ công trên đỉnh Bà
  * Nà, nơi mọi con số trong app này bắt đầu. Ảnh phủ kín màn hình, phủ lên một
- * lớp tối nghiêng từ trái sang để chữ đọc được, và trôi rất khẽ theo con trỏ.
+ * lớp tối nghiêng từ trái sang để chữ đọc được, tự phóng và trôi rất chậm, và
+ * lệch thêm một chút theo con trỏ.
  *
  * VÌ SAO LÀ ẢNH CHỤP CHỨ KHÔNG PHẢI HÌNH VẼ. Chỗ giữa màn hình này đã lần lượt
  * là: lon bia quay 3D dựng bằng canvas (ba vòng), lon dựng từ file bao bì, ảnh
@@ -30,6 +31,19 @@ interface Props {
   maBuild: string;
 }
 
+/**
+ * Hệ số phóng đáy của ảnh nền.
+ *
+ * Phải lớn hơn 1 đủ để ảnh còn phủ kín màn hình sau khi trôi: phần trôi cộng
+ * phần lệch theo con trỏ tối đa 2% mỗi bên, nên 1,075 chừa 3,75% — dư một
+ * khoảng an toàn. Để 1,0 thì lúc ảnh trôi sẽ lòi ra một dải nền trống ở mép.
+ *
+ * Dùng ĐƠN VỊ PHẦN TRĂM cho phần trôi, không dùng điểm ảnh: cùng một con số
+ * điểm ảnh thì trên màn hình 1440px là an toàn mà trên điện thoại 375px là
+ * tràn mép.
+ */
+const PHONG_DAY = 1.075;
+
 /** Các phân hệ của hệ thống, bày ra để người mới biết mình sắp vào đâu. */
 const PHAN_HE = ["Nhập kho", "Xuất kho", "Công nợ", "Báo cáo", "Đơn BNC"];
 
@@ -48,14 +62,19 @@ export default function ManHinhDangNhap({
   const anhRef = useRef<HTMLDivElement>(null);
 
   /**
-   * Ảnh nền trôi rất khẽ theo con trỏ.
+   * ẢNH NỀN TỰ PHÓNG VÀ TRÔI RẤT CHẬM, cộng thêm một chút lệch theo con trỏ.
+   *
+   * Đây là cách phim tài liệu làm với ảnh tĩnh: ảnh không đứng chết nhưng cũng
+   * không có vật gì bên ngoài thêm vào. Bọt bia bay lên đã thử và bỏ — trên ảnh
+   * chụp nhiều chi tiết thì nó thành đốm trắng làm rối mắt.
+   *
+   * GỘP CẢ HAI VÀO MỘT VÒNG rAF, không dùng hoạt ảnh CSS cho phần phóng.
+   * Hoạt ảnh CSS luôn ĐÈ transform đặt bằng style, nên để CSS lo phần phóng thì
+   * phần lệch theo con trỏ không bao giờ hiện ra — đúng cái bẫy đã ghi trong
+   * `index.css` hồi còn cái lon giữa màn hình.
    *
    * Ghi thẳng vào `style.transform` chứ không qua state React: mỗi khung hình
    * mà gọi setState là dựng lại cả cây giao diện 60 lần một giây.
-   *
-   * Biên độ chỉ 14px trên một tấm ảnh đã phóng to 6% — đủ để màn hình có chiều
-   * sâu, chưa đủ để ai đó nhận ra là ảnh đang nhúc nhích. Ảnh nền mà trôi rõ
-   * thì thành phiền, nhất là với người vào đây mỗi ngày.
    */
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -69,11 +88,27 @@ export default function ManHinhDangNhap({
     window.addEventListener("mousemove", theoChuot);
 
     let id = 0;
-    const chay = () => {
+    let goc = 0;
+    const chay = (moc: number) => {
+      if (!goc) goc = moc;
+      const t = (moc - goc) / 1000;
+
       muot.x += (dich.x - muot.x) * 0.04;
       muot.y += (dich.y - muot.y) * 0.04;
+
+      /*
+       * BA CHU KỲ LỆCH NHAU (28, 34, 41 giây) thay vì một chu kỳ chung.
+       *
+       * Dùng một chu kỳ thì cứ 28 giây ảnh về đúng chỗ cũ, và người ngồi lâu sẽ
+       * nhận ra cái vòng lặp. Ba số nguyên tố cùng nhau thì đường đi chỉ khép
+       * lại sau hơn mười tiếng — coi như không lặp.
+       */
+      const phong = PHONG_DAY + 0.035 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 28));
+      const lechX = Math.sin((2 * Math.PI * t) / 34) * 1.4 + muot.x * -1.2;
+      const lechY = Math.sin((2 * Math.PI * t) / 41) * 1 + muot.y * -1.2;
+
       if (anhRef.current) {
-        anhRef.current.style.transform = `scale(1.06) translate(${muot.x * -14}px, ${muot.y * -14}px)`;
+        anhRef.current.style.transform = `scale(${phong}) translate(${lechX}%, ${lechY}%)`;
       }
       id = requestAnimationFrame(chay);
     };
@@ -93,7 +128,9 @@ export default function ManHinhDangNhap({
         className="absolute inset-0 z-0 bg-cover bg-center"
         style={{
           backgroundImage: "url(/nen-xuong-bia.webp)",
-          transform: "scale(1.06)",
+          // Khớp đúng trạng thái đầu của vòng chuyển động, để lúc vào trang
+          // ảnh không nhảy một cái rồi mới trôi.
+          transform: `scale(${PHONG_DAY})`,
           willChange: "transform",
         }}
       />
