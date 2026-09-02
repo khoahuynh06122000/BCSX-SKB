@@ -6,15 +6,64 @@
 | Lâu Đài Mặt Trăng — Lunar Castle Dry Hop Pale Ale | `lon-lau-dai-mat-trang.webp` |
 | Sức Mạnh Atlas — Atlas Wings Dark Lager | `lon-suc-manh-atlas.webp` |
 
-Ba tấm này là **ảnh chụp lon thật** của bộ phận, đã qua
-`scripts/chuan-hoa-anh-lon.py` để tách nền và sửa mấy chỗ lệch.
+Ba tấm này **dựng từ file bao bì**, không phải ảnh chụp:
+`scripts/dung-anh-lon.py` cuộn ô nhãn trải phẳng 208 × 107 mm quanh một hình
+trụ rồi chụp ngang.
 
 Thiếu tệp nào thì **riêng loại đó** quay về hình vẽ SVG — không vỡ, không ô
 trắng, hai loại kia vẫn hiện bình thường.
 
-## Có ảnh mới thì làm gì
+## Vì sao không dùng ảnh chụp thật
 
-Bỏ ba tệp vào một thư mục, đặt tên theo đúng ba tên bên dưới rồi chạy:
+Đã thử. Bộ phận có ba tấm ảnh chụp lon rất đẹp, nhưng **tấm nào cũng có hạt
+nước đọng** — và hạt nước thì không tẩy khỏi ảnh được cho sạch:
+
+- Hạt nước to hơn bộ lọc trung vị, nên lọc nhẹ thì chúng vẫn còn nguyên.
+- Lọc đủ mạnh để xoá được chúng thì chữ trên nhãn nhoè theo.
+- Chúng là những thấu kính trong suốt làm méo hình bên dưới, nên vá lại chỗ
+  chúng đứng cũng để lại vết trên phần hoa văn nhiều chi tiết.
+
+Bản dựng từ file bao bì thì **không có hạt nước nào**, và cũng không có chuyện
+cắt nền hỏng.
+
+Nếu một ngày có ảnh chụp **không có hạt nước**, dùng
+`scripts/chuan-hoa-anh-lon.py` — xem phần cuối.
+
+## Bao bì đổi mẫu thì làm gì
+
+Xin bộ phận file PDF bao bì (bản dieline), bỏ cả ba file vào một thư mục rồi
+chạy:
+
+```bash
+python scripts/dung-anh-lon.py "C:\Users\khoahd\Downloads\vỏ"
+```
+
+Script tự nhận loại bia theo tên file (`Atlas…`, `GoldenBridge…`, `Lunar…`) và
+ghi đè ba tấm ở thư mục này. **Không phải sửa dòng code nào.**
+
+Cần `pymupdf`, `numpy`, `pillow`:
+
+```bash
+python -m pip install pymupdf numpy pillow
+```
+
+### Script làm gì
+
+1. **Tìm ô nhãn bằng đường kẻ vector**, không dò màu điểm ảnh. File dieline có
+   sẵn một hình chữ nhật rộng đúng 208 mm — đó là ô nhãn. Dò màu thì mũi tên và
+   chữ ghi kích thước lọt vào, và nhãn nền trắng (Lâu Đài Mặt Trăng) không tách
+   nổi khỏi nền giấy.
+2. **Xén 0,4 mm hai mép.** Đúng hai mép của ô nhãn gặp nhau khi cuộn quanh lon;
+   sát mép còn đường đánh dấu chỗ cắt.
+3. **Xoá mấy đường đứt màu hồng** đánh dấu chỗ cắt. Chúng nằm đè lên hình vẽ
+   chứ không phải một lớp riêng nên không tắt được lúc kết xuất.
+4. **Cuộn quanh hình trụ và chụp ngang.** Bán kính suy từ chính chu vi nhãn —
+   208 mm ÷ 2π = 33,1 mm, đúng lon 330 ml. Cổ lon thóp 17,81 mm như file ghi.
+   Kim loại trần ở vành miệng và đáy là **vàng champagne**, đúng như lon thật.
+5. **Ghi ra WebP chất lượng 92.** Cùng một tấm: PNG 833 KB, WebP 200 KB, nhìn
+   không ra khác biệt.
+
+## Nếu có ảnh chụp không hạt nước
 
 ```bash
 python scripts/chuan-hoa-anh-lon.py "C:\Users\khoahd\Downloads\anh-lon"
@@ -26,44 +75,20 @@ python scripts/chuan-hoa-anh-lon.py "C:\Users\khoahd\Downloads\anh-lon"
 | `bia ale.png` | `lon-lau-dai-mat-trang.webp` |
 | `bia den.png` | `lon-suc-manh-atlas.webp` |
 
-Cần `numpy`, `pillow`:
+Script lo ba chỗ mà ảnh gốc thường vướng:
 
-```bash
-python -m pip install numpy pillow
-```
+- **Nền trắng đặc**, không phải nền trong.
+- **Tấm bị lật gương** — chữ đọc ngược. Để tên tấm ấy trong `CAN_LAT`. Không
+  đoán tự động được; bộ phận gửi lại bản đã sửa thì **bỏ tên khỏi danh sách**,
+  không thì lật hai lần lại thành ngược.
+- **Tấm bị nén dẹt** so với tỉ lệ lon thật.
 
-## Script sửa những gì
-
-Ảnh gốc của bộ phận có ba chỗ không dùng thẳng được:
-
-1. **Nền trắng đặc**, không phải nền trong. Thả thẳng vào màn hình đăng nhập
-   thì lon hiện ra trong một khối chữ nhật trắng trên nền tối.
-2. **Tấm `bia ale` bị nén dẹt**: tỉ lệ 0,843 trong khi lon 330 ml thật là 0,576.
-   Ba lon đứng cạnh nhau mà một cái lùn hơn là thấy ngay.
-3. **Tấm `bia den` bị lật gương** — chữ `KRAFTBEER` và `SÚC MẠNH ATLAS` đọc
-   ngược. Ảnh xuất từ file dựng bao bì đôi khi bị lật, nhìn lướt không thấy.
-
-### Tách nền theo từng hàng, không loang từ mép vào
-
-Cách loang từ mép ảnh vào hỏng đúng ở lon Lâu Đài Mặt Trăng: thân nó gần như
-trắng toàn bộ, và mép trái là một vệt sáng gần trắng tinh — nên vệt loang chui
-thẳng qua đó vào ruột lon, ăn mất một mảng, để lại viền trắng lởm chởm.
-
-Thân lon là **hình trụ**: nhìn ngang thì mỗi hàng ngang của nó là **một đoạn
-liền**. Nên script chỉ tìm điểm không-phải-nền đầu tiên và cuối cùng trên hàng
-đó rồi lấy trọn đoạn ở giữa. Mảng trắng nằm giữa hai mép tự động được giữ, dù
-nó trắng bằng đúng nền.
-
-Đổi lại phải chắc chắn lon **đứng thẳng** và không bị vật gì che ngang.
-
-### Danh sách tấm cần lật để trong `CAN_LAT`
-
-Không đoán tự động được — không có cách nào đọc chữ trên ảnh để biết nó xuôi hay
-ngược. Nếu bộ phận gửi lại bản đã sửa thì **bỏ tên ấy khỏi `CAN_LAT`**, không
-thì lật hai lần lại thành ngược.
-
-Chạy xong script in ra lời nhắc: **nhìn ba tấm ảnh ra một lượt** trước khi đẩy
-lên.
+**Tách nền theo từng hàng, không loang từ mép vào.** Cách loang hỏng đúng ở lon
+Lâu Đài Mặt Trăng: thân nó trắng, hai mép lại là vệt sáng gần trắng tinh, nên
+vệt loang chui qua đó vào ruột lon. Thân lon là hình trụ nên mỗi hàng ngang của
+nó là **một đoạn liền** — chỉ cần lấy trọn đoạn giữa điểm không-phải-nền đầu và
+cuối. Mép của mỗi hàng còn được lấy **trung vị trên chín hàng** cho bóng lon
+trơn, không lởm chởm.
 
 ## Vì sao không còn lon quay 3D
 
@@ -76,6 +101,4 @@ canvas. Đã làm ba vòng — hai ảnh chụp trước/sau (nhoè ở hai hôn
 cùng hiện nên nói được đúng cái cần nói — đây là ba vị bia của Bà Nà — và bộ mã
 nhẹ đi gần một nghìn dòng.
 
-Lịch sử ba vòng ấy còn trong git, tới commit `b87e5f3`. Ở đó cũng còn
-`scripts/dung-anh-lon.py`, dựng lon thẳng từ file bao bì — dùng tới nếu một
-ngày không còn ảnh chụp.
+Lịch sử ba vòng ấy còn trong git, tới commit `b87e5f3`.

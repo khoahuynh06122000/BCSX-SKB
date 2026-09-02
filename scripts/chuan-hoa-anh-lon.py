@@ -56,12 +56,41 @@ CAO_RA = 1040
 """
 NGUONG COI LA NEN.
 
-Anh bo phan gui ra co nen TRANG TINH (255, 255, 255). Diem nao co kenh toi nhat
-duoi 246 thi chac chan thuoc cai lon, khong phai nen.
+Anh bo phan gui ra co nen TRANG TINH: do mot dai ba diem anh quanh mep thi ca
+ba tam deu dung 255 o moi kenh. Nen bat ky diem nao KHONG trang tinh deu thuoc
+cai lon, ke ca vet sang gan trang o hai men.
+
+Ban truoc lay nguong 246 va da cat an vao than lon Lau Dai Mat Trang: than no
+trang, hai men lai co vet sang gan trang tinh nen bi coi la nen. Moi hang cat
+lech mot ti - ra cai vien rang cua chay doc ma Khoa nhin thay.
 """
-NGUONG_NEN = 246
-# Phai co ngan nay diem lien nhau moi tinh la da cham vao lon.
-SO_DIEM_LIEN = 2
+NGUONG_NEN = 255
+
+"""
+SO HANG LAY TRUNG VI DE LAM TRON BONG LON.
+
+Du da lay nguong dung, men lon van xe dich vai diem anh giua cac hang: anh chup
+co hat nuoc dong, co vet sang, va vien anh thi da qua khu rang cua. De nguyen
+thi bong lon lom nhom.
+
+Lay TRUNG VI cua men tren mot cua so hang chu khong lay min/max: min/max se phinh
+bong lon ra ngoai o cho co, con trung vi thi bo hat nhieu ma van bam theo duong
+cong that cua co va day lon.
+"""
+CUA_SO_LAM_TRON = 9
+
+
+def _lam_tron(men, hop_le):
+    """Lấy trung vị của mép trên một cửa sổ hàng, bỏ qua hàng trống."""
+    ra = men.copy()
+    nua = CUA_SO_LAM_TRON // 2
+    for y in np.flatnonzero(hop_le):
+        d = max(0, y - nua)
+        c = min(len(men), y + nua + 1)
+        lan_can = men[d:c][hop_le[d:c]]
+        if lan_can.size:
+            ra[y] = int(np.median(lan_can))
+    return ra
 
 
 def tach_nen(im):
@@ -70,33 +99,38 @@ def tach_nen(im):
 
     Cach loang tu mep hong o dung lon Lau Dai Mat Trang: than no gan nhu trang
     toan bo, va men trai cua no la mot vet sang gan nhu trang tinh - nen vet
-    loang chui thang qua do vao trong ruot lon, an mat mot mang. Ket qua la lon
-    co mot vien trang lom nhom chay doc.
+    loang chui thang qua do vao trong ruot lon, an mat mot mang.
 
-    Nhung than lon la HINH TRU: nhin ngang thi moi hang ngang cua no la MOT
-    DOAN LIEN, khong dut quang. Nen chi can tim diem khong-phai-nen dau tien va
-    cuoi cung tren hang do, roi lay tron doan giua hai diem ay. Mang trang nam
-    giua hai men tu dong duoc giu, du no trang bang dung nen.
+    Than lon la HINH TRU: nhin ngang thi moi hang ngang cua no la MOT DOAN
+    LIEN, khong dut quang. Nen chi can tim diem khong-phai-nen dau tien va cuoi
+    cung tren hang do, roi lay tron doan giua. Mang trang nam giua hai men tu
+    dong duoc giu, du no trang bang dung nen.
 
     Doi lai phai chac chan lon dung THANG va khong bi vat gi che ngang. Ba tam
     anh cua bo phan deu vay.
     """
     a = np.asarray(im.convert("RGB")).astype(np.int16)
-    # Diem chac chan thuoc lon: co it nhat mot kenh toi han nen.
+    # Nen la trang tinh, nen bat ky diem nao khong trang tinh deu thuoc lon.
     dam = a.min(axis=2) < NGUONG_NEN
 
-    # Doi hoi vai diem lien nhau moi tinh, de mot hat nhieu le loi khong keo
-    # ca hang ra tan mep anh.
-    chac = dam.copy()
-    for k in range(1, SO_DIEM_LIEN):
-        chac &= np.roll(dam, -k, axis=1)
-
-    mask = np.zeros(dam.shape, dtype=bool)
-    for y in range(dam.shape[0]):
-        cot = np.flatnonzero(chac[y])
+    cao, rong = dam.shape
+    trai = np.zeros(cao, dtype=np.int32)
+    phai = np.zeros(cao, dtype=np.int32)
+    hop_le = np.zeros(cao, dtype=bool)
+    for y in range(cao):
+        cot = np.flatnonzero(dam[y])
         if cot.size == 0:
             continue
-        mask[y, cot[0] : cot[-1] + SO_DIEM_LIEN] = True
+        trai[y] = cot[0]
+        phai[y] = cot[-1]
+        hop_le[y] = True
+
+    trai = _lam_tron(trai, hop_le)
+    phai = _lam_tron(phai, hop_le)
+
+    mask = np.zeros(dam.shape, dtype=bool)
+    for y in np.flatnonzero(hop_le):
+        mask[y, trai[y] : phai[y] + 1] = True
 
     ra = np.asarray(im.convert("RGBA"))
     kq = np.dstack([ra[..., :3], np.where(mask, 255, 0).astype(np.uint8)])
@@ -119,19 +153,26 @@ def cat_sat_vien(im):
     return im.crop(hop) if hop else im
 
 
+# Lech duoi muc nay thi de nguyen, khong ep ti le.
+SAI_SO_TI_LE = 0.08
+
+
 def sua_ti_le(im):
     """
-    Ep ve dung ti le lon 330ml that.
+    Ep ve dung ti le lon 330ml that, NHUNG CHI KHI LECH NHIEU.
 
-    Tam "bia ale" gui sang co ti le 0,843 trong khi lon that la 0,576 - no bi
-    nen det theo chieu doc chung ba phan tu. Ba lon dung canh nhau ma mot cai
-    lun hon la thay ngay.
+    Do sau khi da cat sat vien, khong do tren ca tam anh: tam "bia ale" co le
+    trang hai ben nen do ca tam ra 0,843, keo len la lon bi giat cao mot cach
+    vo co. Cat sat vien roi thi no la 0,603 - lech 4,7% so voi 0,576, do la vi
+    anh goc bi cat sat mep tren va mep duoi, mat vai diem anh cua vanh mieng va
+    vanh day.
 
-    Giu nguyen BE RONG roi keo lai chieu cao: keo cao thi net chu gian ra deu,
-    con bop be rong thi lon gay hon lon that.
+    Vai phan tram thi de nguyen. Ep lai chi de bat truong hop anh bi nen det
+    han, chu khong phai de got tung phan tram - got thi net chu bi keo ra ma
+    chang ai thay lon dep hon.
     """
     cao = round(im.width / TI_LE_LON)
-    if abs(cao - im.height) <= max(2, im.height * 0.02):
+    if abs(cao - im.height) <= im.height * SAI_SO_TI_LE:
         return im, False
     return im.resize((im.width, cao), Image.Resampling.LANCZOS), True
 

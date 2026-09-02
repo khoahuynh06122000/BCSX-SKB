@@ -35,9 +35,11 @@ type LoaiBia = "caubang" | "laudai" | "atlas";
 /**
  * BA ẢNH LON TĨNH — dựng sẵn từ file bao bì của bộ phận.
  *
- * ẢNH CHỤP LON THẬT của bộ phận, đã qua `scripts/chuan-hoa-anh-lon.py` để tách
- * nền trắng, lật lại tấm bị lật gương và sửa tấm bị nén dẹt. Xem
- * `public/README-anh-lon.md`.
+ * `scripts/dung-anh-lon.py` cuộn ô nhãn trải phẳng 208 × 107 mm trong file bao
+ * bì quanh một hình trụ rồi chụp ngang.
+ *
+ * KHÔNG DÙNG ẢNH CHỤP THẬT vì ảnh nào cũng có hạt nước đọng, mà hạt nước thì
+ * không tẩy khỏi ảnh được cho sạch — xem `public/README-anh-lon.md`.
  *
  * TRƯỚC ĐÂY LÀ MỘT LON QUAY 3D, dựng lại từng khung hình bằng canvas. Đã làm ba
  * vòng: ảnh chụp mặt trước/mặt sau (nhoè ở hai hông), cuộn nhãn 360° (hết nhoè
@@ -591,10 +593,15 @@ export default function ManHinhDangNhap({
                         */
                         height: dangChon ? "100%" : "78%",
                         marginInline: dangChon ? "-3.5%" : "-4.5%",
-                        opacity: dangChon ? 1 : 0.62,
+                        /*
+                          Hai lon kia mờ 0,75 chứ không mờ hẳn: mờ quá thì nền
+                          ăn màu vào chúng, lon đen hoá xanh theo nền. Cũng
+                          không giảm bão hoà nữa vì lý do ấy.
+                        */
+                        opacity: dangChon ? 1 : 0.75,
                         filter: dangChon
                           ? "drop-shadow(0 26px 44px rgba(0,0,0,0.55))"
-                          : "drop-shadow(0 16px 28px rgba(0,0,0,0.45)) saturate(0.8)",
+                          : "drop-shadow(0 16px 28px rgba(0,0,0,0.45))",
                         zIndex: dangChon ? 2 : 1,
                       }}
                     >
