@@ -4436,7 +4436,20 @@ export default function App() {
     }
   }, [activeTab, batches, loading, products]); // Added products to dependencies
 
-  // Default supplier for import
+  /*
+   * Đặt sẵn nhà cung cấp cho tab Nhập kho.
+   *
+   * CHỈ ĐẶT NHÀ CUNG CẤP, KHÔNG ĐỘNG VÀO `type`. Trước đây chỗ này gán kèm
+   * `type: "IN"`, và nó xoá mất lựa chọn "Tồn đầu kỳ" của người dùng: `partners`
+   * là dữ liệu realtime, nên mỗi lần danh mục đối tác có thay đổi là hiệu ứng
+   * chạy lại. Ai vừa chọn Tồn đầu kỳ xong mà đúng lúc đó danh mục cập nhật thì
+   * thấy ô tự nhảy về Nhập kho. Nặng nhất là lần mở app đầu tiên: lúc dựng
+   * `newTransaction`, `donVi` còn rỗng nên `partnerId` là chuỗi trống; danh mục
+   * về sau vài giây, hiệu ứng chạy, và lựa chọn vừa bấm bị đè.
+   *
+   * Không cần gán `type` ở đây: giá trị dựng ban đầu đã là "IN", và sau mỗi lần
+   * lưu thành công form cũng được đặt lại về "IN".
+   */
   useEffect(() => {
     if (activeTab === "import") {
       // Nhà máy nguồn hàng cũng lấy từ danh mục ghép: Firestore thiếu
@@ -4446,7 +4459,6 @@ export default function App() {
         setNewTransaction((prev) => ({
           ...prev,
           partnerId: skb.id,
-          type: "IN",
         }));
       }
     }
