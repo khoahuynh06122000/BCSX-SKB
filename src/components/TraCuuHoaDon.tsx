@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  Calendar,
   ChevronDown,
   Download,
   FileSearch,
@@ -23,6 +22,8 @@ import {
   type HoaDonDaXuat,
 } from "../lib/traCuuHoaDon";
 import { cn, formatNumber } from "../lib/utils";
+
+import ONgay from "./ONgay";
 
 /**
  * TRA CỨU HÓA ĐƠN ĐÃ XUẤT
@@ -153,24 +154,21 @@ export default function TraCuuHoaDon({
             luôn cầm tờ hóa đơn trong tay và chỉ biết ngày trên tờ đó. */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1 lg:w-40">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            <input
-              type="date"
+            <ONgay
               aria-label="Ngày hóa đơn từ"
               value={tuNgay}
               max={denNgay || undefined}
-              onChange={(e) => setTuNgay(e.target.value)}
-              className="w-full pl-10 pr-2 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+              onChange={(v: string) => setTuNgay(v)}
+              className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
             />
           </div>
           <span className="text-slate-300 font-black shrink-0">—</span>
           <div className="relative flex-1 lg:w-40">
-            <input
-              type="date"
+            <ONgay
               aria-label="Ngày hóa đơn đến"
               value={denNgay}
               min={tuNgay || undefined}
-              onChange={(e) => setDenNgay(e.target.value)}
+              onChange={(v: string) => setDenNgay(v)}
               className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
             />
           </div>

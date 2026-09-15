@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   Building2,
-  Calendar,
   Download,
   Truck,
   AlertTriangle,
@@ -34,6 +33,8 @@ import {
 import { themKieuDep } from "../lib/dieuChuyenKieu";
 import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
+
+import ONgay from "./ONgay";
 
 /**
  * ĐƠN BNC — THEO DÕI BIA ĐI TỚI ĐÂU TRONG KHU
@@ -357,13 +358,11 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
             Từ ngày
           </span>
           <div className="relative mt-1">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            <input
-              type="date"
+            <ONgay
               value={tuNgay}
               max={denNgay || undefined}
-              onChange={(e) => setTuNgay(e.target.value)}
-              className="w-full pl-10 pr-2 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+              onChange={(v: string) => setTuNgay(v)}
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
             />
           </div>
         </label>
@@ -371,11 +370,10 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
             Đến ngày
           </span>
-          <input
-            type="date"
+          <ONgay
             value={denNgay}
             min={tuNgay || undefined}
-            onChange={(e) => setDenNgay(e.target.value)}
+            onChange={(v: string) => setDenNgay(v)}
             className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
           />
         </label>

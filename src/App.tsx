@@ -215,6 +215,8 @@ import type { HoaDonGhiNhan } from "./lib/hoaDon";
 import type { GhiSoPhieu } from "./lib/soPhieu";
 import { KHO_SO_PHIEU, capSoPhieu, huyPhieu } from "./lib/soPhieuKho";
 
+import ONgay from "./components/ONgay";
+
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -6674,19 +6676,17 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="date"
+                    <ONgay
                       value={ptTuNgay}
                       max={ptDenNgay || undefined}
-                      onChange={(e) => setPtTuNgay(e.target.value)}
+                      onChange={(v: string) => setPtTuNgay(v)}
                       className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                     />
                     <span className="text-slate-300 font-black">—</span>
-                    <input
-                      type="date"
+                    <ONgay
                       value={ptDenNgay}
                       min={ptTuNgay || undefined}
-                      onChange={(e) => setPtDenNgay(e.target.value)}
+                      onChange={(v: string) => setPtDenNgay(v)}
                       className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                     />
                     {[
@@ -7201,11 +7201,10 @@ export default function App() {
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                       Từ ngày
                     </span>
-                    <input
-                      type="date"
+                    <ONgay
                       value={tonTuNgay}
                       max={tonDenNgay || undefined}
-                      onChange={(e) => setTonTuNgay(e.target.value)}
+                      onChange={(v: string) => setTonTuNgay(v)}
                       className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                     />
                   </label>
@@ -7213,11 +7212,10 @@ export default function App() {
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                       Đến ngày
                     </span>
-                    <input
-                      type="date"
+                    <ONgay
                       value={tonDenNgay}
                       min={tonTuNgay || undefined}
-                      onChange={(e) => setTonDenNgay(e.target.value)}
+                      onChange={(v: string) => setTonDenNgay(v)}
                       className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                     />
                   </label>
@@ -7569,26 +7567,23 @@ export default function App() {
                       {/* Khoảng ngày báo cáo — thay ô lọc mã lô cũ. */}
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <div className="relative flex-1 sm:w-40">
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                          <input
-                            type="date"
+                          <ONgay
                             aria-label="Từ ngày"
                             value={reportTuNgay}
                             max={reportDenNgay || undefined}
-                            onChange={(e) => setReportTuNgay(e.target.value)}
-                            className="w-full pl-10 pr-2 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+                            onChange={(v: string) => setReportTuNgay(v)}
+                            className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
                           />
                         </div>
                         <span className="text-slate-300 font-black shrink-0">
                           —
                         </span>
                         <div className="relative flex-1 sm:w-40">
-                          <input
-                            type="date"
+                          <ONgay
                             aria-label="Đến ngày"
                             value={reportDenNgay}
                             min={reportTuNgay || undefined}
-                            onChange={(e) => setReportDenNgay(e.target.value)}
+                            onChange={(v: string) => setReportDenNgay(v)}
                             className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
                           />
                         </div>
@@ -9744,7 +9739,7 @@ export default function App() {
                     )}
 
                     <div className="md:col-span-1">
-                      <Input
+                      <ONgay
                         label={
                           activeTab === "import"
                             ? newTransaction.type === "OPENING"
@@ -9752,12 +9747,11 @@ export default function App() {
                               : "Ngày thực nhập"
                             : "Ngày thực xuất"
                         }
-                        type="date"
                         value={newTransaction.date}
-                        onChange={(e: any) =>
+                        onChange={(v: string) =>
                           setNewTransaction({
                             ...newTransaction,
-                            date: e.target.value,
+                            date: v,
                           })
                         }
                       />
@@ -11413,27 +11407,24 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     {/* Khoảng ngày: từ ngày — đến ngày */}
                     <div className="flex items-center gap-2 w-full lg:w-auto">
                       <div className="relative flex-1 lg:w-40">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <input
-                          type="date"
+                        <ONgay
                           aria-label="Từ ngày"
-                          className="w-full pl-10 pr-2 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
                           value={galleryTuNgay}
                           max={galleryDenNgay || undefined}
-                          onChange={(e) => setGalleryTuNgay(e.target.value)}
+                          onChange={(v: string) => setGalleryTuNgay(v)}
                         />
                       </div>
                       <span className="text-slate-300 font-black shrink-0">
                         —
                       </span>
                       <div className="relative flex-1 lg:w-40">
-                        <input
-                          type="date"
+                        <ONgay
                           aria-label="Đến ngày"
                           className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
                           value={galleryDenNgay}
                           min={galleryTuNgay || undefined}
-                          onChange={(e) => setGalleryDenNgay(e.target.value)}
+                          onChange={(v: string) => setGalleryDenNgay(v)}
                         />
                       </div>
                       {/* Bỏ chặn ngày để xem lại toàn bộ. Có nút này thì không

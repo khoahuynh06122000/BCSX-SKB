@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn, formatNumber } from "../lib/utils";
+import ONgay from "./ONgay";
 import {
   alreadySentIds,
   pickRowsForPeriod,
@@ -145,10 +146,9 @@ export default function SapExportPanel({
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             Từ ngày
           </label>
-          <input
-            type="date"
+          <ONgay
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            onChange={(v: string) => setFrom(v)}
             className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-900 focus:border-primary focus:outline-none transition-colors"
           />
         </div>
@@ -156,10 +156,9 @@ export default function SapExportPanel({
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             Đến ngày
           </label>
-          <input
-            type="date"
+          <ONgay
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={(v: string) => setTo(v)}
             className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-900 focus:border-primary focus:outline-none transition-colors"
           />
         </div>

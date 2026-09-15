@@ -43,6 +43,8 @@ import {
 import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
 
+import ONgay from "./ONgay";
+
 /**
  * CÔNG NỢ · HÓA ĐƠN
  *
@@ -497,10 +499,9 @@ export default function DebtExport({
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
                     {nhan}
                   </span>
-                  <input
-                    type="date"
+                  <ONgay
                     value={d[truong] as string}
-                    onChange={(e) => suaDot(d.id, truong, e.target.value)}
+                    onChange={(v: string) => suaDot(d.id, truong, v)}
                     className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
                   />
                 </label>
@@ -766,11 +767,10 @@ export default function DebtExport({
                         />
                       </td>
                       <td className="px-3 py-1.5">
-                        <input
-                          type="date"
+                        <ONgay
                           value={o.ngayHoaDon}
-                          onChange={(e) =>
-                            suaO(d.khoa, "ngayHoaDon", e.target.value, d)
+                          onChange={(v: string) =>
+                            suaO(d.khoa, "ngayHoaDon", v, d)
                           }
                           className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold outline-none focus:border-primary"
                         />
@@ -1081,10 +1081,9 @@ export default function DebtExport({
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                   Ngày chứng từ
                 </span>
-                <input
-                  type="date"
+                <ONgay
                   value={ngayChungTu}
-                  onChange={(e) => setNgayChungTu(e.target.value)}
+                  onChange={(v: string) => setNgayChungTu(v)}
                   className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                 />
                 <span className="block text-[9px] font-bold text-slate-400 mt-1">

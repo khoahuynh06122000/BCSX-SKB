@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Ban,
-  Calendar,
   CheckCircle2,
   Download,
   FileWarning,
@@ -29,6 +28,8 @@ import {
 } from "../lib/soPhieu";
 import { taoSheetDep, XLSXDep, type BangDep } from "../lib/excelDep";
 import { cn, formatNumber } from "../lib/utils";
+
+import ONgay from "./ONgay";
 
 /**
  * SỔ SỐ PHIẾU
@@ -303,24 +304,21 @@ export default function SoPhieu({
 
         <div className="flex items-center gap-2">
           <div className="relative flex-1 lg:w-40">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            <input
-              type="date"
+            <ONgay
               aria-label="Ngày chứng từ từ"
               value={tuNgay}
               max={denNgay || undefined}
-              onChange={(e) => setTuNgay(e.target.value)}
-              className="w-full pl-10 pr-2 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+              onChange={(v: string) => setTuNgay(v)}
+              className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
             />
           </div>
           <span className="text-slate-300 font-black shrink-0">—</span>
           <div className="relative flex-1 lg:w-40">
-            <input
-              type="date"
+            <ONgay
               aria-label="Ngày chứng từ đến"
               value={denNgay}
               min={tuNgay || undefined}
-              onChange={(e) => setDenNgay(e.target.value)}
+              onChange={(v: string) => setDenNgay(v)}
               className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
             />
           </div>
@@ -465,10 +463,9 @@ export default function SoPhieu({
               <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                 Từ ngày
               </label>
-              <input
-                type="date"
+              <ONgay
                 value={capBuTuNgay}
-                onChange={(e) => setCapBuTuNgay(e.target.value)}
+                onChange={(v: string) => setCapBuTuNgay(v)}
                 className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
               />
               <button
@@ -684,10 +681,9 @@ export default function SoPhieu({
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                   Ngày chứng từ của phiếu hủy
                 </span>
-                <input
-                  type="date"
+                <ONgay
                   value={ngayHuy}
-                  onChange={(e) => setNgayHuy(e.target.value)}
+                  onChange={(v: string) => setNgayHuy(v)}
                   className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                 />
               </label>
