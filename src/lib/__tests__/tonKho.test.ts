@@ -119,14 +119,22 @@ dung("giao dich sau ky khong lot vao ky", p1.nhap !== 230 + 999);
 // ------------------------------------------------------------ bien ngay
 
 {
-  // De trong tu ngay: khong co dau ky, moi thu tinh vao trong ky.
+  /*
+   * De trong tu ngay: khong con moc de cat dau ky, nen moi lan NHAP deu tinh
+   * vao trong ky.
+   *
+   * Rieng TON DAU KY thi khong: no la so du mang sang chu khong phai hang ve,
+   * nen van nam o cot dau ky du khong chan moc nao. Bo no vao cot Nhap thi
+   * bao cao ca thoi gian se noi "da nhap 730" trong khi chi co 230 la hang
+   * that ve kho.
+   */
   const het = dungBangTonKy({
     giaoDichTinhTon: giaoDich, giaoDichChoKy: [], products,
     tuNgay: "", denNgay: "2026-08-25",
   });
   const x = het.dong.find((d) => d.productId === "p1")!;
-  eq("khong chan dau thi dau ky bang 0", x.dauKy, 0);
-  eq("nhap gom ca truoc do", x.nhap, 500 + 200 + 30);
+  eq("khong chan dau thi dau ky chi con ton dau ky", x.dauKy, 500);
+  eq("nhap gom moi lan nhap that", x.nhap, 200 + 30);
   eq("cuoi ky khong doi", x.cuoiKy, p1.cuoiKy);
 
   // De trong ca hai: cuoi ky chinh la TON HIEN TAI.
@@ -137,7 +145,7 @@ dung("giao dich sau ky khong lot vao ky", p1.nhap !== 230 + 999);
   const y = tatCa.dong.find((d) => d.productId === "p1")!;
   // 500 - 100 + 200 - 60 - 6 + 30 + 999
   eq("cuoi ky ca thoi gian = ton hien tai", y.cuoiKy, 1563);
-  eq("khong bo giao dich nao", y.nhap - y.xuat, 1563);
+  eq("khong bo giao dich nao", y.dauKy + y.nhap - y.xuat, 1563);
 }
 
 // Ngay bien: giao dich dung ngay tuNgay va denNgay deu phai TINH VAO.
@@ -225,6 +233,74 @@ dung("giao dich sau ky khong lot vao ky", p1.nhap !== 230 + 999);
     giaoDichChoKy: [], products, tuNgay: "2026-08-01", denNgay: "2026-08-25",
   });
   eq("mat hang co phat sinh dung dau", x.dong[0].productId, "p3");
+}
+
+// ------------------------------------------- ton dau ky khai giua ky
+
+/*
+ * TON DAU KY KHAI TRONG KY PHAI NAM O COT DAU KY, KHONG PHAI COT NHAP.
+ *
+ * `OPENING` co dau +1 giong `IN`, nen neu chi theo dau ma don thi no roi vao
+ * cot Nhap: bang bao "ky nay nhap 16.512 lon" trong khi khong co chuyen hang
+ * nao, con cot Dau ky dung tro o 0 du kho co hang tu ngay dau.
+ *
+ * Nguoi dung thuong khai ton dau ky dung vao ngay mo so, tuc la NAM TRONG ky
+ * dau tien ho xem — day la truong hop thuong gap chu khong phai hiem.
+ */
+{
+  const x = dungBangTonKy({
+    giaoDichTinhTon: [
+      tx({ productId: "p1", date: "2026-09-01T03:00:00.000Z", type: "OPENING", quantity: 1000 }),
+    ],
+    giaoDichChoKy: [], products, tuNgay: "2026-09-01", denNgay: "2026-09-15",
+  });
+  const d = x.dong.find((r) => r.productId === "p1")!;
+  eq("ton dau ky khai giua ky vao cot dau ky", d.dauKy, 1000);
+  eq("ton dau ky khong vao cot nhap", d.nhap, 0);
+  eq("cuoi ky van dung", d.cuoiKy, 1000);
+  eq("tong dau ky", x.tong.dauKy, 1000);
+  eq("tong nhap", x.tong.nhap, 0);
+}
+
+// Khai truoc ky thi van vao dau ky nhu cu — hai nhanh phai cho cung ket qua.
+{
+  const x = dungBangTonKy({
+    giaoDichTinhTon: [
+      tx({ productId: "p1", date: "2026-08-20T03:00:00.000Z", type: "OPENING", quantity: 1000 }),
+    ],
+    giaoDichChoKy: [], products, tuNgay: "2026-09-01", denNgay: "2026-09-15",
+  });
+  const d = x.dong.find((r) => r.productId === "p1")!;
+  eq("ton dau ky khai truoc ky van la dau ky", d.dauKy, 1000);
+  eq("va khong vao nhap", d.nhap, 0);
+}
+
+// Khai SAU ky thi khong tinh vao dau ca.
+{
+  const x = dungBangTonKy({
+    giaoDichTinhTon: [
+      tx({ productId: "p1", date: "2026-10-05T03:00:00.000Z", type: "OPENING", quantity: 1000 }),
+    ],
+    giaoDichChoKy: [], products, tuNgay: "2026-09-01", denNgay: "2026-09-15",
+  });
+  const d = x.dong.find((r) => r.productId === "p1")!;
+  eq("ton dau ky khai sau ky khong tinh", [d.dauKy, d.nhap, d.cuoiKy], [0, 0, 0]);
+}
+
+// Nhap that trong ky VAN vao cot nhap — dung sua qua tay thanh chan het.
+{
+  const x = dungBangTonKy({
+    giaoDichTinhTon: [
+      tx({ productId: "p1", date: "2026-09-02T03:00:00.000Z", type: "OPENING", quantity: 1000 }),
+      tx({ productId: "p1", date: "2026-09-05T03:00:00.000Z", type: "IN", quantity: 300 }),
+      tx({ productId: "p1", date: "2026-09-07T03:00:00.000Z", type: "OUT", quantity: 200 }),
+    ],
+    giaoDichChoKy: [], products, tuNgay: "2026-09-01", denNgay: "2026-09-15",
+  });
+  const d = x.dong.find((r) => r.productId === "p1")!;
+  eq("tach dung ba cot", [d.dauKy, d.nhap, d.xuatBan], [1000, 300, 200]);
+  eq("dang thuc van can", d.cuoiKy, d.dauKy + d.nhap - d.xuat);
+  eq("cuoi ky dung so", d.cuoiKy, 1100);
 }
 
 // ------------------------------------------------------------ mo ta ky

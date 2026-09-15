@@ -53,9 +53,14 @@ export interface DongTonKy {
   tenHang: string;
   category: string;
   unit: string;
-  /** Tồn tính tới hết ngày trước `tuNgay`. */
+  /**
+   * Tồn tính tới hết ngày trước `tuNgay`, CỘNG tồn đầu kỳ khai trong khoảng.
+   *
+   * Tồn đầu kỳ là số dư mang sang chứ không phải hàng nhập, nên dù ngày khai
+   * rơi vào giữa kỳ thì nó vẫn thuộc về cột này.
+   */
   dauKy: number;
-  /** Nhập kho và tồn đầu kỳ phát sinh trong khoảng. */
+  /** Nhập kho trong khoảng. Tồn đầu kỳ KHÔNG tính vào đây. */
   nhap: number;
   /** Xuất bán trong khoảng. */
   xuatBan: number;
@@ -177,6 +182,30 @@ export function dungBangTonKy(input: BangTonKyInput): BangTonKy {
     }
     // SAU kỳ → bỏ hẳn, không tính vào đâu cả.
     if (den && ngay > den) return;
+
+    /*
+     * TỒN ĐẦU KỲ RƠI TRONG KỲ VẪN LÀ SỐ ĐẦU KỲ, KHÔNG PHẢI HÀNG NHẬP.
+     *
+     * `OPENING` là số dư mang sang lúc dựng sổ, không phải một lượt hàng về.
+     * Nó có dấu `+1` giống `IN` nên nếu cứ theo dấu mà dồn vào cột Nhập thì
+     * bảng báo "kỳ này nhập 16.512 lon" trong khi chẳng có chuyến hàng nào —
+     * và cột Đầu kỳ đứng trơ ở 0 dù kho có hàng ngay từ ngày đầu.
+     *
+     * Người dùng thường khai tồn đầu kỳ đúng vào ngày mở sổ, tức là NẰM TRONG
+     * kỳ đầu tiên họ xem, nên đây là trường hợp thường gặp chứ không phải
+     * hiếm. Ngày khai trước `tuNgay` thì nhánh ở trên đã dồn vào đầu kỳ rồi.
+     *
+     * Cuối kỳ không đổi: `dauKy + nhap - xuat` vẫn ra đúng con số ấy, chỉ là
+     * nằm đúng cột.
+     *
+     * Màn hình chính đã tính như vậy từ trước (xem chỗ `summaryMap` trong
+     * `App.tsx`). Để lệch thì hai màn hình nói hai con số khác nhau về cùng
+     * một mặt hàng mà không có gì báo lỗi.
+     */
+    if (t.type === "OPENING") {
+      d.dauKy += sl;
+      return;
+    }
 
     if (dau === 1) d.nhap += sl;
     else if (t.type === "OUT") d.xuatBan += sl;
