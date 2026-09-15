@@ -13,7 +13,8 @@ import {
 import { format } from "date-fns";
 import type { ImportSlip, Transaction } from "../types";
 import {
-  DAU_SO,
+  DUOI_HUY,
+  MA_LOAI,
   TEN_LOAI,
   canTroHuy,
   laLoaiHuy,
@@ -353,10 +354,10 @@ export default function SoPhieu({
         {(
           [
             { id: "TAT_CA", ten: "Tất cả", ma: "" },
-            { id: "NHAP", ten: "Nhập kho", ma: DAU_SO.NHAP },
-            { id: "XUAT", ten: "Xuất kho", ma: DAU_SO.XUAT },
-            { id: "HUY_NHAP", ten: "Hủy nhập", ma: DAU_SO.HUY_NHAP },
-            { id: "HUY_XUAT", ten: "Hủy xuất", ma: DAU_SO.HUY_XUAT },
+            { id: "NHAP", ten: "Nhập kho", ma: MA_LOAI.NHAP },
+            { id: "XUAT", ten: "Xuất kho", ma: MA_LOAI.XUAT },
+            { id: "HUY_NHAP", ten: "Hủy nhập", ma: `${MA_LOAI.NHAP}…${DUOI_HUY}` },
+            { id: "HUY_XUAT", ten: "Hủy xuất", ma: `${MA_LOAI.XUAT}…${DUOI_HUY}` },
           ] as const
         ).map((t) => (
           <button

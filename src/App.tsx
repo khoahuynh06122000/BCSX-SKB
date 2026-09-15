@@ -2293,6 +2293,10 @@ export default function App() {
         await capSoPhieu(db, {
           loai: c.loai,
           documentDate: c.documentDate,
+          // Chứng từ nhập đã mang sẵn mã phiếu (`nguon` chính là `slipCode`),
+          // nên cấp bù cũng phải dùng đúng mã ấy chứ không sinh số mới —
+          // không thì tờ giấy lại mang một số, sổ mang một số khác.
+          ...(c.loai === "NHAP" ? { soPhieu: c.nguon } : {}),
           nguon: c.nguon,
           donVi: c.donVi,
           soDong: c.soDong,
@@ -5582,6 +5586,8 @@ export default function App() {
           const g = await capSoPhieu(db, {
             loai: "NHAP",
             documentDate: transactionDate.slice(0, 10),
+            // Sổ ghi ĐÚNG mã phiếu đã in ra giấy, không cấp thêm số thứ hai.
+            soPhieu: slipCode,
             nguon: slipCode,
             donVi: par?.name || "",
             soDong: validItems.length,

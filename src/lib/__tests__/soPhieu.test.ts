@@ -6,8 +6,13 @@
 /**
  * KIỂM TRA SỔ SỐ PHIẾU
  *
- * Ví dụ chuẩn do Khoa đưa: phiếu nhập đầu tiên là `51260001`, phiếu tiếp theo
- * `51260002`; phiếu xuất là `60` + năm; hủy `51260001` sinh ra `52260001`.
+ * Cách đánh số đang dùng (Khoa chốt 15/09/2026): số phiếu trong sổ ĐÚNG BẰNG
+ * mã phiếu in ra giấy — `PN-260911-01` cho nhập, `PX-260911-01` cho xuất, và
+ * hủy thì gắn thêm đuôi `-HUY`.
+ *
+ * Số kiểu cũ (`51260001`, `52260001`, `60…`, `61…`) VẪN PHẢI ĐỌC ĐƯỢC: nó đã
+ * in trên giấy và đã gửi đi, sửa lại là mất khả năng đối chiếu. Nên phần dưới
+ * kiểm cả hai kiểu.
  *
  * Thứ phải giữ bằng mọi giá: một số phiếu đã cấp thì KHÔNG được đổi, và hai
  * phiếu khác nhau KHÔNG được trùng số.
@@ -15,7 +20,12 @@
 
 import {
   DAU_SO,
+  DUOI_HUY,
+  MA_LOAI,
   canTroHuy,
+  dungLaiSo,
+  dungSoPhieuCu,
+  maNgay,
   docSoPhieu,
   dungPhieuHuy,
   dungSoPhieu,
@@ -54,48 +64,96 @@ function dung(ten: string, dieuKien: boolean) {
 
 // ------------------------------------------------- ví dụ Khoa đưa
 
-kiemTra("phieu nhap dau tien", dungSoPhieu(DAU_SO.NHAP, "26", 1), "51260001");
-kiemTra("phieu nhap thu hai", dungSoPhieu(DAU_SO.NHAP, "26", 2), "51260002");
-kiemTra("phieu xuat dau tien", dungSoPhieu(DAU_SO.XUAT, "26", 1), "60260001");
-kiemTra("huy phieu nhap 1", soPhieuHuy("51260001"), "52260001");
-kiemTra("huy phieu xuat 1", soPhieuHuy("60260001"), "61260001");
+kiemTra("phieu nhap dau tien", dungSoPhieu(MA_LOAI.NHAP, "260911", 1), "PN-260911-01");
+kiemTra("phieu nhap thu hai", dungSoPhieu(MA_LOAI.NHAP, "260911", 2), "PN-260911-02");
+kiemTra("phieu xuat dau tien", dungSoPhieu(MA_LOAI.XUAT, "260911", 1), "PX-260911-01");
 
-// Số hủy bám theo số gốc, không chạy dãy riêng.
-kiemTra("huy bam theo so goc", soPhieuHuy("51260047"), "52260047");
-kiemTra("huy phieu xuat giu thu tu", soPhieuHuy("60269999"), "61269999");
+/*
+ * SO PHIEU TRONG SO PHAI BANG DUNG MA PHIEU IN RA GIAY.
+ *
+ * Day la ca ly do doi cach danh so: truoc kia mot to phieu mang hai so khac
+ * nhau, nguoi doi chieu phai nho so nao di voi so nao.
+ */
+kiemTra(
+  "so trong so bang ma phieu in ra giay",
+  dungSoPhieu(MA_LOAI.NHAP, maNgay("2026-09-11"), 1),
+  "PN-260911-01",
+);
+
+kiemTra("huy phieu nhap", soPhieuHuy("PN-260911-01"), `PN-260911-01${DUOI_HUY}`);
+kiemTra("huy phieu xuat", soPhieuHuy("PX-260911-03"), "PX-260911-03-HUY");
 
 // Hủy một phiếu hủy là vô nghĩa.
-kiemTra("khong huy duoc phieu huy", soPhieuHuy("52260001"), null);
-kiemTra("khong huy duoc phieu huy xuat", soPhieuHuy("61260001"), null);
+kiemTra("khong huy duoc phieu huy", soPhieuHuy("PN-260911-01-HUY"), null);
+
+// ------------------------------------------------- số kiểu cũ vẫn đọc được
+
+kiemTra("dung lai so kieu cu", dungSoPhieuCu(DAU_SO.NHAP, "26", 1), "51260001");
+kiemTra("huy so kieu cu", soPhieuHuy("51260001"), "52260001");
+kiemTra("huy so xuat kieu cu", soPhieuHuy("60260001"), "61260001");
+// Số hủy kiểu cũ bám theo số gốc, không chạy dãy riêng.
+kiemTra("huy kieu cu bam theo so goc", soPhieuHuy("51260047"), "52260047");
+kiemTra("khong huy duoc phieu huy kieu cu", soPhieuHuy("52260001"), null);
+kiemTra("khong huy duoc phieu huy xuat kieu cu", soPhieuHuy("61260001"), null);
 
 // ------------------------------------------------- ghép và tách số
 
-kiemTra("dem du 4 chu so", dungSoPhieu(DAU_SO.NHAP, "26", 47), "51260047");
-kiemTra("thu tu 0 van thanh 0001", dungSoPhieu(DAU_SO.NHAP, "26", 0), "51260001");
-// Quá 9.999 thì DÀI RA, không quay vòng — số trùng là hỏng cả sổ.
-kiemTra("qua 9999 thi dai ra", dungSoPhieu(DAU_SO.NHAP, "26", 10000), "512610000");
-dung(
-  "so dai van doc lai duoc",
-  docSoPhieu("512610000")?.thuTu === 10000,
-);
+kiemTra("dem du 2 chu so", dungSoPhieu(MA_LOAI.NHAP, "260911", 7), "PN-260911-07");
+kiemTra("thu tu 0 van thanh 01", dungSoPhieu(MA_LOAI.NHAP, "260911", 0), "PN-260911-01");
+// Quá 99 phiếu một ngày thì DÀI RA, không quay vòng — số trùng là hỏng cả sổ.
+kiemTra("qua 99 thi dai ra", dungSoPhieu(MA_LOAI.NHAP, "260911", 100), "PN-260911-100");
+dung("so dai van doc lai duoc", docSoPhieu("PN-260911-100")?.thuTu === 100);
 
-kiemTra("doc so phieu nhap", docSoPhieu("51260047"), {
-  dauSo: "51",
+kiemTra("ma ngay", maNgay("2026-09-11"), "260911");
+kiemTra("ma ngay hong thi rong", maNgay("11/09/2026"), "");
+
+kiemTra("doc so phieu nhap", docSoPhieu("PN-260911-07"), {
   loai: "NHAP",
+  kieu: "moi",
+  dauSo: "PN",
   namHai: "26",
-  thuTu: 47,
+  ngayMa: "260911",
+  thuTu: 7,
+  kyDem: "PN|260911",
 });
-kiemTra("doc so phieu huy xuat", docSoPhieu("61270003"), {
-  dauSo: "61",
+kiemTra("doc so phieu huy xuat", docSoPhieu("PX-270102-03-HUY"), {
   loai: "HUY_XUAT",
+  kieu: "moi",
+  dauSo: "PX",
   namHai: "27",
+  ngayMa: "270102",
   thuTu: 3,
+  kyDem: "PX|270102",
 });
+kiemTra("doc so kieu cu", docSoPhieu("51260047"), {
+  loai: "NHAP",
+  kieu: "cu",
+  dauSo: "51",
+  namHai: "26",
+  ngayMa: "",
+  thuTu: 47,
+  kyDem: "51|26",
+});
+
+kiemTra("ma la thi khong doc", docSoPhieu("PZ-260911-01"), null);
 kiemTra("dau so la thi khong doc", docSoPhieu("99260001"), null);
 kiemTra("ngan qua thi khong doc", docSoPhieu("5126001"), null);
 kiemTra("co chu thi khong doc", docSoPhieu("5126000A"), null);
 kiemTra("rong thi khong doc", docSoPhieu(""), null);
 kiemTra("thu tu 0000 khong hop le", docSoPhieu("51260000"), null);
+kiemTra("thu tu 00 kieu moi khong hop le", docSoPhieu("PN-260911-00"), null);
+kiemTra("thieu ngay thi khong doc", docSoPhieu("PN-2609-01"), null);
+kiemTra("duoi la thi khong doc", docSoPhieu("PN-260911-01-XOA"), null);
+
+// Dựng lại số từ khoá dãy đếm — ngược với `docSoPhieu`.
+kiemTra("dung lai so kieu moi", dungLaiSo("PN|260911", 5), "PN-260911-05");
+kiemTra("dung lai so kieu cu tu ky dem", dungLaiSo("60|26", 5), "60260005");
+// Đi một vòng phải về đúng chỗ cũ.
+["PN-260911-01", "PX-261231-12", "51260047", "61270003"].forEach((so) => {
+  const t = docSoPhieu(so)!;
+  const lai = laLoaiHuy(t.loai) ? so : dungLaiSo(t.kyDem, t.thuTu);
+  dung(`di mot vong ${so}`, laLoaiHuy(t.loai) || lai === so);
+});
 
 kiemTra("laLoaiHuy nhap", laLoaiHuy("NHAP"), false);
 kiemTra("laLoaiHuy huy nhap", laLoaiHuy("HUY_NHAP"), true);
@@ -171,13 +229,30 @@ const so: GhiSoPhieu[] = [
 
 // ------------------------------------------------- thứ tự kế tiếp
 
-kiemTra("thu tu ke tiep nhap", thuTuKeTiep(so, DAU_SO.NHAP, "26"), 3);
-kiemTra("thu tu ke tiep xuat", thuTuKeTiep(so, DAU_SO.XUAT, "26"), 3);
+kiemTra("thu tu ke tiep nhap", thuTuKeTiep(so, "51|26"), 3);
+kiemTra("thu tu ke tiep xuat", thuTuKeTiep(so, "60|26"), 3);
 // Năm mới thì đếm lại từ 1.
-kiemTra("nam moi dem lai tu 1", thuTuKeTiep(so, DAU_SO.NHAP, "27"), 1);
-kiemTra("so rong thi bat dau tu 1", thuTuKeTiep([], DAU_SO.NHAP, "26"), 1);
+kiemTra("nam moi dem lai tu 1", thuTuKeTiep(so, "51|27"), 1);
+kiemTra("so rong thi bat dau tu 1", thuTuKeTiep([], "51|26"), 1);
 // Dãy hủy đếm riêng, không lẫn vào dãy gốc.
-kiemTra("day huy dem rieng", thuTuKeTiep(so, DAU_SO.HUY_XUAT, "26"), 3);
+kiemTra("day huy dem rieng", thuTuKeTiep(so, "61|26"), 3);
+
+/*
+ * KIEU MOI DEM THEO NGAY, KHONG DEM THEO NAM.
+ *
+ * Sang ngay moi la dem lai tu 01. Dem tiep theo nam thi so phieu khong con
+ * khop voi ma in tren to giay, dung cai vua sua.
+ */
+{
+  const ng: GhiSoPhieu[] = [
+    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
+    g({ soPhieu: "PN-260911-02", id: "PN-260911-02" }),
+    g({ soPhieu: "PN-260912-01", id: "PN-260912-01" }),
+  ];
+  kiemTra("ngay 11 dem tiep la 03", thuTuKeTiep(ng, "PN|260911"), 3);
+  kiemTra("ngay 12 dem tiep la 02", thuTuKeTiep(ng, "PN|260912"), 2);
+  kiemTra("ngay chua co thi tu 1", thuTuKeTiep(ng, "PN|260913"), 1);
+}
 
 // ------------------------------------------------- chặn hủy sai
 
@@ -298,6 +373,60 @@ kiemTra("loc danh sach rong", locSoPhieu([]).length, 0);
     }),
   ]);
   kiemTra("khong bao dut quang o day huy", thua.thieuSo, []);
+}
+
+/*
+ * KIEU MOI: DUT QUANG DO TRONG TUNG NGAY, KHONG DO SUOT NAM.
+ *
+ * Ngay 11 cap toi 03 ma thieu 02 thi dung la dut quang. Con ngay 12 chi moi
+ * cap 01 thi khong thieu gi ca — do suot nam theo kieu cu se bao nham la
+ * thieu PN-...-02 cua ngay 12, va bao nham thi lan sau khong ai tin nua.
+ */
+{
+  const dut = tomTatSoPhieu([
+    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
+    g({ soPhieu: "PN-260911-03", id: "PN-260911-03" }),
+    g({ soPhieu: "PN-260912-01", id: "PN-260912-01" }),
+  ]);
+  kiemTra("dut quang trong ngay", dut.thieuSo, ["PN-260911-02"]);
+}
+
+// Hai ngay lien nhau, ngay nao cung du thi khong bao gi.
+{
+  const du = tomTatSoPhieu([
+    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
+    g({ soPhieu: "PN-260911-02", id: "PN-260911-02" }),
+    g({ soPhieu: "PN-260912-01", id: "PN-260912-01" }),
+    g({ soPhieu: "PX-260912-01", id: "PX-260912-01", loai: "XUAT" }),
+  ]);
+  kiemTra("du thi khong bao thieu", du.thieuSo, []);
+}
+
+// Phieu huy kieu moi dung lai dung thu tu cua phieu goc, khong tao dut quang.
+{
+  const h = tomTatSoPhieu([
+    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
+    g({ soPhieu: "PN-260911-02", id: "PN-260911-02" }),
+    g({
+      soPhieu: "PN-260911-02-HUY",
+      id: "PN-260911-02-HUY",
+      loai: "HUY_NHAP",
+      soLuong: -300,
+    }),
+  ]);
+  kiemTra("phieu huy khong tao dut quang", h.thieuSo, []);
+  kiemTra("dem dung so phieu huy", h.soHuy, 1);
+}
+
+// So kieu cu va kieu moi nam chung mot so thi dem rieng tung day.
+{
+  const tron = tomTatSoPhieu([
+    g({ soPhieu: "51260001", id: "51260001" }),
+    g({ soPhieu: "51260003", id: "51260003" }),
+    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
+  ]);
+  kiemTra("hai kieu dem rieng day", tron.thieuSo, ["51260002"]);
+  kiemTra("dem du ca hai kieu", tron.tongPhieu, 3);
 }
 
 // Số ngày từ biên bản tới lúc vào sổ.

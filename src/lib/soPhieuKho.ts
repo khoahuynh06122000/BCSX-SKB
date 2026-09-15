@@ -36,12 +36,12 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import {
-  DAU_SO,
+  MA_LOAI,
   canTroHuy,
   docSoPhieu,
   dungPhieuHuy,
   dungSoPhieu,
-  namHaiSo,
+  maNgay,
   soPhieuHuy,
   type GhiSoPhieu,
   type LoaiPhieu,
@@ -49,12 +49,18 @@ import {
 
 /** Collection giữ sổ số phiếu. Khoá tài liệu = số phiếu. */
 export const KHO_SO_PHIEU = "so_phieu";
-/** Collection giữ bộ đếm. Một tài liệu cho mỗi (đầu số × năm). */
+/** Collection giữ bộ đếm. Một tài liệu cho mỗi DÃY ĐẾM. */
 export const KHO_BO_DEM = "bo_dem";
 
-/** Khoá tài liệu bộ đếm, ví dụ `sophieu-51-26`. */
-export function khoaBoDem(dauSo: string, namHai: string): string {
-  return `sophieu-${dauSo}-${namHai}`;
+/**
+ * Khoá tài liệu bộ đếm, ví dụ `sophieu-PX-260911`.
+ *
+ * Nhận thẳng khoá dãy đếm (`kyDem` của `docSoPhieu`) nên số kiểu cũ vẫn có bộ
+ * đếm riêng của nó (`sophieu-51-26`) — bộ đếm cũ không bị đụng tới, và không
+ * có số cũ nào bị cấp lại.
+ */
+export function khoaBoDem(kyDem: string): string {
+  return `sophieu-${String(kyDem ?? "").replace("|", "-")}`;
 }
 
 /**
@@ -68,10 +74,22 @@ const SO_LAN_DO = 10;
 
 export interface YeuCauCapSo {
   loai: Exclude<LoaiPhieu, "HUY_NHAP" | "HUY_XUAT">;
-  /** Ngày trên biên bản, `yyyy-MM-dd`. Quyết định luôn dãy năm của số phiếu. */
+  /** Ngày trên biên bản, `yyyy-MM-dd`. Quyết định luôn dãy ngày của số phiếu. */
   documentDate: string;
   /** `slipCode` với phiếu nhập, `referenceGroupId` với phiếu xuất. */
   nguon: string;
+  /**
+   * SỐ PHIẾU ĐÃ CÓ SẴN — dùng đúng số này thay vì cấp số mới.
+   *
+   * Phiếu nhập kho đã mang mã phiếu in trên giấy (`PN-260911-01`, xem
+   * `slip.ts`), và sổ phải ghi ĐÚNG số ấy chứ không cấp thêm một số thứ hai.
+   * Trước đây một tờ phiếu mang hai số khác nhau, người đối chiếu phải nhớ số
+   * nào đi với số nào.
+   *
+   * Để trống thì cấp số mới qua bộ đếm — đó là đường của phiếu xuất, vì phiếu
+   * xuất không có mã nào in sẵn ra giấy.
+   */
+  soPhieu?: string;
   donVi?: string;
   soDong: number;
   soLuong: number;
@@ -88,39 +106,62 @@ export async function capSoPhieu(
   db: Firestore,
   yc: YeuCauCapSo,
 ): Promise<GhiSoPhieu> {
-  const namHai = namHaiSo(yc.documentDate);
-  if (!namHai) {
+  const ngayMa = maNgay(yc.documentDate);
+  if (!ngayMa) {
     throw new Error(
       `Ngày chứng từ "${yc.documentDate}" không đọc được, chưa cấp được số phiếu.`,
     );
   }
-  const dauSo = yc.loai === "NHAP" ? DAU_SO.NHAP : DAU_SO.XUAT;
-  const refDem = doc(db, KHO_BO_DEM, khoaBoDem(dauSo, namHai));
+  const maLoai = yc.loai === "NHAP" ? MA_LOAI.NHAP : MA_LOAI.XUAT;
+  const kyDem = `${maLoai}|${ngayMa}`;
+  const refDem = doc(db, KHO_BO_DEM, khoaBoDem(kyDem));
+
+  /*
+   * PHIẾU NHẬP DÙNG ĐÚNG MÃ PHIẾU ĐÃ IN RA GIẤY, không cấp số thứ hai.
+   *
+   * Không đi qua bộ đếm: số đã nằm trên tờ phiếu rồi, việc còn lại chỉ là ghi
+   * nó vào sổ. Khoá tài liệu = số phiếu nên ghi trùng vẫn bị chặn ở lớp dưới.
+   */
+  const soCoSan = String(yc.soPhieu ?? "").trim();
 
   return runTransaction(db, async (tx) => {
-    const dem = await tx.get(refDem);
-    const batDau = Math.max(1, Number(dem.data()?.tiep) || 1);
-
-    /*
-     * ĐỌC HẾT RỒI MỚI GHI. Firestore bắt buộc như vậy trong một giao dịch, nên
-     * phải dò trước cả loạt số ứng viên chứ không dò-ghi xen kẽ.
-     */
     let thuTu = 0;
     let so = "";
-    for (let i = 0; i < SO_LAN_DO; i++) {
-      const ung = batDau + i;
-      const soUng = dungSoPhieu(dauSo, namHai, ung);
-      const daCo = await tx.get(doc(db, KHO_SO_PHIEU, soUng));
-      if (!daCo.exists()) {
-        thuTu = ung;
-        so = soUng;
-        break;
+    // Đọc bộ đếm ở CẢ HAI đường: nhánh dùng mã có sẵn cũng cần biết số hiện
+    // tại để không đẩy bộ đếm lùi lại (xem chỗ ghi bộ đếm ở cuối).
+    const demHienTai = Math.max(1, Number((await tx.get(refDem)).data()?.tiep) || 1);
+
+    if (soCoSan) {
+      const daCo = await tx.get(doc(db, KHO_SO_PHIEU, soCoSan));
+      if (daCo.exists()) {
+        throw new Error(
+          `Số phiếu ${soCoSan} đã có trong sổ. Có thể phiếu này vừa được ghi sổ rồi.`,
+        );
       }
-    }
-    if (!so) {
-      throw new Error(
-        `Bộ đếm số phiếu đang lệch: ${SO_LAN_DO} số kế tiếp từ ${dungSoPhieu(dauSo, namHai, batDau)} đều đã có trong sổ. Cần xem lại sổ số phiếu trước khi cấp tiếp.`,
-      );
+      so = soCoSan;
+      thuTu = docSoPhieu(soCoSan)?.thuTu ?? 0;
+    } else {
+      const batDau = demHienTai;
+
+      /*
+       * ĐỌC HẾT RỒI MỚI GHI. Firestore bắt buộc như vậy trong một giao dịch,
+       * nên phải dò trước cả loạt số ứng viên chứ không dò-ghi xen kẽ.
+       */
+      for (let i = 0; i < SO_LAN_DO; i++) {
+        const ung = batDau + i;
+        const soUng = dungSoPhieu(maLoai, ngayMa, ung);
+        const daCo = await tx.get(doc(db, KHO_SO_PHIEU, soUng));
+        if (!daCo.exists()) {
+          thuTu = ung;
+          so = soUng;
+          break;
+        }
+      }
+      if (!so) {
+        throw new Error(
+          `Bộ đếm số phiếu đang lệch: ${SO_LAN_DO} số kế tiếp từ ${dungSoPhieu(maLoai, ngayMa, batDau)} đều đã có trong sổ. Cần xem lại sổ số phiếu trước khi cấp tiếp.`,
+        );
+      }
     }
 
     const ghi: GhiSoPhieu = {
@@ -138,7 +179,21 @@ export async function capSoPhieu(
     };
 
     tx.set(doc(db, KHO_SO_PHIEU, so), ghi);
-    tx.set(refDem, { dauSo, namHai, tiep: thuTu + 1 }, { merge: true });
+    /*
+     * BỘ ĐẾM CHỈ TIẾN, KHÔNG BAO GIỜ LÙI.
+     *
+     * Số do phiếu nhập mang sẵn không nhất thiết lớn hơn số đếm hiện tại —
+     * ghi sổ bù cho một phiếu cũ là gặp ngay. Đặt thẳng `thuTu + 1` thì bộ đếm
+     * tụt xuống và lần cấp sau trả về một số ĐÃ IN RA GIẤY.
+     *
+     * Vẫn nhích lên cả ở nhánh dùng mã có sẵn: nhờ vậy nếu về sau phải cấp bù
+     * một phiếu không có mã, số cấp ra không đè lên mã đã dùng trong ngày.
+     */
+    tx.set(
+      refDem,
+      { kyDem, tiep: Math.max(demHienTai, thuTu + 1) },
+      { merge: true },
+    );
     return ghi;
   });
 }
@@ -208,19 +263,16 @@ export async function huyPhieu(
 export async function chinhLaiBoDem(
   db: Firestore,
   ds: GhiSoPhieu[],
-  dauSo: string,
-  namHai: string,
+  kyDem: string,
 ): Promise<number> {
   let max = 0;
   ds.forEach((g) => {
     const p = docSoPhieu(g?.soPhieu);
-    if (p && p.dauSo === dauSo && p.namHai === namHai && p.thuTu > max) {
-      max = p.thuTu;
-    }
+    if (p && p.kyDem === kyDem && p.thuTu > max) max = p.thuTu;
   });
-  const ref = doc(db, KHO_BO_DEM, khoaBoDem(dauSo, namHai));
+  const ref = doc(db, KHO_BO_DEM, khoaBoDem(kyDem));
   const hienTai = Number((await getDoc(ref)).data()?.tiep) || 0;
   const tiep = Math.max(hienTai, max + 1);
-  await setDoc(ref, { dauSo, namHai, tiep }, { merge: true });
+  await setDoc(ref, { kyDem, tiep }, { merge: true });
   return tiep;
 }
