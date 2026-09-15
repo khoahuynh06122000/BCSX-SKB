@@ -231,3 +231,29 @@
   .dn-tieu-de,
   .dn-kinh { animation: none !important; }
 }
+
+/*
+   BỎ NÚT TĂNG / GIẢM CỦA Ô NHẬP SỐ.
+
+   Hai mũi tên nhỏ mà trình duyệt tự thêm vào `<input type="number">` không
+   giúp được gì ở đây: không ai nhập 16.512 lon bằng cách bấm mũi tên, mà bấm
+   nhầm một cái là số lượng trên chứng từ lệch đi một đơn vị — lệch âm thầm,
+   vì con số vẫn trông bình thường.
+
+   Đặt ở đây chứ không đặt trên từng ô: thêm ô nhập số mới về sau cũng tự theo,
+   không phải nhớ.
+
+   Vẫn giữ `type="number"`: bàn phím điện thoại vẫn bật ra bàn số, và trình
+   duyệt vẫn chặn gõ chữ vào ô số.
+*/
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;   /* Firefox dùng thuộc tính riêng */
+  appearance: textfield;
+}
