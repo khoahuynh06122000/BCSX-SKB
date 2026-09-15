@@ -217,6 +217,8 @@ import { KHO_SO_PHIEU, capSoPhieu, huyPhieu } from "./lib/soPhieuKho";
 
 import ONgay from "./components/ONgay";
 
+import { isoSangVn } from "./lib/oNgay";
+
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -2549,7 +2551,7 @@ export default function App() {
 
     if (
       !window.confirm(
-        `Tạo lệnh xuất hóa đơn cho kỳ ${from} → ${to}?\n\n` +
+        `Tạo lệnh xuất hóa đơn cho kỳ ${isoSangVn(from) || from} → ${isoSangVn(to) || to}?\n\n` +
           `${formatNumber(summary.count)} dòng xuất kho · ${formatNumber(summary.partnerCount)} khách hàng\n` +
           `Tiền tạm tính theo giá danh mục: ${formatNumber(summary.totalBeforeVat)} đ\n` +
           `(SAP tính lại theo giá hợp đồng và tự tính thuế)\n\n` +

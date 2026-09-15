@@ -35,6 +35,7 @@ import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
 
 import ONgay from "./ONgay";
+import { isoSangVn } from "../lib/oNgay";
 
 /**
  * ĐƠN BNC — THEO DÕI BIA ĐI TỚI ĐÂU TRONG KHU
@@ -114,7 +115,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
       taoSheetDep({
         tieuDeTren: [
           "ĐƠN BNC — THEO BỘ PHẬN",
-          `Từ ${tuNgay || "đầu"} đến ${denNgay || "nay"} · ${bang.tong.soDon} đơn`,
+          `Từ ${isoSangVn(tuNgay) || "đầu"} đến ${isoSangVn(denNgay) || "nay"} · ${bang.tong.soDon} đơn`,
         ],
         tieuDe: [
           "STT",
@@ -173,7 +174,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
       taoSheetDep({
         tieuDeTren: [
           "ĐƠN BNC — TỪNG ĐƠN",
-          `Từ ${tuNgay || "đầu"} đến ${denNgay || "nay"}`,
+          `Từ ${isoSangVn(tuNgay) || "đầu"} đến ${isoSangVn(denNgay) || "nay"}`,
         ],
         tieuDe: [
           "STT",
@@ -205,7 +206,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         ],
         hang: bang.don.map((d, i) => [
           i + 1,
-          d.ngay,
+          isoSangVn(d.ngay) || d.ngay,
           tenNhomBNC(d.nhom),
           d.boPhan,
           d.soMatHang,
@@ -693,7 +694,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     key={d.id}
                     className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
                   >
-                    <td className="px-3 py-1.5">{d.ngay}</td>
+                    <td className="px-3 py-1.5">{isoSangVn(d.ngay) || d.ngay}</td>
                     <td className="px-3 py-1.5 text-slate-900">{d.boPhan}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {d.soMatHang}
@@ -779,7 +780,8 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                   Biên bản giao nhận
                 </h3>
                 <p className="text-[11px] font-bold text-slate-500 mt-0.5">
-                  {donDangXem.ngay} · {donDangXem.boPhan}
+                  {isoSangVn(donDangXem.ngay) || donDangXem.ngay} ·{" "}
+                  {donDangXem.boPhan}
                 </p>
                 <p className="text-[10px] font-bold text-slate-400 mt-0.5">
                   {donDangXem.soMatHang} mặt hàng ·{" "}

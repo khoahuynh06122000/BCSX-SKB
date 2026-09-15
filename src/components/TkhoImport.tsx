@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Product, Partner } from "../types";
 import { cn, formatNumber } from "../lib/utils";
+import { isoSangVn } from "../lib/oNgay";
 import {
   buildDiemBanLookup,
   type DiemBanEntry,
@@ -494,7 +495,7 @@ export default function TkhoImport({
               </p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                 {result.dateRange
-                  ? `${result.dateRange.from} → ${result.dateRange.to}`
+                  ? `${isoSangVn(result.dateRange.from) || result.dateRange.from} → ${isoSangVn(result.dateRange.to) || result.dateRange.to}`
                   : ""}{" "}
                 · tổng {formatNumber(tongSoLuong)}
               </p>
@@ -572,7 +573,7 @@ export default function TkhoImport({
                 {result.drafts.slice(0, 200).map((d, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="py-2 px-3 font-bold text-slate-600">
-                      {d.dateKey}
+                      {isoSangVn(d.dateKey) || d.dateKey}
                     </td>
                     <td className="py-2 px-3 font-bold text-slate-900">
                       {partnerById.get(d.partnerId)?.name || d.partnerId}
