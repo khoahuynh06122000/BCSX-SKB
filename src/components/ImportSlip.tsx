@@ -8,6 +8,8 @@ import {
   Loader2,
   Upload,
   X,
+  ImageOff,
+  ZoomIn,
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
@@ -78,6 +80,17 @@ export default function ImportSlipPanel({
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  /**
+   * Đường dẫn ảnh tải không được.
+   *
+   * Ảnh nằm trên máy chủ ảnh của bên khác và đã có lần mất cả loạt: đường dẫn
+   * còn nguyên trong sổ mà tệp thì không còn. Không bắt lỗi thì ô ảnh chỉ hiện
+   * một khung trống — người dùng tưởng bấm không được, thay vì biết là ảnh đã
+   * mất và cần đi tìm tờ giấy.
+   */
+  const [anhHong, setAnhHong] = useState<Set<string>>(new Set());
+  const danhDauHong = (url: string) =>
+    setAnhHong((cu) => (cu.has(url) ? cu : new Set(cu).add(url)));
 
   const slipMetaByCode = useMemo(() => {
     const m = new Map<string, ImportSlipType>();
@@ -327,17 +340,42 @@ export default function ImportSlipPanel({
                     </span>
                     {photos.map((url, i) => (
                       <div key={url + i} className="relative group">
+                        {/*
+                          Ô ảnh phải NHÌN RA NGAY LÀ BẤM ĐƯỢC.
+
+                          Trước đây chỉ là một ô 56px trơn, dấu hiệu duy nhất là
+                          dòng chú thích hiện ra sau khi rê chuột và chờ — nên
+                          nhiều người không biết bấm vào xem được ảnh lớn.
+
+                          Nay ô to hơn, con trỏ đổi thành kính lúp, và khi rê
+                          chuột lên thì phủ một lớp tối kèm icon phóng to.
+                        */}
                         <button
                           onClick={() => setPreviewPhoto(url)}
                           title="Bấm để xem ảnh lớn"
-                          className="block w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-white hover:border-primary transition-all"
+                          className="relative block w-[72px] h-[72px] rounded-xl overflow-hidden border border-slate-200 bg-white cursor-zoom-in hover:border-primary hover:ring-2 hover:ring-primary/20 transition-all"
                         >
-                          <img
-                            src={url}
-                            alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
+                          {anhHong.has(url) ? (
+                            <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-rose-50 px-1 text-center">
+                              <ImageOff className="h-4 w-4 text-rose-400" />
+                              <span className="text-[8px] font-black uppercase leading-tight tracking-tight text-rose-500">
+                                Ảnh hỏng
+                              </span>
+                            </span>
+                          ) : (
+                            <>
+                              <img
+                                src={url}
+                                alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
+                                loading="lazy"
+                                onError={() => danhDauHong(url)}
+                                className="h-full w-full object-cover"
+                              />
+                              <span className="absolute inset-0 flex items-center justify-center bg-slate-900/45 opacity-0 transition-opacity group-hover:opacity-100">
+                                <ZoomIn className="h-5 w-5 text-white" />
+                              </span>
+                            </>
+                          )}
                         </button>
                         {canWrite && onRemoveSigned && (
                           <button
@@ -394,11 +432,26 @@ export default function ImportSlipPanel({
             onClick={(e) => e.stopPropagation()}
             className="relative max-w-4xl w-full max-h-full flex flex-col gap-3"
           >
-            <img
-              src={previewPhoto}
-              alt="Phiếu đã ký"
-              className="w-full max-h-[80vh] object-contain rounded-2xl bg-white"
-            />
+            {anhHong.has(previewPhoto) ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white px-6 py-16 text-center">
+                <ImageOff className="h-10 w-10 text-rose-400" />
+                <p className="text-sm font-black text-slate-900">
+                  Không tải được ảnh này
+                </p>
+                <p className="max-w-md text-xs font-medium leading-relaxed text-slate-500">
+                  Đường dẫn vẫn còn trong sổ nhưng tệp ảnh không còn ở máy chủ
+                  ảnh. Tờ phiếu giấy đã ký vẫn là chứng từ gốc — tra lại ở bản
+                  lưu giấy.
+                </p>
+              </div>
+            ) : (
+              <img
+                src={previewPhoto}
+                alt="Phiếu đã ký"
+                onError={() => danhDauHong(previewPhoto)}
+                className="w-full max-h-[80vh] object-contain rounded-2xl bg-white"
+              />
+            )}
             <div className="flex items-center justify-center gap-2">
               <a
                 href={previewPhoto}
