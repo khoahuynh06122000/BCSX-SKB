@@ -4005,6 +4005,57 @@ export default function App() {
               evidencePhotoUrl: photoUrls[0] || null,
               evidencePhotoUrls: photoUrls,
             });
+
+            /*
+             * PHẦN HỤT PHẢI THÀNH GIAO DỊCH `LOSS` THẬT, không chỉ là dòng ghi
+             * chú.
+             *
+             * Trước đây chỗ này chỉ hạ số lượng dòng xuất xuống bằng số thực
+             * nhận rồi chép "[Hao hụt: ...]" vào ô ghi chú. Ghi chú là chữ —
+             * không phép tính nào đọc nó. Hậu quả: bia đã ra khỏi kho thật
+             * nhưng tồn kho vẫn giữ nguyên phần hụt, và báo cáo hao hụt không
+             * thấy một giọt nào của đơn đi đường.
+             *
+             * Vì sao vẫn tách làm hai dòng chứ không giữ nguyên số cũ: dòng
+             * xuất là số lên công nợ và lên hóa đơn, phải đúng bằng số đối tác
+             * nhận. Phần hụt là phần mình chịu. Tách ra thì tồn kho trừ đủ cả
+             * hai, còn công nợ chỉ lấy phần trên.
+             *
+             * FIFO chạy trên CÙNG bản sao `currentBatchesLocal` — bản sao này
+             * đã được cộng trả lại nguyên lượng đang đi đường ở bước 1, nên đủ
+             * cho cả dòng xuất lẫn dòng hao hụt. Phải có số lô thật, vì phép
+             * tính tồn theo lô bỏ qua mọi giao dịch không có số lô.
+             */
+            const haoAlloc = getFIFOAllocations(
+              trx.productId,
+              lossForThisTrx,
+              currentBatchesLocal,
+            );
+            haoAlloc.forEach((al, k) => {
+              // Mã cố định theo dòng xuất: bấm xác nhận lại cũng không đẻ thêm
+              // bản ghi hao hụt trùng.
+              const haoId = `${trx.id}-hao-${k}`;
+              batch.set(doc(db, "transactions", haoId), {
+                id: haoId,
+                date: finalDate,
+                type: "LOSS",
+                productId: trx.productId,
+                productName: trx.productName,
+                category: trx.category,
+                quantity: al.quantity,
+                partnerId: trx.partnerId,
+                partnerName: trx.partnerName,
+                notes:
+                  `Hao hụt đơn đi đường — không ghi công nợ · Lý do: ${lossReason || "Chênh lệch"}`.trim(),
+                batchNumber: al.batchNumber,
+                evidencePhotoUrl: photoUrls[0] || null,
+                evidencePhotoUrls: photoUrls,
+                createdBy: user || "Guest",
+                referenceGroupId: trx.referenceGroupId,
+                status: "completed",
+                originalQuantity: al.quantity,
+              } as Transaction);
+            });
           } else {
             batch.update(doc(db, "transactions", trx.id), {
               status: "completed",
