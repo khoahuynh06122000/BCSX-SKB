@@ -116,7 +116,7 @@ eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
   ghiNhap: false,
   ghiXuat: true,
   doanhThu: false,
-  napFile: false,
+  napFile: true,
   quanTri: false,
 });
 
@@ -204,11 +204,27 @@ dung(
 dung("nguoi nhap kho van doc duoc du lieu kho", quyenCua("NHAP_KHO").xemKho);
 dung("nguoi xuat kho van doc duoc du lieu kho", quyenCua("XUAT_KHO").xemKho);
 
-// Ai NAP TEP duoc: chi ke toan va chu so huu.
+/*
+ * Ai NAP TEP duoc. Mo them cho XUAT_KHO ngay 16/09/2026: tep BBGN la tep cua
+ * chinh ho.
+ *
+ * NAP TEP KHONG CHO GHI THEM CHIEU NAO. Chot lai bang phep kiem ngay duoi:
+ * nguoi xuat kho nap duoc tep nhung van khong ghi duoc chieu nhap, va cho nao
+ * nap tep ma ghi ra dong NHAP thi phai xet them `ghiNhap` — neu khong ho bam
+ * vao chi nhan loi quyen giua chung.
+ */
 eq(
-  "chi ke toan va chu so huu nap duoc tep",
+  "ai nap duoc tep",
   MOI_VAI_TRO.filter((r) => quyenCua(r).napFile),
-  ["OWNER", "KE_TOAN"],
+  ["OWNER", "KE_TOAN", "XUAT_KHO"],
+);
+dung(
+  "nap duoc tep khong co nghia la ghi duoc chieu nhap",
+  quyenCua("XUAT_KHO").napFile && !quyenCua("XUAT_KHO").ghiNhap,
+);
+dung(
+  "va van khong ghi duoc ton dau ky tu tep",
+  !ghiDuocGiaoDich("XUAT_KHO", "OPENING") && !ghiDuocGiaoDich("XUAT_KHO", "IN"),
 );
 // Ai DOANH THU duoc: chi ke toan va chu so huu.
 eq(

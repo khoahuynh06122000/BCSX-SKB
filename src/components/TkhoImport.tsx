@@ -44,6 +44,18 @@ import {
  */
 
 interface Props {
+  /**
+   * Người đang dùng có ghi được chiều NHẬP không.
+   *
+   * Tệp BBGN mang cả hai chiều: sheet T Kho có phần tồn đầu kỳ và hàng nhập,
+   * và phần ấy phải ghi TRƯỚC thì phần xuất mới có lô để trừ theo FIFO.
+   *
+   * Người xuất kho nạp được tệp nhưng không ghi được chiều nhập. Tệp không có
+   * phần nhập thì chạy bình thường; tệp CÓ phần nhập thì phải dừng lại và nói
+   * rõ, chứ bỏ qua phần nhập rồi ghi tiếp là mọi dòng xuất đều báo vượt tồn —
+   * người dùng nhìn vào không hiểu vì sao.
+   */
+  duocGhiNhap: boolean;
   products: Product[];
   partners: Partner[];
   /** Phần gán điểm bán đã lưu, ghép đè lên bảng gán sẵn trong code. */
@@ -95,6 +107,7 @@ function timSheetDungDuoc(
 }
 
 export default function TkhoImport({
+  duocGhiNhap,
   products,
   partners,
   diemBanOverrides,
@@ -273,8 +286,15 @@ export default function TkhoImport({
     ).size;
   }, [result]);
 
+  /**
+   * Tệp có phần nhập mà người dùng không ghi được chiều nhập — phải dừng.
+   *
+   * Xem ghi chú ở `duocGhiNhap`.
+   */
+  const vuongPhanNhap = !duocGhiNhap && (nhap?.drafts.length ?? 0) > 0;
+
   const taoGiaoDich = async () => {
-    if (!result?.drafts.length) return;
+    if (!result?.drafts.length || vuongPhanNhap) return;
     const loMoi = nhap?.drafts.length ? await onCreateNhap(nhap.drafts) : [];
     await onCreate(
       result.drafts.map((d) => ({
@@ -515,6 +535,25 @@ export default function TkhoImport({
             Tồn đầu kỳ và hàng nhập cũng lấy từ chính sheet này. Không có chúng
             thì mọi dòng xuất đều báo vượt tồn — lô chỉ sinh ra từ nhập.
           */}
+          {/*
+            Vướng phần nhập: nói rõ vì sao không tạo được, chứ đừng để nút
+            mờ đi mà không giải thích. Xếp NGAY TRÊN khối phần nhập để đọc liền
+            mạch: vì sao vướng, rồi vướng ở những dòng nào.
+          */}
+          {vuongPhanNhap && (
+            <div className="px-5 py-3 border-b border-rose-100 bg-rose-50">
+              <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest mb-1">
+                Không tạo được — tệp này có phần nhập
+              </p>
+              <p className="text-[11px] font-medium text-rose-900/80 leading-relaxed">
+                Sheet này có {nhap?.drafts.length} dòng tồn đầu kỳ / hàng nhập, mà
+                tài khoản nhân viên xuất kho chỉ ghi được chiều xuất. Bỏ qua phần
+                nhập rồi ghi tiếp thì mọi dòng xuất đều báo vượt tồn, vì lô chỉ sinh ra
+                từ giao dịch nhập. Nhờ kế toán hoặc chủ sở hữu nạp tệp này.
+              </p>
+            </div>
+          )}
+
           {nhap && nhap.drafts.length > 0 && (
             <div className="px-5 py-3 border-b border-slate-100 bg-blue-50/40">
               <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest mb-1">
@@ -638,7 +677,7 @@ export default function TkhoImport({
               </button>
               <button
                 onClick={taoGiaoDich}
-                disabled={busy}
+                disabled={busy || vuongPhanNhap}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200 disabled:opacity-40"
               >
                 {busy ? (

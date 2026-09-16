@@ -105,8 +105,16 @@ export interface Quyen {
   /**
    * Nạp tệp Excel hàng loạt (BBGN, T Kho, doanh thu).
    *
-   * Riêng kế toán và chủ sở hữu: nạp tệp là đổ hàng loạt vào sổ, sai một lần
-   * là hỏng nhiều dòng cùng lúc và phải dò ngược từng dòng để gỡ.
+   * Nạp tệp là đổ hàng loạt vào sổ: sai một lần là hỏng nhiều dòng cùng lúc và
+   * phải dò ngược từng dòng để gỡ. Vì vậy trước đây chỉ kế toán và chủ sở hữu.
+   *
+   * MỞ THÊM CHO `XUAT_KHO` (16/09/2026) vì tệp BBGN là tệp của chính họ.
+   *
+   * CỜ NÀY KHÔNG CHO GHI THÊM CHIỀU NÀO. Người xuất kho vẫn chỉ ghi được chiều
+   * xuất — máy chủ chặn, không phải giao diện. Nên chỗ nào nạp tệp mà ghi ra
+   * dòng NHẬP thì phải xét thêm `ghiNhap`, nếu không người dùng bấm vào chỉ
+   * nhận lỗi quyền giữa chừng. Xem `TkhoImport.tsx` và nút nạp tồn kho ở
+   * `App.tsx`.
    */
   napFile: boolean;
   /** Duyệt người dùng, đổi vai trò, xoá dữ liệu. */
@@ -158,7 +166,7 @@ export function quyenCua(role: UserRole | string): Quyen {
     // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
     // viec trong kho, khong dinh toi phan tien.
     case "XUAT_KHO":
-      return { ...KHONG, xemKho: true, ghiXuat: true };
+      return { ...KHONG, xemKho: true, ghiXuat: true, napFile: true };
     // Khối cung ứng: CHỈ XEM, và chỉ xem chiều xuất.
     case "DNC":
       return { ...KHONG, xemXuat: true };
@@ -207,7 +215,7 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
   {
     ma: "XUAT_KHO",
     ten: "Nhân viên xuất kho",
-    moTa: "Chỉ ghi được chiều xuất: xuất kho, hao hụt, đối tác và điểm bán. Xem được tồn kho, báo cáo và sổ số phiếu. KHÔNG thấy công nợ, hóa đơn, Đơn BNC, doanh thu và nhóm Dữ liệu.",
+    moTa: "Chỉ ghi được chiều xuất: xuất kho, hao hụt, đối tác và điểm bán. Nạp được tệp BBGN. Xem được tồn kho, báo cáo và sổ số phiếu. KHÔNG thấy công nợ, hóa đơn, Đơn BNC, doanh thu và nhóm Dữ liệu.",
   },
   {
     ma: "DNC",

@@ -6730,8 +6730,15 @@ export default function App() {
               Chỉ còn nút nạp Excel tồn kho — nó vốn nằm nhờ trong thanh này chứ
               không thuộc về bộ lọc, nên giữ lại và cho đứng riêng.
             */}
+            {/*
+              Nút này ghi ra TOÀN BỘ là dòng nhập, nên phải có cả `ghiNhap`.
+              Chỉ xét `napFile` thì người xuất kho thấy nút, bấm vào, rồi nhận
+              lỗi quyền từ máy chủ — bày một nút không bao giờ chạy được còn tệ
+              hơn là không bày.
+            */}
             {isAuthorizedFull &&
               quyen.napFile &&
+              quyen.ghiNhap &&
               activeTab === "dashboard" && (
                 <div className="flex justify-end">
                   <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
@@ -9768,6 +9775,7 @@ export default function App() {
                 {activeTab === "export" && quyen.napFile && (
                   <Card title="Nạp xuất kho từ file BBGN">
                     <TkhoImport
+                      duocGhiNhap={quyen.ghiNhap}
                       products={products}
                       partners={partners}
                       diemBanOverrides={diemBanOverrides}
