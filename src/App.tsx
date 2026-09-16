@@ -2358,7 +2358,18 @@ export default function App() {
               evidencePhotoUrls: [],
               createdBy: user || "Guest",
               referenceGroupId,
-              status: "completed",
+              /*
+               * HAO HỤT CHỜ CÙNG ĐƠN, không ghi nhận trước.
+               *
+               * Trước đây dòng hao hụt luôn là `completed` trong khi dòng xuất
+               * của chính nó còn `in_transit`. Hàng chưa xác nhận giao mà báo
+               * cáo đã tính hao hụt — người dùng mở báo cáo ra thấy hao hụt
+               * của một chuyến chưa ai ký nhận.
+               *
+               * Nó được lật sang `completed` cùng lúc đơn đi đường được xác
+               * nhận — xem `handleReportLoss`.
+               */
+              status: quaDiDuong ? "in_transit" : "completed",
               originalQuantity: a.quantity,
             };
             batch.set(doc(db, "transactions", idHao), tHao);
@@ -3653,6 +3664,23 @@ export default function App() {
   const [confirmationPhoto, setConfirmationPhoto] = useState<string>("");
   const [showLossModal, setShowLossModal] = useState(false);
 
+  /**
+   * Hao hụt đang CHỜ theo từng đơn đi đường, cộng theo `referenceGroupId`.
+   *
+   * Dòng hao hụt cố ý không nằm trong thẻ đơn (nó không phải hàng giao cho đối
+   * tác), nhưng phải nói ra là có — nếu không người dùng xác nhận xong mới thấy
+   * báo cáo mọc thêm một khoản hao hụt không rõ từ đâu.
+   */
+  const haoHutChoTheoDon = useMemo(() => {
+    const m = new Map<string, number>();
+    transactions.forEach((t) => {
+      if (!laDongHaoHut(t) || t.status !== "in_transit") return;
+      const k = t.referenceGroupId || t.id;
+      m.set(k, (m.get(k) || 0) + (Number(t.quantity) || 0));
+    });
+    return m;
+  }, [transactions]);
+
   const inTransitGroups = useMemo(() => {
     const groups: Record<string, Transaction[]> = {};
     const sortedAll = [...transactions].sort(
@@ -3669,8 +3697,19 @@ export default function App() {
       }
     });
 
+    /*
+     * CHỈ GOM DÒNG GIAO, KHÔNG GOM DÒNG HAO HỤT.
+     *
+     * Thẻ đơn đi đường hiện "SL gửi" và "N mặt hàng" bằng cách cộng cả nhóm,
+     * và ô "Thực nhận" trong khung xác nhận cũng dựng từ đây. Để dòng hao hụt
+     * lọt vào thì số gửi bị thổi lên và người dùng bị hỏi "đối tác nhận được
+     * bao nhiêu phần hao hụt" — một câu vô nghĩa.
+     *
+     * Hao hụt vẫn được lật sang đã xong cùng lúc với đơn, theo
+     * `referenceGroupId` — xem `handleReportLoss`.
+     */
     transactions
-      .filter((t) => t.status === "in_transit")
+      .filter((t) => t.status === "in_transit" && !laDongHaoHut(t))
       .forEach((t) => {
         const key = t.referenceGroupId || t.id;
         if (!groups[key]) groups[key] = [];
@@ -3808,6 +3847,7 @@ export default function App() {
     const trxsToConfirm = transactions.filter(
       (t) =>
         t.status === "in_transit" &&
+        !laDongHaoHut(t) &&
         t.referenceGroupId &&
         selectedInTransitIds.includes(t.referenceGroupId),
     );
@@ -4164,10 +4204,47 @@ export default function App() {
         }
       }
 
-      await batch.commit();
+      /*
+       * LẬT LUÔN HAO HỤT ĐI KÈM ĐƠN NÀY SANG ĐÃ XONG.
+       *
+       * Hao hụt đọc từ tệp BBGN được ghi sẵn lúc nạp nhưng để `in_transit`,
+       * chờ đúng lúc này. Không lật thì nó treo mãi ở trạng thái đi đường và
+       * không bao giờ vào báo cáo, dù đơn đã xác nhận xong.
+       *
+       * Khớp theo CẢ nhóm chứng từ VÀ mặt hàng: xác nhận có thể chỉ khớp được
+       * một phần mặt hàng trong đơn, và hao hụt của mặt hàng chưa khớp thì
+       * phải tiếp tục chờ lượt sau.
+       */
+      const daXacNhan = new Set(
+        trxsToConfirm
+          .filter((t) => t.referenceGroupId)
+          .map((t) => `${t.referenceGroupId}|${t.productId}`),
+      );
+      const haoChoTheo = transactions.filter(
+        (t) =>
+          laDongHaoHut(t) &&
+          t.status === "in_transit" &&
+          t.referenceGroupId &&
+          daXacNhan.has(`${t.referenceGroupId}|${t.productId}`),
+      );
+      if (haoChoTheo.length > 0) {
+        const batchHao = writeBatch(db);
+        haoChoTheo.forEach((t) => {
+          batchHao.update(doc(db, "transactions", t.id), {
+            status: "completed",
+            date: scannedInvoiceDate || t.date,
+            updatedAt: now,
+          });
+        });
+        await batchHao.commit();
+      }
 
       showNotification(
-        `Xác nhận thành công ${trxsToConfirm.length} đơn. Còn ${selectedInTransitGroup.length - trxsToConfirm.length} đơn chưa có trên phiếu vẫn giữ nguyên.`,
+        `Xác nhận thành công ${trxsToConfirm.length} đơn` +
+          (haoChoTheo.length > 0
+            ? `, kèm ${haoChoTheo.length} dòng hao hụt`
+            : "") +
+          `. Còn ${selectedInTransitGroup.length - trxsToConfirm.length} đơn chưa có trên phiếu vẫn giữ nguyên.`,
       );
 
       setShowLossModal(false);
@@ -5221,7 +5298,9 @@ export default function App() {
     const productPriceMap = new Map(products.map((p) => [p.id, p.price]));
 
     filteredTransactionsForReport.forEach((t) => {
-      if (t.type === "OUT" && t.status === "in_transit") return;
+      // Đang đi đường thì chưa tính — hao hụt đi kèm đơn cũng vậy, nên chặn
+      // theo TRẠNG THÁI chứ không theo loại.
+      if (t.status === "in_transit") return;
 
       const entry = summaryMap.get(t.productId);
       if (entry) {
@@ -5281,7 +5360,7 @@ export default function App() {
      */
     countedTransactions.forEach((t) => {
       // Don't subtract from closing stock if it's still in transit
-      if (t.type === "OUT" && t.status === "in_transit") return;
+      if (t.status === "in_transit") return;
 
       const entry = summaryMap.get(t.productId);
       if (entry) {
@@ -5537,9 +5616,8 @@ export default function App() {
       if (t.type === "IN") {
         totalIn += t.quantity;
       } else if (
-        (t.type === "OUT" && t.status !== "in_transit") ||
-        t.type === "LOSS" ||
-        t.type === "DAMAGE"
+        t.status !== "in_transit" &&
+        (t.type === "OUT" || t.type === "LOSS" || t.type === "DAMAGE")
       ) {
         totalOut += t.quantity;
       }
@@ -9117,6 +9195,17 @@ export default function App() {
                               <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-tighter text-slate-500">
                                 {group.length} mặt hàng
                               </span>
+                              {/*
+                                Hao hụt chờ theo đơn: không nằm trong "SL gửi"
+                                vì nó không giao cho đối tác, nhưng phải nói ra
+                                là có — xác nhận đơn là nó được ghi nhận theo.
+                              */}
+                              {(haoHutChoTheoDon.get(id) || 0) > 0 && (
+                                <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-black uppercase tracking-tighter text-amber-700">
+                                  Kèm hao hụt{" "}
+                                  {formatNumber(haoHutChoTheoDon.get(id) || 0)}
+                                </span>
+                              )}
                             </div>
 
                             {combinedNotes && (
