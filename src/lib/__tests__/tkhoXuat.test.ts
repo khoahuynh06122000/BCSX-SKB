@@ -489,5 +489,90 @@ eq("o trong", docCotHaoHut(""), { laHao: false, tenGoc: "" });
   eq("hao hut mat hang 2", kq.drafts.find((d) => d.productId === "p4")!.haoHut, 6);
 }
 
+/*
+ * O TIEU DE CHI GHI "hao hut", KHONG KEM TEN DIEM BAN.
+ *
+ * Day dung la cach tep that duoc ghi:
+ *
+ *     ... | DRAFF BIA | hao hut | SAN GON | hao hut | ...
+ *              100    |    3    |   140   |   4.2   |
+ *
+ * Ban dau app do theo TEN: "hao hut" bo phan danh dau ra con lai chuoi rong,
+ * khong khop duoc diem ban nao, va ca ba cot hao hut cua tep roi het vao danh
+ * sach "lac" — tuc la im lang mat 16,2 lit. Nay gan theo VI TRI COT.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "04.09.26", null, null, null],
+    [null, null, null, "Draff Bia", "hao hụt", "SW Ha Long", "hao hụt"],
+    ["10168107", "Bia hoi", "lit", 100, 3, 140, 4.2],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("hai chuyen, khong dong hao hut rieng", kq.drafts.length, 2);
+  eq("khong co hao hut lac", kq.haoHutLac.length, 0);
+
+  const draff = kq.drafts.find((d) => d.outlet.toLowerCase().includes("draff"))!;
+  eq("draff giu so giao", draff.quantity, 100);
+  eq("draff dinh dung hao hut", draff.haoHut, 3);
+
+  const hl = kq.drafts.find((d) => d.outlet.includes("Ha Long"))!;
+  eq("ha long giu so giao", hl.quantity, 140);
+  eq("ha long dinh dung hao hut", hl.haoHut, 4.2);
+}
+
+/*
+ * COT HAO HUT TRONG TEN GAN THEO COT LIEN TRUOC, KHONG PHAI THEO TEN TRUNG.
+ *
+ * Cung mot diem ban nhan hai chuyen trong mot ngay: hao hut phai thuoc ve dung
+ * chuyen ngay ben trai no. Do theo ten thi khong phan biet duoc hai chuyen.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "12.09.26", null, null, null],
+    [null, null, null, "SW Ha Long", "hao hụt", "SW Ha Long", "hao hụt"],
+    ["10168107", "Bia hoi", "lit", 61.8, 1, 123.6, 2],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("van la hai chuyen", kq.drafts.length, 2);
+  const c1 = kq.drafts.find((d) => d.quantity === 61.8)!;
+  const c2 = kq.drafts.find((d) => d.quantity === 123.6)!;
+  eq("hao hut chuyen dau", c1.haoHut, 1);
+  eq("hao hut chuyen sau", c2.haoHut, 2);
+}
+
+/*
+ * COT HAO HUT DUNG DAU BANG, KHONG CO CHUYEN NAO BEN TRAI.
+ *
+ * Phai bao ra chu khong duoc gan bua vao chuyen nao do.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "04.09.26", null],
+    [null, null, null, "hao hụt", "Draff Bia"],
+    ["10168107", "Bia hoi", "lit", 5, 100],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("chi mot chuyen", kq.drafts.length, 1);
+  eq("chuyen khong dinh hao hut", kq.drafts[0].haoHut, undefined);
+  eq("bao hao hut lac", kq.haoHutLac.length, 1);
+  eq("hao hut lac giu so", kq.haoHutLac[0].soLuong, 5);
+}
+
+/*
+ * COT CHA KHONG DOC DUOC (diem ban la) thi hao hut phai BAO LAC.
+ *
+ * Im lang bo di la ton kho cao hon thuc te.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "04.09.26", null],
+    [null, null, null, "Diem La Chua Gan", "hao hụt"],
+    ["10168107", "Bia hoi", "lit", 100, 3],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("khong dung duoc chuyen nao", kq.drafts.length, 0);
+  eq("van bao hao hut lac", kq.haoHutLac.length, 1);
+}
+
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

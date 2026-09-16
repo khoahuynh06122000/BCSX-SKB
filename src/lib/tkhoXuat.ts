@@ -396,6 +396,52 @@ export function parseTkhoXuat(
     ngayCua[c] = cur;
   }
 
+  /*
+   * ĐỌC TRƯỚC DẤU HAO HỤT CHO TỪNG CỘT, và cột nào là CHUYẾN GIAO CHA của nó.
+   *
+   * VÌ SAO GẮN THEO VỊ TRÍ CỘT CHỨ KHÔNG THEO TÊN. Trong tệp thật, ô tiêu đề
+   * của cột hao hụt chỉ ghi đúng hai chữ "hao hụt", KHÔNG kèm tên điểm bán:
+   *
+   *     ... | DRAFF BIA | hao hụt | SÂN GÔN | hao hụt | ...
+   *              100    |    3    |   140   |   4.2   |
+   *
+   * Dò theo tên thì "hao hụt" bỏ phần đánh dấu ra còn lại chuỗi rỗng, không
+   * khớp được điểm bán nào, và cả ba cột hao hụt của tệp rơi hết vào danh sách
+   * "lạc" — tức là im lặng mất. Cột hao hụt luôn nằm ngay bên phải chuyến giao
+   * của nó, nên vị trí cột là căn cứ chắc chắn nhất.
+   *
+   * Vẫn tôn trọng tên khi người ghi có đặt ("SW Hạ Long - HH"): nếu tên ấy
+   * không phải tên của cột cha liền trước thì lùi tiếp sang trái tìm đúng cột
+   * mang tên đó. Nhờ vậy cả hai cách ghi đều chạy.
+   */
+  const laHaoCot: boolean[] = [];
+  const tenGocCot: string[] = [];
+  const cotCha: number[] = [];
+  {
+    let chaGanNhat = -1;
+    for (let c = start; c < end; c++) {
+      const { laHao, tenGoc } = docCotHaoHut(S(rDiem[c]));
+      laHaoCot[c] = laHao;
+      tenGocCot[c] = laHao ? tenGoc : S(rDiem[c]);
+      if (laHao) {
+        let cha = chaGanNhat;
+        // Có tên riêng mà không khớp cột cha liền trước thì lùi tìm đúng cột.
+        if (tenGoc && cha >= start && key(tenGocCot[cha]) !== key(tenGoc)) {
+          for (let k = c - 1; k >= start; k--) {
+            if (!laHaoCot[k] && key(tenGocCot[k]) === key(tenGoc)) {
+              cha = k;
+              break;
+            }
+          }
+        }
+        cotCha[c] = cha;
+      } else {
+        cotCha[c] = -1;
+        chaGanNhat = c;
+      }
+    }
+  }
+
   const byCode = new Map<string, Product>();
   products.forEach((p) => {
     if (p.materialCode) byCode.set(S(p.materialCode), p);
@@ -440,29 +486,27 @@ export function parseTkhoXuat(
       }
 
       const oTen = S(rDiem[c]);
-      const { laHao, tenGoc } = docCotHaoHut(oTen);
-      const tenDiem = laHao ? tenGoc : oTen;
+      const tenDiem = tenGocCot[c];
 
       /*
-       * CỘT HAO HỤT GẮN VÀO CHUYẾN GIAO GẦN NHẤT BÊN TRÁI, không tạo dòng mới.
+       * CỘT HAO HỤT GẮN VÀO ĐÚNG CỘT CHUYẾN GIAO CỦA NÓ, không tạo dòng mới.
        *
-       * Cùng mặt hàng, cùng ngày, cùng điểm bán. Đi từ cuối danh sách ngược
-       * lên nên gặp đúng chuyến vừa đọc — một ngày có thể có hai chuyến cho
-       * cùng điểm bán, và hao hụt thuộc về chuyến ngay trước nó.
+       * Khớp bằng SỐ CỘT chứ không bằng tên: một điểm bán có thể nhận hai
+       * chuyến trong cùng một ngày (NH 1901 ngày 12.09 có 61,8 rồi 123,6), và
+       * hao hụt thuộc về đúng chuyến ngay bên trái nó chứ không phải chuyến
+       * nào trùng tên.
+       *
+       * Không gắn được thì BÁO RA, không lặng lẽ bỏ: người ghi đánh dấu một
+       * cột là hao hụt nghĩa là họ đang nói có phần mất thật.
        */
-      if (laHao) {
-        let gan = -1;
-        for (let i = drafts.length - 1; i >= 0; i--) {
-          const d = drafts[i];
-          if (
-            d.dateKey === dateKey &&
-            d.productId === product.id &&
-            key(d.outlet) === key(tenDiem)
-          ) {
-            gan = i;
-            break;
-          }
-        }
+      if (laHaoCot[c]) {
+        const cha = cotCha[c];
+        const gan =
+          cha >= 0
+            ? drafts.findIndex(
+                (d) => d.cot === cha && d.productId === product.id,
+              )
+            : -1;
         if (gan < 0) {
           haoHutLac.push({
             ten: oTen,
