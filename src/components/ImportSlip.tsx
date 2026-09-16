@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Printer,
   Camera,
@@ -9,6 +10,8 @@ import {
   Upload,
   X,
   ImageOff,
+  RotateCcw,
+  RotateCw,
   ZoomIn,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -89,6 +92,29 @@ export default function ImportSlipPanel({
    * mất và cần đi tìm tờ giấy.
    */
   const [anhHong, setAnhHong] = useState<Set<string>>(new Set());
+  /** Góc xoay ảnh đang xem: 0 · 90 · 180 · 270 độ. */
+  const [gocXoay, setGocXoay] = useState(0);
+
+  /** Mở một ảnh: luôn bắt đầu ở góc 0, không giữ góc của ảnh trước. */
+  const moAnh = (url: string) => {
+    setGocXoay(0);
+    setPreviewPhoto(url);
+  };
+
+  /*
+   * Bấm Esc để đóng.
+   *
+   * Khung ảnh phủ kín màn hình, mà chuột lúc đó thường đang ở giữa ảnh — với
+   * người quen dùng bàn phím thì Esc nhanh hơn đi tìm nút Đóng.
+   */
+  useEffect(() => {
+    if (!previewPhoto) return;
+    const khiBam = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewPhoto(null);
+    };
+    window.addEventListener("keydown", khiBam);
+    return () => window.removeEventListener("keydown", khiBam);
+  }, [previewPhoto]);
   const danhDauHong = (url: string) =>
     setAnhHong((cu) => (cu.has(url) ? cu : new Set(cu).add(url)));
 
@@ -351,7 +377,7 @@ export default function ImportSlipPanel({
                           chuột lên thì phủ một lớp tối kèm icon phóng to.
                         */}
                         <button
-                          onClick={() => setPreviewPhoto(url)}
+                          onClick={() => moAnh(url)}
                           title="Bấm để xem ảnh lớn"
                           className="relative block w-[72px] h-[72px] rounded-xl overflow-hidden border border-slate-200 bg-white cursor-zoom-in hover:border-primary hover:ring-2 hover:ring-primary/20 transition-all"
                         >
@@ -422,55 +448,118 @@ export default function ImportSlipPanel({
         />
       )}
 
-      {/* ---------- Xem ảnh phiếu đã ký cỡ lớn ---------- */}
-      {previewPhoto && (
-        <div
-          onClick={() => setPreviewPhoto(null)}
-          className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 print:hidden"
-        >
+      {/*
+        KHUNG XEM ẢNH ĐƯA THẲNG RA `document.body` BẰNG PORTAL.
+
+        Trước đây nó nằm ngay trong cây của bảng phiếu, và `position: fixed`
+        không bám vào màn hình mà bám vào khung cha — lớp phủ chỉ trùm được
+        vùng nội dung, ảnh rơi xuống dưới mép màn hình nên phải lăn chuột mới
+        thấy. Bất kỳ tổ tiên nào có `transform`, `filter` hay `contain` đều gây
+        ra chuyện đó, và cây giao diện thì còn sửa dài dài.
+
+        Cắm thẳng vào `body` là hết hẳn loại lỗi này, không phải đi dò xem tổ
+        tiên nào đang phá.
+      */}
+      {previewPhoto &&
+        createPortal(
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative max-w-4xl w-full max-h-full flex flex-col gap-3"
+            onClick={() => setPreviewPhoto(null)}
+            className="fixed inset-0 z-[300] flex flex-col items-center justify-center gap-3 bg-slate-900/85 p-4 backdrop-blur-sm print:hidden"
           >
             {anhHong.has(previewPhoto) ? (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-white px-6 py-16 text-center">
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex max-w-lg flex-col items-center justify-center gap-3 rounded-2xl bg-white px-6 py-16 text-center"
+              >
                 <ImageOff className="h-10 w-10 text-rose-400" />
                 <p className="text-sm font-black text-slate-900">
                   Không tải được ảnh này
                 </p>
-                <p className="max-w-md text-xs font-medium leading-relaxed text-slate-500">
+                <p className="text-xs font-medium leading-relaxed text-slate-500">
                   Đường dẫn vẫn còn trong sổ nhưng tệp ảnh không còn ở máy chủ
                   ảnh. Tờ phiếu giấy đã ký vẫn là chứng từ gốc — tra lại ở bản
                   lưu giấy.
                 </p>
               </div>
             ) : (
-              <img
-                src={previewPhoto}
-                alt="Phiếu đã ký"
-                onError={() => danhDauHong(previewPhoto)}
-                className="w-full max-h-[80vh] object-contain rounded-2xl bg-white"
-              />
+              /*
+                Ảnh co theo chỗ còn lại (`flex-1` + `min-h-0`) nên luôn nằm gọn
+                trong màn hình, không đẩy hàng nút xuống dưới mép.
+
+                XOAY 90 HAY 270 THÌ RÀNG BUỘC ĐỔI CHIỀU: sau khi xoay, bề ngang
+                nhìn thấy chính là bề cao của ảnh. Nên lúc đó phải chặn bề ngang
+                ảnh bằng chiều CAO màn hình, không thì ảnh thò ra hai bên.
+              */
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden"
+              >
+                <img
+                  src={previewPhoto}
+                  alt="Phiếu đã ký"
+                  onError={() => danhDauHong(previewPhoto)}
+                  style={{ transform: `rotate(${gocXoay}deg)` }}
+                  className={cn(
+                    "rounded-2xl bg-white object-contain transition-transform duration-200",
+                    /*
+                      CHẶN KÍCH THƯỚC THEO MÀN HÌNH, KHÔNG THEO KHUNG CHA.
+                      `max-h-full` là 100% chiều cao của khung cha, mà khung cha
+                      lại co theo chính tấm ảnh — vòng tròn, nên trình duyệt bỏ
+                      qua ràng buộc và ảnh hiện nguyên cỡ thật. Đó là lý do ảnh
+                      cao 1.200px thò xuống dưới mép màn hình.
+
+                      `7rem` chừa cho lề trên dưới và hàng nút bên dưới ảnh.
+                    */
+                    gocXoay % 180 === 0
+                      ? "max-h-[calc(100vh-7rem)] max-w-[calc(100vw-2rem)]"
+                      : // Xoay 90 hay 270 thì bề ngang nhìn thấy chính là bề
+                        // CAO của ảnh, nên hai ràng buộc phải đổi chỗ cho nhau.
+                        "max-h-[calc(100vw-2rem)] max-w-[calc(100vh-7rem)]",
+                  )}
+                />
+              </div>
             )}
-            <div className="flex items-center justify-center gap-2">
+
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex shrink-0 flex-wrap items-center justify-center gap-2"
+            >
+              {!anhHong.has(previewPhoto) && (
+                <>
+                  <button
+                    onClick={() => setGocXoay((g) => (g + 270) % 360)}
+                    title="Xoay trái 90 độ"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/20"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Xoay trái
+                  </button>
+                  <button
+                    onClick={() => setGocXoay((g) => (g + 90) % 360)}
+                    title="Xoay phải 90 độ"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/20"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" /> Xoay phải
+                  </button>
+                </>
+              )}
               <a
                 href={previewPhoto}
                 target="_blank"
                 rel="noreferrer"
-                className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition-all"
+                className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/20"
               >
                 Mở ảnh gốc
               </a>
               <button
                 onClick={() => setPreviewPhoto(null)}
-                className="px-4 py-2 rounded-xl bg-white text-slate-900 text-[10px] font-black uppercase tracking-widest hover:brightness-95 transition-all flex items-center gap-1.5"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-900 transition-all hover:brightness-95"
               >
-                <X className="w-3.5 h-3.5" /> Đóng
+                <X className="h-3.5 w-3.5" /> Đóng
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
