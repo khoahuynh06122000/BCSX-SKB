@@ -213,7 +213,12 @@ import DonBNC from "./components/DonBNC";
 import ManHinhDangNhap from "./components/ManHinhDangNhap";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
 import type { GhiSoPhieu } from "./lib/soPhieu";
-import { KHO_SO_PHIEU, capSoPhieu, huyPhieu } from "./lib/soPhieuKho";
+import {
+  KHO_BO_DEM,
+  KHO_SO_PHIEU,
+  capSoPhieu,
+  huyPhieu,
+} from "./lib/soPhieuKho";
 
 import ONgay from "./components/ONgay";
 
@@ -1695,7 +1700,7 @@ export default function App() {
     if (!isOwner) return;
 
     const confirmReset = window.confirm(
-      `Xoá sạch ${transactions.length} giao dịch và ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký)?\n\nĐối tác và danh mục sản phẩm được giữ lại.\n\nKhông khôi phục lại được.`,
+      `Xoá sạch ${transactions.length} giao dịch, ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký) và ${soPhieu.length} dòng trong Sổ số phiếu?\n\nBộ đếm số phiếu cũng đặt lại, nên số phiếu sau khi dọn sẽ đánh lại từ đầu.\n\nĐối tác và danh mục sản phẩm được giữ lại.\n\nKhông khôi phục lại được.`,
     );
 
     if (!confirmReset) return;
@@ -1713,10 +1718,27 @@ export default function App() {
        *
        * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại
        * còn dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
+       *
+       * XOÁ CẢ SỔ SỐ PHIẾU VÀ BỘ ĐẾM.
+       *
+       * Sổ số phiếu dựng sau (31/08/2026) và không ai thêm nó vào lệnh dọn,
+       * nên "dọn sạch" xong tab Sổ số phiếu vẫn còn nguyên một sổ đầy số trỏ
+       * vào những chứng từ không còn tồn tại. Đúng cái tật "sạch một nửa" mà
+       * đoạn ghi chú trên đã nói.
+       *
+       * Bộ đếm phải xoá theo, nếu không thì sau khi dọn, phiếu xuất đầu tiên
+       * không đánh lại từ 01 mà chạy tiếp con số cũ — người dùng nhìn sổ trống
+       * mà số phiếu bắt đầu từ giữa chừng thì không hiểu nổi.
        */
+      const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
+
       const canXoa: [string, string][] = [
         ...transactions.filter((t) => t.id).map((t) => ["transactions", t.id] as [string, string]),
         ...slips.filter((s) => s.id).map((s) => ["slips", s.id] as [string, string]),
+        ...soPhieu
+          .filter((g) => g.soPhieu)
+          .map((g) => [KHO_SO_PHIEU, g.soPhieu] as [string, string]),
+        ...snapBoDem.docs.map((d) => [KHO_BO_DEM, d.id] as [string, string]),
       ];
 
       if (canXoa.length === 0) {
@@ -1747,7 +1769,7 @@ export default function App() {
 
       setLoading(false);
       showNotification(
-        `Đã xoá ${transactions.length} giao dịch và ${slips.length} phiếu`,
+        `Đã xoá ${transactions.length} giao dịch, ${slips.length} phiếu nhập và ${soPhieu.length} dòng sổ số phiếu`,
       );
     } catch (error) {
       console.error("Hard Reset Error:", error);

@@ -385,28 +385,24 @@ service cloud.firestore {
         && request.resource.data.trangThai == 'da_huy';
 
       /*
-       * XOA - mot khe RAT HEP, chi de doi so phieu nhap kieu cu.
+       * XOA - CHI CHU SO HUU.
        *
-       * Nguyen tac cua so nay la KHONG XOA DUOC GI. Nhung sau khi doi cach
-       * danh so (15/09/2026), nhung phieu nhap cu mang so kieu cu 51... trong
-       * khi to giay in ma PN-... Doi lai la tao tai lieu moi roi xoa tai lieu
-       * cu, vi khoa tai lieu chinh la so phieu.
+       * Truoc day la `if false`: so chung tu khong xoa duoc gi het. Nhung co
+       * hai viec that can toi no, va ca hai deu la viec cua chu so huu:
        *
-       * BA DIEU KIEN CUNG LUC, de khe nay khong bi dung vao viec khac:
+       *   1. DOI SO PHIEU NHAP KIEU CU sang dung ma phieu in ra giay. Doi so
+       *      la tao tai lieu moi roi xoa tai lieu cu, vi khoa tai lieu chinh
+       *      la so phieu.
+       *   2. DON SACH HE THONG. Truoc day lenh don chi xoa `transactions` va
+       *      `slips`, de nguyen so so phieu - don xong tab So so phieu van con
+       *      nguyen mot so day so tro vao nhung chung tu khong con ton tai.
        *
-       *   1. Chi CHU SO HUU.
-       *   2. Chi ban ghi chieu NHAP. Phieu xuat giu nguyen so cu vi 60... la
-       *      so duy nhat no tung co - khong co to giay nao mang so khac de
-       *      khop ve.
-       *   3. Chi so KIEU CU (toan chu so). So kieu moi PN-/PX- va moi thu da
-       *      dung chuan thi khong xoa duoc, ke ca chu so huu.
-       *
-       * Xoa xong het thi nen dat lai thanh `if false`.
+       * VI SAO MO CHO CHU SO HUU LA CHAP NHAN DUOC. Chu so huu von da xoa duoc
+       * moi giao dich va moi phieu nhap; giu rieng so so phieu lai khong bao ve
+       * duoc gi ma chi lam ra mot cuon so lech voi phan con lai. Moi vai tro
+       * khac van khong xoa duoc mot dong nao.
        */
-      allow delete: if isOwner()
-        && (resource.data.loai == 'NHAP' || resource.data.loai == 'HUY_NHAP')
-        && resource.data.soPhieu is string
-        && resource.data.soPhieu.matches('^[0-9]+$');
+      allow delete: if isOwner();
     }
 
     /*
@@ -419,7 +415,17 @@ service cloud.firestore {
     match /bo_dem/{khoa} {
       allow read: if xemKho();
       allow create, update: if ghiNhapKho() || ghiXuatKho();
-      allow delete: if false;
+      /*
+       * Xoa: CHI CHU SO HUU, va chi de phuc vu lenh don sach he thong.
+       *
+       * Don sach ma de nguyen bo dem thi phieu xuat dau tien sau do khong danh
+       * lai tu 01 ma chay tiep con so cu - nguoi dung nhin so trong ma so phieu
+       * bat dau tu giua chung thi khong hieu noi.
+       *
+       * Ngoai lenh don thi khong bao gio duoc xoa: xoa bo dem luc dang chay la
+       * lan cap so sau bat dau lai tu 01 va trung voi so da in ra giay.
+       */
+      allow delete: if isOwner();
     }
   }
 }
