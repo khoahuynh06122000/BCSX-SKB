@@ -7942,22 +7942,15 @@ export default function App() {
                                           {t.category}
                                         </div>
                                         {/*
-                                          Nhãn phải THEO CHIỀU ĐANG XEM.
+                                          ĐÃ BỎ nhãn chữ "Cùng một lượt nhập /
+                                          xuất" dưới tên mặt hàng (16/09/2026).
 
-                                          Bảng này dùng chung cho cả báo cáo
-                                          nhập lẫn báo cáo xuất, mà nhãn cũ
-                                          viết cứng "lệnh xuất gộp" — nên ở
-                                          báo cáo NHẬP nó nói dòng hàng vừa
-                                          nhập về là một phần của lệnh xuất,
-                                          đúng thứ làm người đọc dừng lại hỏi.
+                                          Vạch vàng bên trái và icon xếp lớp đã
+                                          nói đủ những dòng nào đi cùng một
+                                          lượt, lại không chiếm dòng nào của
+                                          bảng. Thêm một dòng chữ nữa cho mỗi
+                                          dòng hàng chỉ làm bảng dài ra.
                                         */}
-                                        {isGrouped && (
-                                          <div className="text-[8px] font-black text-amber-600 uppercase tracking-tighter mt-1 bg-amber-100/50 w-fit px-1 rounded">
-                                            {reportSubTab === "in"
-                                              ? "Cùng một lượt nhập"
-                                              : "Cùng một lượt xuất"}
-                                          </div>
-                                        )}
                                       </div>
                                     </td>
                                     <td className="py-4 px-6 text-right">
