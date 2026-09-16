@@ -36,6 +36,7 @@ import {
   type Firestore,
 } from "firebase/firestore";
 import {
+  DAU_SO,
   MA_LOAI,
   canTroHuy,
   docSoPhieu,
@@ -249,6 +250,27 @@ export async function huyPhieu(
     tx.update(refGoc, { trangThai: "da_huy", huyBoi: soHuy });
     return ghi;
   });
+}
+
+/**
+ * Tài liệu bộ đếm này có thuộc CHIỀU XUẤT không.
+ *
+ * Dùng khi xoá toàn bộ giao dịch xuất: xoá phiếu mà để nguyên bộ đếm thì lần
+ * nạp lại sau không đánh từ 01 mà chạy tiếp con số cũ, người dùng nhìn sổ
+ * trống mà số phiếu bắt đầu từ giữa chừng thì không hiểu nổi.
+ *
+ * Nhận cả hai kiểu đánh số vì bộ đếm cũ vẫn còn nằm đó: kiểu đang dùng
+ * (`sophieu-PX-260904`) và kiểu cũ theo đầu số (`sophieu-60-26`, `sophieu-61-26`
+ * cho phiếu hủy).
+ *
+ * Dò theo TIỀN TỐ CHÍNH XÁC chứ không phải "có chứa": một bộ đếm bên nhập mà
+ * lỡ mang chữ PX ở giữa tên thì không được dính vào đây.
+ */
+export function laBoDemChieuXuat(id: string): boolean {
+  const s = String(id ?? "");
+  return [MA_LOAI.XUAT, DAU_SO.XUAT, DAU_SO.HUY_XUAT].some((ma) =>
+    s.startsWith(`sophieu-${ma}-`),
+  );
 }
 
 /**

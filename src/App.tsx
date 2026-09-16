@@ -217,6 +217,7 @@ import {
   KHO_BO_DEM,
   KHO_SO_PHIEU,
   capSoPhieu,
+  laBoDemChieuXuat,
   huyPhieu,
 } from "./lib/soPhieuKho";
 
@@ -1789,6 +1790,95 @@ export default function App() {
         );
       }
       setLoading(false);
+    }
+  };
+
+  /**
+   * Danh sách giao dịch thuộc CHIỀU XUẤT.
+   *
+   * Gồm cả hao hụt và hư hại: đó cũng là bia đã ra khỏi kho, xoá đơn xuất mà
+   * để lại dòng hao hụt của chính đơn ấy thì tồn kho hụt đúng bằng phần hao
+   * hụt mồ côi, và không dòng nào giải thích được.
+   *
+   * Gồm cả đơn ĐANG ĐI ĐƯỜNG: chúng là đơn xuất chưa xác nhận, không phải một
+   * loại khác.
+   */
+  const LOAI_CHIEU_XUAT = ["OUT", "LOSS", "DAMAGE"];
+
+  /**
+   * XOÁ TOÀN BỘ GIAO DỊCH XUẤT KHO — để nạp lại từ đầu.
+   *
+   * Tách khỏi "Dọn sạch": dọn sạch xoá cả nhập kho, tồn đầu kỳ và phiếu đã ký,
+   * trong khi việc thường gặp là nạp nhầm một tệp xuất rồi muốn nạp lại. Bắt
+   * người dùng dọn sạch cả kho để sửa một tệp xuất là mất luôn phần nhập vốn
+   * không có gì sai.
+   *
+   * XOÁ THEO CẢ SỔ SỐ PHIẾU VÀ BỘ ĐẾM BÊN XUẤT. Để lại thì sổ trỏ vào những
+   * chứng từ không còn tồn tại, và lần nạp lại sau không đánh số từ 01 mà chạy
+   * tiếp con số cũ. Chỉ đụng bên xuất — bộ đếm bên nhập giữ nguyên, vì số phiếu
+   * nhập đã in ra giấy và cấp lại là trùng số thật.
+   */
+  const handleXoaToanBoXuat = async () => {
+    if (!isOwner) return;
+
+    const dsXuat = transactions.filter(
+      (t) => t.id && LOAI_CHIEU_XUAT.includes(t.type),
+    );
+    const dsSo = soPhieu.filter(
+      (g) => g.soPhieu && (g.loai === "XUAT" || g.loai === "HUY_XUAT"),
+    );
+
+    if (dsXuat.length === 0 && dsSo.length === 0) {
+      showNotification("Hiện không có giao dịch xuất kho nào để xoá.");
+      return;
+    }
+
+    const soDiDuong = dsXuat.filter((t) => t.status === "in_transit").length;
+    const soHao = dsXuat.filter((t) => laDongHaoHut(t)).length;
+
+    if (
+      !window.confirm(
+        `Xoá ${dsXuat.length} giao dịch xuất kho` +
+          (soHao > 0 ? ` (trong đó ${soHao} dòng hao hụt)` : "") +
+          (soDiDuong > 0 ? `, ${soDiDuong} đơn đang đi đường` : "") +
+          ` và ${dsSo.length} dòng phiếu xuất trong Sổ số phiếu?\n\n` +
+          `Bộ đếm số phiếu xuất cũng đặt lại, nên phiếu xuất sau khi xoá đánh lại từ đầu.\n\n` +
+          `Nhập kho, tồn đầu kỳ, phiếu đã ký và đối tác được GIỮ NGUYÊN.\n\n` +
+          `Không khôi phục lại được.`,
+      )
+    )
+      return;
+
+    try {
+      setLoading(true);
+
+      const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
+      const canXoa: [string, string][] = [
+        ...dsXuat.map((t) => ["transactions", t.id] as [string, string]),
+        ...dsSo.map((g) => [KHO_SO_PHIEU, g.soPhieu] as [string, string]),
+        ...snapBoDem.docs
+          .filter((d) => laBoDemChieuXuat(d.id))
+          .map((d) => [KHO_BO_DEM, d.id] as [string, string]),
+      ];
+
+      // Chia lô 400: một `writeBatch` chỉ nhận tối đa 500 thao tác.
+      const CHUNK = 400;
+      for (let i = 0; i < canXoa.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        canXoa.slice(i, i + CHUNK).forEach(([kho, id]) => {
+          batch.delete(doc(db, kho, id));
+        });
+        await batch.commit();
+      }
+
+      setLoading(false);
+      showNotification(
+        `Đã xoá ${dsXuat.length} giao dịch xuất và ${dsSo.length} dòng sổ số phiếu. Anh nạp lại tệp được rồi ạ.`,
+      );
+    } catch (error) {
+      console.error("Xoa giao dich xuat:", error);
+      setLoading(false);
+      alert(handleFirestoreError(error, OperationType.DELETE, "transactions"));
     }
   };
 
@@ -10660,6 +10750,48 @@ export default function App() {
                     </p>
                   </div>
                 </Card>
+
+                {isOwner && (
+                  <Card title="Xoá riêng phần xuất kho">
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                        Xoá toàn bộ giao dịch xuất kho — kể cả dòng hao hụt và
+                        đơn đang đi đường — cùng các dòng phiếu xuất trong Sổ số
+                        phiếu, để nạp lại tệp từ đầu. Nhập kho, tồn đầu kỳ,
+                        phiếu đã ký và đối tác được giữ nguyên.
+                      </p>
+
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                        <p className="text-[11px] font-black text-rose-800">
+                          Đang có{" "}
+                          {
+                            transactions.filter((t) =>
+                              LOAI_CHIEU_XUAT.includes(t.type),
+                            ).length
+                          }{" "}
+                          giao dịch xuất kho trong hệ thống
+                        </p>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        loading={loading}
+                        onClick={handleXoaToanBoXuat}
+                      >
+                        <Trash2 className="w-4 h-4" /> Xoá toàn bộ giao dịch
+                        xuất kho
+                      </Button>
+
+                      <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                        Bộ đếm số phiếu xuất đặt lại theo, nên phiếu xuất sau
+                        khi xoá đánh lại từ đầu. Bộ đếm bên nhập không bị đụng
+                        tới — số phiếu nhập đã in ra giấy, cấp lại là trùng số
+                        thật. Không khôi phục lại được.
+                      </p>
+                    </div>
+                  </Card>
+                )}
 
                 {/* DỰ BÁO DUNG LƯỢNG FIREBASE — cảnh báo sớm trước khi chạm giới hạn */}
                 <Card title="Sức khỏe hệ thống · Dung lượng Firebase">

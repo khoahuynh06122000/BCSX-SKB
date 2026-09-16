@@ -40,6 +40,7 @@ import {
   tomTatSoPhieu,
   type GhiSoPhieu,
 } from "../soPhieu";
+import { khoaBoDem, laBoDemChieuXuat } from "../soPhieuKho";
 
 let pass = 0;
 let fail = 0;
@@ -458,6 +459,33 @@ dung("ngay gio VN co dinh dang", /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/.test(
   ngayGioVn("2026-08-31T09:22:00.000Z"),
 ));
 kiemTra("ngay gio hong", ngayGioVn("khong phai ngay"), "");
+
+// ================================================ bo dem nao la ben xuat
+
+/*
+ * DUNG KHI XOA TOAN BO GIAO DICH XUAT.
+ *
+ * Xoa phieu ma de nguyen bo dem thi lan nap lai sau khong danh tu 01 ma chay
+ * tiep con so cu. Nhung xoa NHAM bo dem ben nhap thi te hon nhieu: so phieu
+ * nhap se duoc cap lai trung voi so da in ra giay.
+ */
+dung("bo dem PX la ben xuat", laBoDemChieuXuat("sophieu-PX-260904"));
+dung("bo dem kieu cu 60 la ben xuat", laBoDemChieuXuat("sophieu-60-26"));
+dung("bo dem huy xuat 61 la ben xuat", laBoDemChieuXuat("sophieu-61-26"));
+
+dung("bo dem PN KHONG phai ben xuat", !laBoDemChieuXuat("sophieu-PN-260904"));
+dung("bo dem kieu cu 51 KHONG phai ben xuat", !laBoDemChieuXuat("sophieu-51-26"));
+dung("bo dem huy nhap 52 KHONG phai ben xuat", !laBoDemChieuXuat("sophieu-52-26"));
+
+// Do theo TIEN TO chinh xac, khong phai "co chua": mot khoa la mang chu PX o
+// giua ten khong duoc dinh vao.
+dung("PX nam giua ten thi khong tinh", !laBoDemChieuXuat("sophieu-PN-PX-26"));
+dung("thieu gach noi thi khong tinh", !laBoDemChieuXuat("sophieu-PX260904"));
+dung("chuoi rong", !laBoDemChieuXuat(""));
+
+// Khoa dung phai khop voi khoa that do khoaBoDem sinh ra.
+dung("khop khoa that ben xuat", laBoDemChieuXuat(khoaBoDem(`${MA_LOAI.XUAT}|260904`)));
+dung("khop khoa that ben nhap", !laBoDemChieuXuat(khoaBoDem(`${MA_LOAI.NHAP}|260904`)));
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
