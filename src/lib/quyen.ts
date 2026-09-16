@@ -19,17 +19,22 @@
  * HAI VAI TRÒ MỘT CHIỀU. `NHAP_KHO` chỉ ghi chiều nhập, `XUAT_KHO` chỉ ghi
  * chiều xuất.
  *
- * `NHAP_KHO` KHÔNG CÒN XEM CHIỀU XUẤT (02/09/2026). Trước đây vai trò này thấy
- * cả Công nợ · Hóa đơn, Đơn BNC, Doanh thu và nhóm Dữ liệu — toàn bộ là việc
- * của bên xuất và bên kế toán. Người nhập hàng mở app lên chỉ để nhập hàng,
- * bày thêm bốn phân hệ không phải việc của họ thì vừa rối vừa cho họ thấy số
- * công nợ và doanh thu không cần thiết.
+ * CẢ HAI KHÔNG CÒN XEM PHẦN TIỀN. `NHAP_KHO` bỏ trước (02/09/2026),
+ * `XUAT_KHO` bỏ theo (16/09/2026). Trước đây hai vai trò này thấy cả Công nợ ·
+ * Hóa đơn, Đơn BNC, Doanh thu và nhóm Dữ liệu — toàn bộ là việc của bên kế
+ * toán. Người trong kho mở app lên để ghi hàng vào và hàng ra; bày thêm sáu
+ * phân hệ không phải việc của họ thì vừa rối vừa cho họ thấy số công nợ và
+ * doanh thu không cần thiết.
  *
  * NHƯNG VẪN XEM ĐƯỢC TỒN KHO VÀ BÁO CÁO, và hai bảng đó trộn cả hai chiều —
- * tồn bằng nhập trừ xuất. Nên `xemXuat` ở đây CHỈ LÀ CỜ HIỆN MENU, không phải
- * cờ chặn đọc dữ liệu: quyền đọc trong `firestore.rules` đi theo `xemKho()`.
- * Đừng đem `xemXuat` ra chặn truy vấn, làm thế là tồn kho của người nhập hàng
- * hụt đi đúng phần đã xuất.
+ * tồn bằng nhập trừ xuất. Nên `xemXuat` CHỈ LÀ CỜ HIỆN MENU, không phải cờ
+ * chặn đọc dữ liệu: quyền đọc trong `firestore.rules` đi theo `xemKho()`.
+ * Đừng đem `xemXuat` ra chặn truy vấn, làm thế là tồn kho của người trong kho
+ * hụt đi đúng phần của chiều bên kia.
+ *
+ * GHI ĐỐI TÁC VÀ ĐIỂM BÁN THÌ VẪN ĐƯỢC. `ghiXuat` không đổi, chỉ có màn hình
+ * Đối tác là không bày trên menu nữa — ô chọn đơn vị nhận trong màn hình Xuất
+ * kho, và bước gán điểm bán khi nạp tệp, vẫn chạy như cũ.
  *
  * VAI TRÒ DNC — KHỐI CUNG ỨNG (30/08/2026). Đây là vai trò đầu tiên bị chặn cả
  * phần XEM: chỉ thấy dữ liệu chiều xuất, không thấy tồn kho và nhập kho.
@@ -150,8 +155,10 @@ export function quyenCua(role: UserRole | string): Quyen {
     // `xemKho`, chỉ là menu không bày các phân hệ chiều xuất.
     case "NHAP_KHO":
       return { ...KHONG, xemKho: true, ghiNhap: true };
+    // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
+    // viec trong kho, khong dinh toi phan tien.
     case "XUAT_KHO":
-      return { ...KHONG, xemXuat: true, xemKho: true, ghiXuat: true };
+      return { ...KHONG, xemKho: true, ghiXuat: true };
     // Khối cung ứng: CHỈ XEM, và chỉ xem chiều xuất.
     case "DNC":
       return { ...KHONG, xemXuat: true };
@@ -200,7 +207,7 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
   {
     ma: "XUAT_KHO",
     ten: "Nhân viên xuất kho",
-    moTa: "Xem hết. Chỉ ghi được chiều xuất: xuất kho, hao hụt, đối tác và điểm bán.",
+    moTa: "Chỉ ghi được chiều xuất: xuất kho, hao hụt, đối tác và điểm bán. Xem được tồn kho, báo cáo và sổ số phiếu. KHÔNG thấy công nợ, hóa đơn, Đơn BNC, doanh thu và nhóm Dữ liệu.",
   },
   {
     ma: "DNC",

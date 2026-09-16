@@ -111,7 +111,7 @@ eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
   quanTri: false,
 });
 eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
-  xemXuat: true,
+  xemXuat: false,
   xemKho: true,
   ghiNhap: false,
   ghiXuat: true,
@@ -152,7 +152,7 @@ eq("DNC chi xem chieu xuat", quyenCua("DNC"), {
 eq(
   "ai xem duoc chieu xuat",
   MOI_VAI_TRO.filter((r) => quyenCua(r).xemXuat),
-  ["OWNER", "KE_TOAN", "XUAT_KHO", "DNC"],
+  ["OWNER", "KE_TOAN", "DNC"],
 );
 
 // Ai xem duoc du lieu KHO: moi vai tro tru cho duyet VA tru DNC.
@@ -165,12 +165,27 @@ eq(
  * HAI CO XEM DOC LAP NHAU, va moi ben co dung mot vai tro thieu no.
  *
  * Chot lai bang mot phep kiem thay vi de troi: neu sau nay ai gan lai
- * `xemXuat: true` cho NHAP_KHO thi bon phan he chieu xuat hien lai tren menu
- * ma khong ai biet, vi giao dien khong bao gi ca.
+ * `xemXuat: true` cho hai vai tro trong kho thi sau phan he phan tien hien lai
+ * tren menu ma khong ai biet, vi giao dien khong bao gi ca.
  */
 dung(
   "nguoi nhap kho: xem kho nhung khong xem chieu xuat",
   quyenCua("NHAP_KHO").xemKho && !quyenCua("NHAP_KHO").xemXuat,
+);
+dung(
+  "nguoi xuat kho: xem kho nhung khong xem chieu xuat",
+  quyenCua("XUAT_KHO").xemKho && !quyenCua("XUAT_KHO").xemXuat,
+);
+// Hai vai tro trong kho giong het nhau ve phan XEM, chi khac chieu duoc ghi.
+dung(
+  "hai vai tro mot chieu xem giong nhau",
+  quyenCua("NHAP_KHO").xemKho === quyenCua("XUAT_KHO").xemKho &&
+    quyenCua("NHAP_KHO").xemXuat === quyenCua("XUAT_KHO").xemXuat,
+);
+dung(
+  "nhung nguoc chieu ghi",
+  quyenCua("NHAP_KHO").ghiNhap && !quyenCua("NHAP_KHO").ghiXuat &&
+    quyenCua("XUAT_KHO").ghiXuat && !quyenCua("XUAT_KHO").ghiNhap,
 );
 dung(
   "DNC: xem chieu xuat nhung khong xem kho",
@@ -187,6 +202,7 @@ dung(
  * da xuat.
  */
 dung("nguoi nhap kho van doc duoc du lieu kho", quyenCua("NHAP_KHO").xemKho);
+dung("nguoi xuat kho van doc duoc du lieu kho", quyenCua("XUAT_KHO").xemKho);
 
 // Ai NAP TEP duoc: chi ke toan va chu so huu.
 eq(
