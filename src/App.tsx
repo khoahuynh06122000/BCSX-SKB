@@ -3864,6 +3864,22 @@ export default function App() {
       );
     });
     setActualReceivedQtyMap(qtyMap);
+
+    /*
+     * ĐÁNH DẤU KHỚP SẴN CẢ PHIẾU.
+     *
+     * Không có dòng này thì khung xác nhận mở ra với mọi mặt hàng xám mờ, và
+     * bấm nút xác nhận cuối cùng chỉ nhận lại "Chưa có đơn nào được khớp trên
+     * phiếu" — nút mang tên "xác nhận" mà không xác nhận được gì. Người dùng
+     * đóng khung lại, tưởng đã xong, trong khi đơn vẫn nguyên ở đi đường.
+     *
+     * Đặt lại hẳn Set mới chứ không cộng thêm: dấu khớp còn sót từ lần mở
+     * trước sẽ xác nhận nhầm sang đơn khác.
+     *
+     * Muốn bỏ một mặt hàng ra thì bấm nút trên chính dòng đó trong khung.
+     */
+    setMatchedProductIds(new Set(trxsToConfirm.map((t) => t.productId)));
+
     setLossReason("");
     setConfirmationPhotos([]);
     setConfirmationPhoto("");
@@ -9227,6 +9243,11 @@ export default function App() {
                                     );
                                   });
                                   setActualReceivedQtyMap(qtyMap);
+                                  // Nút ghi "cả phiếu" thì phải khớp sẵn cả
+                                  // phiếu — xem ghi chú ở `handleBulkConfirm`.
+                                  setMatchedProductIds(
+                                    new Set(group.map((t) => t.productId)),
+                                  );
                                   setShowLossModal(true);
                                 }}
                                 className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
@@ -9415,6 +9436,11 @@ export default function App() {
                                           );
                                         });
                                         setActualReceivedQtyMap(qtyMap);
+                                        // Nút ghi "cả phiếu" thì phải khớp sẵn
+                                        // cả phiếu — xem `handleBulkConfirm`.
+                                        setMatchedProductIds(
+                                          new Set(group.map((t) => t.productId)),
+                                        );
                                         setShowLossModal(true);
                                       }}
                                       className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
