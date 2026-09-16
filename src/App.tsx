@@ -7920,7 +7920,13 @@ export default function App() {
                                         {isGrouped && (
                                           // Bọc trong <span> để có tooltip:
                                           // icon Lucide không nhận prop title.
-                                          <span title="Giao dịch xuất nhiều lô">
+                                          <span
+                                            title={
+                                              reportSubTab === "in"
+                                                ? "Một lượt nhập ghi thành nhiều dòng"
+                                                : "Một lượt xuất chia theo nhiều lô"
+                                            }
+                                          >
                                             <Layers className="w-3 h-3 text-amber-500" />
                                           </span>
                                         )}
@@ -7935,9 +7941,21 @@ export default function App() {
                                         <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                           {t.category}
                                         </div>
+                                        {/*
+                                          Nhãn phải THEO CHIỀU ĐANG XEM.
+
+                                          Bảng này dùng chung cho cả báo cáo
+                                          nhập lẫn báo cáo xuất, mà nhãn cũ
+                                          viết cứng "lệnh xuất gộp" — nên ở
+                                          báo cáo NHẬP nó nói dòng hàng vừa
+                                          nhập về là một phần của lệnh xuất,
+                                          đúng thứ làm người đọc dừng lại hỏi.
+                                        */}
                                         {isGrouped && (
                                           <div className="text-[8px] font-black text-amber-600 uppercase tracking-tighter mt-1 bg-amber-100/50 w-fit px-1 rounded">
-                                            Phần của lệnh xuất gộp
+                                            {reportSubTab === "in"
+                                              ? "Cùng một lượt nhập"
+                                              : "Cùng một lượt xuất"}
                                           </div>
                                         )}
                                       </div>
