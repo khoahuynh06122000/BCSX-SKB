@@ -7895,41 +7895,28 @@ export default function App() {
                                   t.type === "OUT" && t.status !== "in_transit"
                                 );
                               })
-                              .map((t, idx, arr) => {
-                                const isGrouped =
-                                  t.referenceGroupId &&
-                                  ((idx > 0 &&
-                                    arr[idx - 1].referenceGroupId ===
-                                      t.referenceGroupId) ||
-                                    (idx < arr.length - 1 &&
-                                      arr[idx + 1].referenceGroupId ===
-                                        t.referenceGroupId));
+                              /*
+                                ĐÃ BỎ HẾT DẤU HIỆU "DÒNG GỘP" (16/09/2026):
+                                nhãn chữ, vạch vàng bên trái, icon xếp lớp và
+                                nền vàng nhạt của dòng.
+
+                                Những dòng cùng một lượt vẫn nhận ra được vì
+                                chúng cùng ngày, cùng mã lô và cột Ghi chú đã
+                                ghi sẵn "[Món 1/2]". Bốn dấu hiệu nữa cho cùng
+                                một chuyện là thừa, và màu vàng trong bảng làm
+                                mắt tưởng có gì bất thường.
+
+                                `referenceGroupId` vẫn nguyên trong dữ liệu —
+                                đây chỉ là chuyện bày ra màn hình.
+                              */
+                              .map((t) => {
                                 return (
                                   <tr
                                     key={t.id}
-                                    className={cn(
-                                      "hover:bg-slate-50 transition-colors relative group/row",
-                                      isGrouped ? "bg-amber-50/10" : "",
-                                    )}
+                                    className="hover:bg-slate-50 transition-colors relative group/row"
                                   >
                                     <td className="py-4 px-6 relative">
-                                      {isGrouped && (
-                                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-400" />
-                                      )}
                                       <div className="text-[11px] font-bold text-slate-900 font-mono flex items-center gap-2">
-                                        {isGrouped && (
-                                          // Bọc trong <span> để có tooltip:
-                                          // icon Lucide không nhận prop title.
-                                          <span
-                                            title={
-                                              reportSubTab === "in"
-                                                ? "Một lượt nhập ghi thành nhiều dòng"
-                                                : "Một lượt xuất chia theo nhiều lô"
-                                            }
-                                          >
-                                            <Layers className="w-3 h-3 text-amber-500" />
-                                          </span>
-                                        )}
                                         {formatDate(t.date)}
                                       </div>
                                     </td>
@@ -7941,16 +7928,6 @@ export default function App() {
                                         <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                           {t.category}
                                         </div>
-                                        {/*
-                                          ĐÃ BỎ nhãn chữ "Cùng một lượt nhập /
-                                          xuất" dưới tên mặt hàng (16/09/2026).
-
-                                          Vạch vàng bên trái và icon xếp lớp đã
-                                          nói đủ những dòng nào đi cùng một
-                                          lượt, lại không chiếm dòng nào của
-                                          bảng. Thêm một dòng chữ nữa cho mỗi
-                                          dòng hàng chỉ làm bảng dài ra.
-                                        */}
                                       </div>
                                     </td>
                                     <td className="py-4 px-6 text-right">
