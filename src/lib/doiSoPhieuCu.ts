@@ -122,9 +122,18 @@ export function dungKeHoachDoiSo(ds: GhiSoPhieu[]): KeHoachDoiSo {
 
     if (soMoi === g.soPhieu) return;
     if (dangCo.has(soMoi)) {
+      // Nói luôn ai đang giữ số đó, để người dùng biết hai phiếu nào đụng nhau
+      // mà đi xem lại — chỉ báo "đã có rồi" thì họ phải tự dò.
+      const ai =
+        list.find((x) => x.soPhieu === soMoi)?.soPhieu ||
+        [...doiThanh.entries()].find(([, m]) => m === soMoi)?.[0] ||
+        "";
       boQua.push({
         soPhieu: g.soPhieu,
-        lyDo: `Số mới ${soMoi} đã có trong sổ rồi — để nguyên, không ghi đè.`,
+        lyDo:
+          `Số mới ${soMoi} đã có trong sổ rồi` +
+          (ai ? ` (của phiếu ${ai})` : "") +
+          ` — để nguyên, không ghi đè. Hai phiếu này đang cùng trỏ vào một mã phiếu, cần xem lại.`,
       });
       return;
     }
@@ -132,6 +141,40 @@ export function dungKeHoachDoiSo(ds: GhiSoPhieu[]): KeHoachDoiSo {
     dangCo.add(soMoi);
     doiThanh.set(g.soPhieu, soMoi);
   });
+
+  /*
+   * Vòng 1b — CẶP HỦY PHẢI ĐI CÙNG NHAU, HOẶC KHÔNG CÁI NÀO ĐI CẢ.
+   *
+   * Đây là chỗ suýt hỏng. Nếu phiếu hủy đổi được mà phiếu gốc của nó vướng va
+   * chạm nên ở lại, thì số hủy mới `PN-260901-01-HUY` trông như đang hủy
+   * `PN-260901-01` — trong khi số đó lại là một TỜ PHIẾU KHÁC vừa nhận. Còn
+   * phiếu gốc thì ghi "đã hủy bởi 52260001", một số không còn tồn tại.
+   *
+   * Sổ lúc ấy vẫn đủ bản ghi, vẫn cộng ra đúng số lượng, chỉ có điều nó nói
+   * sai ai hủy phiếu nào — và không có gì báo lỗi.
+   *
+   * Lặp cho tới khi ổn định: gỡ một cái ra có thể làm cái kia mất bạn đồng
+   * hành, nên phải xét lại từ đầu.
+   */
+  for (let vong = 0; vong < list.length + 1; vong++) {
+    let goRa = false;
+    list.forEach((g) => {
+      if (!doiThanh.has(g.soPhieu)) return;
+      const doiTac = String(g.huyBoi ?? g.huyCho ?? "").trim();
+      if (!doiTac) return;
+      // Đối tác không nằm trong sổ đang xem thì thôi — đã báo ở chỗ khác.
+      if (!list.some((x) => x.soPhieu === doiTac)) return;
+      if (doiThanh.has(doiTac)) return;
+
+      doiThanh.delete(g.soPhieu);
+      boQua.push({
+        soPhieu: g.soPhieu,
+        lyDo: `Phiếu ${doiTac} đi cùng cặp hủy với nó không đổi được, nên giữ nguyên cả hai — đổi một mình thì sổ sẽ chỉ sai ai hủy phiếu nào.`,
+      });
+      goRa = true;
+    });
+    if (!goRa) break;
+  }
 
   // Vòng 2 — dựng bản ghi mới, sửa luôn liên kết hủy sang số mới.
   list.forEach((g) => {

@@ -170,6 +170,78 @@ const g = (o: Partial<GhiSoPhieu>): GhiSoPhieu =>
   dung("ly do nhac phieu goc", kh.boQua[0].lyDo.includes("phiếu gốc"));
 }
 
+// --------------------------------- cap huy phai di cung nhau
+
+/*
+ * PHIEU HUY KHONG DUOC DOI MOT MINH KHI PHIEU GOC O LAI.
+ *
+ * Neu phieu huy doi thanh PN-260901-01-HUY ma phieu goc vuong va cham nen giu
+ * so cu, thi so huy moi TRONG NHU dang huy PN-260901-01 — trong khi so do lai
+ * la MOT TO PHIEU KHAC vua nhan. Con phieu goc thi ghi "da huy boi 52260001",
+ * mot so khong con ton tai.
+ *
+ * So luc ay van du ban ghi, van cong ra dung so luong, chi co dieu no noi sai
+ * ai huy phieu nao — va khong co gi bao loi.
+ */
+{
+  const kh = dungKeHoachDoiSo([
+    // Phieu nay chiem mat PN-260901-01 truoc.
+    g({ soPhieu: "51260003", nguon: "PN-260901-01", soLuong: 2676 }),
+    // Nen cap duoi day deu khong doi duoc.
+    g({
+      soPhieu: "51260001",
+      nguon: "PN-260901-01",
+      soLuong: 11000,
+      trangThai: "da_huy",
+      huyBoi: "52260001",
+    }),
+    g({
+      soPhieu: "52260001",
+      loai: "HUY_NHAP",
+      nguon: "PN-260901-01",
+      soLuong: -11000,
+      huyCho: "51260001",
+    }),
+  ]);
+
+  eq("chi doi phieu khong vuong", kh.viec.map((v) => v.soCu), ["51260003"]);
+  dung(
+    "phieu huy o lai cung phieu goc",
+    !kh.viec.some((v) => v.soCu === "52260001"),
+  );
+  eq("bao ca hai cai o lai", kh.boQua.length, 2);
+  dung(
+    "ly do nhac cap huy",
+    kh.boQua.some((b) => b.soPhieu === "52260001" && b.lyDo.includes("cặp hủy")),
+  );
+  dung(
+    "ly do va cham chi ra phieu dang giu so",
+    kh.boQua.some((b) => b.soPhieu === "51260001" && b.lyDo.includes("51260003")),
+  );
+}
+
+// Nguoc lai: phieu goc doi duoc ma phieu huy vuong thi ca hai cung o lai.
+{
+  const kh = dungKeHoachDoiSo([
+    // Chiem san so huy.
+    g({ soPhieu: "PN-260901-01-HUY", loai: "HUY_NHAP", soLuong: -1 }),
+    g({
+      soPhieu: "51260001",
+      nguon: "PN-260901-01",
+      trangThai: "da_huy",
+      huyBoi: "52260001",
+    }),
+    g({
+      soPhieu: "52260001",
+      loai: "HUY_NHAP",
+      nguon: "PN-260901-01",
+      huyCho: "51260001",
+    }),
+  ]);
+  eq("ca cap cung o lai", kh.viec, []);
+  eq("bao ca hai", kh.boQua.length, 2);
+}
+
 // ------------------------------------------------- khong mat ban ghi nao
 
 /*
