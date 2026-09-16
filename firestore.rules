@@ -383,7 +383,30 @@ service cloud.firestore {
         && request.resource.data.nguon == resource.data.nguon
         && request.resource.data.soLuong == resource.data.soLuong
         && request.resource.data.trangThai == 'da_huy';
-      allow delete: if false;
+
+      /*
+       * XOA - mot khe RAT HEP, chi de doi so phieu nhap kieu cu.
+       *
+       * Nguyen tac cua so nay la KHONG XOA DUOC GI. Nhung sau khi doi cach
+       * danh so (15/09/2026), nhung phieu nhap cu mang so kieu cu 51... trong
+       * khi to giay in ma PN-... Doi lai la tao tai lieu moi roi xoa tai lieu
+       * cu, vi khoa tai lieu chinh la so phieu.
+       *
+       * BA DIEU KIEN CUNG LUC, de khe nay khong bi dung vao viec khac:
+       *
+       *   1. Chi CHU SO HUU.
+       *   2. Chi ban ghi chieu NHAP. Phieu xuat giu nguyen so cu vi 60... la
+       *      so duy nhat no tung co - khong co to giay nao mang so khac de
+       *      khop ve.
+       *   3. Chi so KIEU CU (toan chu so). So kieu moi PN-/PX- va moi thu da
+       *      dung chuan thi khong xoa duoc, ke ca chu so huu.
+       *
+       * Xoa xong het thi nen dat lai thanh `if false`.
+       */
+      allow delete: if isOwner()
+        && (resource.data.loai == 'NHAP' || resource.data.loai == 'HUY_NHAP')
+        && resource.data.soPhieu is string
+        && resource.data.soPhieu.matches('^[0-9]+$');
     }
 
     /*

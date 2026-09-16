@@ -32,6 +32,7 @@ import { cn, formatNumber } from "../lib/utils";
 
 import ONgay from "./ONgay";
 
+import { dungKeHoachDoiSo } from "../lib/doiSoPhieuCu";
 /**
  * SỔ SỐ PHIẾU
  *
@@ -68,6 +69,13 @@ interface Props {
   duocGhi: boolean;
   onHuy: (soGoc: string, documentDate: string, lyDo: string) => Promise<void>;
   onCapBu: (ds: ChungTuChuaCoSo[]) => Promise<void>;
+  /**
+   * Đổi số phiếu nhập kiểu cũ sang mã phiếu in ra giấy — việc làm MỘT LẦN.
+   *
+   * Để trống thì không hiện bảng. Chỉ chủ sở hữu mới được truyền vào: đây là
+   * việc ghi đè lên sổ chứng từ, không phải thao tác hằng ngày.
+   */
+  onDoiSoCu?: () => Promise<void>;
 }
 
 export default function SoPhieu({
@@ -77,7 +85,12 @@ export default function SoPhieu({
   duocGhi,
   onHuy,
   onCapBu,
+  onDoiSoCu,
 }: Props) {
+  const [dangDoi, setDangDoi] = useState(false);
+  /** Kế hoạch đổi số, tính lại mỗi khi sổ đổi — xem `doiSoPhieuCu.ts`. */
+  const keHoachDoiSo = useMemo(() => dungKeHoachDoiSo(soPhieu), [soPhieu]);
+
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
   const [tuKhoa, setTuKhoa] = useState("");
@@ -440,6 +453,52 @@ export default function SoPhieu({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* --------------------------------- đổi số phiếu nhập kiểu cũ */}
+      {onDoiSoCu && keHoachDoiSo.viec.length > 0 && (
+        <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-2xl">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <Wand2 className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-black text-amber-900 uppercase tracking-widest">
+                  Số phiếu nhập kiểu cũ: {keHoachDoiSo.viec.length}
+                </p>
+                <p className="text-[11px] text-amber-800/80 font-medium mt-1 leading-snug">
+                  Những phiếu này mang số kiểu cũ ({keHoachDoiSo.viec[0].soCu}
+                  …) trong khi tờ giấy in mã {keHoachDoiSo.viec[0].soMoi}. Đổi
+                  lại để sổ khớp với chứng từ. Phiếu xuất giữ nguyên số cũ, vì
+                  đó là số duy nhất nó từng có.
+                  {keHoachDoiSo.boQua.length > 0
+                    ? ` Có ${keHoachDoiSo.boQua.length} phiếu không đổi được — xem lý do bên dưới.`
+                    : ""}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setDangDoi(true);
+                onDoiSoCu().finally(() => setDangDoi(false));
+              }}
+              disabled={dangDoi}
+              className="shrink-0 px-4 py-2.5 bg-amber-600 text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            >
+              {dangDoi ? "Đang đổi…" : "Đổi số"}
+            </button>
+          </div>
+
+          {keHoachDoiSo.boQua.length > 0 && (
+            <ul className="mt-3 pt-3 border-t border-amber-200 space-y-1">
+              {keHoachDoiSo.boQua.slice(0, 5).map((b) => (
+                <li key={b.soPhieu} className="text-[11px] text-amber-900/80">
+                  <span className="font-mono font-black">{b.soPhieu}</span> —{" "}
+                  {b.lyDo}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

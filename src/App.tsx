@@ -219,6 +219,7 @@ import ONgay from "./components/ONgay";
 
 import { isoSangVn } from "./lib/oNgay";
 
+import { dungKeHoachDoiSo } from "./lib/doiSoPhieuCu";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -2311,6 +2312,65 @@ export default function App() {
         `Đã cấp được ${xong}/${ds.length} chứng từ rồi dừng lại.\n\n${
           e instanceof Error ? e.message : String(e)
         }\n\nBấm "Cấp số" lần nữa để chạy nốt phần còn lại.`,
+      );
+    }
+  };
+
+  /**
+   * ĐỔI SỐ PHIẾU NHẬP KIỂU CŨ SANG ĐÚNG MÃ PHIẾU IN RA GIẤY — việc làm MỘT LẦN.
+   *
+   * Phép tính nằm ở `doiSoPhieuCu.ts`; ở đây chỉ lo phần ghi.
+   *
+   * MỖI BẢN GHI MỘT LƯỢT GHI GỘP: tạo tài liệu mới và xoá tài liệu cũ trong
+   * cùng một `writeBatch`. Tách ra hai lần ghi thì có lúc sổ có hai bản ghi
+   * cho cùng một tờ phiếu, hoặc tệ hơn là xoá xong mới hỏng và mất hẳn chứng
+   * từ. Gộp lại thì Firestore làm cả hai hoặc không làm gì.
+   *
+   * Hỏng giữa chừng thì DỪNG NGAY, không chạy tiếp. Phần đã đổi vẫn đúng và
+   * bấm lại là chạy nốt phần còn lại — kế hoạch tính lại từ sổ mỗi lần bấm.
+   */
+  const handleDoiSoPhieuCu = async () => {
+    const keHoach = dungKeHoachDoiSo(soPhieu);
+    if (!keHoach.viec.length) {
+      alert("Không có số phiếu nhập kiểu cũ nào cần đổi.");
+      return;
+    }
+
+    const xemTruoc = keHoach.viec
+      .slice(0, 8)
+      .map((v) => `   ${v.soCu}  →  ${v.soMoi}`)
+      .join("\n");
+    const con = keHoach.viec.length - 8;
+
+    if (
+      !window.confirm(
+        `Đổi số cho ${keHoach.viec.length} phiếu nhập kiểu cũ?\n\n` +
+          `${xemTruoc}${con > 0 ? `\n   … và ${con} phiếu nữa` : ""}\n\n` +
+          `Số mới lấy đúng mã phiếu đã in trên tờ giấy, nên sổ khớp lại với ` +
+          `chứng từ. Phiếu xuất giữ nguyên số cũ.\n\n` +
+          `Việc này ghi đè lên sổ chứng từ và KHÔNG hoàn tác được.`,
+      )
+    ) {
+      return;
+    }
+
+    let xong = 0;
+    try {
+      for (const v of keHoach.viec) {
+        const batch = writeBatch(db);
+        batch.set(doc(db, KHO_SO_PHIEU, v.soMoi), v.ghiMoi);
+        batch.delete(doc(db, KHO_SO_PHIEU, v.soCu));
+        await batch.commit();
+        xong += 1;
+      }
+      showNotification(`Đã đổi số cho ${xong} phiếu nhập`);
+    } catch (e) {
+      alert(
+        `Đã đổi được ${xong}/${keHoach.viec.length} phiếu rồi dừng lại.\n\n${
+          e instanceof Error ? e.message : String(e)
+        }\n\nNếu lỗi nhắc tới quyền: luật Firestore đang khoá không cho xoá ` +
+          `tài liệu trong sổ số phiếu. Chủ sở hữu phải publish bản luật mới ` +
+          `rồi bấm lại.`,
       );
     }
   };
@@ -11182,6 +11242,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     duocGhi={quyen.ghiNhap || quyen.ghiXuat}
                     onHuy={handleHuyPhieu}
                     onCapBu={handleCapBuSoPhieu}
+                    onDoiSoCu={isOwner ? handleDoiSoPhieuCu : undefined}
                   />
                 </Card>
               </div>
