@@ -225,6 +225,11 @@ import ONgay from "./components/ONgay";
 import { isoSangVn } from "./lib/oNgay";
 
 import { dungKeHoachDoiSo } from "./lib/doiSoPhieuCu";
+import {
+  laDongHaoHut,
+  trongNhatKyNhap,
+  trongNhatKyXuat,
+} from "./lib/nhatKyKho";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -2840,11 +2845,9 @@ export default function App() {
       sheetName = "Tong hop kho";
     } else {
       const typeLabel = reportSubTab === "in" ? "Nhap" : "Xuat";
-      const targets = filteredTransactionsForReport.filter((t) => {
-        if (reportSubTab === "in")
-          return t.type === "IN" || t.type === "OPENING";
-        return t.type === "OUT" && t.status !== "in_transit";
-      });
+      const targets = filteredTransactionsForReport.filter((t) =>
+        reportSubTab === "in" ? trongNhatKyNhap(t) : trongNhatKyXuat(t),
+      );
 
       if (targets.length === 0) {
         showNotification(`Không có dữ liệu ${typeLabel} để xuất.`, "error");
@@ -7993,15 +7996,11 @@ export default function App() {
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {filteredTransactionsForReport
-                              .filter((t) => {
-                                if (reportSubTab === "in")
-                                  return (
-                                    t.type === "IN" || t.type === "OPENING"
-                                  );
-                                return (
-                                  t.type === "OUT" && t.status !== "in_transit"
-                                );
-                              })
+                              .filter((t) =>
+                                reportSubTab === "in"
+                                  ? trongNhatKyNhap(t)
+                                  : trongNhatKyXuat(t),
+                              )
                               /*
                                 ĐÃ BỎ HẾT DẤU HIỆU "DÒNG GỘP" (16/09/2026):
                                 nhãn chữ, vạch vàng bên trái, icon xếp lớp và
@@ -8031,6 +8030,18 @@ export default function App() {
                                       <div className="flex flex-col">
                                         <div className="font-bold text-slate-900 text-sm leading-tight">
                                           {t.productName}
+                                          {/*
+                                            Hao hụt nằm CHUNG bảng với hàng
+                                            giao, nên phải nói rõ nó không lên
+                                            công nợ — nếu không người đọc cộng
+                                            cả cột và đòi đối tác trả tiền phần
+                                            mình làm mất.
+                                          */}
+                                          {laDongHaoHut(t) && (
+                                            <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase tracking-tighter inline-flex items-center gap-1 align-middle">
+                                              Hao hụt · không ghi công nợ
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                           {t.category}
@@ -8043,7 +8054,9 @@ export default function App() {
                                           "font-mono font-black text-sm",
                                           t.type === "IN"
                                             ? "text-emerald-600"
-                                            : "text-rose-600",
+                                            : laDongHaoHut(t)
+                                              ? "text-amber-600"
+                                              : "text-rose-600",
                                         )}
                                       >
                                         {formatNumber(t.quantity)}
@@ -8145,13 +8158,11 @@ export default function App() {
                                   </tr>
                                 );
                               })}
-                            {filteredTransactionsForReport.filter((t) => {
-                              if (reportSubTab === "in")
-                                return t.type === "IN" || t.type === "OPENING";
-                              return (
-                                t.type === "OUT" && t.status !== "in_transit"
-                              );
-                            }).length === 0 && (
+                            {filteredTransactionsForReport.filter((t) =>
+                              reportSubTab === "in"
+                                ? trongNhatKyNhap(t)
+                                : trongNhatKyXuat(t),
+                            ).length === 0 && (
                               <tr>
                                 <td
                                   colSpan={7}
