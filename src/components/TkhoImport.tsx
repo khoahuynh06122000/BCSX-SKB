@@ -66,7 +66,7 @@ interface Props {
     drafts: TkhoNhapDraft[],
   ) => Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]>;
   onCreate: (
-    drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string; cot: number }[],
+    drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string; cot: number; haoHut?: number }[],
     loMoi?: { productId: string; batchNumber: string; quantity: number; date: string }[],
     /** true = đưa qua Đơn đi đường chờ ảnh; false = ghi thẳng vào xuất kho. */
     quaDiDuong?: boolean,
@@ -279,6 +279,12 @@ export default function TkhoImport({
    * một điểm bán nhận hai chuyến thì đó là hai đơn, hai biên bản, hai lần ký —
    * gom lại thành một đơn thì không tải riêng ảnh cho từng chuyến được.
    */
+  /** Tổng hao hụt đọc được từ các cột đánh dấu. */
+  const tongHaoHut = (result?.drafts ?? []).reduce(
+    (t, d) => t + (d.haoHut || 0),
+    0,
+  );
+
   const soDon = useMemo(() => {
     if (!result?.drafts.length) return 0;
     return new Set(
@@ -504,6 +510,35 @@ export default function TkhoImport({
         </div>
       )}
 
+      {/*
+        Cột hao hụt không tìm được chuyến giao để gắn vào.
+
+        Thường là điểm bán của cột đó chưa được gán đối tác, nên chuyến giao
+        chưa dựng được. Báo ra chứ không lặng lẽ bỏ: người dùng đánh dấu một
+        cột là hao hụt nghĩa là họ đang nói có phần mất thật, im lặng bỏ đi là
+        tồn kho cao hơn thực tế.
+      */}
+      {result && result.haoHutLac.length > 0 && (
+        <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50">
+          <p className="text-[11px] font-black text-amber-800 uppercase tracking-widest">
+            {result.haoHutLac.length} cột hao hụt chưa gắn được vào chuyến giao
+          </p>
+          <p className="text-[11px] font-medium text-amber-900/80 mt-1 leading-relaxed">
+            Thường là điểm bán của cột đó chưa được gán đối tác ở phần trên —
+            gán xong thì hao hụt tự khớp vào đúng chuyến.
+          </p>
+          <ul className="mt-2 space-y-0.5">
+            {result.haoHutLac.slice(0, 5).map((h, i) => (
+              <li key={i} className="text-[11px] text-amber-900/80">
+                <span className="font-black">{h.ten}</span> ·{" "}
+                {isoSangVn(h.dateKey) || h.dateKey} · {h.productName} ·{" "}
+                {formatNumber(h.soLuong)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ---------- Xem trước ---------- */}
       {result && result.drafts.length > 0 && (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -518,6 +553,14 @@ export default function TkhoImport({
                   ? `${isoSangVn(result.dateRange.from) || result.dateRange.from} → ${isoSangVn(result.dateRange.to) || result.dateRange.to}`
                   : ""}{" "}
                 · tổng {formatNumber(tongSoLuong)}
+                {tongHaoHut > 0 && (
+                  <>
+                    {" · "}
+                    <span className="text-amber-600">
+                      hao hụt {formatNumber(tongHaoHut)}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
           </div>

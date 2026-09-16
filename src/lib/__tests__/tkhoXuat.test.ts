@@ -7,6 +7,7 @@
  */
 import type { Product } from "../../types";
 import {
+  docCotHaoHut,
   parseTkhoDate,
   parseTkhoXuat,
   toTkhoNumber,
@@ -362,6 +363,130 @@ console.log("\n17. Mot diem ban nhan HAI CHUYEN trong cung mot ngay");
     k.drafts.reduce((a, d) => a + d.quantity, 0),
     618,
   );
+}
+
+// ==================================================== cot hao hut
+
+const bangHH = buildDiemBanLookup([
+  { ten: "SW Ha Long", partnerId: "AC0301", note: "" },
+  { ten: "Draff Bia", partnerId: "AC0302", note: "" },
+]);
+
+/*
+ * DAU HIEU HAO HUT PHAI DO NGUOI GHI TEP DAT, KHONG DOAN.
+ *
+ * Trong tep that, hai cot lien nhau trung ten diem ban thuong la HAI CHUYEN
+ * GIAO trong cung mot ngay chu khong phai hao hut: NH 1901 ngay 12.09 co 61,8
+ * roi 123,6 — cot sau con lon gap doi cot truoc. Doan "trung ten la hao hut"
+ * thi 123,6 lit giao that bien thanh hao hut va cong no hut dung cho do.
+ */
+eq("doc dau hao hut co gach", docCotHaoHut("SW Ha Long - HH"), {
+  laHao: true,
+  tenGoc: "SW Ha Long",
+});
+eq("doc dau hao hut viet chu", docCotHaoHut("San Gon hao hut"), {
+  laHao: true,
+  tenGoc: "San Gon",
+});
+eq("doc dau hao hut trong ngoac", docCotHaoHut("Draff Bia (HH)"), {
+  laHao: true,
+  tenGoc: "Draff Bia",
+});
+eq("ten thuong thi khong phai hao hut", docCotHaoHut("NH 1901"), {
+  laHao: false,
+  tenGoc: "NH 1901",
+});
+// "HH" dinh lien trong ten thi khong tinh - neu khong mot diem ban ten co hai
+// chu h lien nhau se bi hieu nham la cot hao hut.
+eq("hh dinh lien khong tinh", docCotHaoHut("HHT Mart"), {
+  laHao: false,
+  tenGoc: "HHT Mart",
+});
+eq("o trong", docCotHaoHut(""), { laHao: false, tenGoc: "" });
+
+/*
+ * BANG RUT GON KHONG CO O "MA HANG".
+ *
+ * Bo phan con gui bang xuat kho rut gon: hang dau la ngay, hang thu hai la
+ * diem ban, roi toi thang du lieu. Doi cho duoc o moc thi tep ay doc ra 0 dong
+ * va app bao "khong sheet nao doc duoc", trong khi du lieu hoan toan binh
+ * thuong.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "07.09.26", null, null],
+    [null, null, null, "NH 1901", "SW Ha Long", "SW Ha Long - HH"],
+    ["10168107", "Bia hoi", "lit", 100, 300, 9],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("bang rut gon doc duoc", kq.drafts.length, 2);
+  eq("khong bao hao hut lac", kq.haoHutLac.length, 0);
+
+  const hl = kq.drafts.find((d) => d.outlet.includes("Ha Long"))!;
+  eq("so giao nhan giu nguyen", hl.quantity, 300);
+  eq("hao hut gan dung vao chuyen", hl.haoHut, 9);
+
+  // Cot hao hut KHONG thanh mot chuyen giao rieng.
+  eq("hao hut khong thanh dong xuat", kq.drafts.filter((d) => d.quantity === 9).length, 0);
+
+  const nh = kq.drafts.find((d) => d.outlet === "NH 1901")!;
+  eq("chuyen khac khong dinh hao hut", nh.haoHut, undefined);
+}
+
+/*
+ * HAI CHUYEN CUNG MOT DIEM BAN TRONG MOT NGAY VAN LA HAI DONG.
+ *
+ * Day la cho de hong nhat: khong duoc gop chung lai chi vi trung ten.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "12.09.26", null],
+    [null, null, null, "NH 1901", "NH 1901"],
+    ["10168107", "Bia hoi", "lit", 61.8, 123.6],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("hai chuyen van la hai dong", kq.drafts.length, 2);
+  eq("khong cai nao thanh hao hut", kq.drafts.filter((d) => d.haoHut).length, 0);
+  // Lam tron khi so: 61.8 + 123.6 trong so thuc ra 185.39999999999998.
+  eq(
+    "tong van du",
+    Math.round(kq.drafts.reduce((t, d) => t + d.quantity, 0) * 10) / 10,
+    185.4,
+  );
+  // Hai chuyen phan biet nhau bang so cot.
+  eq("hai chuyen khac cot", new Set(kq.drafts.map((d) => d.cot)).size, 2);
+}
+
+/*
+ * HAO HUT KHONG TIM DUOC CHUYEN GIAO THI BAO RA, khong lang le bo.
+ *
+ * Nguoi dung danh dau mot cot la hao hut nghia la ho dang noi co phan mat
+ * that; im lang bo di la ton kho cao hon thuc te.
+ */
+{
+  const rows: any[][] = [
+    [null, null, null, "07.09.26", null],
+    [null, null, null, "Diem La Chua Gan", "Diem La Chua Gan - HH"],
+    ["10168107", "Bia hoi", "lit", 100, 3],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("khong dung duoc dong nao", kq.drafts.length, 0);
+  eq("bao mot hao hut lac", kq.haoHutLac.length, 1);
+  eq("hao hut lac giu so luong", kq.haoHutLac[0].soLuong, 3);
+}
+
+// Hao hut cua mat hang KHAC trong cung cot thi gan dung mat hang do.
+{
+  const rows: any[][] = [
+    [null, null, null, "07.09.26", null],
+    [null, null, null, "SW Ha Long", "SW Ha Long - HH"],
+    ["10168107", "Bia hoi", "lit", 300, 9],
+    ["10168110", "Bia lon", "lon", 200, 6],
+  ];
+  const kq = parseTkhoXuat(rows, "Sheet1", products, bangHH);
+  eq("hai mat hang hai dong", kq.drafts.length, 2);
+  eq("hao hut mat hang 1", kq.drafts.find((d) => d.productId === "p1")!.haoHut, 9);
+  eq("hao hut mat hang 2", kq.drafts.find((d) => d.productId === "p4")!.haoHut, 6);
 }
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);

@@ -2226,6 +2226,55 @@ export default function App() {
             opCount = 0;
           }
         }
+
+        /*
+         * HAO HỤT TỪ TỆP — ghi thành giao dịch `LOSS` RIÊNG, y như đường điền
+         * tay.
+         *
+         * Vì sao không cộng vào dòng xuất: dòng xuất là số lên công nợ và lên
+         * hóa đơn. Cộng phần hao hụt vào đó là xuất hóa đơn cho phần mình
+         * không thu tiền. Tách riêng thì tồn kho giảm đúng phần đã đi ra thật,
+         * còn công nợ giữ đúng số đã thống nhất với đối tác.
+         *
+         * Cũng đi qua FIFO trên CÙNG bản sao tồn theo lô: có số lô thật thì tồn
+         * theo lô mới trừ được, vì phép tính tồn theo lô bỏ qua mọi giao dịch
+         * không có số lô.
+         */
+        const hao = Number(d.haoHut) || 0;
+        if (hao > 0) {
+          const haoAlloc = getFIFOAllocations(product.id, hao, localBatches);
+          for (let i = 0; i < haoAlloc.length; i++) {
+            const a = haoAlloc[i];
+            if (a.batchNumber === "VUOT_DINH_MUC") shortfall++;
+            const idHao = `${khoaDong[viTri]}-hao-${i}`;
+            seq++;
+            const tHao: Transaction = {
+              id: idHao,
+              date: `${d.dateKey}T08:00:00.000Z`,
+              type: "LOSS",
+              productId: product.id,
+              productName: product.name,
+              category: product.category,
+              quantity: a.quantity,
+              partnerId: d.partnerId,
+              partnerName: d.partnerName,
+              notes: `[Hao hụt] ${noteParts.join(" · ")}`,
+              batchNumber: a.batchNumber,
+              evidencePhotoUrls: [],
+              createdBy: user || "Guest",
+              referenceGroupId,
+              status: "completed",
+              originalQuantity: a.quantity,
+            };
+            batch.set(doc(db, "transactions", idHao), tHao);
+            opCount++;
+            if (opCount >= CHUNK) {
+              await batch.commit();
+              batch = writeBatch(db);
+              opCount = 0;
+            }
+          }
+        }
       }
 
       if (opCount > 0) await batch.commit();

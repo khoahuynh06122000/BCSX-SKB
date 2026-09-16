@@ -50,6 +50,14 @@ export interface TkhoDraft {
   /** Ghi chú lấy từ bảng gán điểm bán: "Ngoại giao", "HTKD", hoặc rỗng. */
   note: string;
   /**
+   * Hao hụt đi kèm chuyến giao này, lấy từ CỘT ĐÁNH DẤU HAO HỤT bên cạnh.
+   *
+   * Không cộng vào `quantity`: số lượng là phần lên công nợ và lên hóa đơn,
+   * còn hao hụt là phần mình mất. Cộng chung là xuất hóa đơn cho phần không
+   * thu tiền — xem `App.tsx`, chỗ ghi giao dịch `LOSS` riêng.
+   */
+  haoHut?: number;
+  /**
    * Chỉ số CỘT trong sheet mà ô này nằm ở đó.
    *
    * Đây là danh tính của một CHUYẾN GIAO. Cùng một ngày, một điểm bán có thể
@@ -61,6 +69,19 @@ export interface TkhoDraft {
    * bước xử lý.
    */
   cot: number;
+}
+
+/**
+ * Một cột hao hụt không tìm được chuyến giao để gắn vào.
+ *
+ * Báo ra chứ không lặng lẽ bỏ: người dùng đánh dấu một cột là hao hụt thì họ
+ * đang nói có phần mất thật, im lặng bỏ đi là tồn kho cao hơn thực tế.
+ */
+export interface TkhoHaoHutLac {
+  ten: string;
+  dateKey: string;
+  productName: string;
+  soLuong: number;
 }
 
 export interface TkhoUnknownOutlet {
@@ -130,10 +151,49 @@ export interface TkhoParseResult {
   totalChecks: TkhoTotalCheck[];
   /** Số ô có số lượng nhưng cột đó không có ngày. */
   oThieuNgay: number;
+  /** Cột hao hụt không gắn được vào chuyến giao nào. */
+  haoHutLac: TkhoHaoHutLac[];
   dateRange: { from: string; to: string } | null;
 }
 
 const S = (v: any): string => String(v ?? "").trim();
+
+/**
+ * Cột này có phải CỘT HAO HỤT của điểm bán bên trái không.
+ *
+ * VÌ SAO PHẢI ĐÁNH DẤU, KHÔNG ĐOÁN. Trong tệp thật, hai cột liền nhau trùng
+ * tên điểm bán thường là HAI CHUYẾN GIAO trong cùng một ngày, không phải hao
+ * hụt: NH 1901 ngày 12.09 có 61,8 rồi 123,6 — cột sau còn lớn gấp đôi cột
+ * trước. Đoán "trùng tên là hao hụt" thì 123,6 lít giao thật biến thành hao
+ * hụt và công nợ hụt đúng chỗ đó.
+ *
+ * Nên dấu hiệu phải do người ghi tệp đặt: thêm "HH" hoặc "hao hụt" vào ô tên
+ * điểm bán, ví dụ "SW Hạ Long - HH".
+ *
+ * Nhận cả vài cách viết cho đỡ phải nhớ chính xác, nhưng phải là MỘT TỪ RIÊNG
+ * — "HH" dính liền trong tên thì không tính, nếu không thì một điểm bán tên có
+ * hai chữ h liền nhau sẽ bị hiểu nhầm.
+ */
+const RE_HAO_HUT = /(^|[\s\-–—_/(\[])(hh|hao\s*hut)([\s\-–—_/)\]]|$)/i;
+
+export function docCotHaoHut(ten: string): { laHao: boolean; tenGoc: string } {
+  const raw = S(ten);
+  if (!raw) return { laHao: false, tenGoc: raw };
+  // Bỏ dấu tiếng Việt trước khi dò, để "hao hụt" và "hao hut" như nhau.
+  const khongDau = raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d");
+  if (!RE_HAO_HUT.test(khongDau)) return { laHao: false, tenGoc: raw };
+
+  // Tên gốc = bỏ phần đánh dấu và mấy dấu nối thừa ở hai đầu.
+  const tenGoc = raw
+    .replace(/(^|[\s\-–—_/(\[])\s*(hh|hao\s*h[uụ]t)\s*([\s\-–—_/)\]]|$)/i, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s\-–—_/]+|[\s\-–—_/]+$/g, "")
+    .trim();
+  return { laHao: true, tenGoc };
+}
 
 /** Bỏ dấu + ký tự lạ để so tiêu đề, không phân biệt hoa thường. */
 const key = (v: any): string =>
@@ -219,6 +279,7 @@ export function parseTkhoXuat(
     unknownCodes: [],
     totalChecks: [],
     oThieuNgay: 0,
+    haoHutLac: [],
     dateRange: null,
   };
 
@@ -235,7 +296,41 @@ export function parseTkhoXuat(
       }
     }
   }
-  if (hRow < 0) return empty;
+  /*
+   * BẢNG RÚT GỌN KHÔNG CÓ Ô "MÃ HÀNG".
+   *
+   * Bộ phận còn gửi bảng xuất kho rút gọn: hàng đầu là ngày, hàng thứ hai là
+   * điểm bán, rồi tới thẳng dữ liệu — mã vật tư nằm ở cột đầu mà không có chữ
+   * "MÃ HÀNG" nào. Đòi cho được ô mốc thì tệp ấy đọc ra 0 dòng và app báo
+   * "không sheet nào đọc được", trong khi dữ liệu hoàn toàn bình thường.
+   *
+   * Dò thay thế: hàng tiêu đề là hàng ĐẦU TIÊN đọc ra được một ngày; cột mã là
+   * cột đầu tiên có mã vật tư ở những hàng bên dưới. Chỉ chạy khi không tìm
+   * thấy ô mốc, nên sheet đầy đủ không bị ảnh hưởng.
+   */
+  if (hRow < 0) {
+    for (let r = 0; r < Math.min(rows.length, 8) && hRow < 0; r++) {
+      const row = rows[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        if (parseTkhoDate(row[c])) {
+          hRow = r;
+          break;
+        }
+      }
+    }
+    if (hRow < 0) return empty;
+
+    // Cột mã: cột trái nhất mà các hàng dưới có mã vật tư.
+    for (let c = 0; c < 6 && codeCol < 0; c++) {
+      for (let r = hRow + 2; r < Math.min(rows.length, hRow + 20); r++) {
+        if (/^\d{6,}$/.test(S((rows[r] || [])[c]))) {
+          codeCol = c;
+          break;
+        }
+      }
+    }
+    if (codeCol < 0) return empty;
+  }
 
   const rNgay = rows[hRow] || [];
   const rDiem = rows[hRow + 1] || [];
@@ -311,6 +406,7 @@ export function parseTkhoXuat(
   const unknownCodes = new Map<string, TkhoUnknownCode>();
   const totalChecks: TkhoTotalCheck[] = [];
   const ngayCoDuLieu = new Set<string>();
+  const haoHutLac: TkhoHaoHutLac[] = [];
   let oThieuNgay = 0;
 
   for (let r = hRow + 2; r < rows.length; r++) {
@@ -343,7 +439,43 @@ export function parseTkhoXuat(
         continue;
       }
 
-      const tenDiem = S(rDiem[c]);
+      const oTen = S(rDiem[c]);
+      const { laHao, tenGoc } = docCotHaoHut(oTen);
+      const tenDiem = laHao ? tenGoc : oTen;
+
+      /*
+       * CỘT HAO HỤT GẮN VÀO CHUYẾN GIAO GẦN NHẤT BÊN TRÁI, không tạo dòng mới.
+       *
+       * Cùng mặt hàng, cùng ngày, cùng điểm bán. Đi từ cuối danh sách ngược
+       * lên nên gặp đúng chuyến vừa đọc — một ngày có thể có hai chuyến cho
+       * cùng điểm bán, và hao hụt thuộc về chuyến ngay trước nó.
+       */
+      if (laHao) {
+        let gan = -1;
+        for (let i = drafts.length - 1; i >= 0; i--) {
+          const d = drafts[i];
+          if (
+            d.dateKey === dateKey &&
+            d.productId === product.id &&
+            key(d.outlet) === key(tenDiem)
+          ) {
+            gan = i;
+            break;
+          }
+        }
+        if (gan < 0) {
+          haoHutLac.push({
+            ten: oTen,
+            dateKey,
+            productName: product.name,
+            soLuong: qty,
+          });
+        } else {
+          drafts[gan].haoHut = (drafts[gan].haoHut || 0) + qty;
+        }
+        continue;
+      }
+
       const diem = lookupDiemBan(tenDiem, bangDiemBan);
       if (!diem) {
         const k = key(tenDiem) || "(trong)";
@@ -396,6 +528,7 @@ export function parseTkhoXuat(
     ),
     totalChecks,
     oThieuNgay,
+    haoHutLac,
     dateRange: ds.length ? { from: ds[0], to: ds[ds.length - 1] } : null,
   };
 }

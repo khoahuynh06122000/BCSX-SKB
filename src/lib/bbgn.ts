@@ -48,6 +48,14 @@ export interface BbgnDraft {
   /** Cột Note trong file, chỉ giữ khi khác với địa điểm. */
   note: string;
   /**
+   * Hao hụt đi kèm chuyến giao này. Ghi thành giao dịch `LOSS` RIÊNG.
+   *
+   * Không cộng vào `quantity`: số lượng là phần lên công nợ và lên hóa đơn,
+   * hao hụt là phần mình mất. Cộng chung là xuất hóa đơn cho phần không thu
+   * tiền.
+   */
+  haoHut?: number;
+  /**
    * Chỉ số cột trong sheet — danh tính của một CHUYẾN GIAO.
    *
    * Chỉ dòng đọc từ bảng chéo "T Kho" mới có. Cùng ngày một điểm bán có thể
