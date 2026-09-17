@@ -235,6 +235,7 @@ import {
   laGiaoDichDaHuy,
   nguonPhieuDaHuy,
 } from "./lib/phieuHuy";
+import { chuanTen, ghiChuHienThi } from "./lib/ghiChu";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -2349,13 +2350,29 @@ export default function App() {
         const soChuyen = chuyenTrongNgay.get(`${d.dateKey}|${d.partnerId}`)!;
         const thuTuChuyen = soChuyen.indexOf(d.cot ?? -1) + 1;
 
+        /*
+         * GHI CHÚ CHỈ GIỮ THỨ KHÔNG CỘT NÀO NÓI ĐƯỢC.
+         *
+         * Bỏ "Nạp từ file BBGN": nó lặp y hệt trên mọi dòng của cùng một lần
+         * nạp, nên không phân biệt được dòng nào với dòng nào — mà ô ghi chú
+         * càng dài thì mắt càng bỏ qua cả ô, kể cả dòng thật sự cần đọc.
+         *
+         * Bỏ "Điểm nhận" khi nó trùng tên đối tác: cột Đối tác ngay bên cạnh
+         * đã ghi "BNC · KAVKAZ" rồi. Chỉ giữ khi khác — lúc đó nó là thứ duy
+         * nhất cho biết bia đi tới đâu.
+         */
+        const trungTen =
+          chuanTen(d.outlet) === chuanTen(d.partnerName) ||
+          String(d.partnerName || "")
+            .split("·")
+            .some((x) => chuanTen(x) === chuanTen(d.outlet));
+
         const noteParts = [
           soChuyen.length > 1
             ? `Chuyến ${thuTuChuyen}/${soChuyen.length}`
             : "",
-          d.outlet ? `Điểm nhận: ${d.outlet}` : "",
-          d.note,
-          "Nạp từ file BBGN",
+          d.outlet && !trungTen ? `Điểm nhận: ${d.outlet}` : "",
+          chuanTen(d.note) === chuanTen(d.outlet) ? "" : d.note,
         ].filter(Boolean);
 
         /*
@@ -4256,7 +4273,7 @@ export default function App() {
               status: "completed",
               date: finalDate,
               updatedAt: now,
-              notes: `${trx.notes || ""} (Tin đã khớp)`.trim(),
+              // Không thêm chữ gì: cột Trạng thái đã nói là đơn đã xong.
               evidencePhotoUrl: photoUrls[0] || null,
               evidencePhotoUrls: photoUrls,
             });
@@ -8121,8 +8138,11 @@ export default function App() {
                                     </td>
                                     <td className="py-4 px-6">
                                       <div className="flex items-center gap-2 min-w-[100px]">
-                                        <span className="text-xs text-slate-400 italic italic">
-                                          {t.notes || "—"}
+                                        <span className="text-xs text-slate-400 italic">
+                                          {ghiChuHienThi(
+                                            t.notes,
+                                            t.partnerName,
+                                          ) || "—"}
                                         </span>
                                         {t.evidencePhotoUrl && (
                                           <div className="flex gap-1.5">
@@ -11364,7 +11384,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                               <td className="py-4 px-6">
                                 <div className="flex items-center gap-3">
                                   <span className="text-xs text-slate-400 italic max-w-[120px] truncate">
-                                    {t.notes || "—"}
+                                    {ghiChuHienThi(t.notes, t.partnerName) ||
+                                      "—"}
                                   </span>
                                   {t.evidencePhotoUrl && (
                                     <div className="flex gap-1.5">
