@@ -4262,6 +4262,30 @@ export default function App() {
       }
 
       /*
+       * GHI CÁC DÒNG XUẤT XUỐNG FIRESTORE.
+       *
+       * Dòng này từng bị xoá nhầm (9a3de54): cả lô cập nhật được dựng đầy đủ
+       * rồi vứt đi mà không ai biết. Hậu quả đúng như đã gặp — bấm xác nhận
+       * xong, không có lỗi nào, nhưng đơn vẫn nằm nguyên ở Đơn đi đường, còn
+       * phần hao hụt thì lại vào sổ vì nó đi bằng một lô ghi khác ở dưới.
+       *
+       * Có try/catch riêng để lỗi của chính lượt ghi này hiện ra kèm MÃ LỖI
+       * GỐC của Firestore, không lẫn vào khối catch chung ở cuối hàm.
+       */
+      try {
+        await batch.commit();
+      } catch (e: any) {
+        setLoading(false);
+        alert(
+          `LƯU HỎNG NGAY LÚC GHI.\n\n` +
+            `Mã lỗi: ${e?.code || "(không có mã)"}\n` +
+            `Nội dung: ${e?.message || String(e)}\n\n` +
+            `Số dòng định ghi: ${trxsToConfirm.length}`,
+        );
+        return;
+      }
+
+      /*
        * ĐỌC LẠI SAU KHI GHI, ĐỂ BIẾT GHI CÓ ĂN KHÔNG.
        *
        * `writeBatch.commit()` chạy trót lọt không có nghĩa là dữ liệu đã đổi
@@ -4277,19 +4301,28 @@ export default function App() {
       const conTreo: string[] = [];
       for (const trx of trxsToConfirm) {
         const lai = await getDoc(doc(db, "transactions", trx.id));
-        if (!lai.exists() || lai.data()?.status === "in_transit") {
-          conTreo.push(trx.id);
+        const d = lai.data();
+        if (!lai.exists()) {
+          conTreo.push(`${trx.id} :: không còn bản ghi`);
+        } else if (d?.status === "in_transit") {
+          /*
+           * `updatedAt` phân biệt hai nguyên nhân khác hẳn nhau: bằng đúng giờ
+           * vừa ghi nghĩa là ghi CÓ ăn rồi bị một lượt ghi khác đè ngược; vẫn
+           * là giờ cũ nghĩa là lệnh ghi KHÔNG hề chạm tới bản ghi này.
+           */
+          conTreo.push(
+            `${trx.id} :: status=${d?.status} updatedAt=${d?.updatedAt || "(trống)"}`,
+          );
         }
       }
       if (conTreo.length > 0) {
         setLoading(false);
         alert(
-          `GHI KHÔNG ĂN — ${conTreo.length}/${trxsToConfirm.length} dòng vẫn ` +
+          `LƯU CHƯA ĂN — ${conTreo.length}/${trxsToConfirm.length} dòng vẫn ` +
             `còn ở trạng thái đang đi đường sau khi lưu.\n\n` +
-            `Mã bản ghi: ${conTreo.slice(0, 5).join(", ")}` +
-            (conTreo.length > 5 ? ` và ${conTreo.length - 5} dòng nữa` : "") +
-            `\n\nAnh chụp màn hình này gửi lại nhé, đây là đầu mối để tìm ra ` +
-            `nguyên nhân.`,
+            `Giờ vừa ghi: ${now}\n\n` +
+            conTreo.slice(0, 3).join("\n") +
+            (conTreo.length > 3 ? `\n… và ${conTreo.length - 3} dòng nữa` : ""),
         );
         return;
       }
