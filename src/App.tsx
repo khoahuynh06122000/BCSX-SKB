@@ -6133,7 +6133,23 @@ export default function App() {
                 evidencePhotoUrls: [],
                 createdBy: user || "Guest",
                 referenceGroupId,
-                status: "completed",
+                /*
+                 * HAO HỤT MANG ĐÚNG TRẠNG THÁI CỦA DÒNG XUẤT ĐI KÈM.
+                 *
+                 * Để cứng "completed" trong khi dòng xuất là `in_transit` thì
+                 * sinh ra hai chuyện, cùng một gốc:
+                 *
+                 *   1. Báo cáo tính hao hụt của một chuyến chưa ai ký nhận.
+                 *   2. Thẻ Đơn đi đường và khung xác nhận đều tìm hao hụt theo
+                 *      `in_transit`, nên không thấy gì — đơn điền tay có hao
+                 *      hụt mà màn hình không hiện được một dòng nào.
+                 *
+                 * Đường nạp từ tệp BBGN đã sửa ở 9a3de54; đây là đúng chỗ ấy
+                 * trên đường điền tay, sót lại.
+                 */
+                status: newTransaction.isInTransit
+                  ? "in_transit"
+                  : "completed",
               } as Transaction);
             }
           }
