@@ -5396,7 +5396,15 @@ export default function App() {
         unit: string;
         openingStock: number;
         closingStock: number;
-        /** Phần hao hụt, đã nằm trong . Tách ra chỉ để hiện thành cột riêng. */
+        /**
+         * Hao hụt / hư hại trong kỳ. ĐỨNG RIÊNG, không nằm trong `out`.
+         *
+         * `out` là số ghi công nợ cho đối tác và lên hóa đơn; hao hụt là phần
+         * mình chịu. Gộp chung thì người đọc báo cáo lấy cột Xuất đi đối chiếu
+         * công nợ sẽ đòi đối tác trả tiền cả phần mình làm mất.
+         *
+         * Quan hệ giữa các cột: tồn cuối = tồn đầu + nhập − xuất − hao hụt.
+         */
         loss: number;
       }
     >();
@@ -5444,18 +5452,20 @@ export default function App() {
         } else if (t.type === "IN") {
           entry.in += Number(t.quantity || 0);
           entry.inValue += Number(t.quantity || 0) * price;
+        } else if (t.type === "LOSS" || t.type === "DAMAGE") {
+          /*
+           * HAO HỤT KHÔNG CỘNG VÀO CỘT XUẤT.
+           *
+           * Cột Xuất là số ghi công nợ cho đối tác, phải đúng bằng số trên
+           * biên bản hai bên ký. Hao hụt là phần mình chịu — cộng vào đó là
+           * đòi đối tác trả tiền cả phần mình làm mất.
+           *
+           * Giá trị cũng không cộng: hao hụt không sinh ra đồng doanh thu nào.
+           */
+          entry.loss += Number(t.quantity || 0);
         } else {
           entry.out += Number(t.quantity || 0);
           entry.outValue += Number(t.quantity || 0) * price;
-          /*
-           * Hao hụt VẪN nằm trong `out` — phép tính tồn đầu (closing − in +
-           * out) dựa vào đó. Đếm riêng thêm một lượt để hiện thành cột, vì
-           * gộp vào "Tổng xuất" thì không ai biết trong đó có bao nhiêu là
-           * hàng mình mất.
-           */
-          if (t.type === "LOSS" || t.type === "DAMAGE") {
-            entry.loss += Number(t.quantity || 0);
-          }
         }
       }
     });
@@ -5500,9 +5510,23 @@ export default function App() {
       }
     });
 
-    // 3. Calculate Opening Stock: Opening = Closing - In + Out
+    /*
+     * 3. TỒN ĐẦU KỲ tính ngược từ tồn cuối.
+     *
+     *     tồn cuối = tồn đầu + nhập − xuất − hao hụt
+     *   → tồn đầu  = tồn cuối − nhập + xuất + hao hụt
+     *
+     * PHẢI CỘNG CẢ `loss`. Tồn cuối ở bước 2 đã trừ hao hụt rồi (hàng mất là
+     * mất thật), nên nếu chỉ cộng lại `out` thì tồn đầu thiếu đúng bằng phần
+     * hao hụt, và bảng không còn cân — người đọc cộng tay theo đúng công thức
+     * trên sẽ ra lệch mà không hiểu vì sao.
+     *
+     * Trước đây `out` bao gộp cả hao hụt nên chỉ cần `+ entry.out`; nay hai
+     * cột tách nhau thì phép tính này phải tách theo.
+     */
     summaryMap.forEach((entry) => {
-      entry.openingStock = entry.closingStock - entry.in + entry.out;
+      entry.openingStock =
+        entry.closingStock - entry.in + entry.out + entry.loss;
     });
 
     return Array.from(summaryMap.values());
