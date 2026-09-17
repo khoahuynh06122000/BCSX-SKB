@@ -3681,6 +3681,31 @@ export default function App() {
     return m;
   }, [transactions]);
 
+  /**
+   * Các dòng hao hụt đi kèm phiếu đang mở trong khung xác nhận.
+   *
+   * Hao hụt cố ý không nằm trong danh sách hàng hóa của khung (nó không giao
+   * cho đối tác, hỏi "thực nhận bao nhiêu" là vô nghĩa), nhưng phải hiện ra
+   * để người kho biết bấm xác nhận là ghi nhận luôn cả phần này.
+   */
+  const haoHutCuaPhieuDangXac = useMemo(() => {
+    if (!selectedInTransitGroup || selectedInTransitGroup.length === 0)
+      return [] as Transaction[];
+    const nhom = new Set(
+      selectedInTransitGroup
+        .map((t) => t.referenceGroupId)
+        .filter((x): x is string => !!x),
+    );
+    if (nhom.size === 0) return [] as Transaction[];
+    return transactions.filter(
+      (t) =>
+        laDongHaoHut(t) &&
+        t.status === "in_transit" &&
+        t.referenceGroupId &&
+        nhom.has(t.referenceGroupId),
+    );
+  }, [transactions, selectedInTransitGroup]);
+
   const inTransitGroups = useMemo(() => {
     const groups: Record<string, Transaction[]> = {};
     const sortedAll = [...transactions].sort(
@@ -9719,6 +9744,69 @@ export default function App() {
                               );
                             })()}
                           </div>
+
+                          {/*
+                            HAO HỤT ĐI KÈM PHIẾU — chỉ để đọc, không có ô nhập.
+                            Số này lấy thẳng từ tệp BBGN, người kho không sửa ở
+                            đây; muốn sửa thì sửa tệp rồi nạp lại.
+
+                            Mỗi dòng nói rõ nó có được ghi nhận lần này không:
+                            hao hụt chỉ đi theo mặt hàng ĐÃ TÍCH khớp. Không nói
+                            ra thì người dùng tích ba trên năm mặt hàng, tưởng
+                            hao hụt vào hết, rồi hai dòng còn lại treo lại mà
+                            không hiểu vì sao.
+                          */}
+                          {haoHutCuaPhieuDangXac.length > 0 && (
+                            <div className="space-y-2">
+                              <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1 block leading-snug">
+                                Hao hụt đi kèm phiếu này
+                              </label>
+                              <div className="rounded-2xl border border-amber-200 bg-amber-50/60 divide-y divide-amber-200/70 overflow-hidden">
+                                {haoHutCuaPhieuDangXac.map((h) => {
+                                  const seGhi = matchedProductIds.has(
+                                    h.productId,
+                                  );
+                                  const dv =
+                                    products.find((x) => x.id === h.productId)
+                                      ?.unit || "đơn vị";
+                                  return (
+                                    <div
+                                      key={h.id}
+                                      className="flex items-center gap-2 px-3 py-2.5"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[12px] font-black text-slate-800 leading-snug break-words">
+                                          {h.productName}
+                                        </div>
+                                        <div className="text-[10px] font-bold uppercase tracking-tighter mt-0.5 text-slate-400">
+                                          {seGhi ? (
+                                            <span className="text-emerald-600">
+                                              Ghi nhận cùng lần xác nhận này
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400">
+                                              Chưa tích mặt hàng — hao hụt chờ
+                                              lượt sau
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className="font-mono font-black text-sm text-amber-700 shrink-0">
+                                        {formatNumber(h.quantity)}
+                                      </span>
+                                      <span className="text-[10px] font-black text-amber-600/70 uppercase shrink-0">
+                                        {dv}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[10px] font-bold text-slate-400 leading-relaxed ml-1">
+                                Phần hao hụt KHÔNG lên công nợ và không lên hóa
+                                đơn — chỉ trừ vào tồn kho. Số lấy từ tệp đã nạp.
+                              </p>
+                            </div>
+                          )}
 
                           {Object.entries(actualReceivedQtyMap).some(
                             ([pId, qty]) => {
