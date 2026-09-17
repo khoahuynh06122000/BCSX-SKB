@@ -231,6 +231,11 @@ import {
   trongNhatKyNhap,
   trongNhatKyXuat,
 } from "./lib/nhatKyKho";
+import {
+  boGiaoDichPhieuDaHuy,
+  laGiaoDichDaHuy,
+  nguonPhieuDaHuy,
+} from "./lib/phieuHuy";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -4579,9 +4584,21 @@ export default function App() {
    * Ngoai le co y: tab Lich su va thu vien anh van hien day du de nguoi dung
    * thay duoc hang minh vua dien va biet no dang cho ky.
    */
+  /**
+   * Chứng từ đang mang dấu ĐÃ HỦY trong sổ số phiếu.
+   *
+   * Dựng lại từ sổ mỗi lần chứ không lưu cờ vào từng giao dịch, nên phiếu hủy
+   * từ trước cũng tự đúng theo — xem `src/lib/phieuHuy.ts`.
+   */
+  const nguonDaHuy = useMemo(() => nguonPhieuDaHuy(soPhieu), [soPhieu]);
+
   const countedTransactions = useMemo(
-    () => stockTransactions(transactions, approvedSlips),
-    [transactions, approvedSlips],
+    () =>
+      boGiaoDichPhieuDaHuy(
+        stockTransactions(transactions, approvedSlips),
+        nguonDaHuy,
+      ),
+    [transactions, approvedSlips, nguonDaHuy],
   );
 
   const filteredTransactionsByTime = useMemo(() => {
@@ -4598,8 +4615,12 @@ export default function App() {
 
   /** Ban da loc theo thoi gian VA da bo hang chua ky - dung cho thong ke, do thi. */
   const countedTransactionsByTime = useMemo(
-    () => stockTransactions(filteredTransactionsByTime, approvedSlips),
-    [filteredTransactionsByTime, approvedSlips],
+    () =>
+      boGiaoDichPhieuDaHuy(
+        stockTransactions(filteredTransactionsByTime, approvedSlips),
+        nguonDaHuy,
+      ),
+    [filteredTransactionsByTime, approvedSlips, nguonDaHuy],
   );
 
   const filteredRevenueByTime = useMemo(() => {
@@ -11643,6 +11664,18 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                     t.type === "DAMAGE") && (
                                     <span className="ml-2 px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[9px] font-black uppercase tracking-tighter mt-1 md:mt-0">
                                       Hao hụt / Hư hại
+                                    </span>
+                                  )}
+                                  {/*
+                                    Dòng thuộc phiếu đã hủy VẪN HIỆN ở Lịch sử,
+                                    kèm nhãn. Ẩn hẳn thì người dùng thấy hàng
+                                    biến mất khỏi tồn kho mà không còn dấu vết
+                                    nào để tra vì sao — đây đúng là chỗ cần tra
+                                    lại.
+                                  */}
+                                  {laGiaoDichDaHuy(t, nguonDaHuy) && (
+                                    <span className="ml-2 px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[9px] font-black uppercase tracking-tighter mt-1 md:mt-0">
+                                      Phiếu đã hủy · không tính tồn
                                     </span>
                                   )}
                                 </div>
