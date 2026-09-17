@@ -3866,19 +3866,17 @@ export default function App() {
     setActualReceivedQtyMap(qtyMap);
 
     /*
-     * ĐÁNH DẤU KHỚP SẴN CẢ PHIẾU.
+     * MỞ KHUNG RA LÀ CHƯA KHỚP MẶT HÀNG NÀO — CỐ Ý.
      *
-     * Không có dòng này thì khung xác nhận mở ra với mọi mặt hàng xám mờ, và
-     * bấm nút xác nhận cuối cùng chỉ nhận lại "Chưa có đơn nào được khớp trên
-     * phiếu" — nút mang tên "xác nhận" mà không xác nhận được gì. Người dùng
-     * đóng khung lại, tưởng đã xong, trong khi đơn vẫn nguyên ở đi đường.
+     * Người kho phải dò từng loại bia trên tờ phiếu giấy, đối đúng số lượng,
+     * rồi mới tích "có trên phiếu" cho loại đó. Đây là bước ĐỐI CHIẾU, không
+     * phải thủ tục thừa: tích sẵn cả phiếu là biến nó thành một cú bấm, và
+     * hàng giao thiếu trôi thẳng vào sổ mà không ai nhìn.
      *
-     * Đặt lại hẳn Set mới chứ không cộng thêm: dấu khớp còn sót từ lần mở
-     * trước sẽ xác nhận nhầm sang đơn khác.
-     *
-     * Muốn bỏ một mặt hàng ra thì bấm nút trên chính dòng đó trong khung.
+     * Đặt lại Set RỖNG chứ không để nguyên: dấu khớp còn sót từ đơn mở trước
+     * sẽ xác nhận nhầm sang đơn này.
      */
-    setMatchedProductIds(new Set(trxsToConfirm.map((t) => t.productId)));
+    setMatchedProductIds(new Set());
 
     setLossReason("");
     setConfirmationPhotos([]);
@@ -9243,11 +9241,9 @@ export default function App() {
                                     );
                                   });
                                   setActualReceivedQtyMap(qtyMap);
-                                  // Nút ghi "cả phiếu" thì phải khớp sẵn cả
-                                  // phiếu — xem ghi chú ở `handleBulkConfirm`.
-                                  setMatchedProductIds(
-                                    new Set(group.map((t) => t.productId)),
-                                  );
+                                  // Mở ra là chưa khớp gì, người kho dò từng
+                                  // loại — xem ghi chú ở `handleBulkConfirm`.
+                                  setMatchedProductIds(new Set());
                                   setShowLossModal(true);
                                 }}
                                 className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
@@ -9436,11 +9432,9 @@ export default function App() {
                                           );
                                         });
                                         setActualReceivedQtyMap(qtyMap);
-                                        // Nút ghi "cả phiếu" thì phải khớp sẵn
-                                        // cả phiếu — xem `handleBulkConfirm`.
-                                        setMatchedProductIds(
-                                          new Set(group.map((t) => t.productId)),
-                                        );
+                                        // Mở ra là chưa khớp gì, người kho dò
+                                        // từng loại — xem `handleBulkConfirm`.
+                                        setMatchedProductIds(new Set());
                                         setShowLossModal(true);
                                       }}
                                       className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
