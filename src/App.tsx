@@ -1888,9 +1888,6 @@ export default function App() {
     }
   };
 
-  /** Xoá cả tồn đầu kỳ khi dọn phần nhập — mặc định KHÔNG. */
-  const [xoaCaTonDau, setXoaCaTonDau] = useState(false);
-
   /**
    * XOÁ TOÀN BỘ PHẦN NHẬP KHO — để nạp lại từ đầu.
    *
@@ -1902,9 +1899,14 @@ export default function App() {
    * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại còn
    * dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
    *
-   * TỒN ĐẦU KỲ PHẢI TỰ CHỌN, mặc định giữ lại. Nó là số dư mang sang, khai một
-   * lần rồi thôi — gộp nó vào "xoá phần nhập" thì một lần bấm để nạp lại tệp
-   * tháng này sẽ thổi bay luôn số gốc của cả kho, và không có đường lấy lại.
+   * TỒN ĐẦU KỲ KHÔNG BAO GIỜ BỊ ĐỤNG TỚI, và cố ý không có ô chọn nào để bật
+   * lên. Nó là số dư mang sang, khai một lần rồi thôi — trong khi nút này dùng
+   * để nạp lại tệp nhập của một kỳ, việc lặp đi lặp lại. Một lựa chọn có thể
+   * trót tích nhầm giữa việc lặp lại ấy là một lựa chọn sẽ có ngày bị tích
+   * nhầm, và số gốc của cả kho thì không có đường lấy lại.
+   *
+   * Muốn xoá cả tồn đầu kỳ thì dùng "Dọn sạch" ở thanh bên — chỗ đó nói rõ là
+   * xoá sạch mọi thứ, nên không ai bấm nhầm mà không biết mình đang làm gì.
    *
    * Bộ đếm bên NHẬP xoá theo được: mã phiếu nhập do `nextSlipCode` sinh từ các
    * mã đang có, không lấy từ bộ đếm — xem `laBoDemChieuNhap`.
@@ -1912,9 +1914,7 @@ export default function App() {
   const handleXoaToanBoNhap = async () => {
     if (!isOwner) return;
 
-    const dsNhap = transactions.filter(
-      (t) => t.id && (t.type === "IN" || (xoaCaTonDau && t.type === "OPENING")),
-    );
+    const dsNhap = transactions.filter((t) => t.id && t.type === "IN");
     const dsSo = soPhieu.filter(
       (g) => g.soPhieu && (g.loai === "NHAP" || g.loai === "HUY_NHAP"),
     );
@@ -1925,19 +1925,16 @@ export default function App() {
       return;
     }
 
-    const soTonDau = dsNhap.filter((t) => t.type === "OPENING").length;
     const conTonDau = transactions.filter((t) => t.type === "OPENING").length;
 
     if (
       !window.confirm(
-        `Xoá ${dsNhap.length} giao dịch nhập kho` +
-          (soTonDau > 0 ? ` (trong đó ${soTonDau} dòng tồn đầu kỳ)` : "") +
-          `, ${dsPhieu.length} phiếu nhập kèm ảnh đã ký, và ${dsSo.length} ` +
-          `dòng phiếu nhập trong Sổ số phiếu?\n\n` +
-          (soTonDau === 0 && conTonDau > 0
-            ? `GIỮ LẠI ${conTonDau} dòng tồn đầu kỳ. Muốn xoá cả thì tích ô "Xoá cả tồn đầu kỳ" rồi bấm lại.\n\n`
+        `Xoá ${dsNhap.length} giao dịch nhập kho, ${dsPhieu.length} phiếu nhập ` +
+          `kèm ảnh đã ký, và ${dsSo.length} dòng phiếu nhập trong Sổ số phiếu?\n\n` +
+          (conTonDau > 0
+            ? `GIỮ NGUYÊN ${conTonDau} dòng tồn đầu kỳ.\n`
             : "") +
-          `Xuất kho và đối tác được GIỮ NGUYÊN.\n\n` +
+          `Xuất kho và đối tác cũng giữ nguyên.\n\n` +
           `Ảnh trên Cloudinary không bị xoá, chỉ bỏ liên kết.\n\n` +
           `Không khôi phục lại được.`,
       )
@@ -11173,38 +11170,28 @@ export default function App() {
                     <div className="space-y-4">
                       <p className="text-xs font-semibold text-slate-500 leading-relaxed">
                         Xoá toàn bộ giao dịch nhập kho, các phiếu nhập kèm ảnh
-                        đã ký, và các dòng phiếu nhập trong Sổ số phiếu. Xuất
-                        kho, đối tác và danh mục sản phẩm được giữ nguyên.
+                        đã ký, và các dòng phiếu nhập trong Sổ số phiếu.{" "}
+                        <span className="font-black text-slate-700">
+                          Tồn đầu kỳ được giữ nguyên.
+                        </span>{" "}
+                        Xuất kho, đối tác và danh mục sản phẩm cũng giữ nguyên.
                       </p>
 
                       <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
                         <p className="text-[11px] font-black text-rose-800">
-                          Đang có{" "}
+                          Sẽ xoá{" "}
                           {transactions.filter((t) => t.type === "IN").length}{" "}
-                          giao dịch nhập kho và{" "}
-                          {transactions.filter((t) => t.type === "OPENING").length}{" "}
+                          giao dịch nhập kho
+                        </p>
+                        <p className="text-[11px] font-black text-emerald-700 mt-1">
+                          Giữ lại{" "}
+                          {
+                            transactions.filter((t) => t.type === "OPENING")
+                              .length
+                          }{" "}
                           dòng tồn đầu kỳ
                         </p>
                       </div>
-
-                      {/*
-                        TỒN ĐẦU KỲ PHẢI TỰ TÍCH, mặc định giữ lại. Nó là số dư
-                        mang sang, khai một lần rồi thôi — gộp vào "xoá phần
-                        nhập" thì một lần bấm để nạp lại tệp tháng này sẽ thổi
-                        bay luôn số gốc của cả kho.
-                      */}
-                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 mt-0.5 shrink-0 text-primary rounded border-slate-300 focus:ring-primary/20"
-                          checked={xoaCaTonDau}
-                          onChange={(e) => setXoaCaTonDau(e.target.checked)}
-                        />
-                        <span className="text-[11px] font-bold text-slate-600 leading-snug">
-                          Xoá cả tồn đầu kỳ (số liệu gốc ban đầu). Để trống thì
-                          tồn đầu kỳ được giữ lại.
-                        </span>
-                      </label>
 
                       <Button
                         variant="outline"
@@ -11219,7 +11206,8 @@ export default function App() {
                       <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
                         Ảnh trên Cloudinary không bị xoá — đó là chứng từ đã ký,
                         giữ lại còn dấu vết để tra. Chỉ bỏ liên kết trong cơ sở
-                        dữ liệu. Không khôi phục lại được.
+                        dữ liệu. Muốn xoá cả tồn đầu kỳ thì dùng "Dọn sạch" ở
+                        thanh bên. Không khôi phục lại được.
                       </p>
                     </div>
                   </Card>
