@@ -33,6 +33,7 @@ import { cn, formatNumber } from "../lib/utils";
 import ONgay from "./ONgay";
 
 import { dungKeHoachDoiSo } from "../lib/doiSoPhieuCu";
+import { nguonCuaGiaoDich } from "../lib/phieuHuy";
 /**
  * SỔ SỐ PHIẾU
  *
@@ -116,6 +117,30 @@ export default function SoPhieu({
   const loc: BoLocSoPhieu = { tuNgay, denNgay, tuKhoa, loai, chiConHieuLuc };
   const ds = useMemo(() => locSoPhieu(soPhieu, loc), [soPhieu, tuNgay, denNgay, tuKhoa, loai, chiConHieuLuc]);
   const tomTat = useMemo(() => tomTatSoPhieu(ds), [ds]);
+
+  /**
+   * Mặt hàng của từng chứng từ, tra theo `nguon`.
+   *
+   * Sổ số phiếu chỉ lưu số dòng và tổng số lượng, không lưu tên hàng — nên
+   * phải dựng lại từ bảng giao dịch. Không có cột này thì nhìn sổ chỉ thấy
+   * "PN-260911-01 · 2.797,2" và phải sang tab khác mới biết đó là bia gì.
+   *
+   * Dùng chung `nguonCuaGiaoDich` với phép lọc phiếu hủy, để hai chỗ không bao
+   * giờ hiểu "chứng từ gốc" theo hai kiểu khác nhau.
+   */
+  const matHangTheoNguon = useMemo(() => {
+    const m = new Map<string, { ten: string; soLuong: number }[]>();
+    transactions.forEach((t) => {
+      const n = nguonCuaGiaoDich(t);
+      if (!n) return;
+      const ds = m.get(n) || [];
+      const co = ds.find((x) => x.ten === t.productName);
+      if (co) co.soLuong += Number(t.quantity) || 0;
+      else ds.push({ ten: t.productName, soLuong: Number(t.quantity) || 0 });
+      m.set(n, ds);
+    });
+    return m;
+  }, [transactions]);
 
   /** Nguồn chứng từ đã có số — để biết cái nào còn thiếu. */
   const nguonDaCoSo = useMemo(() => {
@@ -566,24 +591,21 @@ export default function SoPhieu({
       ) : (
         <div className="rounded-2xl border border-slate-100 overflow-hidden premium-shadow bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full text-left table-fixed min-w-[1120px]">
+            <table className="w-full text-left table-fixed min-w-[940px]">
               {/*
                 Số phiếu cần 150px: `PN-260911-01` ở cỡ 13px là vừa đúng một
                 dòng. Cột cũ 104px nên số bị gãy làm hai dòng, và dòng nào gãy
                 thì cao hơn hẳn dòng bên cạnh — bảng trông so le.
 
-                HAI CỘT ĐỂ TRỐNG BỀ RỘNG (Đơn vị và Chứng từ gốc) thay vì một.
-                Bảng `table-fixed` dồn hết chỗ thừa vào cột không khai bề rộng;
-                trước đây chỉ mình cột Đơn vị để trống nên nó phình ra, và giữa
-                bảng hở một mảng trắng lớn trong khi chữ thì chen chúc.
+                CỘT MẶT HÀNG LÀ CỘT DUY NHẤT KHÔNG KHAI BỀ RỘNG. Bảng
+                `table-fixed` dồn hết chỗ thừa vào cột nào không khai, nên phải
+                là cột chứa nhiều chữ nhất — tên bia dài và có thể nhiều dòng.
               */}
               <colgroup>
                 <col className="w-[150px]" />
-                <col className="w-[148px]" />
+                <col />
                 <col className="w-[120px]" />
                 <col className="w-[152px]" />
-                <col />
-                <col />
                 <col className="w-[112px]" />
                 <col className="w-[152px]" />
                 <col className="w-[96px]" />
@@ -592,11 +614,9 @@ export default function SoPhieu({
                 <tr>
                   {[
                     "Số phiếu",
-                    "Loại",
-                    "Document Date",
-                    "Entered On",
-                    "Đơn vị",
-                    "Chứng từ gốc",
+                    "Mặt hàng",
+                    "Ngày biên bản",
+                    "Vào hệ thống",
                     "Số lượng",
                     "Trạng thái",
                     "",
@@ -605,8 +625,8 @@ export default function SoPhieu({
                       key={i}
                       className={cn(
                         "py-3 px-4 font-black text-[10px] text-slate-400 uppercase tracking-widest",
-                        i === 6 && "text-right",
-                        i === 7 && "text-center",
+                        i === 4 && "text-right",
+                        i === 5 && "text-center",
                       )}
                     >
                       {t}
@@ -638,31 +658,48 @@ export default function SoPhieu({
                           {g.soPhieu}
                         </span>
                       </td>
+                      {/*
+                        CỘT MẶT HÀNG thay cho ba cột cũ (Loại, Đơn vị, Chứng từ
+                        gốc). Loại đã nằm sẵn trong đầu số phiếu (PN / PX / đuôi
+                        -HUY), còn "Chứng từ gốc" với phiếu nhập chỉ chép lại
+                        đúng số phiếu bên trái — một cột lặp lại cột khác.
+                      */}
                       <td className="py-3.5 px-4">
-                        <span
-                          className={cn(
-                            "inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border whitespace-nowrap",
-                            huy
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : g.loai === "NHAP"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200",
-                          )}
-                        >
-                          {TEN_LOAI[g.loai]}
-                        </span>
+                        {(() => {
+                          const ds = matHangTheoNguon.get(g.nguon) || [];
+                          if (ds.length === 0)
+                            return (
+                              <span className="text-[11px] font-bold text-slate-300 italic">
+                                Không còn giao dịch
+                              </span>
+                            );
+                          return (
+                            <div className="space-y-0.5">
+                              {ds.map((x) => (
+                                <div
+                                  key={x.ten}
+                                  className={cn(
+                                    "flex items-baseline gap-2 text-[12px] leading-snug",
+                                    daHuy && "text-slate-400",
+                                  )}
+                                >
+                                  <span className="font-bold text-slate-800 break-words min-w-0">
+                                    {x.ten}
+                                  </span>
+                                  <span className="font-mono font-black text-slate-400 shrink-0">
+                                    {formatNumber(x.soLuong)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 text-[12px] font-mono font-bold text-slate-700 whitespace-nowrap">
                         {ngayVn(g.documentDate)}
                       </td>
                       <td className="py-3.5 px-4 text-[12px] font-mono text-slate-400 whitespace-nowrap">
                         {ngayGioVn(g.enteredOn)}
-                      </td>
-                      <td className="py-3.5 px-4 text-[12px] font-bold text-slate-700 leading-tight">
-                        {g.donVi || "—"}
-                      </td>
-                      <td className="py-3.5 px-4 text-[12px] font-mono text-slate-400 truncate">
-                        {g.nguon}
                       </td>
                       <td
                         className={cn(
