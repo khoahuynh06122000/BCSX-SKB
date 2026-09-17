@@ -54,20 +54,17 @@ const transactions: Transaction[] = [
     id: "t1",
     slipCode: "PN-260805-01",
     productName: "Bia A",
-    batchNumber: "LOT-01",
   }),
   tx({
     id: "t2",
     slipCode: "PN-260805-01",
     productName: "Bia B",
-    batchNumber: "LOT-01",
   }),
   // Nhập kho kiểu cũ: ảnh gắn thẳng vào giao dịch.
   tx({
     id: "t3",
     date: "2026-07-20T08:00:00.000Z",
     productName: "Bia Cũ",
-    batchNumber: "LOT-CU",
     evidencePhotoUrl: U(9),
   }),
   // Xuất kho: một giao dịch mang nhiều ảnh.
@@ -252,8 +249,13 @@ kiemTra(
   }).length,
   2,
 );
+/*
+ * KHONG CON TRA THEO MA LO. Kho da bo theo doi theo lo, nen khong anh nao con
+ * mang ma lo de ma tra — tra bang mot chuoi kieu ma lo phai ra RONG chu khong
+ * duoc vo tinh khop nham sang truong khac.
+ */
 kiemTra(
-  "tra theo ma lo",
+  "tra bang ma lo cu thi khong con ra gi",
   dungAnhThuVien({
     transactions,
     slips,
@@ -262,7 +264,7 @@ kiemTra(
     denNgay: "",
     tuKhoa: "lot-01",
   }).length,
-  2,
+  0,
 );
 kiemTra(
   "tra khong ra thi rong",

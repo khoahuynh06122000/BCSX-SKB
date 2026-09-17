@@ -3,7 +3,6 @@ import * as XLSX from "xlsx";
 import {
   FileDown,
   FileUp,
-  Layers,
   RotateCcw,
   Search,
   CheckCircle2,
@@ -20,25 +19,13 @@ import { MAU, taoSheetDep, XLSXDep } from "../lib/excelDep";
  * sẵn toàn bộ danh mục, ai nhận loại nào thì điền số vào loại đó. Dòng nào
  * để trống coi như không nhập.
  *
- * Số lô do bộ phận tự điền vì nó gắn với đợt sản xuất. Có ô "số lô chung"
- * để điền một lần cho cả phiếu khi cùng một đợt.
- *
- * SỐ LÔ CHUNG TỰ CÓ HIỆU LỰC, không phải bấm nút nào.
- *
- * Bản trước bắt bấm "Áp dụng", mà nút đó lại tự khoá khi chưa dòng nào có số
- * lượng. Người dùng gõ số lô chung trước rồi mới điền số lượng — thứ tự rất
- * tự nhiên — thì bấm không được, điền số lượng xong lại quên bấm lại, và lúc
- * lưu bị chặn với thông báo "bắt buộc nhập Mã lô" dù màn hình đang hiện số lô
- * rành rành. Nút im lặng vô hiệu hoá là cái bẫy, nên bỏ hẳn.
- *
- * Nay số lô chung là GIÁ TRỊ MẶC ĐỊNH: dòng nào không tự điền số lô riêng thì
- * lấy theo nó. Dòng nào điền riêng thì số riêng thắng.
+ * KHÔNG CÒN SỐ LÔ. Kho đã bỏ theo dõi theo lô, nên bảng này chỉ còn hai thứ
+ * phải điền: chọn loại bia và gõ số lượng.
  */
 
 export interface BulkRow {
   productId: string;
   quantity: number;
-  batchNumber: string;
 }
 
 interface Props {
@@ -64,62 +51,35 @@ export default function BulkImportGrid({
       init[p.id] = {
         productId: p.id,
         quantity: existing?.quantity || 0,
-        batchNumber: existing?.batchNumber || "",
       };
     });
     return init;
   });
 
-  const [commonBatch, setCommonBatch] = useState("");
   const [search, setSearch] = useState("");
   const [importNote, setImportNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  /** Số lô thật sự dùng cho một dòng: số riêng thắng, không có thì lấy chung. */
-  const soLoHieuLuc = (r: BulkRow, chung: string = commonBatch) =>
-    (r.batchNumber || "").trim() || chung.trim();
-
-  /*
-   * Báo lên form cha ĐÃ GỘP số lô chung vào từng dòng.
-   *
-   * Gộp ở đây chứ không gộp lúc lưu: form cha chỉ nhìn thấy `items`, nên nếu
-   * để nó tự đoán thì phép kiểm "thiếu mã lô" bên đó sẽ chặn nhầm những dòng
-   * mà màn hình đang hiện số lô rõ ràng.
-   */
-  const phatLen = (next: Record<string, BulkRow>, chung: string) => {
-    onChange(
-      Object.values(next)
-        .filter((r) => r.quantity && r.quantity > 0)
-        .map((r) => ({ ...r, batchNumber: soLoHieuLuc(r, chung) })),
-    );
+  const phatLen = (next: Record<string, BulkRow>) => {
+    onChange(Object.values(next).filter((r) => r.quantity && r.quantity > 0));
   };
 
   const push = (next: Record<string, BulkRow>) => {
     setRows(next);
-    phatLen(next, commonBatch);
+    phatLen(next);
   };
 
   const update = (productId: string, patch: Partial<BulkRow>) => {
     push({ ...rows, [productId]: { ...rows[productId], ...patch } });
   };
 
-  /** Sửa số lô chung thì phát lại ngay, không chờ ai bấm gì. */
-  const doiSoLoChung = (giaTri: string) => {
-    setCommonBatch(giaTri);
-    phatLen(rows, giaTri);
-  };
-
   const clearAll = () => {
     const next: Record<string, BulkRow> = {};
     products.forEach((p) => {
-      next[p.id] = { productId: p.id, quantity: 0, batchNumber: "" };
+      next[p.id] = { productId: p.id, quantity: 0 };
     });
-    setCommonBatch("");
     setImportNote("");
-    // Không dùng push(): nó đọc `commonBatch` của lượt vẽ cũ, vừa xoá xong mà
-    // vẫn gộp lại số lô vừa bỏ.
-    setRows(next);
-    phatLen(next, "");
+    push(next);
   };
 
   const visibleProducts = useMemo(() => {
@@ -138,11 +98,11 @@ export default function BulkImportGrid({
 
   const downloadTemplate = () => {
     /*
-     * Tệp mẫu để bộ phận điền tay rồi nạp lại. Ô "Số lượng" và "Số lô" bỏ
-     * trống, tô vàng để nhìn là biết chỗ nào phải điền — mẫu trắng trơn thì
-     * người nhận không biết được phép sửa cột nào.
+     * Tệp mẫu để bộ phận điền tay rồi nạp lại. Ô "Số lượng" bỏ trống, tô vàng
+     * để nhìn là biết chỗ nào phải điền — mẫu trắng trơn thì người nhận không
+     * biết được phép sửa cột nào.
      */
-    const hang = products.map((p) => [p.name, p.unit, "", ""]);
+    const hang = products.map((p) => [p.name, p.unit, ""]);
 
     /*
      * CỐ Ý KHÔNG có dòng tiêu đề phụ phía trên.
@@ -152,15 +112,15 @@ export default function BulkImportGrid({
      * lại không ra dòng nào — đẹp mà không dùng được thì tệ hơn xấu.
      */
     const ws = taoSheetDep({
-      tieuDe: ["Tên sản phẩm", "Đơn vị", "Số lượng", "Số lô"],
-      cot: [{ rong: 42 }, { rong: 10, kieu: "giua" }, { rong: 14, kieu: "so" }, { rong: 20 }],
+      tieuDe: ["Tên sản phẩm", "Đơn vị", "Số lượng"],
+      cot: [{ rong: 42 }, { rong: 10, kieu: "giua" }, { rong: 14, kieu: "so" }],
       hang,
     });
 
     // Tô vàng hai cột cần điền để mắt bắt được ngay.
     for (let i = 0; i < hang.length; i++) {
       const r = i + 1;
-      for (const c of [2, 3]) {
+      for (const c of [2]) {
         const dc = XLSXDep.utils.encode_cell({ c, r });
         const o = ws[dc];
         if (o) o.s = { ...o.s, fill: { patternType: "solid", fgColor: { rgb: MAU.canhBao } } };
@@ -197,8 +157,6 @@ export default function BulkImportGrid({
             .toString()
             .replace(/,/g, "."),
         );
-        const batch = String(r["Số lô"] ?? r["So lo"] ?? "").trim();
-
         // Khớp tên không phân biệt hoa thường và khoảng trắng thừa
         const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
         const p = products.find((x) => norm(x.name) === norm(rawName));
@@ -209,11 +167,7 @@ export default function BulkImportGrid({
         }
         if (!qty || qty <= 0) return;
 
-        next[p.id] = {
-          productId: p.id,
-          quantity: qty,
-          batchNumber: batch || next[p.id]?.batchNumber || "",
-        };
+        next[p.id] = { productId: p.id, quantity: qty };
         matched++;
       });
 
@@ -280,28 +234,6 @@ export default function BulkImportGrid({
         </div>
       )}
 
-      {/* Số lô chung — tự có hiệu lực, không cần bấm nút nào */}
-      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="flex items-center gap-2 shrink-0">
-            <Layers className="w-4 h-4 text-amber-600" />
-            <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
-              Số lô chung
-            </span>
-          </div>
-          <input
-            value={commonBatch}
-            onChange={(e) => doiSoLoChung(e.target.value)}
-            placeholder="Cả phiếu cùng một đợt sản xuất thì điền một lần ở đây"
-            className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-all"
-          />
-        </div>
-        <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
-          Tự điền cho mọi dòng có số lượng mà chưa có số lô riêng. Dòng nào cần
-          lô khác thì gõ thẳng vào ô Số lô của dòng đó — số riêng thắng.
-        </p>
-      </div>
-
       {/* Bảng danh mục */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -317,25 +249,14 @@ export default function BulkImportGrid({
                 <th className="py-3 px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[130px]">
                   Số lượng
                 </th>
-                <th className="py-3 px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[160px]">
-                  Số lô
-                </th>
               </tr>
             </thead>
             <tbody>
               {visibleProducts.map((p) => {
-                const row = rows[p.id] || {
-                  productId: p.id,
-                  quantity: 0,
-                  batchNumber: "",
-                };
+                const row = rows[p.id] || { productId: p.id, quantity: 0 };
                 const stock =
                   inventory.find((i) => i.productId === p.id)?.stock || 0;
                 const active = row.quantity > 0;
-                // Chỉ đỏ khi thật sự không có số lô nào — kể cả số lô chung.
-                const missingBatch = active && !soLoHieuLuc(row);
-                const theoSoLoChung =
-                  active && !(row.batchNumber || "").trim() && !!commonBatch.trim();
 
                 return (
                   <tr
@@ -383,29 +304,6 @@ export default function BulkImportGrid({
                       />
                     </td>
 
-                    <td className="py-2.5 px-3">
-                      <input
-                        value={row.batchNumber}
-                        onChange={(e) =>
-                          update(p.id, { batchNumber: e.target.value })
-                        }
-                        placeholder={
-                          theoSoLoChung
-                            ? commonBatch.trim()
-                            : active
-                              ? "Bắt buộc"
-                              : "—"
-                        }
-                        className={cn(
-                          "w-full px-3 py-2 bg-white border rounded-lg text-sm font-bold outline-none transition-all",
-                          missingBatch
-                            ? "border-rose-300 focus:border-rose-500 placeholder:text-rose-400"
-                            : theoSoLoChung
-                              ? "border-amber-200 focus:border-primary placeholder:text-amber-600"
-                              : "border-slate-200 focus:border-primary",
-                        )}
-                      />
-                    </td>
                   </tr>
                 );
               })}

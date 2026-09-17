@@ -269,7 +269,6 @@ eq("giu nguyen so luong theo don vi kho", mapped.quantity, 20);
 eq("tien truoc thue = so luong x don gia", mapped.amountBeforeVat, 12000000);
 eq("danh dau don gia la tam tinh", mapped.priceEstimated, true);
 eq("khong tu dat thue", mapped.vatAmount, undefined);
-eq("giu so lo", transactionToSapRow(tx({ batchNumber: "LOT-1408-H" }), prod).batchNumber, "LOT-1408-H");
 
 // Khong tim thay san pham trong danh muc: khong duoc no ra NaN, va phai lo ra
 // la thieu ma vat tu de bi chan truoc khi xuat.

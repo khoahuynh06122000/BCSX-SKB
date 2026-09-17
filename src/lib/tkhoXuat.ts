@@ -127,7 +127,6 @@ export interface TkhoNhapDraft {
    * lô, nên nhập mà thiếu lô thì hàng không vào tồn theo lô, và mọi dòng xuất
    * sau đó đều bị báo vượt tồn.
    */
-  batchNumber: string;
 }
 
 export interface TkhoNhapResult {
@@ -691,7 +690,6 @@ export function parseTkhoNhap(
           productId: product.id,
           productName: product.name,
           quantity: q,
-          batchNumber: `TONDAU-${hai(thang.thang)}${String(thang.nam).slice(2)}`,
         });
         tonDauCount++;
       }
@@ -711,7 +709,6 @@ export function parseTkhoNhap(
         productId: product.id,
         productName: product.name,
         quantity: q,
-        batchNumber: `NK-${dateKey.slice(8)}${hai(thang.thang)}${String(thang.nam).slice(2)}`,
       });
       nhapCount++;
     }

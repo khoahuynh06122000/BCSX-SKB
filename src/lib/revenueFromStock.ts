@@ -141,7 +141,6 @@ export function revenueFromStockOut(input: {
       partnerId: t.partnerId,
       deptCode: partner?.sapCode,
       sourceTransactionId: t.id,
-      batchNumber: t.batchNumber,
     });
   });
 

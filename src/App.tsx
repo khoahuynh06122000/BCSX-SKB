@@ -85,7 +85,6 @@ import {
   isWithinInterval,
   parseISO,
   format,
-  differenceInDays,
   subDays,
   subWeeks,
   subMonths,
@@ -98,7 +97,6 @@ import {
   InventoryItem,
   TransactionType,
   Category,
-  BatchInfo,
   RevenueRecord,
   UserRole,
   UserProfile,
@@ -202,7 +200,7 @@ import {
 } from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
-import { dungBangTonKy, moTaKy } from "./lib/tonKho";
+import { dauCuaLoai, dungBangTonKy, moTaKy } from "./lib/tonKho";
 import { NHAN_MUC_DO, phanTichKho } from "./lib/phanTich";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
@@ -968,10 +966,6 @@ export default function App() {
   // giá trị vì các phép tính bên dưới nhận nó làm tham số. Dựng một lần để
   // không sinh Date mới mỗi lần vẽ lại, kéo theo tính lại mọi memo.
   const filterBaseDate = useMemo(() => new Date(), []);
-  const [selectedInventoryProduct, setSelectedInventoryProduct] = useState<
-    string | null
-  >(null);
-
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   // Cac o nhap mat khau / PIN da duoc go bo: viec xac thuc nay do Google lo.
 
@@ -1541,7 +1535,6 @@ export default function App() {
         day.setDate(day.getDate() - dayBack);
         day.setHours(8 + (dayBack % 3), 15, 0, 0);
 
-        const dayStamp = format(day, "ddMM");
         const dateKey = format(day, "yyyy-MM-dd");
         const slipCode = nextSlipCode(dateKey, usedSlipCodes);
         usedSlipCodes.push(slipCode);
@@ -1591,7 +1584,6 @@ export default function App() {
             quantity: qty,
             partnerId: supplier?.id || "",
             partnerName: supplier?.name || "",
-            batchNumber: `LOT-${dayStamp}-${p.category === "Lít" ? "H" : "L"}`,
             notes: DEMO_NOTE,
             createdBy: currentUserProfile?.name || user || "Demo",
             status: "completed",
@@ -2064,7 +2056,7 @@ export default function App() {
    */
   const handleCreateNhapFromTkho = async (
     drafts: TkhoNhapDraft[],
-  ): Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]> => {
+  ): Promise<{ productId: string; quantity: number; date: string }[]> => {
     if (!drafts.length) return [];
 
     const khoa = (d: TkhoNhapDraft) =>
@@ -2092,7 +2084,7 @@ export default function App() {
       }
     }
 
-    const loMoi: { productId: string; batchNumber: string; quantity: number; date: string }[] = [];
+    const loMoi: { productId: string; quantity: number; date: string }[] = [];
 
     for (const d of drafts) {
       const product = products.find((p) => p.id === d.productId);
@@ -2113,18 +2105,12 @@ export default function App() {
           d.type === "OPENING"
             ? "Tồn đầu kỳ · nạp từ file BBGN"
             : "Nhập kho · nạp từ file BBGN",
-        batchNumber: d.batchNumber,
         evidencePhotoUrls: [],
         createdBy: user || "Guest",
         status: "completed",
       };
       batch.set(doc(db, "transactions", id), transaction);
-      loMoi.push({
-        productId: product.id,
-        batchNumber: d.batchNumber,
-        quantity: d.quantity,
-        date,
-      });
+      loMoi.push({ productId: product.id, quantity: d.quantity, date });
       opCount++;
       if (opCount >= CHUNK) {
         await batch.commit();
@@ -2191,7 +2177,7 @@ export default function App() {
   const handleCreateFromBbgn = async (
     drafts: BbgnDraft[],
     /** Lô nhập vừa ghi trong cùng lần chạy, FIFO phải thấy chúng. */
-    loMoi: { productId: string; batchNumber: string; quantity: number; date: string }[] = [],
+    loMoi: { productId: string; quantity: number; date: string }[] = [],
     quaDiDuong: boolean = true,
   ) => {
     if (!drafts.length || loading) return;
@@ -2231,7 +2217,20 @@ export default function App() {
     setLoading(true);
     try {
       // Ban sao ton theo lo de FIFO "nhin thay" phan da bi tru trong cung lan chay
-      const localBatches = batches.map((b) => ({ ...b }));
+      /*
+       * TỒN TẠM TÍNH TRONG LẦN NẠP NÀY, để biết dòng nào xuất vượt tồn.
+       *
+       * Không còn FIFO nên không còn lô "VUOT_DINH_MUC" để đếm; thay bằng một
+       * bản đếm tồn theo mặt hàng, trừ dần theo từng dòng sắp ghi. Bỏ hẳn cảnh
+       * báo này thì một tệp xuất nhiều hơn số đang có sẽ ghi im lặng và tồn
+       * kho âm mà không ai biết.
+       */
+      const tonTam = new Map<string, number>(tonTheoMatHang);
+      const truTon = (productId: string, sl: number) => {
+        const con = tonTam.get(productId) ?? 0;
+        tonTam.set(productId, con - sl);
+        return con < sl;
+      };
 
       /*
        * Ghép lô vừa nhập trong CÙNG lần chạy vào bản sao tồn theo lô.
@@ -2240,24 +2239,11 @@ export default function App() {
        * state chỉ đổi ở lần dựng lại sau. Nếu chỉ dựa vào nó thì nạp cả tháng
        * trong một lượt sẽ thấy tồn bằng 0 và báo vượt tồn toàn bộ.
        */
+      // Hàng vừa nhập trong CÙNG lần chạy cũng phải được tính vào tồn tạm,
+      // không thì dòng xuất ngay sau đó bị báo nhầm là vượt tồn.
       loMoi.forEach((lo) => {
-        const co = localBatches.find(
-          (bb) => bb.batchNumber === lo.batchNumber && bb.productId === lo.productId,
-        );
-        if (co) co.stock += lo.quantity;
-        else {
-          const sp = products.find((pp) => pp.id === lo.productId);
-          localBatches.push({
-            batchNumber: lo.batchNumber,
-            productId: lo.productId,
-            productName: sp?.name || lo.productId,
-            category: sp?.category || "Lít",
-            stock: lo.quantity,
-            importDate: lo.date,
-          });
-        }
+        tonTam.set(lo.productId, (tonTam.get(lo.productId) ?? 0) + lo.quantity);
       });
-      localBatches.sort((x, y) => (x.importDate || "").localeCompare(y.importDate || ""));
       const groupIds = new Map<string, string>();
       let seq = 0;
       let shortfall = 0;
@@ -2372,47 +2358,42 @@ export default function App() {
           "Nạp từ file BBGN",
         ].filter(Boolean);
 
-        const allocations = getFIFOAllocations(
-          product.id,
-          d.quantity,
-          localBatches,
-        );
+        /*
+         * MỘT CHUYẾN GIAO LÀ MỘT DÒNG. Trước đây FIFO chia một lần xuất thành
+         * nhiều dòng theo lô, nên biên bản 300 lít có khi thành ba dòng 100 —
+         * đối chiếu với tờ giấy phải cộng tay lại.
+         *
+         * Mã dòng giữ đuôi `-0` như cũ để lần nạp lại vẫn đè lên đúng dòng của
+         * lần trước, không sinh thêm bản ghi mới.
+         */
+        if (truTon(product.id, d.quantity)) shortfall++;
 
-        for (let i = 0; i < allocations.length; i++) {
-          const alloc = allocations[i];
-          if (alloc.batchNumber === "VUOT_DINH_MUC") shortfall++;
+        const id = `${khoaDong[viTri]}-0`;
+        seq++;
+        const transaction: Transaction = {
+          id,
+          date: `${d.dateKey}T08:00:00.000Z`,
+          type: "OUT",
+          productId: product.id,
+          productName: product.name,
+          category: product.category,
+          quantity: d.quantity,
+          partnerId: d.partnerId,
+          partnerName: d.partnerName,
+          notes: noteParts.join(" · "),
+          evidencePhotoUrls: [],
+          createdBy: user || "Guest",
+          referenceGroupId,
+          status: quaDiDuong ? "in_transit" : "completed",
+          originalQuantity: d.quantity,
+        };
 
-          const id = `${khoaDong[viTri]}-${i}`;
-          seq++;
-          const transaction: Transaction = {
-            id,
-            date: `${d.dateKey}T08:00:00.000Z`,
-            type: "OUT",
-            productId: product.id,
-            productName: product.name,
-            category: product.category,
-            quantity: alloc.quantity,
-            partnerId: d.partnerId,
-            partnerName: d.partnerName,
-            notes:
-              allocations.length > 1
-                ? `[Lô ${i + 1}/${allocations.length}] ${noteParts.join(" · ")}`
-                : noteParts.join(" · "),
-            batchNumber: alloc.batchNumber,
-            evidencePhotoUrls: [],
-            createdBy: user || "Guest",
-            referenceGroupId,
-            status: quaDiDuong ? "in_transit" : "completed",
-            originalQuantity: alloc.quantity,
-          };
-
-          batch.set(doc(db, "transactions", id), transaction);
-          opCount++;
-          if (opCount >= CHUNK) {
-            await batch.commit();
-            batch = writeBatch(db);
-            opCount = 0;
-          }
+        batch.set(doc(db, "transactions", id), transaction);
+        opCount++;
+        if (opCount >= CHUNK) {
+          await batch.commit();
+          batch = writeBatch(db);
+          opCount = 0;
         }
 
         /*
@@ -2424,17 +2405,12 @@ export default function App() {
          * không thu tiền. Tách riêng thì tồn kho giảm đúng phần đã đi ra thật,
          * còn công nợ giữ đúng số đã thống nhất với đối tác.
          *
-         * Cũng đi qua FIFO trên CÙNG bản sao tồn theo lô: có số lô thật thì tồn
-         * theo lô mới trừ được, vì phép tính tồn theo lô bỏ qua mọi giao dịch
-         * không có số lô.
          */
         const hao = Number(d.haoHut) || 0;
         if (hao > 0) {
-          const haoAlloc = getFIFOAllocations(product.id, hao, localBatches);
-          for (let i = 0; i < haoAlloc.length; i++) {
-            const a = haoAlloc[i];
-            if (a.batchNumber === "VUOT_DINH_MUC") shortfall++;
-            const idHao = `${khoaDong[viTri]}-hao-${i}`;
+          {
+            if (truTon(product.id, hao)) shortfall++;
+            const idHao = `${khoaDong[viTri]}-hao-0`;
             seq++;
             const tHao: Transaction = {
               id: idHao,
@@ -2443,11 +2419,10 @@ export default function App() {
               productId: product.id,
               productName: product.name,
               category: product.category,
-              quantity: a.quantity,
+              quantity: hao,
               partnerId: d.partnerId,
               partnerName: d.partnerName,
               notes: `[Hao hụt] ${noteParts.join(" · ")}`,
-              batchNumber: a.batchNumber,
               evidencePhotoUrls: [],
               createdBy: user || "Guest",
               referenceGroupId,
@@ -2463,7 +2438,7 @@ export default function App() {
                * nhận — xem `handleReportLoss`.
                */
               status: quaDiDuong ? "in_transit" : "completed",
-              originalQuantity: a.quantity,
+              originalQuantity: hao,
             };
             batch.set(doc(db, "transactions", idHao), tHao);
             opCount++;
@@ -3063,7 +3038,6 @@ export default function App() {
         t.productName,
         t.quantity,
         t.partnerName,
-        t.batchNumber || "",
         t.notes || "",
       ]);
       bang = {
@@ -3369,8 +3343,6 @@ export default function App() {
         const docsToSave: { docRef: any; data: any }[] = [];
         let idxCounter = 0;
 
-        // Deep clone batches to track allocation through the loop
-        let runningBatches = batches.map((b) => ({ ...b }));
 
         for (const row of jsonData) {
           const productName = row["Sản phẩm"] || row["Product"] || "";
@@ -3422,38 +3394,29 @@ export default function App() {
                   partnerName: "Excel Import",
                   category: product.category,
                   createdBy: syncBy,
-                  batchNumber: `IMPORT-${format(new Date(), "ddMM")}`,
                 },
               });
             }
 
             if (finalOut > 0) {
-              const allocations = getFIFOAllocations(
-                product.id,
-                finalOut,
-                runningBatches,
-              );
-              for (const alloc of allocations) {
-                idxCounter++;
-                const exportId = `import-out-${product.id}-${Date.now()}-${idxCounter}-${Math.random().toString(36).substr(2, 4)}`;
-                const docRef = doc(db, "transactions", exportId);
-                docsToSave.push({
-                  docRef,
-                  data: {
-                    id: exportId,
-                    date: syncDate,
-                    type: "OUT",
-                    productId: product.id,
-                    productName: product.name,
-                    quantity: alloc.quantity,
-                    partnerId: "SYSTEM_SYNC",
-                    partnerName: "Excel Import",
-                    category: product.category,
-                    createdBy: syncBy,
-                    batchNumber: alloc.batchNumber,
-                  },
-                });
-              }
+              idxCounter++;
+              const exportId = `import-out-${product.id}-${Date.now()}-${idxCounter}-${Math.random().toString(36).substr(2, 4)}`;
+              const docRef = doc(db, "transactions", exportId);
+              docsToSave.push({
+                docRef,
+                data: {
+                  id: exportId,
+                  date: syncDate,
+                  type: "OUT",
+                  productId: product.id,
+                  productName: product.name,
+                  quantity: finalOut,
+                  partnerId: "SYSTEM_SYNC",
+                  partnerName: "Excel Import",
+                  category: product.category,
+                  createdBy: syncBy,
+                },
+              });
             }
             successCount++;
           }
@@ -3541,55 +3504,10 @@ export default function App() {
     return uploadToCloudinary(compressed);
   };
 
-  const getFIFOAllocations = (
-    productId: string,
-    quantity: number,
-    currentBatches: BatchInfo[],
-  ) => {
-    const allocations: {
-      batchNumber: string;
-      quantity: number;
-      category?: string;
-    }[] = [];
-    let remaining = quantity;
-
-    // Process batches for this product that have stock
-    const relevant = currentBatches
-      .filter((b) => b.productId === productId && b.stock > 0)
-      .sort((a, b) => {
-        const timeA = new Date(a.importDate).getTime();
-        const timeB = new Date(b.importDate).getTime();
-        return timeA - timeB;
-      });
-
-    for (const b of relevant) {
-      if (remaining <= 0) break;
-      const taken = Math.min(b.stock, remaining);
-      allocations.push({
-        batchNumber: b.batchNumber,
-        quantity: taken,
-        category: b.category,
-      });
-      remaining -= taken;
-      // Update local copy so subsequent items in the same sync loop see updated state
-      b.stock -= taken;
-    }
-
-    if (remaining > 0) {
-      allocations.push({
-        batchNumber: "VUOT_DINH_MUC",
-        quantity: remaining,
-        category: "?",
-      });
-    }
-    return allocations;
-  };
-
   // Form states
   interface TransactionItem {
     productId: string;
     quantity: number;
-    batchNumber: string;
     /**
      * Lượng bia hao hụt của lần xuất này — KHÔNG ghi vào công nợ.
      *
@@ -3671,7 +3589,7 @@ export default function App() {
     evidencePhotoUrls: [],
     date: format(new Date(), "yyyy-MM-dd"),
     isInTransit: false,
-    items: [{ productId: products[0]?.id || "", quantity: 0, batchNumber: "" }],
+    items: [{ productId: products[0]?.id || "", quantity: 0 }],
   });
 
   /**
@@ -3694,7 +3612,6 @@ export default function App() {
         {
           productId: products[0]?.id || "",
           quantity: 0,
-          batchNumber: prev.type === "OPENING" ? "Tồn 25/4" : "",
         },
       ],
     }));
@@ -4221,18 +4138,6 @@ export default function App() {
       const now = new Date().toISOString();
       const photoUrls = confirmationPhotos;
 
-      // 1. Prepare clean batches state for re-allocation
-      // We "add back" the currently assigned stock of the transactions we are confirming
-      // to let getFIFOAllocations "see" the available stock.
-      const currentBatchesLocal = batches.map((b) => ({ ...b }));
-      trxsToConfirm.forEach((t) => {
-        const b = currentBatchesLocal.find(
-          (bl) =>
-            bl.batchNumber === t.batchNumber && bl.productId === t.productId,
-        );
-        if (b) b.stock += t.quantity;
-      });
-
       // 2. Chronological sort for correct FIFO sequence during confirmation
       const sortedTrxs = [...trxsToConfirm].sort((a, b) =>
         (a.date || "").localeCompare(b.date || ""),
@@ -4293,17 +4198,6 @@ export default function App() {
             Number(remainingLossToAllocate - lossForThisTrx).toFixed(4),
           );
 
-          // Re-allocate lot number based on the latest FIFO state
-          const allocations = getFIFOAllocations(
-            trx.productId,
-            finalTrxQty,
-            currentBatchesLocal,
-          );
-          const bestBatch =
-            allocations.length > 0
-              ? allocations[0].batchNumber
-              : trx.batchNumber || "UNKNOWN";
-
           if (lossForThisTrx > 0) {
             batch.update(doc(db, "transactions", trx.id), {
               quantity: finalTrxQty,
@@ -4313,7 +4207,6 @@ export default function App() {
                 `${trx.notes || ""} [Hao hụt: ${lossForThisTrx} ${p?.unit || "đv"}, Lý do: ${lossReason || "Chênh lệch"}]`.trim(),
               date: finalDate,
               updatedAt: now,
-              batchNumber: bestBatch,
               evidencePhotoUrl: photoUrls[0] || null,
               evidencePhotoUrls: photoUrls,
             });
@@ -4333,20 +4226,11 @@ export default function App() {
              * nhận. Phần hụt là phần mình chịu. Tách ra thì tồn kho trừ đủ cả
              * hai, còn công nợ chỉ lấy phần trên.
              *
-             * FIFO chạy trên CÙNG bản sao `currentBatchesLocal` — bản sao này
-             * đã được cộng trả lại nguyên lượng đang đi đường ở bước 1, nên đủ
-             * cho cả dòng xuất lẫn dòng hao hụt. Phải có số lô thật, vì phép
-             * tính tồn theo lô bỏ qua mọi giao dịch không có số lô.
              */
-            const haoAlloc = getFIFOAllocations(
-              trx.productId,
-              lossForThisTrx,
-              currentBatchesLocal,
-            );
-            haoAlloc.forEach((al, k) => {
+            {
               // Mã cố định theo dòng xuất: bấm xác nhận lại cũng không đẻ thêm
               // bản ghi hao hụt trùng.
-              const haoId = `${trx.id}-hao-${k}`;
+              const haoId = `${trx.id}-hao-0`;
               batch.set(doc(db, "transactions", haoId), {
                 id: haoId,
                 date: finalDate,
@@ -4354,28 +4238,25 @@ export default function App() {
                 productId: trx.productId,
                 productName: trx.productName,
                 category: trx.category,
-                quantity: al.quantity,
+                quantity: lossForThisTrx,
                 partnerId: trx.partnerId,
                 partnerName: trx.partnerName,
                 notes:
                   `Hao hụt đơn đi đường — không ghi công nợ · Lý do: ${lossReason || "Chênh lệch"}`.trim(),
-                batchNumber: al.batchNumber,
                 evidencePhotoUrl: photoUrls[0] || null,
                 evidencePhotoUrls: photoUrls,
                 createdBy: user || "Guest",
                 referenceGroupId: trx.referenceGroupId,
                 status: "completed",
-                originalQuantity: al.quantity,
+                originalQuantity: lossForThisTrx,
               } as Transaction);
-            });
+            }
           } else {
             batch.update(doc(db, "transactions", trx.id), {
               status: "completed",
               date: finalDate,
               updatedAt: now,
-              batchNumber: bestBatch,
-              notes:
-                `${trx.notes || ""} (Tin đã khớp và cập nhật mã lô FIFO)`.trim(),
+              notes: `${trx.notes || ""} (Tin đã khớp)`.trim(),
               evidencePhotoUrl: photoUrls[0] || null,
               evidencePhotoUrls: photoUrls,
             });
@@ -4947,80 +4828,32 @@ export default function App() {
   }, [filteredRevenueByTime, revenuePartnerSearch]);
 
   // Derived State: Batches (Tracking stock per batch) - OPTIMIZED O(N)
-  const batches = useMemo(() => {
-    // Chi tinh tren giao dich da duyet: hang chua co anh phieu ky thi chua co
-    // trong kho, nen cung khong duoc tao ra lo hang nao de FIFO lay ra xuat.
-    if (!countedTransactions.length) return [];
-
-    // Process in chronological order for correct stock history/FIFO
-    const sortedTransactions = [...countedTransactions].sort((a, b) => {
-      const dateA = a.date || "";
-      const dateB = b.date || "";
-      return dateA.localeCompare(dateB);
+  /**
+   * TỒN KHO THEO MẶT HÀNG — nguồn duy nhất cho mọi con số tồn.
+   *
+   * Thay cho bảng tồn theo lô cũ. Khác biệt đáng nói: bảng theo lô BỎ QUA mọi
+   * giao dịch không có số lô, nên một dòng
+   * nhập hay xuất thiếu lô thì tồn kho không hề đổi mà không có gì báo. Tính
+   * thẳng theo mặt hàng thì mọi dòng đều được tính — đúng như bảng nhập · xuất
+   * · tồn vẫn làm từ trước (`dungBangTonKy`), nên hai chỗ hết lệch nhau.
+   *
+   * Dùng chung `dauCuaLoai` với `tonKho.ts` để không có hai bản phân loại
+   * tăng/giảm sống song song rồi trôi khỏi nhau.
+   *
+   * Hàng đang đi đường VẪN trừ: bia rời kho là rời kho.
+   */
+  const tonTheoMatHang = useMemo(() => {
+    const m = new Map<string, number>();
+    countedTransactions.forEach((t) => {
+      const dau = dauCuaLoai(t.type);
+      if (!dau || !t.productId) return;
+      m.set(
+        t.productId,
+        (m.get(t.productId) || 0) + dau * (Number(t.quantity) || 0),
+      );
     });
-
-    // Look up products faster with a map
-    const productMap = new Map<string, Product>();
-    products.forEach((p) => productMap.set(p.id, p));
-
-    // Group transactions by product and batch for O(1) lookup
-    const batchMap = new Map<string, BatchInfo>();
-
-    // Single pass through transactions
-    for (const t of sortedTransactions) {
-      if (!t.batchNumber || !t.productId) continue;
-      const key = `${t.productId}_${t.batchNumber}`;
-
-      let existing = batchMap.get(key);
-      if (!existing) {
-        const product = productMap.get(t.productId);
-        if (!product) continue;
-
-        existing = {
-          batchNumber: t.batchNumber,
-          productId: t.productId,
-          productName: t.productName || product.name,
-          category: t.category || product.category,
-          stock: 0,
-          importDate: t.date,
-        };
-        batchMap.set(key, existing);
-      }
-
-      const qty = Number(t.quantity) || 0;
-
-      if (t.type === "IN" || t.type === "OPENING") {
-        existing.stock += qty;
-        // Keep earliest import date
-        if (t.date && t.date < existing.importDate) {
-          existing.importDate = t.date;
-        }
-      } else if (
-        t.type === "OUT" ||
-        t.type === "LOSS" ||
-        t.type === "DAMAGE" ||
-        t.type === "ADJUST_OUT"
-      ) {
-        // Deduction regardless of status (in_transit means it's out of warehouse)
-        existing.stock -= qty;
-        if (
-          t.date &&
-          (!existing.lastExportDate || t.date > existing.lastExportDate)
-        ) {
-          existing.lastExportDate = t.date;
-        }
-      }
-    }
-
-    // Return batches (filter empty if needed, or keep for history)
-    return Array.from(batchMap.values()).sort((a, b) => {
-      const timeA = new Date(a.importDate).getTime();
-      const timeB = new Date(b.importDate).getTime();
-      if (isNaN(timeA)) return 1;
-      if (isNaN(timeB)) return -1;
-      return timeA - timeB;
-    });
-  }, [countedTransactions, products]);
+    return m;
+  }, [countedTransactions]);
 
   // AUTO-FILL FIFO SUGGESTION
   useEffect(() => {
@@ -5033,21 +4866,7 @@ export default function App() {
         const product = products.find((p) => p.id === item.productId);
         if (!product) return item;
 
-        // Tìm lô đầu tiên còn hàng
-        const oldestBatch = batches.find(
-          (b) => b.productId === item.productId && b.stock > 0,
-        );
-        const targetBatch = oldestBatch ? oldestBatch.batchNumber : "";
-
-        // Chỉ cập nhật nếu Lô dự kiến khác Lô hiện tại và Lô hiện tại chưa được người dùng nhập thủ công (hoặc rỗng)
-        if (
-          targetBatch &&
-          item.batchNumber !== targetBatch &&
-          (!item.batchNumber || item.batchNumber === "")
-        ) {
-          hasChange = true;
-          return { ...item, batchNumber: targetBatch };
-        }
+        // Không còn theo dõi theo lô nên không gợi ý lô nào nữa.
         return item;
       });
 
@@ -5055,7 +4874,7 @@ export default function App() {
         setNewTransaction((prev) => ({ ...prev, items: updatedItems }));
       }
     }
-  }, [activeTab, batches, loading, products]); // Added products to dependencies
+  }, [activeTab, loading, products]);
 
   /*
    * Đặt sẵn nhà cung cấp cho tab Nhập kho.
@@ -5821,12 +5640,12 @@ export default function App() {
       phanTichKho({
         giaoDichTinhTon: countedTransactions,
         giaoDichChoKy: pendingSlipTransactions(transactions, approvedSlips),
-        loTon: batches.map((b) => ({
-          productId: b.productId,
-          batchNumber: b.batchNumber,
-          stock: b.stock,
-          importDate: b.importDate,
-        })),
+        /*
+         * KHÔNG CÒN TỒN THEO LÔ nên không có lô nào để báo "nằm kho quá lâu".
+         * Giữ nguyên tham số và phép tính bên `phanTich.ts`: nó vô hại khi danh
+         * sách rỗng, và còn nguyên nếu sau này kho quay lại theo dõi theo lô.
+         */
+        loTon: [],
         products,
         tuNgay: ptTuNgay,
         denNgay: ptDenNgay,
@@ -5836,7 +5655,6 @@ export default function App() {
       countedTransactions,
       transactions,
       approvedSlips,
-      batches,
       products,
       ptTuNgay,
       ptDenNgay,
@@ -5868,16 +5686,16 @@ export default function App() {
       });
     });
 
-    // 2. Aggregate from pre-calculated batches (O(B))
+    // 2. Cộng tồn theo từng mặt hàng.
     const productMap = new Map<string, Product>();
     products.forEach((p) => productMap.set(p.id, p));
 
-    batches.forEach((b) => {
-      const item = invMap.get(b.productId);
-      const product = productMap.get(b.productId);
+    tonTheoMatHang.forEach((ton, productId) => {
+      const item = invMap.get(productId);
+      const product = productMap.get(productId);
       if (item && product) {
-        item.stock += b.stock;
-        const units = b.stock * (product.conversionFactor || 1);
+        item.stock += ton;
+        const units = ton * (product.conversionFactor || 1);
         const liters = (units * (product.capacityPerUnit || 1000)) / 1000;
         item.totalLiters += liters;
       }
@@ -5889,7 +5707,7 @@ export default function App() {
     return Array.from(invMap.values()).sort(
       (a, b) => b.stock + b.pendingStock - (a.stock + a.pendingStock),
     );
-  }, [batches, products, transactions, approvedSlips]);
+  }, [tonTheoMatHang, products, transactions, approvedSlips]);
 
   // Derived State: Stats & Turnover
   const stats = useMemo(() => {
@@ -5960,7 +5778,6 @@ export default function App() {
       const basicMatch =
         t.productName.toLowerCase().includes(q) ||
         t.partnerName.toLowerCase().includes(q) ||
-        t.batchNumber?.toLowerCase().includes(q) ||
         t.notes?.toLowerCase().includes(q);
 
       if (basicMatch) return true;
@@ -6008,24 +5825,6 @@ export default function App() {
     if (validItems.length === 0) {
       alert("Vui lòng chọn ít nhất một sản phẩm với số lượng hợp lệ!");
       return;
-    }
-
-    if (type === "IN") {
-      // Nói rõ THIẾU Ở MẶT HÀNG NÀO. Bảng nhập có hơn chục dòng; câu "thiếu mã
-      // lô" trống không bắt người dùng tự dò từng dòng để tìm ô còn trắng.
-      const thieuLo = validItems
-        .filter((item) => !item.batchNumber?.trim())
-        .map(
-          (item) =>
-            products.find((p) => p.id === item.productId)?.name ||
-            item.productId,
-        );
-      if (thieuLo.length > 0) {
-        alert(
-          `Chưa có số lô cho ${thieuLo.length} mặt hàng:\n\n· ${thieuLo.join("\n· ")}\n\nĐiền vào ô Số lô của từng dòng, hoặc điền một lần ở ô "Số lô chung" phía trên bảng.`,
-        );
-        return;
-      }
     }
 
     if (type === "OUT") {
@@ -6076,23 +5875,14 @@ export default function App() {
             ])
           : undefined;
 
-      // Local copy of batches to handle multiple items in one go
-      let currentBatchesLocal = batches.map((b) => ({ ...b }));
 
       for (const item of validItems) {
         const p = products.find((prod) => prod.id === item.productId);
         if (!p) continue;
 
         if (type === "OUT") {
-          const allocations = getFIFOAllocations(
-            p.id,
-            Number(item.quantity),
-            currentBatchesLocal,
-          );
-
-          for (let i = 0; i < allocations.length; i++) {
-            const alloc = allocations[i];
-            const transactionId = `split-${Date.now()}-${item.productId}-${i}`;
+          {
+            const transactionId = `split-${Date.now()}-${item.productId}-0`;
             const transaction: Transaction = {
               id: transactionId,
               date: transactionDate,
@@ -6100,16 +5890,13 @@ export default function App() {
               productId: p.id,
               productName: p.name,
               category: p.category,
-              quantity: alloc.quantity,
+              quantity: Number(item.quantity),
               partnerId: par?.id || "UNKNOWN",
               partnerName: par?.name || "Vô danh",
               notes:
                 validItems.length > 1
-                  ? `[Món ${validItems.indexOf(item) + 1}/${validItems.length}] ${allocations.length > 1 ? `[Lô ${i + 1}/${allocations.length}] ` : ""}${newTransaction.notes}`
-                  : allocations.length > 1
-                    ? `[Lô ${i + 1}/${allocations.length}] ${newTransaction.notes}`
-                    : newTransaction.notes,
-              batchNumber: alloc.batchNumber,
+                  ? `[Món ${validItems.indexOf(item) + 1}/${validItems.length}] ${newTransaction.notes}`
+                  : newTransaction.notes,
               evidencePhotoUrl: newTransaction.evidencePhotoUrl || null,
               evidencePhotoUrls:
                 newTransaction.evidencePhotoUrls.length > 0
@@ -6120,7 +5907,7 @@ export default function App() {
               createdBy: user || "Guest",
               referenceGroupId: referenceGroupId,
               status: newTransaction.isInTransit ? "in_transit" : "completed",
-              originalQuantity: alloc.quantity,
+              originalQuantity: Number(item.quantity),
             };
             batch.set(doc(db, "transactions", transactionId), transaction);
           }
@@ -6133,20 +5920,13 @@ export default function App() {
            * mình không thu tiền. Tách riêng thì tồn kho giảm đúng phần đã đi
            * ra thật, còn công nợ giữ đúng số đã thống nhất với đối tác.
            *
-           * Cũng đi qua FIFO trên CÙNG bản sao tồn theo lô: có số lô thật thì
-           * tồn theo lô mới trừ được — phép tính tồn theo lô bỏ qua mọi giao
-           * dịch không có số lô, nên thiếu bước này là hao hụt ghi xong mà tồn
-           * kho không đổi.
-           *
            * `LOSS` đã bị `billableTransactions()` loại khỏi hóa đơn và doanh
            * thu, nên không phải làm gì thêm ở hai chỗ đó.
            */
           const hao = Number(item.lossQuantity) || 0;
           if (hao > 0) {
-            const haoAlloc = getFIFOAllocations(p.id, hao, currentBatchesLocal);
-            for (let k = 0; k < haoAlloc.length; k++) {
-              const al = haoAlloc[k];
-              const haoId = `hao-${Date.now()}-${p.id}-${k}`;
+            {
+              const haoId = `hao-${Date.now()}-${p.id}-0`;
               batch.set(doc(db, "transactions", haoId), {
                 id: haoId,
                 date: transactionDate,
@@ -6154,11 +5934,10 @@ export default function App() {
                 productId: p.id,
                 productName: p.name,
                 category: p.category,
-                quantity: al.quantity,
+                quantity: hao,
                 partnerId: par?.id || "",
                 partnerName: par?.name || "",
                 notes: (`Hao hụt — không ghi công nợ · ${newTransaction.notes}`).trim().replace(/ · $/, ""),
-                batchNumber: al.batchNumber,
                 evidencePhotoUrls: [],
                 createdBy: user || "Guest",
                 referenceGroupId,
@@ -6200,7 +5979,6 @@ export default function App() {
               validItems.length > 1
                 ? `[Món ${validItems.indexOf(item) + 1}/${validItems.length}] ${newTransaction.notes}`
                 : newTransaction.notes,
-            batchNumber: item.batchNumber || null,
             evidencePhotoUrl: newTransaction.evidencePhotoUrl || null,
             evidencePhotoUrls:
               newTransaction.evidencePhotoUrls.length > 0
@@ -6300,7 +6078,7 @@ export default function App() {
         date: format(new Date(), "yyyy-MM-dd"),
         isInTransit: false,
         items: [
-          { productId: products[0]?.id || "", quantity: 0, batchNumber: "" },
+          { productId: products[0]?.id || "", quantity: 0 },
         ],
       });
 
@@ -7684,88 +7462,15 @@ export default function App() {
                     Bảo quản" là để gọi ba ô cảm biến; bỏ chúng đi mà giữ tên
                     thì tiêu đề hứa nhiều hơn nội dung.
                   */}
-                  <Card title="Lô hàng tồn lâu" className="lg:col-span-8">
-                    <div className="grid grid-cols-1 gap-4 sm:gap-6">
-                      {/*
-                        Ba ô ở đây — Nhiệt độ kho lạnh 4,2°C, Độ ẩm 65%, Sử
-                        dụng diện tích 78,5% — đã bỏ ngày 27/08/2026. Chúng ghi
-                        số cứng trong mã: kho không có cảm biến nào, app cũng
-                        không biết diện tích kho, nên ba con số ấy hiện y nguyên
-                        mãi mãi. Để lại là bày một thứ không có thật ngay cạnh
-                        số thật.
-                      */}
-                      <div className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 group hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-500">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                          Lô hàng chậm (Aging &gt; 15 ngày)
-                        </p>
-                        <div className="flex items-baseline gap-2">
-                          <h5 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            {
-                              batches.filter(
-                                (b) =>
-                                  b.stock > 0 &&
-                                  differenceInDays(
-                                    new Date(),
-                                    parseISO(b.importDate),
-                                  ) > 15,
-                              ).length
-                            }
-                          </h5>
-                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">
-                            Lô hàng
-                          </span>
-                        </div>
-                        <div className="mt-3 sm:mt-4 flex items-center gap-2">
-                          <div
-                            className={cn(
-                              "w-2 h-2 rounded-full",
-                              batches.filter(
-                                (b) =>
-                                  b.stock > 0 &&
-                                  differenceInDays(
-                                    new Date(),
-                                    parseISO(b.importDate),
-                                  ) > 15,
-                              ).length > 0
-                                ? "bg-rose-500 animate-pulse"
-                                : "bg-emerald-500",
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "text-[9px] sm:text-[10px] font-black uppercase tracking-widest leading-none",
-                              batches.filter(
-                                (b) =>
-                                  b.stock > 0 &&
-                                  differenceInDays(
-                                    new Date(),
-                                    parseISO(b.importDate),
-                                  ) > 15,
-                              ).length > 0
-                                ? "text-rose-600"
-                                : "text-emerald-600",
-                            )}
-                          >
-                            {batches.filter(
-                              (b) =>
-                                b.stock > 0 &&
-                                differenceInDays(
-                                  new Date(),
-                                  parseISO(b.importDate),
-                                ) > 15,
-                            ).length > 0
-                              ? "CRITICAL"
-                              : "ALL CLEAR"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-
+                  {/*
+                    Thẻ "Lô hàng tồn lâu" đã bỏ cùng lúc bỏ theo dõi theo lô:
+                    không còn lô thì không đếm được lô nào nằm kho quá 15 ngày.
+                    Thẻ cảnh báo tồn thấp bên dưới nay chiếm trọn bề ngang.
+                  */}
                   {/* Stock-out & Low Inventory Defense Center */}
                   <Card
                     title="⚠️ Cảnh báo Đứt hàng & Tồn thấp"
-                    className="lg:col-span-4 bg-slate-900 border-none shadow-2xl"
+                    className="lg:col-span-12 bg-slate-900 border-none shadow-2xl"
                   >
                     <div className="space-y-4 sm:space-y-6">
                       {inventory.filter((i) => i.stock <= i.minStock).length ===
@@ -8007,10 +7712,7 @@ export default function App() {
                             return (
                               <tr
                                 key={d.productId}
-                                onClick={() =>
-                                  setSelectedInventoryProduct(d.productId)
-                                }
-                                className="hover:bg-slate-50 transition-colors cursor-pointer text-[11px] sm:text-xs font-bold text-slate-600"
+                                className="hover:bg-slate-50 transition-colors text-[11px] sm:text-xs font-bold text-slate-600"
                               >
                                 <td className="py-2.5 px-3 sm:px-4">
                                   <p className="font-bold text-slate-900 leading-tight">
@@ -8072,130 +7774,6 @@ export default function App() {
                 </Card>
 
 
-                {/* Batch Detail Modal/Section */}
-                {selectedInventoryProduct && (
-                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-                    <div
-                      className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
-                      onClick={() => setSelectedInventoryProduct(null)}
-                    />
-                    <Card
-                      className="relative w-full max-w-2xl bg-white shadow-2xl border-2 border-slate-900 rounded-3xl overflow-hidden"
-                      noPadding
-                    >
-                      <div className="bg-slate-900 p-6 flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center">
-                            <Package className="w-5 h-5 text-slate-900" />
-                          </div>
-                          <div>
-                            <h3 className="text-white text-lg font-black uppercase tracking-tight italic font-serif">
-                              {" "}
-                              CHI TIẾT TỒN KHO THEO LÔ
-                            </h3>
-                            <p className="text-amber-400 text-[9px] font-black uppercase tracking-widest">
-                              {
-                                products.find(
-                                  (p) => p.id === selectedInventoryProduct,
-                                )?.name
-                              }
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setSelectedInventoryProduct(null)}
-                          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all"
-                        >
-                          <RefreshCw className="w-5 h-5 rotate-45" />
-                        </button>
-                      </div>
-
-                      <div className="max-h-[60vh] overflow-y-auto p-4 sm:p-8 custom-scrollbar">
-                        <div className="space-y-4">
-                          {batches.filter(
-                            (b) =>
-                              b.productId === selectedInventoryProduct &&
-                              b.stock > 0,
-                          ).length > 0 ? (
-                            batches
-                              .filter(
-                                (b) =>
-                                  b.productId === selectedInventoryProduct &&
-                                  b.stock > 0,
-                              )
-                              .map((batch) => (
-                                <div
-                                  key={batch.batchNumber}
-                                  className="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group hover:border-primary/30 transition-all"
-                                >
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-100 flex flex-col items-center justify-center shadow-sm">
-                                      <span className="text-[10px] font-black text-slate-400 uppercase leading-none mb-1">
-                                        LÔ
-                                      </span>
-                                      <span className="text-xs font-black text-slate-900 font-mono italic">
-                                        #{batch.batchNumber}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">
-                                        Ngày nhập
-                                      </p>
-                                      <p className="text-sm font-bold text-slate-900 font-mono">
-                                        {formatDate(batch.importDate)}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto">
-                                    <div className="sm:text-right">
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1.5">
-                                        Số lượng tồn
-                                      </p>
-                                      <p className="text-xl font-black text-slate-900 flex items-baseline gap-1.5">
-                                        {formatNumber(batch.stock)}
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                          {products.find(
-                                            (p) => p.id === batch.productId,
-                                          )?.unit || "Đơn vị"}
-                                        </span>
-                                      </p>
-                                    </div>
-                                    {batch.lastExportDate && (
-                                      <p className="text-[9px] font-bold text-rose-500 uppercase tracking-tighter mt-1 text-right">
-                                        Xuất gần nhất:{" "}
-                                        {format(
-                                          parseISO(batch.lastExportDate),
-                                          "dd/MM",
-                                        )}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ))
-                          ) : (
-                            <div className="py-20 text-center flex flex-col items-center">
-                              <AlertCircle className="w-12 h-12 text-slate-200 mb-4" />
-                              <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] italic">
-                                Sản phẩm hiện đã hết hàng tồn kho
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-50 p-6 border-t border-slate-100 flex items-center justify-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <Info className="w-4 h-4 text-primary" />
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">
-                            Hệ thống đang áp dụng phương pháp FIFO để trừ tồn
-                            kho theo lô
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-                )}
               </div>
             )}
 
@@ -8452,9 +8030,6 @@ export default function App() {
                               <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
                                 Đối tác
                               </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-center">
-                                Mã lô
-                              </th>
                               <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
                                 Ghi chú
                               </th>
@@ -8544,22 +8119,6 @@ export default function App() {
                                     <td className="py-4 px-6 text-xs font-bold text-slate-600 uppercase tracking-tight">
                                       {t.partnerName}
                                     </td>
-                                    {/* Trước đây bấm vào mã lô là lọc cả báo
-                                        cáo theo lô đó. Bộ lọc mã lô đã bỏ nên
-                                        ô này chỉ còn để đọc — bấm được mà
-                                        không xảy ra gì thì khó hiểu hơn. */}
-                                    <td className="py-4 px-6 text-center">
-                                      <span
-                                        className={cn(
-                                          "inline-block px-2 py-1 rounded text-[10px] font-black font-mono",
-                                          t.batchNumber
-                                            ? "bg-slate-100 text-slate-600"
-                                            : "text-slate-300",
-                                        )}
-                                      >
-                                        {t.batchNumber || "—"}
-                                      </span>
-                                    </td>
                                     <td className="py-4 px-6">
                                       <div className="flex items-center gap-2 min-w-[100px]">
                                         <span className="text-xs text-slate-400 italic italic">
@@ -8576,9 +8135,7 @@ export default function App() {
                                                     : "OUT",
                                                 );
                                                 setGallerySearchQuery(
-                                                  t.type === "OUT"
-                                                    ? t.partnerName
-                                                    : t.batchNumber || "",
+                                                  t.partnerName || "",
                                                 );
                                                 // Mở thư viện đúng ngày của
                                                 // giao dịch này, không phải cả
@@ -10469,15 +10026,6 @@ export default function App() {
                             setNewTransaction({
                               ...newTransaction,
                               type,
-                              items: newTransaction.items.map((item) => ({
-                                ...item,
-                                batchNumber:
-                                  type === "OPENING"
-                                    ? "Tồn 25/4"
-                                    : item.batchNumber === "Tồn 25/4"
-                                      ? ""
-                                      : item.batchNumber,
-                              })),
                             });
                           }}
                         />
@@ -10756,7 +10304,6 @@ export default function App() {
                           initialRows={newTransaction.items.map((i) => ({
                             productId: i.productId,
                             quantity: i.quantity,
-                            batchNumber: i.batchNumber || "",
                           }))}
                           onChange={(rows) =>
                             setNewTransaction((prev) => ({
@@ -10764,11 +10311,7 @@ export default function App() {
                               items: rows.length
                                 ? rows
                                 : [
-                                    {
-                                      productId: "",
-                                      quantity: 0,
-                                      batchNumber: "",
-                                    },
+                                    { productId: "", quantity: 0 },
                                   ],
                             }))
                           }
@@ -10806,7 +10349,6 @@ export default function App() {
                                   ...missingProducts.map((p) => ({
                                     productId: p.id,
                                     quantity: 0,
-                                    batchNumber: "",
                                   })),
                                 ],
                               }));
@@ -10859,7 +10401,6 @@ export default function App() {
                                       ...matches.map((p) => ({
                                         productId: p.id,
                                         quantity: 0,
-                                        batchNumber: "",
                                       })),
                                     ],
                                   }));
@@ -10987,65 +10528,6 @@ export default function App() {
                                     "import" (nhập kho dùng bảng nhập nhanh),
                                     nên điều kiện activeTab === "import" cũ ở
                                     đây luôn sai — đã bỏ. */}
-                                {newTransaction.type === "OPENING" && (
-                                  <Input
-                                    label="Số lô (Mã lô nhập)"
-                                    placeholder="LOT-XXX"
-                                    value={item.batchNumber}
-                                    onChange={(e: any) =>
-                                      updateTransactionItem(index, {
-                                        batchNumber: e.target.value,
-                                      })
-                                    }
-                                  />
-                                )}
-                                {activeTab === "export" &&
-                                  (() => {
-                                    const selectedBatch = batches.find(
-                                      (b) =>
-                                        b.productId === item.productId &&
-                                        b.batchNumber === item.batchNumber,
-                                    );
-                                    const currentProduct = products.find(
-                                      (p) => p.id === item.productId,
-                                    );
-                                    // Only show mismatch if we actually matched a batch for this specific productId
-                                    const isCategoryMismatch =
-                                      selectedBatch &&
-                                      currentProduct &&
-                                      selectedBatch.category !==
-                                        currentProduct.category;
-
-                                    return (
-                                      <div
-                                        className={cn(
-                                          "text-[10px] font-mono font-black px-3 py-3 rounded-xl border flex flex-col gap-1",
-                                          isCategoryMismatch
-                                            ? "text-rose-600 bg-rose-50 border-rose-200"
-                                            : "text-rose-500 bg-rose-50/50 border-rose-100",
-                                        )}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span>
-                                            FIFO:{" "}
-                                            {item.batchNumber || "TỰ ĐỘNG"}
-                                          </span>
-                                          {selectedBatch && (
-                                            <span className="opacity-40">
-                                              {selectedBatch.category}
-                                            </span>
-                                          )}
-                                        </div>
-                                        {isCategoryMismatch && (
-                                          <div className="text-[8px] flex items-center gap-1.5 mt-0.5 text-rose-500 uppercase font-black">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            Cảnh báo: Lô này thuộc hệ{" "}
-                                            {selectedBatch.category}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
                               </div>
                             </div>
                           </div>
@@ -11863,11 +11345,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                 <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                   {t.category} • {t.partnerName}
                                 </div>
-                                {t.batchNumber && (
-                                  <div className="mt-1 text-[10px] font-mono font-black text-primary/60">
-                                    LOT: {t.batchNumber}
-                                  </div>
-                                )}
                               </td>
                               <td className="py-4 px-6 text-right">
                                 <span

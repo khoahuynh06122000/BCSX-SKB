@@ -64,10 +64,10 @@ interface Props {
   /** Ghi tồn đầu kỳ + hàng nhập, trả về các lô vừa tạo cho FIFO của phần xuất. */
   onCreateNhap: (
     drafts: TkhoNhapDraft[],
-  ) => Promise<{ productId: string; batchNumber: string; quantity: number; date: string }[]>;
+  ) => Promise<{ productId: string; quantity: number; date: string }[]>;
   onCreate: (
     drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string; cot: number; haoHut?: number }[],
-    loMoi?: { productId: string; batchNumber: string; quantity: number; date: string }[],
+    loMoi?: { productId: string; quantity: number; date: string }[],
     /** true = đưa qua Đơn đi đường chờ ảnh; false = ghi thẳng vào xuất kho. */
     quaDiDuong?: boolean,
   ) => Promise<void>;

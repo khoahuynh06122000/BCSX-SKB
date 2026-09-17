@@ -102,8 +102,6 @@ export interface SapSourceRow {
   partnerId?: string;
   unit?: string;
   quantity: number;
-  /** Số lô, để tra lại được lô nào đã lên hóa đơn nào. */
-  batchNumber?: string;
   unitPrice: number;
   /** Tiền TRƯỚC thuế. */
   amountBeforeVat: number;
@@ -143,7 +141,6 @@ export function transactionToSapRow(
     partnerId: t.partnerId,
     unit: product?.unit,
     quantity,
-    batchNumber: t.batchNumber,
     unitPrice,
     amountBeforeVat: quantity * unitPrice,
     // Thuế để SAP tính: thuế suất phụ thuộc mặt hàng và thời kỳ, app đoán thì

@@ -108,7 +108,6 @@ export interface Transaction {
   partnerId: string;
   partnerName: string; // Denormalized
   notes?: string;
-  batchNumber?: string; // Số lô
   evidencePhotoUrl?: string; // Ảnh biên bản
   evidencePhotoUrls?: string[]; // Multiple evidence photos
   createdBy: string; // Người thực hiện
@@ -126,6 +125,12 @@ export interface Transaction {
   slipCode?: string;
 }
 
+/**
+ * KHÔNG CÒN DÙNG — kho đã bỏ theo dõi theo lô.
+ *
+ * Giữ lại kiểu này vì `phanTich.ts` vẫn nhận tham số `loTon` (nay luôn rỗng),
+ * để nếu có ngày quay lại theo dõi theo lô thì phép tính bên đó còn nguyên.
+ */
 export interface BatchInfo {
   batchNumber: string;
   productId: string;
@@ -225,5 +230,4 @@ export interface RevenueRecord {
    * tra ngược được về lần giao hàng gốc. Xem `src/lib/revenueFromStock.ts`.
    */
   sourceTransactionId?: string;
-  batchNumber?: string;
 }

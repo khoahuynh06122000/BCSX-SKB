@@ -588,7 +588,7 @@ function SlipPreview({
     return {
       name: t.productName || p?.name || "—",
       unit: p?.unit || "—",
-      batch: t.batchNumber || "—",
+      batch: "—",
       partner: t.partnerName || partner?.name || "—",
       quantity: t.quantity || 0,
       liters,

@@ -222,21 +222,20 @@ eq("hai dong nhap", n.nhapCount, 3);
 const td = n.drafts.find((d) => d.type === "OPENING")!;
 eq("ton dau dung so luong", td.quantity, 100);
 eq("ton dau ghi vao ngay dau thang", td.dateKey, "2026-08-01");
-eq("ton dau co so lo rieng", td.batchNumber, "TONDAU-0826");
 
 const nk = n.drafts.filter((d) => d.type === "IN" && d.productId === "p1");
 eq("so ngay doi thanh ngay day du", nk.map((d) => d.dateKey), [
   "2026-08-01",
   "2026-08-02",
 ]);
-eq("so lo theo ngay nhap", nk.map((d) => d.batchNumber), [
-  "NK-010826",
-  "NK-020826",
-]);
 eq("so luong dung", nk.map((d) => d.quantity), [200, 300]);
+/*
+ * KHONG CON SO LO. Kho da bo theo doi theo lo, nen bo doc bang nhap khong sinh
+ * ra ma lo nao nua — moi dong chi con ngay, mat hang va so luong.
+ */
 eq(
-  "moi dong nhap deu co so lo — thieu lo la FIFO khong thay hang",
-  n.drafts.every((d) => !!d.batchNumber),
+  "khong dong nao con mang so lo",
+  n.drafts.every((d) => !("batchNumber" in (d as object))),
   true,
 );
 eq("ton dau bang 0 thi khong tao dong", n.drafts.filter((d) => d.type === "OPENING").length, 1);

@@ -120,7 +120,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
       if (!anh.length) return;
       const lienQuan = theoPhieu.get(s.code) || [];
       const tenHang = lienQuan.map((t) => t.productName).filter(Boolean);
-      const lo = lienQuan.map((t) => t.batchNumber || "").filter(Boolean);
+      const lo: string[] = [];
       // Ngày của phiếu lấy theo giao dịch nếu có: `slips.date` chỉ có ngày,
       // còn giao dịch có cả giờ nên xếp thứ tự sát thực tế hơn.
       const ngay = lienQuan[0]?.date || s.date;
@@ -154,11 +154,11 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           url,
           date: t.date,
           tieuDe: t.productName,
-          phu: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
-          phuGoc: t.batchNumber ? `Lô ${t.batchNumber}` : t.partnerName,
+          phu: t.partnerName,
+          phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
-          timKiem: [t.batchNumber || "", t.productName, t.partnerName]
+          timKiem: [t.productName, t.partnerName]
             .join(" ")
             .toLowerCase(),
         });
@@ -178,7 +178,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
-          timKiem: [t.partnerName, t.productName, t.batchNumber || ""]
+          timKiem: [t.partnerName, t.productName]
             .join(" ")
             .toLowerCase(),
         });
