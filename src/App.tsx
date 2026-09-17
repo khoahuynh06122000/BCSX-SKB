@@ -4059,8 +4059,24 @@ export default function App() {
     }
   };
 
+  /*
+   * XÁC NHẬN HỎNG THÌ PHẢI NÓI RA, KHÔNG IM LẶNG.
+   *
+   * Cả hai lối thoát dưới đây trước kia đều êm: một cái `return` trắng, một
+   * cái chỉ hiện dòng thông báo góc màn hình rồi tự tắt. Người dùng bấm xác
+   * nhận, không thấy gì đổi, đóng khung lại và tin là đã xong — trong khi đơn
+   * vẫn nằm nguyên ở đi đường. Mất cả buổi mới phát hiện.
+   *
+   * Nay dùng `alert`: nó chặn màn hình, buộc phải đọc.
+   */
   const handleReportLoss = async () => {
-    if (!selectedInTransitGroup || selectedInTransitGroup.length === 0) return;
+    if (!selectedInTransitGroup || selectedInTransitGroup.length === 0) {
+      alert(
+        "Chưa chọn được đơn nào để xác nhận. Anh đóng khung này rồi bấm lại " +
+          "nút xác nhận trên đơn nhé.",
+      );
+      return;
+    }
 
     // Only confirm transactions whose product ID or transaction ID is in the matched set
     const trxsToConfirm = selectedInTransitGroup.filter(
@@ -4068,9 +4084,11 @@ export default function App() {
     );
 
     if (trxsToConfirm.length === 0) {
-      showNotification(
-        "Chưa có đơn nào được khớp trên phiếu ạ! Anh vui lòng quét phiếu hoặc bấm 'Có trên phiếu' để xác nhận nhé.",
-        "error",
+      alert(
+        "CHƯA XÁC NHẬN ĐƯỢC — chưa tích mặt hàng nào là có trên phiếu.\n\n" +
+          "Anh dò từng loại bia trên tờ phiếu giấy, đối đúng số lượng, rồi bấm " +
+          "nút bên phải dòng đó để tích. Dòng đã tích sẽ sáng xanh và có chữ " +
+          "\"ĐÃ KHỚP\".",
       );
       return;
     }
@@ -4241,6 +4259,39 @@ export default function App() {
             });
           }
         }
+      }
+
+      /*
+       * ĐỌC LẠI SAU KHI GHI, ĐỂ BIẾT GHI CÓ ĂN KHÔNG.
+       *
+       * `writeBatch.commit()` chạy trót lọt không có nghĩa là dữ liệu đã đổi
+       * đúng như mình nghĩ: khoá tài liệu sai thì `update` ném lỗi, nhưng một
+       * bản ghi bị luật Firestore chặn, hoặc đang bị một lượt ghi khác đè, thì
+       * lại im. Triệu chứng gặp thật: bấm xác nhận xong, đơn vẫn nằm nguyên ở
+       * Đơn đi đường và không có một dòng báo lỗi nào.
+       *
+       * Nên đọc lại đúng những bản ghi vừa sửa và kiểm: còn cái nào
+       * `in_transit` là báo thẳng ra màn hình kèm mã bản ghi, thay vì để người
+       * dùng tự phát hiện sau vài ngày.
+       */
+      const conTreo: string[] = [];
+      for (const trx of trxsToConfirm) {
+        const lai = await getDoc(doc(db, "transactions", trx.id));
+        if (!lai.exists() || lai.data()?.status === "in_transit") {
+          conTreo.push(trx.id);
+        }
+      }
+      if (conTreo.length > 0) {
+        setLoading(false);
+        alert(
+          `GHI KHÔNG ĂN — ${conTreo.length}/${trxsToConfirm.length} dòng vẫn ` +
+            `còn ở trạng thái đang đi đường sau khi lưu.\n\n` +
+            `Mã bản ghi: ${conTreo.slice(0, 5).join(", ")}` +
+            (conTreo.length > 5 ? ` và ${conTreo.length - 5} dòng nữa` : "") +
+            `\n\nAnh chụp màn hình này gửi lại nhé, đây là đầu mối để tìm ra ` +
+            `nguyên nhân.`,
+        );
+        return;
       }
 
       /*

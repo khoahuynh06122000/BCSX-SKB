@@ -100,8 +100,18 @@ export default function SoPhieu({
   const [lyDo, setLyDo] = useState("");
   const [ngayHuy, setNgayHuy] = useState(format(new Date(), "yyyy-MM-dd"));
   const [banRon, setBanRon] = useState(false);
-  /** Chỉ cấp bù cho chứng từ từ ngày này trở đi. */
-  const [capBuTuNgay, setCapBuTuNgay] = useState(format(new Date(), "yyyy-MM-dd"));
+  /**
+   * Chỉ cấp bù cho chứng từ từ ngày này trở đi.
+   *
+   * MẶC ĐỊNH LÙI 90 NGÀY, KHÔNG PHẢI HÔM NAY. Để mặc định là hôm nay thì danh
+   * sách "chứng từ chưa có số" gần như luôn rỗng — chứng từ nạp từ tệp mang
+   * ngày trên biên bản, thường là mấy tuần trước. Người dùng mở tab Sổ số
+   * phiếu, thấy trống trơn, và kết luận là app không cấp số cho hàng nạp từ
+   * tệp, trong khi thật ra chỉ là bộ lọc ngày cắt mất.
+   */
+  const [capBuTuNgay, setCapBuTuNgay] = useState(
+    format(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
+  );
 
   const loc: BoLocSoPhieu = { tuNgay, denNgay, tuKhoa, loai, chiConHieuLuc };
   const ds = useMemo(() => locSoPhieu(soPhieu, loc), [soPhieu, tuNgay, denNgay, tuKhoa, loai, chiConHieuLuc]);
