@@ -274,6 +274,21 @@ export function laBoDemChieuXuat(id: string): boolean {
 }
 
 /**
+ * Tài liệu bộ đếm này có thuộc CHIỀU NHẬP không.
+ *
+ * Xoá bộ đếm nhập KHÔNG làm cấp lại số đã in ra giấy: mã phiếu nhập do
+ * `nextSlipCode` sinh ra từ các mã đang có (xem `slip.ts`), không lấy từ bộ
+ * đếm. Bộ đếm bên nhập chỉ đi theo để ghi sổ. Nên khi đã xoá sạch phiếu nhập
+ * thì xoá luôn bộ đếm cho sổ bắt đầu lại từ đầu.
+ */
+export function laBoDemChieuNhap(id: string): boolean {
+  const s = String(id ?? "");
+  return [MA_LOAI.NHAP, DAU_SO.NHAP, DAU_SO.HUY_NHAP].some((ma) =>
+    s.startsWith(`sophieu-${ma}-`),
+  );
+}
+
+/**
  * Dựng lại bộ đếm từ sổ thật.
  *
  * Dùng khi bộ đếm lệch — chẳng hạn sau khi phục hồi dữ liệu, hoặc lần đầu bật

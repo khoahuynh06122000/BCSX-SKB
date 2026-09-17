@@ -40,7 +40,11 @@ import {
   tomTatSoPhieu,
   type GhiSoPhieu,
 } from "../soPhieu";
-import { khoaBoDem, laBoDemChieuXuat } from "../soPhieuKho";
+import {
+  khoaBoDem,
+  laBoDemChieuNhap,
+  laBoDemChieuXuat,
+} from "../soPhieuKho";
 
 let pass = 0;
 let fail = 0;
@@ -486,6 +490,34 @@ dung("chuoi rong", !laBoDemChieuXuat(""));
 // Khoa dung phai khop voi khoa that do khoaBoDem sinh ra.
 dung("khop khoa that ben xuat", laBoDemChieuXuat(khoaBoDem(`${MA_LOAI.XUAT}|260904`)));
 dung("khop khoa that ben nhap", !laBoDemChieuXuat(khoaBoDem(`${MA_LOAI.NHAP}|260904`)));
+
+// ================================================ bo dem nao la ben nhap
+
+/*
+ * HAI PHEP DO PHAI LOAI TRU NHAU HOAN TOAN.
+ *
+ * Mot khoa vua duoc ke la nhap vua duoc ke la xuat thi lenh xoa rieng mot ben
+ * se cuon ca ben kia di theo.
+ */
+dung("bo dem PN la ben nhap", laBoDemChieuNhap("sophieu-PN-260911"));
+dung("bo dem kieu cu 51 la ben nhap", laBoDemChieuNhap("sophieu-51-26"));
+dung("bo dem huy nhap 52 la ben nhap", laBoDemChieuNhap("sophieu-52-26"));
+
+dung("bo dem PX KHONG phai ben nhap", !laBoDemChieuNhap("sophieu-PX-260911"));
+dung("bo dem kieu cu 60 KHONG phai ben nhap", !laBoDemChieuNhap("sophieu-60-26"));
+dung("bo dem huy xuat 61 KHONG phai ben nhap", !laBoDemChieuNhap("sophieu-61-26"));
+
+dung("PN nam giua ten thi khong tinh", !laBoDemChieuNhap("sophieu-PX-PN-26"));
+dung("chuoi rong ben nhap", !laBoDemChieuNhap(""));
+
+// Khong khoa nao thuoc ca hai ben.
+["sophieu-PN-260911", "sophieu-PX-260911", "sophieu-51-26", "sophieu-60-26",
+ "sophieu-52-26", "sophieu-61-26"].forEach((k) => {
+  dung(
+    `khoa ${k} chi thuoc mot ben`,
+    !(laBoDemChieuNhap(k) && laBoDemChieuXuat(k)),
+  );
+});
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

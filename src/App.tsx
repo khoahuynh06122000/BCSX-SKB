@@ -217,6 +217,7 @@ import {
   KHO_BO_DEM,
   KHO_SO_PHIEU,
   capSoPhieu,
+  laBoDemChieuNhap,
   laBoDemChieuXuat,
   huyPhieu,
 } from "./lib/soPhieuKho";
@@ -1882,6 +1883,96 @@ export default function App() {
       );
     } catch (error) {
       console.error("Xoa giao dich xuat:", error);
+      setLoading(false);
+      alert(handleFirestoreError(error, OperationType.DELETE, "transactions"));
+    }
+  };
+
+  /** Xoá cả tồn đầu kỳ khi dọn phần nhập — mặc định KHÔNG. */
+  const [xoaCaTonDau, setXoaCaTonDau] = useState(false);
+
+  /**
+   * XOÁ TOÀN BỘ PHẦN NHẬP KHO — để nạp lại từ đầu.
+   *
+   * XOÁ CẢ PHIẾU NHẬP (`slips`), không riêng giao dịch. Ảnh tờ phiếu đã ký nằm
+   * ở `slips`; bỏ lại thì thư viện ảnh vẫn đầy ảnh nhập kho và tab Phiếu nhập
+   * còn một đống phiếu mồ côi không còn dòng hàng nào bên dưới. Sạch một nửa
+   * khó hiểu hơn không dọn.
+   *
+   * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại còn
+   * dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
+   *
+   * TỒN ĐẦU KỲ PHẢI TỰ CHỌN, mặc định giữ lại. Nó là số dư mang sang, khai một
+   * lần rồi thôi — gộp nó vào "xoá phần nhập" thì một lần bấm để nạp lại tệp
+   * tháng này sẽ thổi bay luôn số gốc của cả kho, và không có đường lấy lại.
+   *
+   * Bộ đếm bên NHẬP xoá theo được: mã phiếu nhập do `nextSlipCode` sinh từ các
+   * mã đang có, không lấy từ bộ đếm — xem `laBoDemChieuNhap`.
+   */
+  const handleXoaToanBoNhap = async () => {
+    if (!isOwner) return;
+
+    const dsNhap = transactions.filter(
+      (t) => t.id && (t.type === "IN" || (xoaCaTonDau && t.type === "OPENING")),
+    );
+    const dsSo = soPhieu.filter(
+      (g) => g.soPhieu && (g.loai === "NHAP" || g.loai === "HUY_NHAP"),
+    );
+    const dsPhieu = slips.filter((s) => s.id);
+
+    if (dsNhap.length === 0 && dsSo.length === 0 && dsPhieu.length === 0) {
+      showNotification("Hiện không có dữ liệu nhập kho nào để xoá.");
+      return;
+    }
+
+    const soTonDau = dsNhap.filter((t) => t.type === "OPENING").length;
+    const conTonDau = transactions.filter((t) => t.type === "OPENING").length;
+
+    if (
+      !window.confirm(
+        `Xoá ${dsNhap.length} giao dịch nhập kho` +
+          (soTonDau > 0 ? ` (trong đó ${soTonDau} dòng tồn đầu kỳ)` : "") +
+          `, ${dsPhieu.length} phiếu nhập kèm ảnh đã ký, và ${dsSo.length} ` +
+          `dòng phiếu nhập trong Sổ số phiếu?\n\n` +
+          (soTonDau === 0 && conTonDau > 0
+            ? `GIỮ LẠI ${conTonDau} dòng tồn đầu kỳ. Muốn xoá cả thì tích ô "Xoá cả tồn đầu kỳ" rồi bấm lại.\n\n`
+            : "") +
+          `Xuất kho và đối tác được GIỮ NGUYÊN.\n\n` +
+          `Ảnh trên Cloudinary không bị xoá, chỉ bỏ liên kết.\n\n` +
+          `Không khôi phục lại được.`,
+      )
+    )
+      return;
+
+    try {
+      setLoading(true);
+
+      const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
+      const canXoa: [string, string][] = [
+        ...dsNhap.map((t) => ["transactions", t.id] as [string, string]),
+        ...dsPhieu.map((s) => ["slips", s.id] as [string, string]),
+        ...dsSo.map((g) => [KHO_SO_PHIEU, g.soPhieu] as [string, string]),
+        ...snapBoDem.docs
+          .filter((d) => laBoDemChieuNhap(d.id))
+          .map((d) => [KHO_BO_DEM, d.id] as [string, string]),
+      ];
+
+      // Chia lô 400: một `writeBatch` chỉ nhận tối đa 500 thao tác.
+      const CHUNK = 400;
+      for (let i = 0; i < canXoa.length; i += CHUNK) {
+        const batch = writeBatch(db);
+        canXoa.slice(i, i + CHUNK).forEach(([kho, id]) => {
+          batch.delete(doc(db, kho, id));
+        });
+        await batch.commit();
+      }
+
+      setLoading(false);
+      showNotification(
+        `Đã xoá ${dsNhap.length} giao dịch nhập, ${dsPhieu.length} phiếu nhập và ${dsSo.length} dòng sổ số phiếu.`,
+      );
+    } catch (error) {
+      console.error("Xoa du lieu nhap:", error);
       setLoading(false);
       alert(handleFirestoreError(error, OperationType.DELETE, "transactions"));
     }
@@ -11076,6 +11167,63 @@ export default function App() {
                     </p>
                   </div>
                 </Card>
+
+                {isOwner && (
+                  <Card title="Xoá riêng phần nhập kho">
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-slate-500 leading-relaxed">
+                        Xoá toàn bộ giao dịch nhập kho, các phiếu nhập kèm ảnh
+                        đã ký, và các dòng phiếu nhập trong Sổ số phiếu. Xuất
+                        kho, đối tác và danh mục sản phẩm được giữ nguyên.
+                      </p>
+
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                        <p className="text-[11px] font-black text-rose-800">
+                          Đang có{" "}
+                          {transactions.filter((t) => t.type === "IN").length}{" "}
+                          giao dịch nhập kho và{" "}
+                          {transactions.filter((t) => t.type === "OPENING").length}{" "}
+                          dòng tồn đầu kỳ
+                        </p>
+                      </div>
+
+                      {/*
+                        TỒN ĐẦU KỲ PHẢI TỰ TÍCH, mặc định giữ lại. Nó là số dư
+                        mang sang, khai một lần rồi thôi — gộp vào "xoá phần
+                        nhập" thì một lần bấm để nạp lại tệp tháng này sẽ thổi
+                        bay luôn số gốc của cả kho.
+                      */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 mt-0.5 shrink-0 text-primary rounded border-slate-300 focus:ring-primary/20"
+                          checked={xoaCaTonDau}
+                          onChange={(e) => setXoaCaTonDau(e.target.checked)}
+                        />
+                        <span className="text-[11px] font-bold text-slate-600 leading-snug">
+                          Xoá cả tồn đầu kỳ (số liệu gốc ban đầu). Để trống thì
+                          tồn đầu kỳ được giữ lại.
+                        </span>
+                      </label>
+
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        loading={loading}
+                        onClick={handleXoaToanBoNhap}
+                      >
+                        <Trash2 className="w-4 h-4" /> Xoá toàn bộ dữ liệu nhập
+                        kho
+                      </Button>
+
+                      <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                        Ảnh trên Cloudinary không bị xoá — đó là chứng từ đã ký,
+                        giữ lại còn dấu vết để tra. Chỉ bỏ liên kết trong cơ sở
+                        dữ liệu. Không khôi phục lại được.
+                      </p>
+                    </div>
+                  </Card>
+                )}
 
                 {isOwner && (
                   <Card title="Xoá riêng phần xuất kho">
