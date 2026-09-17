@@ -3895,9 +3895,38 @@ export default function App() {
       alert("Tài khoản chưa được duyệt nên chưa thao tác được.");
       return;
     }
+
+    /*
+     * XOÁ CẢ DÒNG HAO HỤT CỦA CHÍNH ĐƠN NÀY.
+     *
+     * Dòng hao hụt cố ý KHÔNG nằm trong `group` — nó không phải hàng giao cho
+     * đối tác nên bị lọc khỏi thẻ đơn đi đường. Nhưng lệnh xoá thì lại chạy
+     * đúng trên `group`, nên xoá đơn xong dòng hao hụt nằm lại một mình: vẫn
+     * trừ tồn kho, vẫn hiện ở báo cáo, mà không còn đơn nào giải thích nó.
+     *
+     * Gom theo `referenceGroupId` — cùng một chuyến giao.
+     */
+    const nhom = new Set(
+      group.map((t) => t.referenceGroupId).filter((x): x is string => !!x),
+    );
+    const haoKemTheo =
+      nhom.size > 0
+        ? transactions.filter(
+            (t) =>
+              t.id &&
+              laDongHaoHut(t) &&
+              t.referenceGroupId &&
+              nhom.has(t.referenceGroupId),
+          )
+        : [];
+    const canXoa = [...group, ...haoKemTheo];
+
     if (
       !window.confirm(
-        `Bạn có chắc chắn muốn xóa toàn bộ ${group.length} bản ghi trong đơn này không?`,
+        `Bạn có chắc chắn muốn xóa toàn bộ ${canXoa.length} bản ghi trong đơn này không?` +
+          (haoKemTheo.length > 0
+            ? `\n\nTrong đó có ${haoKemTheo.length} dòng hao hụt đi kèm đơn — xoá theo luôn.`
+            : ""),
       )
     )
       return;
@@ -3905,7 +3934,7 @@ export default function App() {
     try {
       setLoading(true);
       const batch = writeBatch(db);
-      group.forEach((t) => {
+      canXoa.forEach((t) => {
         batch.delete(doc(db, "transactions", t.id));
       });
       await batch.commit();
