@@ -438,7 +438,23 @@ kiemTra(
   lyDoAnhLoi("data:image/jpeg;base64,/9j/4AA"),
   "Ảnh cũ nhúng trong hệ thống, có thể đã bị cắt",
 );
-kiemTra("ly do anh Cloudinary", lyDoAnhLoi(U(1)), "Ảnh không còn trên máy chủ ảnh");
+/*
+ * KHONG DUOC KHANG DINH LA ANH DA MAT.
+ *
+ * Trinh duyet chi biet "toi tai khong duoc". May chu anh chan tam, mang chap,
+ * hay anh mat that — ca ba cho ra dung mot tin hieu. Da co lan app ghi "anh
+ * khong con tren may chu" cho mot tam ma mo thang duong dan ra van tai duoc.
+ */
+kiemTra(
+  "ly do anh Cloudinary khong khang dinh la mat",
+  lyDoAnhLoi(U(1)),
+  "Chưa tải được — có thể do mạng hoặc máy chủ ảnh chặn tạm",
+);
+kiemTra(
+  "khong noi anh da mat",
+  /không còn|đã mất|bị xoá/i.test(lyDoAnhLoi(U(1))),
+  false,
+);
 kiemTra("ly do khong co duong dan", lyDoAnhLoi(""), "Không có đường dẫn ảnh");
 kiemTra("chi khoang trang cung la khong co duong dan", lyDoAnhLoi("   "), "Không có đường dẫn ảnh");
 // Luon phai co cau gi de hien, khong duoc tra ve rong.

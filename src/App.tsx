@@ -903,9 +903,50 @@ export default function App() {
    * app lọc sai hoặc mất ảnh. Ghi lại để ô ảnh hiện đúng lý do, và để đếm ra
    * một dòng cảnh báo phía trên lưới.
    */
-  const [anhLoi, setAnhLoi] = useState<Set<string>>(new Set());
-  const ghiAnhLoi = (id: string) =>
-    setAnhLoi((cu) => (cu.has(id) ? cu : new Set(cu).add(id)));
+  /*
+   * MỘT LẦN TẢI HỎNG CHƯA PHẢI LÀ ẢNH HỎNG.
+   *
+   * Bản trước hễ thẻ ảnh báo lỗi một lần là ô đó vĩnh viễn thành "không tải
+   * được" cho tới khi tải lại trang, và không có cách nào thử lại. Mà lỗi một
+   * lần thì đầy lý do tạm thời: máy chủ ảnh chặn bớt khi bị hỏi mấy chục tấm
+   * cùng lúc (lưới tải lười, cuộn tới đâu bắn tới đó), mạng công ty chập một
+   * nhịp, máy đang tải tệp khác. Đã gặp thật: một tấm bị ghi "ảnh không còn
+   * trên máy chủ" mà mở thẳng đường dẫn ra vẫn tải được bình thường.
+   *
+   * Nay đếm số lần hỏng. Chỉ quá `SO_LAN_THU` mới coi là hỏng thật; trước đó
+   * đổi đường dẫn một chút để trình duyệt tải lại thay vì lấy kết quả hỏng
+   * trong bộ nhớ đệm.
+   */
+  const SO_LAN_THU = 2;
+  const [lanThuAnh, setLanThuAnh] = useState<Record<string, number>>({});
+  const anhLoi = useMemo(
+    () =>
+      new Set(
+        Object.entries(lanThuAnh)
+          .filter(([, n]) => n > SO_LAN_THU)
+          .map(([id]) => id),
+      ),
+    [lanThuAnh],
+  );
+  /** Lùi dần: 0,6s rồi 1,2s — đủ để cơn chặn tạm đi qua. */
+  const ghiAnhLoi = (id: string) => {
+    const lan = lanThuAnh[id] ?? 0;
+    const cham = () =>
+      setLanThuAnh((cu) => ({ ...cu, [id]: (cu[id] ?? 0) + 1 }));
+    if (lan >= SO_LAN_THU) cham();
+    else setTimeout(cham, 600 * (lan + 1));
+  };
+  /** Người dùng tự bấm thử lại — xoá sạch số lần hỏng của tấm đó. */
+  const thuLaiAnh = (id: string) =>
+    setLanThuAnh((cu) => {
+      const moi = { ...cu };
+      delete moi[id];
+      return moi;
+    });
+  const thuLaiTatCaAnh = () => setLanThuAnh({});
+  /** Đuôi đổi đường dẫn để trình duyệt không lấy lại kết quả hỏng đã đệm. */
+  const duongDanThu = (id: string, url: string) =>
+    lanThuAnh[id] ? `${url}${url.includes("?") ? "&" : "?"}thu=${lanThuAnh[id]}` : url;
   const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
     tong: 0,
     xong: 0,
@@ -5050,7 +5091,7 @@ export default function App() {
    * Thẻ ảnh không cần máy chủ cho phép đọc chéo tên miền, nên đo đúng cái mà
    * lưới ảnh gặp phải. Có hẹn giờ vì ảnh mất đôi khi không báo lỗi mà treo.
    */
-  const thuTaiAnh = (url: string): Promise<boolean> =>
+  const taiMotLuot = (url: string): Promise<boolean> =>
     new Promise((xong) => {
       const img = new Image();
       const hetGio = setTimeout(() => {
@@ -5067,6 +5108,25 @@ export default function App() {
       };
       img.src = url;
     });
+
+  /**
+   * THỬ BA LƯỢT TRƯỚC KHI KẾT LUẬN MỘT TẤM LÀ HỎNG.
+   *
+   * Lượt soát bắn sáu luồng liên tục vào máy chủ ảnh; đúng kiểu làm nó chặn
+   * bớt. Kết luận sau một lượt hỏng là ghi oan cho những tấm còn nguyên — và
+   * báo cáo soát ảnh chính là thứ người dùng dựa vào để quyết định đi lục lại
+   * chứng từ giấy, nên sai ở đây tốn công thật.
+   *
+   * Đổi đuôi đường dẫn mỗi lượt để không lấy lại kết quả hỏng trong bộ đệm.
+   */
+  const thuTaiAnh = async (url: string): Promise<boolean> => {
+    for (let lan = 0; lan < 3; lan++) {
+      const u = lan === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}thu=${lan}`;
+      if (await taiMotLuot(u)) return true;
+      if (lan < 2) await new Promise((r) => setTimeout(r, 600 * (lan + 1)));
+    }
+    return false;
+  };
 
   const soatAnhThuVien = async () => {
     if (dangSoat.tong > 0) return;
@@ -12081,15 +12141,26 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 {soAnhLoi > 0 && (
                   <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
                     <ImageOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
-                      <strong>
-                        {formatNumber(soAnhLoi)}/{formatNumber(anhThuVien.length)}{" "}
-                        tấm
-                      </strong>{" "}
-                      không tải được — ô ảnh ghi rõ lý do từng tấm. Ảnh cũ nhúng
-                      trong hệ thống thì chạy phần <strong>Chuyển ảnh cũ</strong>;
-                      ảnh không còn trên máy chủ thì phải tìm lại tờ biên bản.
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                        <strong>
+                          {formatNumber(soAnhLoi)}/
+                          {formatNumber(anhThuVien.length)} tấm
+                        </strong>{" "}
+                        chưa tải được sau {SO_LAN_THU + 1} lượt thử. Thường là
+                        mạng chập hoặc máy chủ ảnh chặn tạm khi bị hỏi nhiều tấm
+                        cùng lúc — bấm Thử lại trước khi kết luận là ảnh đã mất.
+                        Ảnh cũ nhúng trong hệ thống thì chạy phần{" "}
+                        <strong>Chuyển ảnh cũ</strong>; mở thẳng đường dẫn ảnh mà
+                        vẫn không ra thì mới phải tìm lại tờ biên bản.
+                      </p>
+                      <button
+                        onClick={thuLaiTatCaAnh}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 transition-all"
+                      >
+                        Thử lại tất cả
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -12112,15 +12183,26 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                             <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2 px-3 text-center">
                               <ImageOff className="w-7 h-7 text-slate-300" />
                               <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-snug">
-                                Không tải được ảnh
+                                Chưa tải được ảnh
                               </span>
                               <span className="text-[9px] font-bold text-slate-400 leading-snug">
                                 {lyDoAnhLoi(t.url)}
                               </span>
+                              {/* Phải có đường tự thử lại: lỗi tạm thì bấm một
+                                  cái là ra ảnh, không cần tải lại cả trang. */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  thuLaiAnh(t.id);
+                                }}
+                                className="mt-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
+                              >
+                                Thử lại
+                              </button>
                             </div>
                           ) : (
                             <img
-                              src={t.url}
+                              src={duongDanThu(t.id, t.url)}
                               alt={t.tieuDe}
                               loading="lazy"
                               onError={() => ghiAnhLoi(t.id)}

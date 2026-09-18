@@ -354,7 +354,19 @@ export function lyDoAnhLoi(url: string): string {
     case "khong-hop-le":
       return "Đường dẫn ảnh không hợp lệ";
     default:
-      return "Ảnh không còn trên máy chủ ảnh";
+      /*
+       * KHÔNG KHẲNG ĐỊNH LÀ ẢNH ĐÃ MẤT.
+       *
+       * Trình duyệt chỉ biết "tôi tải không được", nó không biết vì sao: máy
+       * chủ ảnh chặn tạm khi bị hỏi quá nhiều cùng lúc, mạng công ty chập, hay
+       * ảnh mất thật — cả ba cho ra đúng một tín hiệu. Đã có lần app ghi "ảnh
+       * không còn trên máy chủ" cho một tấm mà mở thẳng đường dẫn ra vẫn tải
+       * được bình thường.
+       *
+       * Câu chữ ở đây phải nói đúng cái mình BIẾT, và chỉ đường cho người dùng
+       * tự kiểm.
+       */
+      return "Chưa tải được — có thể do mạng hoặc máy chủ ảnh chặn tạm";
   }
 }
 
