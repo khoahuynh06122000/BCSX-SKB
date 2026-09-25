@@ -573,6 +573,26 @@ export default function DebtExport({
     [khoiHoaDon, donTheoNhan],
   );
 
+  /**
+   * ĐIỀN XONG SỐ HÓA ĐƠN THÌ ĐƠN RỜI KHỎI BẢNG NÀY.
+   *
+   * Bảng trên là danh sách VIỆC CÒN PHẢI LÀM: đã kết xuất tệp, mang đi phát
+   * hành rồi, giờ chờ điền số thật. Điền xong là xong việc — để nó nằm lại thì
+   * mỗi kỳ bảng dài thêm, và không nhìn ra còn mấy tờ chưa điền.
+   *
+   * Không mất đi đâu: hóa đơn đã điền số nằm ở phần Tra cứu ngay bên dưới,
+   * cùng thẻ này.
+   *
+   * CHIA THEO SỐ ĐÃ LƯU, không theo chữ đang gõ — gõ được nửa số mà dòng biến
+   * mất thì con trỏ mất tiêu.
+   */
+  const [hienCaDaDien, setHienCaDaDien] = useState(false);
+  const khoiChoDien = useMemo(
+    () => khoiDaXuat.filter((k) => !String(k.don?.soDaGhi || "").trim()),
+    [khoiDaXuat],
+  );
+  const khoiHienRa = hienCaDaDien ? khoiDaXuat : khoiChoDien;
+
   const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
     setCauHinhSap((c) => ({ ...c, [truong]: giaTri }));
 
@@ -999,7 +1019,9 @@ export default function DebtExport({
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <div className="min-w-0">
               <p className="text-[15px] font-black text-emerald-900 tracking-tight">
-                Đã xuất hóa đơn · {daXuat.length} đơn
+                {hienCaDaDien
+                  ? `Đã xuất hóa đơn · ${khoiDaXuat.length} đơn`
+                  : `Chờ điền số hóa đơn · ${khoiChoDien.length} đơn`}
               </p>
               {/* Nói rõ đang xem đợt nào, vì ô khai đợt đã chuyển hẳn sang thẻ
                   "Chưa xuất" — không có dòng này thì danh sách rỗng nhìn giống
@@ -1016,10 +1038,26 @@ export default function DebtExport({
           </div>
           <p className="text-[12px] font-bold text-emerald-700 leading-relaxed">
             Những đơn <strong>đã kết xuất tệp TEMPLATE</strong> và mang đi phát
-            hành. Phát hành xong thì điền <strong>số hóa đơn</strong> và{" "}
-            <strong>ngày hóa đơn</strong> vào đây rồi bấm Lưu. Đây cũng là nơi
-            tra lại thông tin hóa đơn đã xuất.
+            hành, đang <strong>chờ điền số hóa đơn</strong>. Điền số và ngày rồi
+            bấm Lưu là đơn rời khỏi bảng này — xem lại ở phần{" "}
+            <strong>Tra cứu</strong> bên dưới.
           </p>
+          {/* Đường quay lại để sửa một số đã lưu bị gõ nhầm. */}
+          {khoiDaXuat.length > khoiChoDien.length && (
+            <label className="flex items-center gap-2 cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={hienCaDaDien}
+                onChange={(e) => setHienCaDaDien(e.target.checked)}
+                className="w-4 h-4 shrink-0 text-primary rounded border-emerald-300 focus:ring-emerald-200"
+              />
+              <span className="text-[12px] font-bold text-emerald-700">
+                Hiện cả {khoiDaXuat.length - khoiChoDien.length} đơn đã điền số
+                (để sửa chỗ gõ nhầm)
+              </span>
+            </label>
+          )}
+
           <p className="text-[12px] font-bold text-emerald-700/80 leading-relaxed">
             Số app tự đánh chỉ là <strong>gợi ý</strong> điền sẵn — ghi một số
             không có thật vào sổ thì sau này đối chiếu với cơ quan thuế không
@@ -1027,14 +1065,16 @@ export default function DebtExport({
           </p>
         </div>
 
-        {daXuat.length === 0 ? (
+        {khoiHienRa.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
-            Chưa kết xuất đơn nào trong kỳ này.
+            {daXuat.length === 0
+              ? "Chưa kết xuất đơn nào trong kỳ này."
+              : "Đã điền số hóa đơn cho mọi đơn đã kết xuất. Xem lại ở phần Tra cứu bên dưới."}
           </p>
         ) : (
           <>
             <BangChotHoaDon
-              khoi={khoiDaXuat.map((k) => {
+              khoi={khoiHienRa.map((k) => {
                 const d = k.don!;
                 const o = oCuaDong(d);
                 return {
