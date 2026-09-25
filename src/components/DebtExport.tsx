@@ -556,16 +556,29 @@ export default function DebtExport({
   );
 
   const [timHoaDon, setTimHoaDon] = useState("");
+  const [khoTuNgay, setKhoTuNgay] = useState("");
+  const [khoDenNgay, setKhoDenNgay] = useState("");
+
+  /**
+   * Lọc kho theo NGÀY HÓA ĐƠN và số hóa đơn.
+   *
+   * Hóa đơn CHƯA điền ngày thì lọt qua bộ lọc ngày chứ không bị loại. Loại nó
+   * đi là giấu mất đúng những dòng còn dở — mà đó mới là thứ cần tìm để điền
+   * cho xong.
+   */
   const khoDaLoc = useMemo(() => {
     const q = timHoaDon.trim().toLowerCase();
-    if (!q) return khoHoaDon;
-    return khoHoaDon.filter((h) =>
-      [h.soHoaDon, h.donVi, h.maBp, h.ngayHoaDon]
+    return khoHoaDon.filter((h) => {
+      const ngay = String(h.ngayHoaDon || "").slice(0, 10);
+      if (khoTuNgay && ngay && ngay < khoTuNgay) return false;
+      if (khoDenNgay && ngay && ngay > khoDenNgay) return false;
+      if (!q) return true;
+      return [h.soHoaDon, h.donVi, h.maBp]
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [khoHoaDon, timHoaDon]);
+        .includes(q);
+    });
+  }, [khoHoaDon, timHoaDon, khoTuNgay, khoDenNgay]);
 
   const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
     setCauHinhSap((c) => ({ ...c, [truong]: giaTri }));
@@ -688,6 +701,15 @@ export default function DebtExport({
       </div>
       )}
 
+      {/*
+        ĐỢT CHỐT, CẢNH BÁO VÀ TỔNG KỲ CHỈ THUỘC THẺ "CHƯA XUẤT".
+
+        Khai biên đợt là việc của lượt kết xuất: gom xuất kho tới ngày nào thì
+        cắt. Thẻ "Đã xuất" là sổ theo dõi hóa đơn đã phát hành — bày lại ô khai
+        đợt ở đó chỉ làm người dùng tưởng phải khai gì thêm mới tra được.
+      */}
+      {phan === "chua" && (
+      <>
       {/* ----- Đợt chốt ----- */}
       <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -831,6 +853,8 @@ export default function DebtExport({
           </div>
         ))}
       </div>
+      </>
+      )}
 
       {phan === "chua" && (
       <>
@@ -987,9 +1011,22 @@ export default function DebtExport({
         <div className="px-4 py-3.5 bg-emerald-50 border-b-2 border-emerald-200 space-y-1.5">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-[15px] font-black text-emerald-900 tracking-tight">
-              Đã xuất hóa đơn · {daXuat.length} đơn
-            </p>
+            <div className="min-w-0">
+              <p className="text-[15px] font-black text-emerald-900 tracking-tight">
+                Đã xuất hóa đơn · {daXuat.length} đơn
+              </p>
+              {/* Nói rõ đang xem đợt nào, vì ô khai đợt đã chuyển hẳn sang thẻ
+                  "Chưa xuất" — không có dòng này thì danh sách rỗng nhìn giống
+                  mất dữ liệu. */}
+              <p className="text-[11px] font-bold text-emerald-700/70 mt-0.5">
+                Đợt đang khai:{" "}
+                {dot.length === 0
+                  ? "chưa khai đợt nào — khai ở thẻ Chưa xuất hóa đơn"
+                  : dot
+                      .map((d) => nhanNgayGiao(d.tuNgay, d.denNgay))
+                      .join(" · ")}
+              </p>
+            </div>
           </div>
           <p className="text-[12px] font-bold text-emerald-700 leading-relaxed">
             Những đơn <strong>đã kết xuất tệp TEMPLATE</strong> và mang đi phát
@@ -1037,19 +1074,65 @@ export default function DebtExport({
           <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-200 space-y-2">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <p className="text-[13px] font-black text-slate-700 tracking-tight">
-                Kho hóa đơn đã ghi · {khoHoaDon.length} hóa đơn
+                Kho hóa đơn đã ghi · {khoDaLoc.length}
+                {khoDaLoc.length !== khoHoaDon.length
+                  ? ` / ${khoHoaDon.length}`
+                  : ""}{" "}
+                hóa đơn
               </p>
-              <input
-                value={timHoaDon}
-                onChange={(e) => setTimHoaDon(e.target.value)}
-                placeholder="Tra số hóa đơn / đơn vị / mã BP..."
-                className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary w-full sm:w-72"
-              />
+              {(khoTuNgay || khoDenNgay || timHoaDon) && (
+                <button
+                  onClick={() => {
+                    setKhoTuNgay("");
+                    setKhoDenNgay("");
+                    setTimHoaDon("");
+                  }}
+                  className="px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-all"
+                >
+                  Bỏ lọc
+                </button>
+              )}
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Ngày hóa đơn từ
+                </span>
+                <ONgay
+                  value={khoTuNgay}
+                  onChange={setKhoTuNgay}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Đến ngày
+                </span>
+                <ONgay
+                  value={khoDenNgay}
+                  onChange={setKhoDenNgay}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Số hóa đơn / đơn vị
+                </span>
+                <input
+                  value={timHoaDon}
+                  onChange={(e) => setTimHoaDon(e.target.value)}
+                  placeholder="Gõ số hóa đơn, tên đơn vị hoặc mã BP"
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+
             <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
-              Toàn bộ hóa đơn đã ghi số, <strong>không lọc theo đợt</strong>{" "}
-              đang khai ở trên — tra hóa đơn tháng trước không phải đổi lại biên
-              đợt. Muốn in lại mẫu Chốt thì sang thẻ{" "}
+              Toàn bộ hóa đơn đã ghi số, <strong>không phụ thuộc đợt chốt</strong>{" "}
+              — tra hóa đơn tháng trước không phải khai lại gì. Hóa đơn chưa
+              điền ngày vẫn hiện dù có lọc ngày, để còn thấy mà điền cho xong.
+              Muốn in lại mẫu Chốt thì sang thẻ{" "}
               <strong>Tra cứu · in lại</strong>.
             </p>
           </div>
