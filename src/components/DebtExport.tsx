@@ -22,6 +22,8 @@ import {
 import {
   dongCanDienHoaDon,
   bangHoaDon,
+  boDauKetXuat,
+  danhDauKetXuat,
   type HoaDonGhiNhan,
 } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
@@ -235,17 +237,17 @@ export default function DebtExport({
    * chỗ gõ nhầm. Trộn chung một bảng thì nhìn vào không biết còn bao nhiêu đơn
    * phải xuất, mà đó mới là câu hỏi mở màn hình này ra để trả lời.
    *
-   * CHIA THEO SỐ ĐÃ LƯU, không theo chữ đang gõ. Chia theo chữ đang gõ thì gõ
-   * được nửa số là dòng nhảy sang bảng kia, con trỏ mất tiêu.
+   * MỐC CHUYỂN LÀ LÚC TẢI TỆP TEMPLATE, không phải lúc điền số hóa đơn. Tải
+   * tệp về là mang sang hệ thống hóa đơn để phát hành — kể từ lúc ấy đơn đã đi
+   * khỏi tay, dù số hóa đơn thật vài hôm sau mới có. Lấy số hóa đơn làm mốc
+   * thì suốt quãng giữa đơn vẫn nằm ở "chưa xuất", và lần kết xuất sau sẽ gom
+   * nó vào tệp lần nữa — xuất trùng hóa đơn.
    */
   const chuaXuat = useMemo(
-    () => canDien.filter((d) => !String(d.soDaGhi || "").trim()),
+    () => canDien.filter((d) => !d.daKetXuat),
     [canDien],
   );
-  const daXuat = useMemo(
-    () => canDien.filter((d) => !!String(d.soDaGhi || "").trim()),
-    [canDien],
-  );
+  const daXuat = useMemo(() => canDien.filter((d) => d.daKetXuat), [canDien]);
 
   /** Chữ đang gõ trong bảng, chưa bấm lưu. */
   const [nhap, setNhap] = useState<
@@ -394,18 +396,38 @@ export default function DebtExport({
    * bắt buộc phải khớp nhau từng đồng. Tính lại ở đây là mở đường cho hai con
    * số khác nhau cùng nói về một lần bán.
    */
+  /**
+   * TỆP TEMPLATE CHỈ GOM ĐƠN CHƯA KẾT XUẤT.
+   *
+   * Không lọc thì lần kết xuất thứ hai trong cùng một kỳ sẽ gom lại cả những
+   * đơn đã mang đi phát hành lần trước — mang tệp đó sang hệ thống hóa đơn là
+   * xuất trùng, mà hóa đơn trùng thì phải làm hóa đơn điều chỉnh, không xoá
+   * được.
+   *
+   * Khớp theo (nhãn đợt × mã BP) vì đó đúng là thứ `khoaHoaDon` băm ra — một
+   * hóa đơn là một (đợt × đơn vị).
+   */
+  const khoaDaKetXuat = useMemo(
+    () => new Set(daXuat.map((d) => `${d.nhanDot}|${d.maBp || d.donVi}`)),
+    [daXuat],
+  );
+
   const tepSap = useMemo(() => {
-    const dong: DongHangSap[] = bang.dong.map((r) => ({
-      khoaDot: r.ngayGiaoBia,
-      maBp: r.maBp,
-      donVi: r.donVi,
-      tenHangHoa: r.tenHangHoa,
-      dvt: r.dvt,
-      soLuong: r.soLuong,
-      thanhTien: r.thanhTienSkb,
-    }));
+    const dong: DongHangSap[] = bang.dong
+      .filter(
+        (r) => !khoaDaKetXuat.has(`${r.ngayGiaoBia}|${r.maBp || r.donVi}`),
+      )
+      .map((r) => ({
+        khoaDot: r.ngayGiaoBia,
+        maBp: r.maBp,
+        donVi: r.donVi,
+        tenHangHoa: r.tenHangHoa,
+        dvt: r.dvt,
+        soLuong: r.soLuong,
+        thanhTien: r.thanhTienSkb,
+      }));
     return dungTepSap({ dong, ngayChungTu, cauHinh: cauHinhSap });
-  }, [bang.dong, ngayChungTu, cauHinhSap]);
+  }, [bang.dong, khoaDaKetXuat, ngayChungTu, cauHinhSap]);
 
   /**
    * Tải tệp TEMPLATE: mở ĐÚNG TỆP MẪU của bộ phận ra, chỉ điền dữ liệu vào.
@@ -462,6 +484,17 @@ export default function DebtExport({
       a.download = `TEMPLATE xuat hoa don ${ngayChungTu}.xlsx`;
       a.click();
       URL.revokeObjectURL(a.href);
+
+      /*
+       * TẢI XONG LÀ ĐÁNH DẤU ĐÃ KẾT XUẤT.
+       *
+       * Đánh dấu SAU khi tệp đã tải thật, không phải lúc bấm nút: dựng tệp có
+       * thể hỏng giữa chừng (tải tệp mẫu về không được chẳng hạn), mà đánh dấu
+       * trước thì đơn nhảy sang tab kia trong khi trong tay chưa có tệp nào.
+       */
+      if (chuaXuat.length > 0) {
+        await onSaveHoaDon(danhDauKetXuat(chuaXuat, new Date().toISOString()));
+      }
     } catch (e) {
       alert(
         `Không tạo được tệp TEMPLATE: ${e instanceof Error ? e.message : String(e)}`,
@@ -469,6 +502,32 @@ export default function DebtExport({
     } finally {
       setDangTaiSap(false);
     }
+  };
+
+  /**
+   * Đưa một đơn ngược về "chưa xuất".
+   *
+   * Bấm nhầm nút tải tệp là cả loạt đơn nhảy sang tab kia; không có đường lui
+   * thì phải đi sửa thẳng dữ liệu. Chặn khi đơn đã có số hóa đơn — lúc đó hóa
+   * đơn đã phát hành thật, đưa về "chưa xuất" là mời gọi xuất trùng.
+   */
+  const boKetXuat = async (d: (typeof canDien)[0]) => {
+    if (String(d.soDaGhi || "").trim()) {
+      alert(
+        `Đơn ${d.donVi} đã có số hóa đơn ${d.soDaGhi} — không đưa về "chưa xuất" được.\n\n` +
+          `Hóa đơn đã phát hành thật rồi; đưa về là lần kết xuất sau gom nó vào tệp lần nữa và xuất trùng. ` +
+          `Muốn bỏ thật thì xoá số hóa đơn trước.`,
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        `Đưa đơn ${d.donVi} (${d.nhanDot}) về "Chưa xuất hóa đơn"?\n\n` +
+          `Đơn sẽ được gom vào tệp TEMPLATE của lần kết xuất sau.`,
+      )
+    )
+      return;
+    await onSaveHoaDon([boDauKetXuat(d)]);
   };
 
   const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
@@ -483,7 +542,7 @@ export default function DebtExport({
    * thành hai bảng riêng thì sửa một cột phải nhớ sửa cả hai chỗ, và quên một
    * chỗ là hai bảng lệch nhau mà không có gì báo.
    */
-  const bangDongHoaDon = (ds: typeof canDien, canhBao: boolean) => (
+  const bangDongHoaDon = (ds: typeof canDien, kieu: "chua" | "da") => (
     <div className="overflow-x-auto">
       <table className="w-full text-left whitespace-nowrap">
         <thead>
@@ -494,11 +553,10 @@ export default function DebtExport({
               "Mã BP",
               "Dòng",
               "Thành tiền",
-              "Số hóa đơn",
-              "Ngày hóa đơn",
-            ].map((h) => (
+              ...(kieu === "da" ? ["Số hóa đơn", "Ngày hóa đơn", ""] : []),
+            ].map((h, i) => (
               <th
-                key={h}
+                key={h || `c${i}`}
                 className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
               >
                 {h}
@@ -509,7 +567,7 @@ export default function DebtExport({
         <tbody>
           {ds.map((d) => {
             const o = oCuaDong(d);
-            const chuaCo = !o.soHoaDon.trim();
+            const chuaCoSo = !o.soHoaDon.trim();
             return (
               <tr
                 key={d.khoa}
@@ -526,28 +584,47 @@ export default function DebtExport({
                 <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
                   {tien(d.thanhTien)}
                 </td>
-                <td className="px-3.5 py-2.5">
-                  <input
-                    value={o.soHoaDon}
-                    onChange={(e) =>
-                      suaO(d.khoa, "soHoaDon", e.target.value, d)
-                    }
-                    placeholder={d.soGoiY}
-                    className={cn(
-                      "w-44 px-3 py-2.5 rounded-lg border bg-white text-[14px] font-black font-mono outline-none focus:border-primary",
-                      canhBao && chuaCo
-                        ? "border-amber-300 placeholder:text-amber-400"
-                        : "border-slate-200",
-                    )}
-                  />
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <ONgay
-                    value={o.ngayHoaDon}
-                    onChange={(v: string) => suaO(d.khoa, "ngayHoaDon", v, d)}
-                    className="px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold outline-none focus:border-primary"
-                  />
-                </td>
+                {kieu === "da" && (
+                  <>
+                    <td className="px-3.5 py-2.5">
+                      <input
+                        value={o.soHoaDon}
+                        onChange={(e) =>
+                          suaO(d.khoa, "soHoaDon", e.target.value, d)
+                        }
+                        placeholder={d.soGoiY}
+                        className={cn(
+                          "w-44 px-3 py-2.5 rounded-lg border bg-white text-[14px] font-black font-mono outline-none focus:border-primary",
+                          chuaCoSo
+                            ? "border-amber-300 placeholder:text-amber-400"
+                            : "border-slate-200",
+                        )}
+                      />
+                    </td>
+                    <td className="px-3.5 py-2.5">
+                      <ONgay
+                        value={o.ngayHoaDon}
+                        onChange={(v: string) =>
+                          suaO(d.khoa, "ngayHoaDon", v, d)
+                        }
+                        className="px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-3.5 py-2.5 text-right">
+                      {/* Đường lui cho người bấm nhầm nút tải tệp. Chỉ hiện khi
+                          đơn chưa có số hóa đơn — có số rồi thì hóa đơn đã
+                          phát hành thật. */}
+                      {chuaCoSo && !String(d.soDaGhi || "").trim() && (
+                        <button
+                          onClick={() => boKetXuat(d)}
+                          className="px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all"
+                        >
+                          Đưa về chưa xuất
+                        </button>
+                      )}
+                    </td>
+                  </>
+                )}
               </tr>
             );
           })}
@@ -846,40 +923,24 @@ export default function DebtExport({
             )}
           </div>
           <p className="text-[12px] font-bold text-amber-700 leading-relaxed">
-            Tải tệp TEMPLATE, xuất hóa đơn trên hệ thống hóa đơn, rồi quay lại
-            điền số và ngày thật vào đây. Bấm <strong>Lưu số hóa đơn</strong> là
-            đơn chuyển xuống phần <strong>Đã xuất hóa đơn</strong> bên dưới.
+            Đây là những đơn <strong>chưa mang đi xuất hóa đơn</strong>. Bấm
+            <strong> Tải tệp TEMPLATE</strong> để lấy tệp mang sang hệ thống hóa
+            đơn — tải xong là cả {chuaXuat.length} đơn này chuyển sang thẻ{" "}
+            <strong>Đã xuất hóa đơn</strong>, và anh điền số hóa đơn, ngày hóa
+            đơn ở thẻ đó.
           </p>
           <p className="text-[12px] font-bold text-amber-700/80 leading-relaxed">
-            Số app tự đánh chỉ là <strong>gợi ý</strong> — ghi một số không có
-            thật vào sổ thì sau này đối chiếu với cơ quan thuế không lần ra được
-            gì.
+            Bấm nhầm thì ở thẻ kia có nút <strong>Đưa về chưa xuất</strong> cho
+            từng đơn, miễn là đơn đó chưa điền số hóa đơn.
           </p>
         </div>
 
         {chuaXuat.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
-            Mọi đơn trong kỳ đã có số hóa đơn.
+            Mọi đơn trong kỳ đã được kết xuất.
           </p>
         ) : (
-          <>
-            {bangDongHoaDon(chuaXuat, true)}
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex gap-2 justify-end flex-wrap">
-              <button
-                onClick={dienGoiY}
-                className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
-              >
-                Điền số gợi ý
-              </button>
-              <button
-                onClick={luuHoaDon}
-                disabled={dangLuu}
-                className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
-              >
-                {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
-              </button>
-            </div>
-          </>
+          bangDongHoaDon(chuaXuat, "chua")
         )}
       </div>
       )}
@@ -894,26 +955,38 @@ export default function DebtExport({
             </p>
           </div>
           <p className="text-[12px] font-bold text-emerald-700 leading-relaxed">
-            Sổ theo dõi số hóa đơn và ngày hóa đơn đã phát hành. Sửa được khi
-            gõ nhầm — sửa xong nhớ bấm <strong>Lưu số hóa đơn</strong> ở phần
-            trên.
+            Những đơn <strong>đã kết xuất tệp TEMPLATE</strong> và mang đi phát
+            hành. Phát hành xong thì điền <strong>số hóa đơn</strong> và{" "}
+            <strong>ngày hóa đơn</strong> vào đây rồi bấm Lưu. Đây cũng là nơi
+            tra lại thông tin hóa đơn đã xuất.
+          </p>
+          <p className="text-[12px] font-bold text-emerald-700/80 leading-relaxed">
+            Số app tự đánh chỉ là <strong>gợi ý</strong> điền sẵn — ghi một số
+            không có thật vào sổ thì sau này đối chiếu với cơ quan thuế không
+            lần ra được gì.
           </p>
         </div>
 
         {daXuat.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
-            Chưa có đơn nào được ghi số hóa đơn trong kỳ này.
+            Chưa kết xuất đơn nào trong kỳ này.
           </p>
         ) : (
           <>
-            {bangDongHoaDon(daXuat, false)}
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+            {bangDongHoaDon(daXuat, "da")}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex gap-2 justify-end flex-wrap">
+              <button
+                onClick={dienGoiY}
+                className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+              >
+                Điền số gợi ý
+              </button>
               <button
                 onClick={luuHoaDon}
                 disabled={dangLuu}
                 className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
               >
-                {dangLuu ? "Đang lưu..." : "Lưu thay đổi"}
+                {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
               </button>
             </div>
           </>

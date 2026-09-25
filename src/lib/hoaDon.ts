@@ -42,6 +42,18 @@ export interface HoaDonGhiNhan {
   soHoaDon: string;
   /** yyyy-MM-dd */
   ngayHoaDon: string;
+  /**
+   * LÚC TỆP TEMPLATE CỦA ĐƠN NÀY ĐƯỢC TẢI VỀ. ISO, rỗng nghĩa là chưa tải.
+   *
+   * Đây là mốc chuyển đơn từ "chưa xuất" sang "đã xuất", chứ KHÔNG phải lúc
+   * điền số hóa đơn. Tải tệp về là mang sang hệ thống hóa đơn để phát hành —
+   * kể từ lúc ấy đơn đã đi khỏi tay, dù số hóa đơn thật vài hôm sau mới có.
+   *
+   * Tách riêng khỏi `soHoaDon` vì hai mốc khác nhau: lấy `soHoaDon` làm mốc
+   * thì suốt quãng giữa — đã kết xuất, chưa có số — đơn vẫn nằm ở danh sách
+   * "chưa xuất", và lần kết xuất sau sẽ gom nó vào tệp lần nữa.
+   */
+  ngayKetXuat?: string;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -85,6 +97,8 @@ export interface DongCanDien {
   /** Đã điền và đã lưu chưa. */
   soDaGhi: string;
   ngayDaGhi: string;
+  /** Tệp TEMPLATE của đơn này đã được tải về chưa. */
+  daKetXuat: boolean;
 }
 
 /**
@@ -130,6 +144,7 @@ export function dongCanDienHoaDon(
         soGoiY: r.soHoaDon,
         soDaGhi: h?.soHoaDon || "",
         ngayDaGhi: h?.ngayHoaDon || "",
+        daKetXuat: !!String(h?.ngayKetXuat || "").trim(),
       };
       gom.set(khoa, o);
     }
@@ -147,6 +162,49 @@ export function dongCanDienHoaDon(
  * Xảy ra khi người dùng sửa lại biên đợt sau lúc đã điền số. Không tự xoá và
  * cũng không tự gán sang đợt khác — chỉ báo ra, để người biết mà quyết định.
  */
+/**
+ * Đánh dấu một loạt đơn là ĐÃ KẾT XUẤT, giữ nguyên số hóa đơn đã có.
+ *
+ * Trả về bản ghi để nơi gọi lưu xuống. CỐ Ý chép lại `soHoaDon` và
+ * `ngayHoaDon` cũ thay vì để trống: bản ghi đi qua `merge` của Firestore, mà
+ * một ngày nào đó đổi sang ghi đè thì để trống ở đây sẽ xoá sạch số đã điền.
+ */
+export function danhDauKetXuat(
+  ds: DongCanDien[],
+  luc: string,
+): HoaDonGhiNhan[] {
+  return ds.map((d) => ({
+    id: d.khoa,
+    tuNgay: d.tuNgay,
+    denNgay: d.denNgay,
+    maBp: d.maBp,
+    donVi: d.donVi,
+    soHoaDon: d.soDaGhi,
+    ngayHoaDon: d.ngayDaGhi,
+    ngayKetXuat: luc,
+  }));
+}
+
+/**
+ * Đưa một đơn NGƯỢC về "chưa xuất".
+ *
+ * Bấm nhầm nút tải tệp là đơn nhảy sang tab kia; không có đường lui thì phải
+ * đi sửa thẳng dữ liệu. Xoá bằng chuỗi rỗng chứ không xoá hẳn trường, vì bản
+ * ghi đi qua `merge` — `merge` không bỏ được trường.
+ */
+export function boDauKetXuat(d: DongCanDien): HoaDonGhiNhan {
+  return {
+    id: d.khoa,
+    tuNgay: d.tuNgay,
+    denNgay: d.denNgay,
+    maBp: d.maBp,
+    donVi: d.donVi,
+    soHoaDon: d.soDaGhi,
+    ngayHoaDon: d.ngayDaGhi,
+    ngayKetXuat: "",
+  };
+}
+
 export function hoaDonRoiRa(
   daGhi: HoaDonGhiNhan[],
   khoaDangDung: Set<string>,

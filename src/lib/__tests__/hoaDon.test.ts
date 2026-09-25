@@ -6,9 +6,12 @@
 import { stableHash } from "../hash";
 import {
   bangHoaDon,
+  boDauKetXuat,
+  danhDauKetXuat,
   dongCanDienHoaDon,
   hoaDonRoiRa,
   khoaHoaDon,
+  type DongCanDien,
   type HoaDonGhiNhan,
 } from "../hoaDon";
 
@@ -135,6 +138,148 @@ eq(
   ).length,
   0,
 );
+
+// ====================================================== moc DA KET XUAT
+
+/*
+ * MOC CHUYEN TAB LA LUC TAI TEP TEMPLATE, KHONG PHAI LUC DIEN SO HOA DON.
+ *
+ * Tai tep ve la mang sang he thong hoa don de phat hanh — ke tu luc ay don da
+ * di khoi tay, du so hoa don that vai hom sau moi co. Lay so hoa don lam moc
+ * thi suot quang giua don van nam o "chua xuat", va lan ket xuat sau gom no
+ * vao tep lan nua — xuat trung hoa don.
+ */
+{
+  const dong = [
+    {
+      ngayGiaoBia: "01-12/08",
+      maBp: "AD0103",
+      donVi: "BNC",
+      soLuong: 10,
+      thanhTienSkb: 100,
+      soHoaDon: "GOI-Y-1",
+    },
+  ];
+  const dot = [
+    { tuNgay: "2026-08-01", denNgay: "2026-08-12", nhan: "01-12/08" },
+  ];
+  const khoa = K("2026-08-01", "2026-08-12", "AD0103");
+
+  // Chua co ban ghi nao -> chua ket xuat.
+  const a = dongCanDienHoaDon(dong, dot, new Map(), stableHash);
+  eq("chua co ban ghi thi chua ket xuat", a[0].daKetXuat, false);
+
+  // Co ngay ket xuat nhung CHUA co so hoa don -> van la DA ket xuat.
+  const b = dongCanDienHoaDon(
+    dong,
+    dot,
+    bangHoaDon([
+      {
+        id: khoa,
+        tuNgay: "2026-08-01",
+        denNgay: "2026-08-12",
+        maBp: "AD0103",
+        donVi: "BNC",
+        soHoaDon: "",
+        ngayHoaDon: "",
+        ngayKetXuat: "2026-08-13T02:00:00.000Z",
+      },
+    ]),
+    stableHash,
+  );
+  eq("da ket xuat du chua co so hoa don", b[0].daKetXuat, true);
+  eq("va so hoa don van trong", b[0].soDaGhi, "");
+
+  // Co so hoa don nhung KHONG co ngay ket xuat (du lieu cu) -> chua ket xuat.
+  // Co y: du lieu cu khong biet no da duoc ket xuat hay chua, va doan bua o
+  // day thi don cu se bien mat khoi ca hai tab.
+  const c = dongCanDienHoaDon(
+    dong,
+    dot,
+    bangHoaDon([
+      {
+        id: khoa,
+        tuNgay: "2026-08-01",
+        denNgay: "2026-08-12",
+        maBp: "AD0103",
+        donVi: "BNC",
+        soHoaDon: "HD-001",
+        ngayHoaDon: "2026-08-13",
+      },
+    ]),
+    stableHash,
+  );
+  eq("du lieu cu khong co moc thi chua ket xuat", c[0].daKetXuat, false);
+  eq("nhung so hoa don cu van doc ra", c[0].soDaGhi, "HD-001");
+
+  // Ngay ket xuat rong cung la chua ket xuat — do la cach `boDauKetXuat` xoa.
+  const d = dongCanDienHoaDon(
+    dong,
+    dot,
+    bangHoaDon([
+      {
+        id: khoa,
+        tuNgay: "2026-08-01",
+        denNgay: "2026-08-12",
+        maBp: "AD0103",
+        donVi: "BNC",
+        soHoaDon: "",
+        ngayHoaDon: "",
+        ngayKetXuat: "",
+      },
+    ]),
+    stableHash,
+  );
+  eq("moc rong la chua ket xuat", d[0].daKetXuat, false);
+}
+
+// ------------------------------------------------ danh dau / bo danh dau
+
+const mauDong = (them: Partial<DongCanDien> = {}): DongCanDien => ({
+  khoa: "hd-x",
+  tuNgay: "2026-08-01",
+  denNgay: "2026-08-12",
+  nhanDot: "01-12/08",
+  maBp: "AD0103",
+  donVi: "BNC",
+  soDong: 9,
+  soLuong: 100,
+  thanhTien: 1000,
+  soGoiY: "GOI-Y",
+  soDaGhi: "",
+  ngayDaGhi: "",
+  daKetXuat: false,
+  ...them,
+});
+
+{
+  const ra = danhDauKetXuat([mauDong()], "2026-08-13T02:00:00.000Z");
+  eq("danh dau dung mot ban ghi", ra.length, 1);
+  eq("giu nguyen khoa", ra[0].id, "hd-x");
+  eq("ghi moc ket xuat", ra[0].ngayKetXuat, "2026-08-13T02:00:00.000Z");
+
+  /*
+   * VE QUAN TRONG: KHONG DUOC XOA SO HOA DON DA CO.
+   *
+   * Ban ghi nay di qua `merge` cua Firestore nen de trong khong xoa gi — nhung
+   * mot ngay nao do doi sang ghi de thi de trong o day se xoa sach so da dien.
+   */
+  const giuSo = danhDauKetXuat(
+    [mauDong({ soDaGhi: "HD-001", ngayDaGhi: "2026-08-13" })],
+    "2026-08-14T02:00:00.000Z",
+  );
+  eq("giu so hoa don da co", giuSo[0].soHoaDon, "HD-001");
+  eq("giu ngay hoa don da co", giuSo[0].ngayHoaDon, "2026-08-13");
+}
+
+{
+  const bo = boDauKetXuat(mauDong({ daKetXuat: true }));
+  eq("xoa moc bang chuoi rong", bo.ngayKetXuat, "");
+  eq("van giu khoa", bo.id, "hd-x");
+  // Xoa bang chuoi rong chu khong bo han truong: ban ghi di qua `merge`, ma
+  // `merge` khong bo duoc truong.
+  eq("truong van con", "ngayKetXuat" in bo, true);
+}
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
