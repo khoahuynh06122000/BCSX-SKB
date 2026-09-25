@@ -137,10 +137,17 @@ export default function DebtExport({
   onSaveHoaDon,
 }: Props) {
   const [dot, setDot] = useState<DotChot[]>(docDotDaLuu);
-  const [tienTo, setTienTo] = useState("C26TKB#");
+  /*
+   * Tiền tố và số bắt đầu của số hóa đơn GỢI Ý — không còn ô để chỉnh.
+   *
+   * Giữ lại giá trị vì số gợi ý vẫn điền sẵn vào ô cho người dùng sửa. Bỏ ô
+   * chỉnh vì số thật do người điền sau lúc phát hành, nên gần như không ai
+   * đụng tới hai ô ấy — mà chúng lại làm khối khai đợt trông rắc rối.
+   */
+  const [tienTo] = useState("C26TKB#");
   /** Đang dựng tệp TEMPLATE. Chặn bấm hai lần vì phải tải tệp mẫu về trước. */
   const [dangTaiSap, setDangTaiSap] = useState(false);
-  const [soBatDau, setSoBatDau] = useState<number>(() => {
+  const [soBatDau] = useState<number>(() => {
     const v = Number(localStorage.getItem(KHOA_LUU_SO));
     return Number.isFinite(v) && v > 0 ? v : 1;
   });
@@ -701,8 +708,8 @@ export default function DebtExport({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CalendarRange className="w-4 h-4 text-slate-400" />
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-              Đợt chốt hóa đơn
+            <p className="text-[13px] font-black text-slate-700 tracking-tight">
+              Gom xuất kho thành hóa đơn
             </p>
           </div>
           <button
@@ -713,9 +720,18 @@ export default function DebtExport({
           </button>
         </div>
 
+        {/*
+          NÓI THẲNG NÓ LÀM GÌ, đừng bắt người dùng đoán nghĩa "đợt chốt".
+          Câu cũ không cho biết khai cái này ra thì được gì; câu mới nói đúng
+          hệ quả: khoảng ngày này quyết định cắt hóa đơn ở đâu.
+        */}
         <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
-          Một tháng thường chốt nhiều đợt dài ngắn khác nhau. Khai đủ các đợt thì
-          app kiểm được có ngày xuất kho nào rơi ra ngoài không.
+          Khoảng ngày này quyết định <strong>cắt hóa đơn ở đâu</strong>: mỗi
+          khoảng × mỗi đơn vị gom thành <strong>một</strong> hóa đơn. Ví dụ khai
+          17.09–21.09 thì cả chín dòng bia giao cho BNC trong năm ngày đó nằm
+          chung một tờ. Một tháng chốt nhiều lần thì bấm{" "}
+          <strong>Thêm đợt</strong> — khai đủ thì app báo được ngày xuất kho nào
+          rơi ra ngoài.
         </p>
 
         <div className="space-y-2">
@@ -757,30 +773,14 @@ export default function DebtExport({
           ))}
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-2 pt-1">
-          <label className="block">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Tiền tố số hóa đơn
-            </span>
-            <input
-              value={tienTo}
-              onChange={(e) => setTienTo(e.target.value)}
-              className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold text-slate-900 font-mono"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Số hóa đơn đầu kỳ
-            </span>
-            <input
-              type="number"
-              min={1}
-              value={soBatDau}
-              onChange={(e) => setSoBatDau(Number(e.target.value) || 1)}
-              className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold text-slate-900 tabular-nums"
-            />
-          </label>
-        </div>
+        {/*
+          ĐÃ BỎ "Tiền tố số hóa đơn" và "Số hóa đơn đầu kỳ".
+
+          Hai ô đó chỉ để app TỰ ĐÁNH một số gợi ý. Từ khi số hóa đơn thật do
+          người điền sau lúc phát hành, số gợi ý gần như không ai dùng tới — mà
+          hai ô cấu hình nằm ngay dưới biên đợt lại làm cả khối trông như phải
+          khai gì đó phức tạp. Số gợi ý vẫn còn, chỉ là thôi cho chỉnh.
+        */}
       </div>
 
       {/* ----- Cảnh báo ----- */}
