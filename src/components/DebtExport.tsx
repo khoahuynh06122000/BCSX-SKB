@@ -27,6 +27,7 @@ import {
   type HoaDonGhiNhan,
 } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
+import { ngayVn } from "../lib/soPhieu";
 import { taoWorkbookCongNo } from "../lib/congNoExcel";
 // Ghi bang XLSXDep chu khong phai `xlsx`: dung `xlsx` thi workbook da gan dinh
 // dang van bi ghi ra trang tron, vi ban cong dong khong ghi thuoc tinh `s`.
@@ -530,6 +531,42 @@ export default function DebtExport({
     await onSaveHoaDon([boDauKetXuat(d)]);
   };
 
+  /**
+   * MỌI hóa đơn đã ghi số, KHÔNG lọc theo đợt chốt đang khai.
+   *
+   * Bảng "Đã xuất hóa đơn" ở trên chỉ dựng từ đợt đang khai trên màn hình, nên
+   * hóa đơn của tháng trước không hiện ra — mà đây lại đúng là chỗ người dùng
+   * mở ra để tra lại. Đổi biên đợt để đi tìm một hóa đơn cũ là việc không ai
+   * nên phải làm.
+   *
+   * Xếp mới nhất lên đầu theo ngày hóa đơn; hóa đơn chưa điền ngày thì lấy
+   * biên đợt làm mốc để nó không rơi xuống tận đáy.
+   */
+  const khoHoaDon = useMemo(
+    () =>
+      hoaDon
+        .filter((h) => String(h?.soHoaDon || "").trim())
+        .slice()
+        .sort((a, b) =>
+          `${b.ngayHoaDon || b.denNgay || ""}`.localeCompare(
+            `${a.ngayHoaDon || a.denNgay || ""}`,
+          ),
+        ),
+    [hoaDon],
+  );
+
+  const [timHoaDon, setTimHoaDon] = useState("");
+  const khoDaLoc = useMemo(() => {
+    const q = timHoaDon.trim().toLowerCase();
+    if (!q) return khoHoaDon;
+    return khoHoaDon.filter((h) =>
+      [h.soHoaDon, h.donVi, h.maBp, h.ngayHoaDon]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [khoHoaDon, timHoaDon]);
+
   const suaCauHinh = (truong: keyof CauHinhSap, giaTri: string) =>
     setCauHinhSap((c) => ({ ...c, [truong]: giaTri }));
 
@@ -992,6 +1029,81 @@ export default function DebtExport({
           </>
         )}
       </div>
+      )}
+
+      {/* ---------- Kho lưu trữ hóa đơn, không lọc theo đợt ---------- */}
+      {phan === "da" && (
+        <div className="rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-200 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[13px] font-black text-slate-700 tracking-tight">
+                Kho hóa đơn đã ghi · {khoHoaDon.length} hóa đơn
+              </p>
+              <input
+                value={timHoaDon}
+                onChange={(e) => setTimHoaDon(e.target.value)}
+                placeholder="Tra số hóa đơn / đơn vị / mã BP..."
+                className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary w-full sm:w-72"
+              />
+            </div>
+            <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
+              Toàn bộ hóa đơn đã ghi số, <strong>không lọc theo đợt</strong>{" "}
+              đang khai ở trên — tra hóa đơn tháng trước không phải đổi lại biên
+              đợt. Muốn in lại mẫu Chốt thì sang thẻ{" "}
+              <strong>Tra cứu · in lại</strong>.
+            </p>
+          </div>
+
+          {khoDaLoc.length === 0 ? (
+            <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
+              {khoHoaDon.length === 0
+                ? "Chưa ghi số hóa đơn nào."
+                : "Không có hóa đơn nào khớp."}
+            </p>
+          ) : (
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-white sticky top-0 z-10">
+                  <tr>
+                    {["Số hóa đơn", "Ngày hóa đơn", "Đơn vị", "Mã BP", "Đợt"].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200"
+                        >
+                          {h}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {khoDaLoc.map((h) => (
+                    <tr
+                      key={h.id}
+                      className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
+                    >
+                      <td className="px-3.5 py-2.5 font-mono font-black text-slate-900">
+                        {h.soHoaDon}
+                      </td>
+                      <td className="px-3.5 py-2.5 font-mono">
+                        {h.ngayHoaDon ? ngayVn(h.ngayHoaDon) : "—"}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-900">{h.donVi}</td>
+                      <td className="px-3.5 py-2.5 font-mono text-slate-400">
+                        {h.maBp}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-slate-400">
+                        {h.tuNgay ? ngayVn(h.tuNgay) : "?"} —{" "}
+                        {h.denNgay ? ngayVn(h.denNgay) : "?"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {phan === "chua" && (

@@ -97,7 +97,14 @@ export interface DongCanDien {
   /** Đã điền và đã lưu chưa. */
   soDaGhi: string;
   ngayDaGhi: string;
-  /** Tệp TEMPLATE của đơn này đã được tải về chưa. */
+  /**
+   * Đơn này đã mang đi xuất hóa đơn chưa.
+   *
+   * Đúng khi ĐÃ TẢI TỆP TEMPLATE, hoặc khi đã có SỐ HÓA ĐƠN thật. Vế thứ hai
+   * mới nhìn tưởng thừa nhưng không: không thể có số hóa đơn mà chưa xuất hóa
+   * đơn. Thiếu nó thì mọi hóa đơn ghi từ trước lúc có mốc kết xuất đều rơi về
+   * "chưa xuất", và sổ theo dõi mở ra trống trơn dù đã điền hàng chục số.
+   */
   daKetXuat: boolean;
 }
 
@@ -144,7 +151,9 @@ export function dongCanDienHoaDon(
         soGoiY: r.soHoaDon,
         soDaGhi: h?.soHoaDon || "",
         ngayDaGhi: h?.ngayHoaDon || "",
-        daKetXuat: !!String(h?.ngayKetXuat || "").trim(),
+        daKetXuat:
+          !!String(h?.ngayKetXuat || "").trim() ||
+          !!String(h?.soHoaDon || "").trim(),
       };
       gom.set(khoa, o);
     }

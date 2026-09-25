@@ -190,9 +190,13 @@ eq(
   eq("da ket xuat du chua co so hoa don", b[0].daKetXuat, true);
   eq("va so hoa don van trong", b[0].soDaGhi, "");
 
-  // Co so hoa don nhung KHONG co ngay ket xuat (du lieu cu) -> chua ket xuat.
-  // Co y: du lieu cu khong biet no da duoc ket xuat hay chua, va doan bua o
-  // day thi don cu se bien mat khoi ca hai tab.
+  /*
+   * CO SO HOA DON NHUNG KHONG CO MOC KET XUAT -> VAN LA DA XUAT.
+   *
+   * Khong the co so hoa don ma chua xuat hoa don. Thieu ve nay thi moi hoa don
+   * ghi tu truoc luc co moc ket xuat deu roi ve "chua xuat", va so theo doi mo
+   * ra trong tron du da dien hang chuc so.
+   */
   const c = dongCanDienHoaDon(
     dong,
     dot,
@@ -209,8 +213,8 @@ eq(
     ]),
     stableHash,
   );
-  eq("du lieu cu khong co moc thi chua ket xuat", c[0].daKetXuat, false);
-  eq("nhung so hoa don cu van doc ra", c[0].soDaGhi, "HD-001");
+  eq("co so hoa don la da xuat", c[0].daKetXuat, true);
+  eq("va so hoa don cu doc ra dung", c[0].soDaGhi, "HD-001");
 
   // Ngay ket xuat rong cung la chua ket xuat — do la cach `boDauKetXuat` xoa.
   const d = dongCanDienHoaDon(
@@ -230,7 +234,7 @@ eq(
     ]),
     stableHash,
   );
-  eq("moc rong la chua ket xuat", d[0].daKetXuat, false);
+  eq("moc rong va khong co so thi chua xuat", d[0].daKetXuat, false);
 }
 
 // ------------------------------------------------ danh dau / bo danh dau
