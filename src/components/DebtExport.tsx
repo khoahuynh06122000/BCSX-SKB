@@ -448,7 +448,7 @@ export default function DebtExport({
     <div className="space-y-4">
       <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
         <Receipt className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-        <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+        <p className="text-[13px] font-bold text-slate-500 leading-relaxed">
           Dựng đúng sheet <strong>Chốt</strong> của file công nợ tháng: 18 cột,
           hai chặng giá cạnh nhau, một số hóa đơn cho mỗi{" "}
           <strong>đợt × đơn vị</strong>. Hai mươi bộ phận BNC gộp về một dòng
@@ -462,19 +462,19 @@ export default function DebtExport({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CalendarRange className="w-4 h-4 text-slate-400" />
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
               Đợt chốt hóa đơn
             </p>
           </div>
           <button
             onClick={themDot}
-            className="px-3 py-1.5 rounded-lg bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 flex items-center gap-1"
+            className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 flex items-center gap-1"
           >
             <Plus className="w-3 h-3" /> Thêm đợt
           </button>
         </div>
 
-        <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+        <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
           Một tháng thường chốt nhiều đợt dài ngắn khác nhau. Khai đủ các đợt thì
           app kiểm được có ngày xuất kho nào rơi ra ngoài không.
         </p>
@@ -485,7 +485,7 @@ export default function DebtExport({
               key={d.id}
               className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-2 items-center"
             >
-              <span className="text-[10px] font-black text-slate-300 w-5 text-center">
+              <span className="text-[12px] font-black text-slate-300 w-5 text-center">
                 {i + 1}
               </span>
               {(
@@ -496,13 +496,13 @@ export default function DebtExport({
                 ] as [keyof DotChot, string][]
               ).map(([truong, nhan]) => (
                 <label key={truong} className="block">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                     {nhan}
                   </span>
                   <ONgay
                     value={d[truong] as string}
                     onChange={(v: string) => suaDot(d.id, truong, v)}
-                    className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+                    className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold text-slate-900"
                   />
                 </label>
               ))}
@@ -520,17 +520,17 @@ export default function DebtExport({
 
         <div className="grid sm:grid-cols-2 gap-2 pt-1">
           <label className="block">
-            <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               Tiền tố số hóa đơn
             </span>
             <input
               value={tienTo}
               onChange={(e) => setTienTo(e.target.value)}
-              className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 font-mono"
+              className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold text-slate-900 font-mono"
             />
           </label>
           <label className="block">
-            <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               Số hóa đơn đầu kỳ
             </span>
             <input
@@ -538,7 +538,7 @@ export default function DebtExport({
               min={1}
               value={soBatDau}
               onChange={(e) => setSoBatDau(Number(e.target.value) || 1)}
-              className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 tabular-nums"
+              className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold text-slate-900 tabular-nums"
             />
           </label>
         </div>
@@ -565,7 +565,7 @@ export default function DebtExport({
               />
               <p
                 className={cn(
-                  "text-[11px] font-bold leading-relaxed",
+                  "text-[13px] font-bold leading-relaxed",
                   nghiemTrong(c.loai) ? "text-amber-800" : "text-blue-800",
                 )}
               >
@@ -591,7 +591,7 @@ export default function DebtExport({
             key={s.label}
             className="p-3 rounded-xl bg-white border border-slate-200"
           >
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
               {s.label}
             </p>
             <p className="text-sm font-black text-slate-900 mt-0.5 tabular-nums">
@@ -604,7 +604,7 @@ export default function DebtExport({
       {/* ----- Thống kê theo đợt ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
             Theo đợt
           </p>
         </div>
@@ -624,7 +624,7 @@ export default function DebtExport({
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                    className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
                   >
                     {h}
                   </th>
@@ -635,28 +635,28 @@ export default function DebtExport({
               {bang.theoDot.map((d) => (
                 <tr
                   key={d.dotId}
-                  className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
+                  className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
                 >
-                  <td className="px-3 py-1.5 text-slate-900">
+                  <td className="px-3.5 py-2.5 text-slate-900">
                     {d.nhanNgayGiao}
                   </td>
-                  <td className="px-3 py-1.5">{d.ngayHoaDon}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
+                  <td className="px-3.5 py-2.5">{d.ngayHoaDon}</td>
+                  <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {d.soDong}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
+                  <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {d.soDonVi}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
+                  <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {d.soHoaDon}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                  <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
                     {formatNumber(d.soLuong)}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
+                  <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {tien(d.thanhTienSkb)}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums">
+                  <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {tien(d.sauThueSkb)}
                   </td>
                 </tr>
@@ -671,26 +671,26 @@ export default function DebtExport({
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
                 Số hóa đơn đã phát hành · {canDien.length} hóa đơn
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={dienGoiY}
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+                  className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
                 >
                   Điền số gợi ý
                 </button>
                 <button
                   onClick={luuHoaDon}
                   disabled={dangLuu}
-                  className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
+                  className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
                 >
                   {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
                 </button>
               </div>
             </div>
-            <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+            <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
               Phát hành hóa đơn xong thì điền số và ngày thật vào đây. Số app tự
               đánh chỉ là gợi ý — ghi một số không có thật vào sổ thì đối chiếu
               với cơ quan thuế sau này không lần ra được gì.
@@ -699,7 +699,7 @@ export default function DebtExport({
 
           {bang.chuaCoSoThat > 0 && (
             <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
-              <p className="text-[11px] font-bold text-amber-800">
+              <p className="text-[13px] font-bold text-amber-800">
                 <strong>{bang.chuaCoSoThat}</strong> hóa đơn chưa có số thật —
                 file kết xuất đang dùng số app tự đánh cho những dòng đó.
               </p>
@@ -721,7 +721,7 @@ export default function DebtExport({
                   ].map((h) => (
                     <th
                       key={h}
-                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                      className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
                     >
                       {h}
                     </th>
@@ -736,22 +736,22 @@ export default function DebtExport({
                     <tr
                       key={d.khoa}
                       className={cn(
-                        "border-t border-slate-100 text-[11px] font-bold text-slate-600",
+                        "border-t border-slate-100 text-[13px] font-bold text-slate-600",
                         chuaCo && "bg-amber-50/40",
                       )}
                     >
-                      <td className="px-3 py-1.5">{d.nhanDot}</td>
-                      <td className="px-3 py-1.5 text-slate-900">{d.donVi}</td>
-                      <td className="px-3 py-1.5 font-mono text-slate-400">
+                      <td className="px-3.5 py-2.5">{d.nhanDot}</td>
+                      <td className="px-3.5 py-2.5 text-slate-900">{d.donVi}</td>
+                      <td className="px-3.5 py-2.5 font-mono text-slate-400">
                         {d.maBp}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums">
                         {d.soDong}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
                         {tien(d.thanhTien)}
                       </td>
-                      <td className="px-3 py-1.5">
+                      <td className="px-3.5 py-2.5">
                         <input
                           value={o.soHoaDon}
                           onChange={(e) =>
@@ -759,20 +759,20 @@ export default function DebtExport({
                           }
                           placeholder={d.soGoiY}
                           className={cn(
-                            "w-44 px-2 py-1.5 rounded-lg border bg-white text-[12px] font-black font-mono outline-none focus:border-primary",
+                            "w-44 px-3 py-2.5 rounded-lg border bg-white text-[14px] font-black font-mono outline-none focus:border-primary",
                             chuaCo
                               ? "border-amber-300 placeholder:text-amber-400"
                               : "border-slate-200",
                           )}
                         />
                       </td>
-                      <td className="px-3 py-1.5">
+                      <td className="px-3.5 py-2.5">
                         <ONgay
                           value={o.ngayHoaDon}
                           onChange={(v: string) =>
                             suaO(d.khoa, "ngayHoaDon", v, d)
                           }
-                          className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold outline-none focus:border-primary"
+                          className="px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold outline-none focus:border-primary"
                         />
                       </td>
                     </tr>
@@ -789,7 +789,7 @@ export default function DebtExport({
       {bang.theoDonVi.length > 0 && (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
               Theo đơn vị · cả kỳ
             </p>
           </div>
@@ -799,22 +799,22 @@ export default function DebtExport({
                 {bang.theoDonVi.map((u) => (
                   <tr
                     key={u.maBp || u.donVi}
-                    className="border-t border-slate-100 text-[11px] font-bold text-slate-600 first:border-t-0"
+                    className="border-t border-slate-100 text-[13px] font-bold text-slate-600 first:border-t-0"
                   >
-                    <td className="px-3 py-1.5 text-slate-900">{u.donVi}</td>
-                    <td className="px-3 py-1.5 font-mono text-slate-400">
+                    <td className="px-3.5 py-2.5 text-slate-900">{u.donVi}</td>
+                    <td className="px-3.5 py-2.5 font-mono text-slate-400">
                       {u.maBp}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {u.soDong} dòng
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
                       {formatNumber(u.soLuong)}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {tien(u.thanhTienSkb)}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {tien(u.sauThueSkb)}
                     </td>
                   </tr>
@@ -829,11 +829,11 @@ export default function DebtExport({
       <div className="p-4 rounded-2xl border border-slate-200 bg-white">
         <div className="flex items-center gap-2 mb-2">
           <Calculator className="w-4 h-4 text-slate-400" />
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
             Đơn giá đang áp dụng
           </p>
         </div>
-        <div className="grid sm:grid-cols-2 gap-2 text-[11px] font-bold text-slate-600">
+        <div className="grid sm:grid-cols-2 gap-2 text-[13px] font-bold text-slate-600">
           <p>
             Bia hơi (LIT): SKB→DNC{" "}
             <span className="text-slate-900">
@@ -855,7 +855,7 @@ export default function DebtExport({
             </span>
           </p>
         </div>
-        <p className="text-[10px] font-bold text-slate-400 mt-2 leading-relaxed">
+        <p className="text-[12px] font-bold text-slate-400 mt-2 leading-relaxed">
           VAT 10% cả hai chặng. Bảng đúng 18 cột của file bộ phận — không có
           &quot;Đơn vị xuất&quot;, &quot;Thuế TTĐB&quot;, &quot;Doanh thu
           511&quot;. Giá đổi thì báo tôi sửa trong src/lib/invoice.ts.
@@ -869,8 +869,12 @@ export default function DebtExport({
         </p>
       ) : (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          {/* Chỉ còn cuộn DỌC. Bảng đã vừa bề ngang nên bỏ overflow-x. */}
-          <div className="max-h-[520px] overflow-y-auto">
+          {/*
+            Cuộn CẢ HAI CHIỀU. Trước đây bảng vừa đúng bề ngang màn hình nên bỏ
+            cuộn ngang; nay chữ to lên, cột phải nới ra, nên phải mở lại — không
+            thì cột cuối bị cắt mất mà không có cách nào kéo tới.
+          */}
+          <div className="max-h-[520px] overflow-auto">
             {/*
               MÀN HÌNH GOM THEO HÓA ĐƠN, TỆP THÌ VẪN PHẲNG 18 CỘT.
 
@@ -887,34 +891,41 @@ export default function DebtExport({
               Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng chỉ lệch
               vài phần trăm nên đọc nhầm cũng không lộ ra.
             */}
-            <table className="w-full text-left table-fixed">
+            {/*
+              CHỮ TO LÊN THÌ CỘT PHẢI NỚI THEO, và bảng phải kéo ngang được.
+              `table-fixed` không cho ô phình ra: chữ không vừa thì nó xuống
+              dòng ngay trong ô, và một con tiền bị bẻ làm hai dòng còn khó đọc
+              hơn chữ nhỏ. Nới cột tiền rồi đặt bề ngang tối thiểu — thà kéo
+              ngang một cái còn hơn đọc không ra số.
+            */}
+            <table className="w-full text-left table-fixed min-w-[1240px]">
               <colgroup>
-                <col className="w-10" />
-                <col className="w-[86px]" />
-                <col />
                 <col className="w-12" />
-                <col className="w-20" />
-                <col className="w-[62px]" />
-                <col className="w-[92px]" />
-                <col className="w-[82px]" />
+                <col className="w-[98px]" />
+                <col className="w-[190px]" />
+                <col className="w-14" />
+                <col className="w-24" />
+                <col className="w-[72px]" />
+                <col className="w-[106px]" />
                 <col className="w-[96px]" />
-                <col className="w-[62px]" />
-                <col className="w-[92px]" />
-                <col className="w-[82px]" />
+                <col className="w-[112px]" />
+                <col className="w-[72px]" />
+                <col className="w-[106px]" />
                 <col className="w-[96px]" />
+                <col className="w-[112px]" />
               </colgroup>
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
                   <th colSpan={5} className="bg-slate-50" />
                   <th
                     colSpan={4}
-                    className="px-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center"
+                    className="px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center"
                   >
                     SKB - DNC
                   </th>
                   <th
                     colSpan={4}
-                    className="px-2 py-1.5 text-[9px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center"
+                    className="px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center"
                   >
                     DNC xuất BNC và ĐVTV
                   </th>
@@ -938,7 +949,7 @@ export default function DebtExport({
                     <th
                       key={i}
                       className={cn(
-                        "px-2 py-2 text-[9px] font-black uppercase tracking-widest",
+                        "px-3 py-3 text-[11px] font-black uppercase tracking-widest",
                         COT_SO.includes(i) && "text-right",
                         i >= 5 && i <= 8
                           ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
@@ -959,7 +970,7 @@ export default function DebtExport({
                   <tr className="bg-slate-100/70">
                     <td
                       colSpan={13}
-                      className="px-2 py-1.5 text-[10px] font-black text-slate-600"
+                      className="px-3 py-2.5 text-[12px] font-black text-slate-600"
                     >
                       <span className="text-slate-900">{k.dau.donVi}</span>
                       <span className="text-slate-300 mx-1.5">·</span>
@@ -967,7 +978,7 @@ export default function DebtExport({
                         {k.dau.maBp || "chưa có mã BP"}
                       </span>
                       <span className="text-slate-300 mx-1.5">·</span>
-                      <span className="font-mono text-[10px] text-slate-700">
+                      <span className="font-mono text-[12px] text-slate-700">
                         {k.dau.soHoaDon}
                       </span>
                       <span className="text-slate-300 mx-1.5">·</span>
@@ -980,43 +991,43 @@ export default function DebtExport({
                   {k.dong.map((r) => (
                     <tr
                       key={r.stt}
-                      className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
+                      className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
                     >
-                      <td className="px-2 py-1.5 text-slate-400">{r.stt}</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">
+                      <td className="px-3 py-2.5 text-slate-400">{r.stt}</td>
+                      <td className="px-3 py-2.5 font-mono text-[12px]">
                         {r.maVatTu}
                       </td>
                       {/* Cột duy nhất co giãn, và là cột duy nhất được xuống
                           dòng — tên bia dài nhất cũng chỉ ăn hai dòng. */}
-                      <td className="px-2 py-1.5 leading-tight">
+                      <td className="px-3 py-2.5 leading-tight">
                         {r.tenHangHoa}
                       </td>
-                      <td className="px-2 py-1.5 text-slate-400">{r.dvt}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900">
+                      <td className="px-3 py-2.5 text-slate-400">{r.dvt}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
                         {formatNumber(r.soLuong)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#1F4E5F]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#1F4E5F]/5">
                         {formatNumber(r.donGiaSkb)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
                         {tien(r.thanhTienSkb)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#1F4E5F]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#1F4E5F]/5">
                         {tien(r.vatSkb)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
                         {tien(r.sauThueSkb)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#6B4E71]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#6B4E71]/5">
                         {formatNumber(r.donGiaDnc)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
                         {tien(r.thanhTienDnc)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums bg-[#6B4E71]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#6B4E71]/5">
                         {tien(r.vatDnc)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
                         {tien(r.sauThueDnc)}
                       </td>
                     </tr>
@@ -1025,31 +1036,31 @@ export default function DebtExport({
               ))}
 
               <tfoot className="sticky bottom-0">
-                <tr className="bg-slate-100 border-t-2 border-slate-300 text-[11px] font-black text-slate-900">
-                  <td colSpan={4} className="px-2 py-2">
+                <tr className="bg-slate-100 border-t-2 border-slate-300 text-[13px] font-black text-slate-900">
+                  <td colSpan={4} className="px-3 py-3">
                     TỔNG CỘNG
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {formatNumber(bang.tong.soLuong)}
                   </td>
                   <td />
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.thanhTienSkb)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.vatSkb)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.sauThueSkb)}
                   </td>
                   <td />
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.thanhTienDnc)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.vatDnc)}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {tien(bang.tong.sauThueDnc)}
                   </td>
                 </tr>
@@ -1063,11 +1074,11 @@ export default function DebtExport({
       {tepSap.oDong.length > 0 && (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
               Tệp TEMPLATE xuất hóa đơn · {tepSap.tong.soChungTu} chứng từ ·{" "}
               {tepSap.oDong.length} dòng
             </p>
-            <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+            <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
               Tệp bút toán đúng khuôn mẫu bộ phận gửi, để nạp lên hệ thống kế
               toán. Mỗi <strong>đợt × đơn vị</strong> là một chứng từ: một dòng
               Nợ phải thu, mỗi mặt hàng một dòng doanh thu, và một dòng thuế
@@ -1078,28 +1089,28 @@ export default function DebtExport({
           <div className="p-4 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <label className="block">
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
                   Ngày chứng từ
                 </span>
                 <ONgay
                   value={ngayChungTu}
                   onChange={(v: string) => setNgayChungTu(v)}
-                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900"
                 />
-                <span className="block text-[9px] font-bold text-slate-400 mt-1">
+                <span className="block text-[11px] font-bold text-slate-400 mt-1">
                   Ngày hạch toán, không phải ngày giao bia
                 </span>
               </label>
               <label className="block sm:col-span-2">
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
                   Tiêu đề chứng từ
                 </span>
                 <input
                   value={cauHinhSap.tieuDeChungTu}
                   onChange={(e) => suaCauHinh("tieuDeChungTu", e.target.value)}
-                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900 font-mono"
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900 font-mono"
                 />
-                <span className="block text-[9px] font-bold text-slate-400 mt-1">
+                <span className="block text-[11px] font-bold text-slate-400 mt-1">
                   Nối thêm tên đơn vị: {cauHinhSap.tieuDeChungTu}BNC
                 </span>
               </label>
@@ -1107,7 +1118,7 @@ export default function DebtExport({
 
             <button
               onClick={() => setMoCauHinh(!moCauHinh)}
-              className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
+              className="text-[12px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
             >
               {moCauHinh ? "Ẩn" : "Sửa"} mã cố định (tài khoản, mã thuế, công ty)
             </button>
@@ -1129,19 +1140,19 @@ export default function DebtExport({
                   ] as [keyof CauHinhSap, string][]
                 ).map(([k, nhan]) => (
                   <label key={k} className="block">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                       {nhan}
                     </span>
                     <input
                       value={cauHinhSap[k]}
                       onChange={(e) => suaCauHinh(k, e.target.value)}
-                      className="w-full mt-0.5 px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold font-mono text-slate-900"
+                      className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold font-mono text-slate-900"
                     />
                   </label>
                 ))}
                 {/* Chú thích ở sheet 1 ghi TO2 còn tệp mẫu ghi O2 — nói ra chứ
                     không tự chọn hộ. */}
-                <p className="col-span-2 sm:col-span-4 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
+                <p className="col-span-2 sm:col-span-4 text-[12px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
                   Mã thuế: tệp mẫu ghi <strong>O2</strong>, còn chú thích ở
                   sheet 1 ghi <strong>TO2</strong>. Em để mặc định theo tệp mẫu
                   vì đó là tệp đã dùng được — anh xem lại rồi sửa nếu cần.
@@ -1164,7 +1175,7 @@ export default function DebtExport({
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                        className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
                       >
                         {h}
                       </th>
@@ -1175,39 +1186,39 @@ export default function DebtExport({
                   {tepSap.chungTu.map((x, i) => (
                     <tr
                       key={`${x.maBp}-${i}`}
-                      className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
+                      className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
                     >
-                      <td className="px-3 py-1.5 text-slate-900 font-mono text-[10px]">
+                      <td className="px-3.5 py-2.5 text-slate-900 font-mono text-[12px]">
                         {x.tieuDe}
                       </td>
-                      <td className="px-3 py-1.5 font-mono text-slate-400">
+                      <td className="px-3.5 py-2.5 font-mono text-slate-400">
                         {x.maBp}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums">
                         {x.soDongHang}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums">
                         {tien(x.truocThue)}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums">
                         {tien(x.vat)}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
                         {tien(x.tongCong)}
                       </td>
                     </tr>
                   ))}
-                  <tr className="border-t-2 border-slate-200 text-[11px] font-black text-slate-900 bg-slate-50">
-                    <td className="px-3 py-1.5" colSpan={3}>
+                  <tr className="border-t-2 border-slate-200 text-[13px] font-black text-slate-900 bg-slate-50">
+                    <td className="px-3.5 py-2.5" colSpan={3}>
                       Tổng
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {tien(tepSap.tong.truocThue)}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {tien(tepSap.tong.vat)}
                     </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums">
                       {tien(tepSap.tong.tongCong)}
                     </td>
                   </tr>
@@ -1217,7 +1228,7 @@ export default function DebtExport({
 
             {tepSap.vuotDoDai.length > 0 && (
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+                <p className="text-[13px] font-bold text-amber-800 leading-relaxed">
                   {tepSap.vuotDoDai.length} tên hàng dài hơn 25 ký tự, mà cột
                   Header Text khai C(25). Tệp mẫu của anh cũng vậy và vẫn dùng
                   được nên em giữ nguyên, không cắt.
@@ -1227,7 +1238,7 @@ export default function DebtExport({
 
             <button
               onClick={taiTepSap}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2"
+              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[12px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2"
             >
               <Download className="w-4 h-4" /> Tải tệp TEMPLATE (
               {tepSap.tong.soChungTu} chứng từ)
@@ -1240,7 +1251,7 @@ export default function DebtExport({
       <button
         onClick={handleDownload}
         disabled={bang.dong.length === 0}
-        className="px-5 py-3 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
+        className="px-5 py-3 rounded-xl bg-primary text-white text-[12px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
       >
         <Download className="w-4 h-4" /> Tải file công nợ ({bang.tong.soDong}{" "}
         dòng · {dot.length} đợt)

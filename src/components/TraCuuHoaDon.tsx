@@ -113,14 +113,14 @@ export default function TraCuuHoaDon({
 
   const oTong = (nhan: string, giaTri: string, phu?: string) => (
     <div className="px-4 py-3 bg-white border border-slate-100 rounded-2xl">
-      <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] leading-none">
+      <p className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em] leading-none">
         {nhan}
       </p>
       <p className="text-base font-black text-slate-900 mt-1.5 leading-none">
         {giaTri}
       </p>
       {phu && (
-        <p className="text-[9px] font-bold text-slate-400 mt-1 leading-none">
+        <p className="text-[11px] font-bold text-slate-400 mt-1 leading-none">
           {phu}
         </p>
       )}
@@ -179,7 +179,7 @@ export default function TraCuuHoaDon({
                 setDenNgay("");
                 setTuKhoa("");
               }}
-              className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
+              className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[11px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
             >
               Tất cả
             </button>
@@ -189,7 +189,7 @@ export default function TraCuuHoaDon({
         <button
           onClick={handleDownload}
           disabled={!kq.bang.dong.length}
-          className="px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2.5 shrink-0"
+          className="px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2.5 shrink-0"
         >
           <Download className="w-4 h-4" />
           Xuất mẫu Chốt
@@ -224,10 +224,10 @@ export default function TraCuuHoaDon({
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
             <div className="min-w-0">
-              <p className="text-[11px] font-black text-amber-900 uppercase tracking-widest">
+              <p className="text-[13px] font-black text-amber-900 uppercase tracking-widest">
                 {kq.thieuDong.length} hóa đơn không dựng lại được dòng hàng
               </p>
-              <p className="text-[11px] text-amber-800 font-medium mt-1 leading-snug">
+              <p className="text-[13px] text-amber-800 font-medium mt-1 leading-snug">
                 Số hóa đơn đã ghi nhưng giao dịch xuất kho bên dưới đã bị sửa,
                 bị xoá, hoặc đơn vị đã mất mã BP sau khi hóa đơn phát hành. Cần
                 xem lại vì tờ hóa đơn vẫn đang có hiệu lực với cơ quan thuế.
@@ -236,7 +236,7 @@ export default function TraCuuHoaDon({
                 {kq.thieuDong.map((h) => (
                   <span
                     key={h.id}
-                    className="px-2 py-1 bg-white border border-amber-200 rounded-lg text-[10px] font-black font-mono text-amber-900"
+                    className="px-2 py-1 bg-white border border-amber-200 rounded-lg text-[12px] font-black font-mono text-amber-900"
                   >
                     {h.soHoaDon} · {h.donVi} · {ngayVietNam(h.ngayHoaDon)}
                   </span>
@@ -256,7 +256,7 @@ export default function TraCuuHoaDon({
               ? "Không có hóa đơn nào khớp"
               : "Chưa có hóa đơn nào được điền số"}
           </p>
-          <p className="text-[11px] text-slate-400 font-medium mt-1.5 max-w-md mx-auto leading-snug">
+          <p className="text-[13px] text-slate-400 font-medium mt-1.5 max-w-md mx-auto leading-snug">
             {daLoc
               ? "Thử bỏ bớt bộ lọc, hoặc bấm “Tất cả”."
               : "Sang thẻ “Kết xuất · điền số”, phát hành hóa đơn rồi điền số và ngày thật vào bảng. Điền xong thì hóa đơn hiện ở đây."}
@@ -313,23 +313,23 @@ function TheHoaDon({
             <span className="font-mono font-black text-sm text-slate-900 leading-none">
               {h.soHoaDon}
             </span>
-            <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[10px] font-black uppercase tracking-tighter text-slate-700">
+            <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[12px] font-black uppercase tracking-tighter text-slate-700">
               {h.donVi}
             </span>
             {h.maBp && (
-              <span className="text-[10px] font-mono font-bold text-slate-400">
+              <span className="text-[12px] font-mono font-bold text-slate-400">
                 {h.maBp}
               </span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+            <span className="text-[12px] font-black text-slate-500 uppercase tracking-widest">
               HĐ {ngayVietNam(h.ngayHoaDon)}
             </span>
-            <span className="text-[10px] font-bold text-slate-400">
+            <span className="text-[12px] font-bold text-slate-400">
               giao {h.nhanDot}
             </span>
-            <span className="text-[10px] font-bold text-slate-400">
+            <span className="text-[12px] font-bold text-slate-400">
               {h.dong.length} mặt hàng · {formatNumber(h.soLuong)}
             </span>
           </div>
@@ -339,7 +339,7 @@ function TheHoaDon({
           <p className="font-mono font-black text-sm text-slate-900 leading-none">
             {formatNumber(Math.round(h.thanhTienSkb))}
           </p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 leading-none">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1 leading-none">
             sau thuế {formatNumber(Math.round(h.sauThueSkb))}
           </p>
         </div>
@@ -382,13 +382,13 @@ function TheHoaDon({
                   <th colSpan={4} className="bg-slate-50" />
                   <th
                     colSpan={4}
-                    className="py-1.5 px-3 font-black text-[9px] text-white uppercase tracking-widest bg-[#1F4E5F] text-center whitespace-nowrap"
+                    className="py-1.5 px-3 font-black text-[11px] text-white uppercase tracking-widest bg-[#1F4E5F] text-center whitespace-nowrap"
                   >
                     SKB - DNC
                   </th>
                   <th
                     colSpan={4}
-                    className="py-1.5 px-3 font-black text-[9px] text-white uppercase tracking-widest bg-[#6B4E71] text-center whitespace-nowrap"
+                    className="py-1.5 px-3 font-black text-[11px] text-white uppercase tracking-widest bg-[#6B4E71] text-center whitespace-nowrap"
                   >
                     DNC xuất BNC và ĐVTV
                   </th>
@@ -411,7 +411,7 @@ function TheHoaDon({
                     <th
                       key={i}
                       className={cn(
-                        "py-2 px-2 font-black text-[9px] uppercase tracking-widest whitespace-nowrap",
+                        "py-2 px-2 font-black text-[11px] uppercase tracking-widest whitespace-nowrap",
                         i >= 3 && "text-right",
                         i >= 4 && i <= 7
                           ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
@@ -428,40 +428,40 @@ function TheHoaDon({
               <tbody className="divide-y divide-slate-50">
                 {h.dong.map((d) => (
                   <tr key={`${d.maVatTu}|${d.dvt}`}>
-                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-500 whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-500 whitespace-nowrap">
                       {d.maVatTu || "—"}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-bold text-slate-800 leading-tight">
+                    <td className="py-2 px-2 text-[13px] font-bold text-slate-800 leading-tight">
                       {d.tenHangHoa}
                     </td>
-                    <td className="py-2 px-2 text-[10px] font-black text-slate-400 uppercase">
+                    <td className="py-2 px-2 text-[12px] font-black text-slate-400 uppercase">
                       {d.dvt}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                       {formatNumber(d.soLuong)}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap">
                       {formatNumber(d.donGiaSkb)}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.thanhTienSkb))}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.vatSkb))}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
+                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
                       {formatNumber(Math.round(d.sauThueSkb))}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono text-slate-400 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[13px] font-mono text-slate-400 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(d.donGiaDnc)}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.thanhTienDnc))}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono text-slate-500 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.vatDnc))}
                     </td>
-                    <td className="py-2 px-2 text-[11px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
+                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
                       {formatNumber(Math.round(d.sauThueDnc))}
                     </td>
                   </tr>
@@ -471,31 +471,31 @@ function TheHoaDon({
                 <tr className="bg-slate-50 border-t border-slate-200">
                   <td
                     colSpan={3}
-                    className="py-2 px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest"
+                    className="py-2 px-2 text-[12px] font-black text-slate-500 uppercase tracking-widest"
                   >
                     Tổng tờ này
                   </td>
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(h.soLuong)}
                   </td>
                   <td />
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.thanhTienSkb))}
                   </td>
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.vatSkb))}
                   </td>
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.sauThueSkb))}
                   </td>
                   <td />
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.thanhTienDnc))}
                   </td>
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.vatDnc))}
                   </td>
-                  <td className="py-2 px-2 text-[11px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
+                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
                     {formatNumber(Math.round(h.sauThueDnc))}
                   </td>
                 </tr>
@@ -506,7 +506,7 @@ function TheHoaDon({
           {/* Ai điền số vào app và điền lúc nào — để truy khi số bị sai. */}
           {(h.ghiBoi || h.ghiLuc) && (
             <div className="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100">
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                 Số điền bởi {h.ghiBoi || "không rõ"}
                 {h.ghiLuc
                   ? ` · ${format(new Date(h.ghiLuc), "HH:mm dd/MM/yyyy")}`
