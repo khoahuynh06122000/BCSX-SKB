@@ -11786,13 +11786,28 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
 
             {activeTab === "gallery" && quyen.xemXuat && (
               <div className="space-y-8">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                  <div>
+                {/*
+                  TIÊU ĐỀ KHÔNG ĐƯỢC BỊ BÓP.
+
+                  Hàng này có bảy ô điều khiển (tra cứu, hai ô ngày, ba ô lọc,
+                  ba nút tải) mà bẻ hàng ngang từ 768px. Khối tiêu đề không khai
+                  `shrink-0` nên flex bóp nó nhường chỗ cho đám kia, ép chữ
+                  xuống dòng từng từ một — "THƯ / VIỆN / ẢNH / XUẤT / KHO" thành
+                  một cột dọc.
+
+                  Hai chỗ sửa: tiêu đề `shrink-0` để giữ bề ngang tự nhiên, và
+                  hàng nút `flex-wrap` để xuống dòng đàng hoàng thay vì đi bóp
+                  hàng xóm. Mốc bẻ ngang dời lên `xl` (1280px) — dưới mức đó
+                  bảy ô điều khiển không bao giờ đủ chỗ nằm cùng hàng với tiêu
+                  đề.
+                */}
+                <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+                  <div className="shrink-0">
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight italic font-serif uppercase">
                       THƯ VIỆN ẢNH{" "}
                       {galleryFilter === "IN" ? "NHẬP KHO" : "XUẤT KHO"}
                     </h2>
-                    <p className="text-[10px] font-black text-slate-400 mt-2 uppercase tracking-[0.3em]">
+                    <p className="text-[11px] font-black text-slate-400 mt-2 uppercase tracking-[0.18em]">
                       {galleryFilter === "IN"
                         ? "Ảnh tờ phiếu nhập kho đã ký"
                         : "Ảnh biên bản giao hàng"}{" "}
@@ -11801,7 +11816,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     </p>
                   </div>
 
-                  <div className="flex flex-col lg:flex-row items-center gap-4 w-full md:w-auto">
+                  <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">
                     {/* Search Dynamic Field */}
                     <div className="relative group w-full lg:w-64">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
