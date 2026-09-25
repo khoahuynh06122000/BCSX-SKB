@@ -824,20 +824,25 @@ export default function App() {
   );
 
   /*
-   * Phân hệ Công nợ · Hóa đơn có hai việc, tách làm hai thẻ.
+   * Phân hệ Công nợ · Hóa đơn chia làm BA thẻ, theo trạng thái của đơn.
    *
-   *   "ket-xuat" — gom xuất kho theo đợt, tải tệp mang đi phát hành, rồi điền
-   *                số và ngày hóa đơn thật vào app.
-   *   "tra-cuu"  — xem lại những hóa đơn ĐÃ điền số, và in ra tệp mẫu Chốt.
+   *   "chua-xuat" — đơn chưa có số hóa đơn: tải tệp TEMPLATE mang đi phát
+   *                 hành, xong quay lại điền số và ngày thật.
+   *   "da-xuat"   — sổ theo dõi những đơn ĐÃ có số hóa đơn và ngày hóa đơn.
+   *   "tra-cuu"   — tra lại hóa đơn cũ và in ra tệp mẫu Chốt.
    *
-   * Trước đây chỉ có việc thứ nhất, nên số đã điền nằm im: muốn tra lại phải
-   * dựng đúng biên đợt cũ trên màn hình kết xuất mới thấy — mà biên đợt lưu ở
-   * localStorage của một máy. Thẻ tra cứu tự dựng lại đợt từ chính các hóa đơn
-   * đã ghi, xem `src/lib/traCuuHoaDon.ts`.
+   * Hai thẻ đầu đều do `DebtExport` vẽ, chỉ khác tham số `phan`. Cố ý dựng
+   * bằng CÙNG MỘT thẻ ở cùng một chỗ trong cây: đổi thẻ thì React giữ nguyên
+   * component, nên số hóa đơn đang gõ dở và biên đợt vừa khai không bị mất.
+   * Tách ra hai nhánh khác nhau là mỗi lần đổi thẻ lại dựng mới từ đầu.
+   *
+   * Thẻ tra cứu tự dựng lại đợt từ chính các hóa đơn đã ghi (biên đợt lưu ở
+   * localStorage của một máy nên không tra chéo máy được) — xem
+   * `src/lib/traCuuHoaDon.ts`.
    */
-  const [theCongNo, setTheCongNo] = useState<"ket-xuat" | "tra-cuu">(
-    "ket-xuat",
-  );
+  const [theCongNo, setTheCongNo] = useState<
+    "chua-xuat" | "da-xuat" | "tra-cuu"
+  >("chua-xuat");
 
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   /*
@@ -11500,9 +11505,11 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       Công nợ · Hóa đơn
                     </h2>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                      {theCongNo === "ket-xuat"
-                        ? "Gom xuất kho theo kỳ · tính thuế · kết xuất mẫu Chốt"
-                        : "Xem lại hóa đơn đã phát hành · in ra mẫu Chốt"}
+                      {theCongNo === "chua-xuat"
+                        ? "Đơn còn phải xuất hóa đơn · tải tệp TEMPLATE · điền số thật"
+                        : theCongNo === "da-xuat"
+                          ? "Sổ theo dõi số hóa đơn và ngày hóa đơn đã phát hành"
+                          : "Tra lại hóa đơn cũ · in ra mẫu Chốt"}
                     </p>
                   </div>
 
@@ -11510,13 +11517,18 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     {(
                       [
                         {
-                          id: "ket-xuat",
-                          label: "Kết xuất · điền số",
+                          id: "chua-xuat",
+                          label: "Chưa xuất hóa đơn",
                           icon: Calculator,
                         },
                         {
+                          id: "da-xuat",
+                          label: "Đã xuất hóa đơn",
+                          icon: CheckCircle,
+                        },
+                        {
                           id: "tra-cuu",
-                          label: "Tra cứu đã xuất",
+                          label: "Tra cứu · in lại",
                           icon: FileSearch,
                         },
                       ] as const
@@ -11539,8 +11551,16 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 </div>
 
                 <Card>
-                  {theCongNo === "ket-xuat" ? (
+                  {theCongNo === "tra-cuu" ? (
+                    <TraCuuHoaDon
+                      transactions={transactions}
+                      products={products}
+                      partners={donVi}
+                      hoaDon={hoaDon}
+                    />
+                  ) : (
                     <DebtExport
+                      phan={theCongNo === "da-xuat" ? "da" : "chua"}
                       transactions={transactions}
                       products={products}
                       /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
@@ -11548,13 +11568,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       partners={donVi}
                       hoaDon={hoaDon}
                       onSaveHoaDon={handleSaveHoaDon}
-                    />
-                  ) : (
-                    <TraCuuHoaDon
-                      transactions={transactions}
-                      products={products}
-                      partners={donVi}
-                      hoaDon={hoaDon}
                     />
                   )}
                 </Card>

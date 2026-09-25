@@ -70,6 +70,16 @@ interface Props {
   transactions: Transaction[];
   products: Product[];
   partners: Partner[];
+  /**
+   * Thẻ đang xem: `"chua"` là đơn còn phải xuất hóa đơn, `"da"` là sổ theo dõi
+   * đơn đã xuất.
+   *
+   * Cùng một component vẽ cả hai vì chúng dùng chung biên đợt, chung phép tính
+   * tiền và chung ô nhập số hóa đơn. Tách thành hai component thì phải nhấc
+   * toàn bộ trạng thái ấy lên trên, và biên đợt vốn lưu ở localStorage sẽ có
+   * hai chỗ đọc ghi.
+   */
+  phan?: "chua" | "da";
   /** Hóa đơn đã phát hành, do người dùng điền lại. */
   hoaDon: HoaDonGhiNhan[];
   onSaveHoaDon: (ds: HoaDonGhiNhan[]) => Promise<void>;
@@ -116,6 +126,7 @@ function docDotDaLuu(): DotChot[] {
 }
 
 export default function DebtExport({
+  phan = "chua",
   transactions,
   products,
   partners,
@@ -549,6 +560,8 @@ export default function DebtExport({
 
   return (
     <div className="space-y-4">
+      {/* Lời dẫn nói về việc kết xuất, nên chỉ thuộc thẻ "Chưa xuất". */}
+      {phan === "chua" && (
       <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
         <Receipt className="w-5 h-5 text-primary shrink-0 mt-0.5" />
         <p className="text-[13px] font-bold text-slate-500 leading-relaxed">
@@ -559,6 +572,7 @@ export default function DebtExport({
           không xuất cho từng quán.
         </p>
       </div>
+      )}
 
       {/* ----- Đợt chốt ----- */}
       <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
@@ -704,6 +718,8 @@ export default function DebtExport({
         ))}
       </div>
 
+      {phan === "chua" && (
+      <>
       {/*
         KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
 
@@ -792,6 +808,9 @@ export default function DebtExport({
 
         </div>
       </details>
+      </>
+      )}
+
 
       {/* ================================================================
           HAI PHẦN, CHIA THEO VIỆC CÒN PHẢI LÀM HAY ĐÃ XONG.
@@ -803,6 +822,7 @@ export default function DebtExport({
           xuống dưới thành sổ theo dõi.
       ================================================================= */}
 
+      {phan === "chua" && (
       <div className="rounded-2xl border-2 border-amber-300 overflow-hidden">
         <div className="px-4 py-3.5 bg-amber-50 border-b-2 border-amber-200 space-y-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -862,7 +882,9 @@ export default function DebtExport({
           </>
         )}
       </div>
+      )}
 
+      {phan === "da" && (
       <div className="rounded-2xl border-2 border-emerald-200 overflow-hidden">
         <div className="px-4 py-3.5 bg-emerald-50 border-b-2 border-emerald-200 space-y-1.5">
           <div className="flex items-center gap-2.5">
@@ -880,13 +902,27 @@ export default function DebtExport({
 
         {daXuat.length === 0 ? (
           <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
-            Chưa có đơn nào được ghi số hóa đơn.
+            Chưa có đơn nào được ghi số hóa đơn trong kỳ này.
           </p>
         ) : (
-          bangDongHoaDon(daXuat, false)
+          <>
+            {bangDongHoaDon(daXuat, false)}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={luuHoaDon}
+                disabled={dangLuu}
+                className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
+              >
+                {dangLuu ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </>
         )}
       </div>
+      )}
 
+      {phan === "chua" && (
+      <>
       {/*
         KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
 
@@ -1373,7 +1409,11 @@ export default function DebtExport({
 
         </div>
       </details>
+      </>
+      )}
 
+
+      {phan === "chua" && (
       <button
         onClick={handleDownload}
         disabled={bang.dong.length === 0}
@@ -1382,6 +1422,7 @@ export default function DebtExport({
         <Download className="w-4 h-4" /> Tải file công nợ ({bang.tong.soDong}{" "}
         dòng · {dot.length} đợt)
       </button>
+      )}
     </div>
   );
 }
