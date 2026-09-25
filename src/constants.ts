@@ -101,6 +101,7 @@ export const INITIAL_PARTNERS: Partner[] = [
   { id: 'AD0115', sapCode: 'AD0115', name: 'SVT', type: 'AGENT' },
   { id: 'AD0112', sapCode: 'AD0112', name: 'FSS', type: 'AGENT' },
   { id: 'AA0100', sapCode: 'AA0100', name: 'SAIR', type: 'AGENT' },
+  { id: 'AC0135', sapCode: 'AC0135', name: 'Đông Du', type: 'AGENT' },
 
   // Đối tác hệ thống, không phải đơn vị nhận hàng thật.
   { id: 'SYSTEM_SYNC', sapCode: 'SYNC', name: 'Tin Tin (Hệ thống)', type: 'AGENT' },
