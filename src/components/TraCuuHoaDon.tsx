@@ -22,6 +22,7 @@ import {
   type HoaDonDaXuat,
 } from "../lib/traCuuHoaDon";
 import { cn, formatNumber } from "../lib/utils";
+import BangChotHoaDon from "./BangChotHoaDon";
 
 import ONgay from "./ONgay";
 
@@ -263,7 +264,45 @@ export default function TraCuuHoaDon({
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-4">
+          {/*
+            BẢNG CHỐT BÀY THẲNG RA, không phải mở từng tờ mới thấy.
+            Người tra cứu thường cần rà cả loạt dòng cùng lúc — đối chiếu với
+            tệp Excel, cộng lại một cột — mà thẻ xếp gập thì phải mở từng tờ.
+            Dùng CHUNG component với thẻ "Đã xuất hóa đơn" nên hai màn hình
+            không bao giờ lệch nhau.
+          */}
+          <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+              <p className="text-[13px] font-black text-slate-700 tracking-tight">
+                Bảng Chốt · {kq.hoaDon.length} hóa đơn ·{" "}
+                {kq.hoaDon.reduce((n, h) => n + h.dong.length, 0)} dòng
+              </p>
+            </div>
+            <BangChotHoaDon
+              khoi={kq.hoaDon.map((h) => ({
+                khoa: `${h.soHoaDon}|${h.maBp}|${h.nhanDot}`,
+                soHoaDon: h.soHoaDon,
+                ngayHoaDon: h.ngayHoaDon,
+                dong: h.dong,
+              }))}
+            />
+          </div>
+
+          {/* Xem từng tờ một, kèm tổng của tờ — giữ lại cho lúc cần in. */}
+          <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
+            <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
+              <span className="text-[13px] font-black text-slate-700 tracking-tight">
+                Xem từng tờ hóa đơn
+              </span>
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-open:hidden">
+                Bung ra
+              </span>
+              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 hidden group-open:inline">
+                Thu lại
+              </span>
+            </summary>
+            <div className="p-3 space-y-2 border-t border-slate-100">
           {kq.hoaDon.map((h) => (
             <TheHoaDon
               key={`${h.soHoaDon}|${h.maBp}|${h.nhanDot}`}
@@ -277,6 +316,8 @@ export default function TraCuuHoaDon({
               }
             />
           ))}
+            </div>
+          </details>
         </div>
       )}
     </div>

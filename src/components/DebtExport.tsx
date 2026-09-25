@@ -49,6 +49,7 @@ import { docZip, giaiNen, suaXlsx } from "../lib/zipXlsx";
 import { cn, formatNumber } from "../lib/utils";
 
 import ONgay from "./ONgay";
+import BangChotHoaDon from "./BangChotHoaDon";
 
 /**
  * CÔNG NỢ · HÓA ĐƠN
@@ -1089,135 +1090,25 @@ export default function DebtExport({
           </p>
         ) : (
           <>
-            {/*
-              ĐÚNG 18 CỘT CỦA SHEET CHỐT, chỉ đảo hai cột lên đầu.
-
-              Số hóa đơn và ngày hóa đơn là thứ người tra cần thấy trước; trong
-              sheet chúng nằm ở cột M và B, phải lia mắt hai đầu bảng mới ghép
-              được. Các cột còn lại giữ nguyên thứ tự sheet để đối chiếu với
-              tệp Excel không phải dò lại.
-
-              Hai cột ấy GỘP Ô theo hóa đơn thay vì lặp trên từng dòng — một
-              hóa đơn thì một số, lặp lại chín lần chỉ tốn chỗ và làm người đọc
-              tưởng là chín số khác nhau.
-            */}
-            <div className="overflow-auto max-h-[600px]">
-              <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[1500px]">
-                <thead className="bg-slate-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap" colSpan={9} />
-                    <th colSpan={4} className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center border-b border-slate-200">
-                      SKB - DNC
-                    </th>
-                    <th colSpan={4} className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center border-b border-slate-200">
-                      DNC xuất BNC và ĐVTV
-                    </th>
-                    <th className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap" />
-                  </tr>
-                  <tr>
-                    {[
-                      "Số hóa đơn",
-                      "Ngày hóa đơn",
-                      "Ngày giao bia",
-                      "STT",
-                      "Đơn vị",
-                      "Mã vật tư",
-                      "Tên hàng hóa",
-                      "Đơn vị tính",
-                      "Số lượng",
-                      "SKB - TLĐ",
-                      "Thành tiền",
-                      "VAT",
-                      "Thành tiền sau thuế",
-                      "Đơn giá",
-                      "Thành tiền",
-                      "VAT",
-                      "Thành tiền sau thuế",
-                      "Mã BP",
-                    ].map((h, i) => (
-                      <th key={`${h}-${i}`} className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {khoiDaXuat.map((k) =>
-                    k.dong.map((r, i) => {
-                      const d = k.don!;
-                      const o = oCuaDong(d);
-                      return (
-                        <tr
-                          key={`${k.khoa}-${r.stt}-${i}`}
-                          className="border-t border-slate-100"
-                        >
-                          {i === 0 && (
-                            <>
-                              <td
-                                rowSpan={k.dong.length}
-                                className="px-3 py-2 align-top border-r border-slate-100 bg-slate-50/40"
-                              >
-                                <input
-                                  value={o.soHoaDon}
-                                  onChange={(e) =>
-                                    suaO(d.khoa, "soHoaDon", e.target.value, d)
-                                  }
-                                  placeholder={d.soGoiY}
-                                  className={cn(
-                                    "w-48 px-2.5 py-2 rounded-lg border bg-white text-[13px] font-black font-mono outline-none focus:border-primary",
-                                    o.soHoaDon.trim()
-                                      ? "border-slate-200"
-                                      : "border-amber-300 placeholder:text-amber-400",
-                                  )}
-                                />
-                              </td>
-                              <td
-                                rowSpan={k.dong.length}
-                                className="px-3 py-2 align-top border-r border-slate-100 bg-slate-50/40"
-                              >
-                                <ONgay
-                                  value={o.ngayHoaDon}
-                                  onChange={(v: string) =>
-                                    suaO(d.khoa, "ngayHoaDon", v, d)
-                                  }
-                                  className="px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
-                                />
-                              </td>
-                            </>
-                          )}
-                          <td className="px-3 py-2 whitespace-nowrap">{r.ngayGiaoBia}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{r.stt}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{r.donVi}</td>
-                          <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap">
-                            {r.maVatTu}
-                          </td>
-                          <td className="px-3 py-2 text-slate-900">
-                            {r.tenHangHoa}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">{r.dvt}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{formatNumber(r.soLuong)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.donGiaSkb)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.thanhTienSkb)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.vatSkb)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
-                            {tien(r.sauThueSkb)}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.donGiaDnc)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.thanhTienDnc)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{tien(r.vatDnc)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
-                            {tien(r.sauThueDnc)}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap">
-                            {r.maBp}
-                          </td>
-                        </tr>
-                      );
-                    }),
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <BangChotHoaDon
+              khoi={khoiDaXuat.map((k) => {
+                const d = k.don!;
+                const o = oCuaDong(d);
+                return {
+                  khoa: d.khoa,
+                  soHoaDon: o.soHoaDon,
+                  ngayHoaDon: o.ngayHoaDon,
+                  dong: k.dong,
+                };
+              })}
+              onSua={(khoa, truong, giaTri) => {
+                const d = canDien.find((x) => x.khoa === khoa);
+                if (d) suaO(khoa, truong, giaTri, d);
+              }}
+              goiYSo={(khoa) =>
+                canDien.find((x) => x.khoa === khoa)?.soGoiY || ""
+              }
+            />
             <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex gap-2 justify-end flex-wrap">
               <button
                 onClick={dienGoiY}
