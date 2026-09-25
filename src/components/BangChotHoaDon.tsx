@@ -4,23 +4,34 @@
  */
 
 /**
- * BẢNG HÓA ĐƠN ĐÃ XUẤT — ĐÚNG 18 CỘT CỦA SHEET "CHỐT".
+ * BẢNG HÓA ĐƠN ĐÃ XUẤT — DỰNG THEO SHEET "CHỐT".
  *
- * Thứ tự cột giữ y như tệp Excel của bộ phận, CHỈ đảo hai cột lên đầu:
+ * Thứ tự cột bám tệp Excel của bộ phận, đảo hai cột lên đầu:
  *
- *     Số hóa đơn · Ngày hóa đơn · Ngày giao bia · STT · Đơn vị · Mã vật tư ·
- *     Tên hàng hóa · ĐVT · Số lượng · [SKB-TLĐ · Thành tiền · VAT · Sau thuế] ·
- *     [Đơn giá · Thành tiền · VAT · Sau thuế] · Mã BP
+ *     Số hóa đơn · Ngày hóa đơn · Ngày giao bia · Đơn vị · Mã BP · Mã vật tư ·
+ *     Tên hàng hóa · ĐVT · Số lượng · [Đơn giá · Thành tiền · VAT · Sau thuế] ·
+ *     [Đơn giá · Thành tiền · VAT · Sau thuế]
+ *
+ * Khác tệp gốc ba chỗ, đều theo yêu cầu của người dùng:
+ *
+ *   - BỎ CỘT STT. Số thứ tự trong tệp chỉ để đánh dấu dòng khi in ra giấy;
+ *     trên màn hình nó chiếm một cột mà không ai tra theo nó.
+ *   - "SKB - TLĐ" gọi thẳng là ĐƠN GIÁ, cho khớp cột cùng nghĩa ở khối bên
+ *     cạnh. Tiêu đề khối bên trên đã nói rõ đó là chặng nào.
+ *   - MÃ BP ĐỨNG CẠNH ĐƠN VỊ. Trong tệp nó nằm ở cột cuối, cách tên đơn vị cả
+ *     mười mấy cột — mà mã BP chính là mã của đơn vị ấy, đọc rời nhau thì phải
+ *     lia mắt hai đầu bảng để ghép.
  *
  * Trong sheet, số hóa đơn nằm ở cột M và ngày hóa đơn ở cột B — người tra phải
  * lia mắt hai đầu bảng mới ghép được một tờ hóa đơn. Đưa hai cột ấy lên đầu thì
  * nhìn là thấy; các cột còn lại giữ nguyên vị trí để đối chiếu với tệp Excel
  * không phải dò lại.
  *
- * MỘT CHỖ DỰNG CHO CẢ HAI MÀN HÌNH. Bảng này hiện ở thẻ "Đã xuất hóa đơn" và
- * thẻ "Tra cứu · in lại". Chép thành hai bản thì sửa một cột phải nhớ sửa cả
- * hai chỗ, và quên một chỗ là hai bảng lệch nhau mà không có gì báo — đúng cái
- * đã xảy ra với chính bảng này.
+ * MỘT CHỖ DỰNG CHO MỌI NƠI HIỆN HÓA ĐƠN. Bảng này dùng ở cả hai phần của thẻ
+ * "Đã xuất hóa đơn": bảng điền số của đợt đang khai, và phần tra cứu bên dưới.
+ * Chép thành hai bản thì sửa một cột phải nhớ sửa cả hai chỗ, và quên một chỗ
+ * là hai bảng lệch nhau mà không có gì báo — đúng cái đã xảy ra với chính bảng
+ * này.
  */
 
 import type { DongCongNo } from "../lib/congNo";
@@ -80,7 +91,7 @@ export default function BangChotHoaDon({
 
   return (
     <div className={cn("overflow-auto", cao)}>
-      <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[1500px]">
+      <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[1420px]">
         <thead className="bg-slate-50 sticky top-0 z-10">
           {/* Hai khối giá tô hai màu như trong tệp: hai bộ cột Đơn giá /
               Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng chỉ lệch
@@ -99,20 +110,19 @@ export default function BangChotHoaDon({
             >
               DNC xuất BNC và ĐVTV
             </th>
-            <th className={TH} />
           </tr>
           <tr>
             {[
               "Số hóa đơn",
               "Ngày hóa đơn",
               "Ngày giao bia",
-              "STT",
               "Đơn vị",
+              "Mã BP",
               "Mã vật tư",
               "Tên hàng hóa",
               "Đơn vị tính",
               "Số lượng",
-              "SKB - TLĐ",
+              "Đơn giá",
               "Thành tiền",
               "VAT",
               "Thành tiền sau thuế",
@@ -120,7 +130,6 @@ export default function BangChotHoaDon({
               "Thành tiền",
               "VAT",
               "Thành tiền sau thuế",
-              "Mã BP",
             ].map((h, i) => (
               <th key={`${h}-${i}`} className={TH}>
                 {h}
@@ -191,8 +200,10 @@ export default function BangChotHoaDon({
                   </>
                 )}
                 <td className={TD}>{r.ngayGiaoBia}</td>
-                <td className={TDS}>{r.stt}</td>
                 <td className={TD}>{r.donVi}</td>
+                <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap">
+                  {r.maBp}
+                </td>
                 <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap">
                   {r.maVatTu}
                 </td>
@@ -210,9 +221,6 @@ export default function BangChotHoaDon({
                 <td className={TDS}>{tien(r.vatDnc)}</td>
                 <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
                   {tien(r.sauThueDnc)}
-                </td>
-                <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap">
-                  {r.maBp}
                 </td>
               </tr>
             )),
