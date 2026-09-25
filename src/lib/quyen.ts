@@ -101,6 +101,15 @@ export interface Quyen {
   /** Ghi giao dịch chiều xuất, hao hụt, và sửa đối tác / điểm bán. */
   ghiXuat: boolean;
   /** Doanh thu, hóa đơn, lệnh xuất hóa đơn lên SAP. */
+  /**
+   * Thao tác trên doanh thu (sửa, xoá, nạp lại).
+   *
+   * KHÔNG CÒN MÀN HÌNH NÀO ĐỌC CỜ NÀY từ 25/09/2026 — phân hệ Doanh thu đã gỡ.
+   * Giữ lại vì doanh thu vẫn là số tính ra được từ xuất kho: nếu có ngày dựng
+   * lại màn hình đó thì luật phân quyền còn nguyên, không phải nghĩ lại ai
+   * được sửa. Đừng dựa vào cờ này để mở một màn hình mới mà không nối lại chỗ
+   * kiểm.
+   */
   doanhThu: boolean;
   /**
    * Nạp tệp Excel hàng loạt (BBGN, T Kho, doanh thu).

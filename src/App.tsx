@@ -35,7 +35,6 @@ import {
   Camera,
   Image as ImageIcon,
   ImageOff,
-  FileSpreadsheet,
   Layers,
   FileText,
   AlertTriangle,
@@ -56,16 +55,7 @@ import {
   Hash,
 } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   AreaChart,
   Area,
 } from "recharts";
@@ -85,9 +75,6 @@ import {
   parseISO,
   format,
   subDays,
-  subWeeks,
-  subMonths,
-  subYears,
 } from "date-fns";
 import {
   Transaction,
@@ -96,7 +83,6 @@ import {
   InventoryItem,
   TransactionType,
   Category,
-  RevenueRecord,
   UserRole,
   UserProfile,
   ImportSlip,
@@ -104,7 +90,6 @@ import {
 import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
-import { matchRevenueProduct, revenueRowLiters } from "./lib/reconcile";
 import { revenueFromStockOut } from "./lib/revenueFromStock";
 import {
   approvedSlipCodes,
@@ -676,25 +661,6 @@ export default function App() {
    *
    * Nguyen tac: che do toi dung ban mau sang hon va bot bao hoa de do doc.
    */
-  const chartColors = useMemo(
-    () => ({
-      grid: isDark ? "#2f3949" : "#E2E8F0",
-      axis: isDark ? "#8592a6" : "#64748b",
-      // Day mau cho bieu do tron / nhieu chuoi du lieu
-      series: isDark
-        ? ["#fbbf24", "#60a5fa", "#34d399", "#f472b6", "#c084fc"]
-        : ["#0f172a", "#2563eb", "#10b981", "#f59e0b", "#ec4899"],
-      blue: isDark ? "#60a5fa" : "#2563eb",
-      rose: isDark ? "#fb7185" : "#f43f5e",
-      emerald: isDark ? "#34d399" : "#10b981",
-      // Mau nhan manh: nen toi dung ho phach thay cho navy gan nhu den
-      accent: isDark ? "#fbbf24" : "#0f172a",
-      tooltipBg: isDark ? "#1e2531" : "#ffffff",
-      tooltipText: isDark ? "#eef2f7" : "#0f172a",
-      tooltipBorder: isDark ? "1px solid #2f3949" : "none",
-    }),
-    [isDark],
-  );
 
   // Phien dang nhap do Firebase Auth quan ly (xem useEffect onAuthStateChanged).
   // Ban cu doc vai tro tu localStorage - ai cung sua duoc bang cong cu trinh
@@ -860,7 +826,6 @@ export default function App() {
    */
   const [reportTuNgay, setReportTuNgay] = useState("");
   const [reportDenNgay, setReportDenNgay] = useState("");
-  const [revenuePartnerSearch, setRevenuePartnerSearch] = useState("");
   const [reportPartnerSearch, setReportPartnerSearch] = useState("");
 
   const [galleryFilter, setGalleryFilter] = useState<"IN" | "OUT">("IN");
@@ -962,7 +927,6 @@ export default function App() {
   // Danh sach so hoa don dang bung chi tiet o so chi tiet doanh thu.
   // Truoc day khai bao la Set nhung cho dung lai goi .includes()/.filter() nen
   // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
-  const [expandedInvoices, setExpandedInvoices] = useState<string[]>([]);
 
   /**
    * Phần gán điểm bán do người dùng thêm, lưu ở collection `diem_ban`.
@@ -3153,129 +3117,7 @@ export default function App() {
    * `revenueData` giờ là số tính từ xuất kho, khoá của nó (`dt-...`) không phải
    * khoá của tài liệu cũ — lấy nó đi xoá thì không trúng gì cả.
    */
-  const clearOldRevenueDocs = async () => {
-    if (!isOwner) {
-      alert("Chỉ chủ sở hữu mới dọn được dữ liệu doanh thu cũ ạ!");
-      return;
-    }
-    if (
-      !window.confirm(
-        "Xoá toàn bộ dữ liệu doanh thu CŨ đã nạp từ file Excel?\n\n" +
-          "Doanh thu hiện đã tính thẳng từ xuất kho nên số cũ không còn được " +
-          "dùng ở đâu. Xoá rồi không lấy lại được.",
-      )
-    )
-      return;
 
-    setLoading(true);
-    try {
-      const snap = await getDocs(collection(db, "revenue"));
-      if (snap.empty) {
-        showNotification("Không còn dữ liệu doanh thu cũ nào để dọn.");
-        return;
-      }
-      // Chia lô 400: một writeBatch của Firestore tối đa 500 thao tác.
-      const ids = snap.docs.map((d) => d.id);
-      for (let i = 0; i < ids.length; i += 400) {
-        const batch = writeBatch(db);
-        ids.slice(i, i + 400).forEach((id) => {
-          batch.delete(doc(db, "revenue", id));
-        });
-        await batch.commit();
-      }
-      showNotification(`Đã dọn ${ids.length} dòng doanh thu cũ.`);
-    } catch (err) {
-      console.error(err);
-      showNotification("Lỗi khi dọn dữ liệu doanh thu cũ.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExportRevenueToExcel = () => {
-    if (revenueData.length === 0) {
-      showNotification("Không có dữ liệu doanh thu để xuất.", "error");
-      return;
-    }
-
-    const tieuDe = [
-      "Ngày xuất hóa đơn",
-      "Số hóa đơn",
-      "Đơn vị thụ hưởng",
-      "Mã vật tư",
-      "Tên hàng hóa",
-      "ĐVT",
-      "Số lượng",
-      "Đơn giá",
-      "Thành tiền",
-      "VAT",
-      "Thành tiền sau thuế",
-      "Mã BP",
-    ];
-    const hang = filteredRevenueByTime.map((r) => [
-      // parseDateSafe thay cho parseISO: dòng nào ngày không đúng chuẩn ISO thì
-      // parseISO trả Invalid Date và format() ném lỗi, mất cả file xuất.
-      format(parseDateSafe(r.date), "dd/MM/yyyy"),
-      r.invoiceNumber || "",
-      r.partnerName,
-      r.materialCode || "",
-      r.productName,
-      r.unit || "",
-      r.quantity,
-      r.unitPrice,
-      r.amountBeforeVat ?? r.totalAmount,
-      r.vatAmount ?? 0,
-      r.amountAfterVat ?? (r.totalAmount || 0) + (r.vatAmount || 0),
-      r.deptCode || "",
-    ]);
-    const cong = (i: number) => hang.reduce((s, h) => s + (Number(h[i]) || 0), 0);
-
-    const wb = XLSXDep.utils.book_new();
-    XLSXDep.utils.book_append_sheet(
-      wb,
-      taoSheetDep({
-        tieuDeTren: [
-          "BÁO CÁO DOANH THU",
-          `${hang.length} dòng · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
-        ],
-        tieuDe,
-        cot: [
-          { rong: 15, kieu: "giua" },
-          { rong: 20 },
-          { rong: 24 },
-          { rong: 13, kieu: "giua" },
-          { rong: 38 },
-          { rong: 7, kieu: "giua" },
-          { rong: 12, kieu: "so" },
-          { rong: 12, kieu: "tien" },
-          { rong: 17, kieu: "tien" },
-          { rong: 15, kieu: "tien" },
-          { rong: 19, kieu: "tien" },
-          { rong: 10, kieu: "giua" },
-        ],
-        hang,
-        dongTong: [
-          "TỔNG CỘNG",
-          "",
-          "",
-          "",
-          "",
-          "",
-          cong(6),
-          "",
-          cong(8),
-          cong(9),
-          cong(10),
-          "",
-        ],
-      }),
-      "Doanh thu",
-    );
-    XLSXDep.writeFile(
-      wb,
-      `Bao cao doanh thu ${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`,
-    );
-  };
 
   // Error Handling Helper
   /** Tên việc đang làm, để ghép vào câu báo lỗi cho người đọc hiểu. */
@@ -4716,181 +4558,10 @@ export default function App() {
     });
   }, [revenueData, timeFilter, filterBaseDate]);
 
-  const previousRevenueByTime = useMemo(() => {
-    if (timeFilter === "all") return [];
 
-    let start: Date;
-    let end: Date;
 
-    if (timeFilter === "day") {
-      start = startOfDay(subDays(filterBaseDate, 1));
-      end = endOfDay(subDays(filterBaseDate, 1));
-    } else if (timeFilter === "week") {
-      start = startOfWeek(subWeeks(filterBaseDate, 1), { weekStartsOn: 1 });
-      end = endOfWeek(subWeeks(filterBaseDate, 1), { weekStartsOn: 1 });
-    } else if (timeFilter === "month") {
-      start = startOfMonth(subMonths(filterBaseDate, 1));
-      end = endOfMonth(subMonths(filterBaseDate, 1));
-    } else {
-      start = startOfYear(subYears(filterBaseDate, 1));
-      end = endOfYear(subYears(filterBaseDate, 1));
-    }
 
-    return revenueData.filter((r) => {
-      try {
-        const date = (r as any)._parsedDate || parseDateSafe(r.date);
-        return isWithinInterval(date, { start, end });
-      } catch {
-        return false;
-      }
-    });
-  }, [revenueData, timeFilter, filterBaseDate]);
 
-  const revenueAnalytics = useMemo(() => {
-    // totalAmount luôn là doanh thu TRƯỚC VAT (xem types.ts), nên mọi con số
-    // dưới đây cùng một gốc so sánh.
-    const currentRev = filteredRevenueByTime.reduce(
-      (a, b) => a + b.totalAmount,
-      0,
-    );
-    const prevRev = previousRevenueByTime.reduce(
-      (a, b) => a + b.totalAmount,
-      0,
-    );
-    const currentVat = filteredRevenueByTime.reduce(
-      (a, b) => a + (b.vatAmount || 0),
-      0,
-    );
-
-    /**
-     * Sản lượng quy về LÍT. Trước đây cộng thẳng số lượng của mọi dòng rồi gắn
-     * nhãn bằng đơn vị của dòng đầu tiên — tức là cộng lon với lít vào một số
-     * và gọi nó là "sản lượng", kéo theo ARPU cũng vô nghĩa.
-     */
-    const litersOfRows = (rows: typeof filteredRevenueByTime) =>
-      rows.reduce(
-        (a, r) =>
-          a + revenueRowLiters(r, matchRevenueProduct(products, r)).liters,
-        0,
-      );
-    const currentQty = litersOfRows(filteredRevenueByTime);
-    const prevQty = litersOfRows(previousRevenueByTime);
-
-    const partnerGroups: Record<string, number> = {};
-    const productGroups: Record<string, number> = {};
-    const productQtyGroups: Record<string, number> = {};
-
-    filteredRevenueByTime.forEach((r) => {
-      partnerGroups[r.partnerName] =
-        (partnerGroups[r.partnerName] || 0) + r.totalAmount;
-      productGroups[r.productName] =
-        (productGroups[r.productName] || 0) + r.totalAmount;
-      productQtyGroups[r.productName] =
-        (productQtyGroups[r.productName] || 0) + r.quantity;
-    });
-
-    const sortedPartners = Object.entries(partnerGroups)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-
-    const sortedProducts = Object.entries(productGroups)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-
-    const sortedProductQty = Object.entries(productQtyGroups)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-
-    const top20Count = Math.ceil(sortedPartners.length * 0.2);
-    const top20Rev = sortedPartners
-      .slice(0, top20Count)
-      .reduce((a, b) => a + b.value, 0);
-    const concentration = currentRev > 0 ? (top20Rev / currentRev) * 100 : 0;
-
-    const growth = prevRev > 0 ? ((currentRev - prevRev) / prevRev) * 100 : 0;
-    const qtyGrowth =
-      prevQty > 0 ? ((currentQty - prevQty) / prevQty) * 100 : 0;
-    const arpu = currentQty > 0 ? currentRev / currentQty : 0;
-    const prevArpu = prevQty > 0 ? prevRev / prevQty : 0;
-    const arpuGrowth = prevArpu > 0 ? ((arpu - prevArpu) / prevArpu) * 100 : 0;
-
-    return {
-      /** Doanh thu TRƯỚC VAT. */
-      totalRevenue: currentRev,
-      totalVat: currentVat,
-      totalAfterVat: currentRev + currentVat,
-      revGrowth: growth,
-      /** Sản lượng quy về LÍT. */
-      totalQuantity: currentQty,
-      qtyGrowth,
-      /** Đơn giá bình quân, đồng trên một LÍT. */
-      arpu,
-      arpuGrowth,
-      concentration,
-      partnerStats: sortedPartners,
-      productStats: sortedProducts,
-      productQtyStats: sortedProductQty,
-    };
-  }, [filteredRevenueByTime, previousRevenueByTime, products]);
-
-  const cfoMetrics = revenueAnalytics;
-
-  const groupedRevenue = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        /** Khoá nhóm, duy nhất — dùng cho React key và trạng thái bung. */
-        key: string;
-        invoiceNumber: string;
-        date: string;
-        partnerName: string;
-        totalAmount: number;
-        items: RevenueRecord[];
-      }
-    >();
-
-    filteredRevenueByTime.forEach((r) => {
-      // Filter by partner search
-      if (
-        revenuePartnerSearch &&
-        !r.partnerName
-          .toLowerCase()
-          .includes(revenuePartnerSearch.toLowerCase())
-      ) {
-        return;
-      }
-
-      /*
-       * Gom theo SỐ HÓA ĐƠN nếu đã phát hành; chưa phát hành thì gom theo
-       * NGÀY + ĐỐI TÁC — tức là một lượt giao hàng.
-       *
-       * Doanh thu nay sinh từ xuất kho nên phần lớn dòng chưa có số hóa đơn.
-       * Nếu vẫn lấy số hóa đơn làm khoá thì mỗi dòng thành một nhóm riêng mang
-       * nhãn "N/A", sổ chi tiết dài ra gấp mấy lần mà không nhóm được gì.
-       */
-      const issued = (r.invoiceNumber || "").trim();
-      const key = issued || `chua-hd|${r.date.slice(0, 10)}|${r.partnerId || r.partnerName}`;
-      const existing = groups.get(key);
-
-      if (existing) {
-        existing.totalAmount += r.totalAmount;
-        existing.items.push(r);
-      } else {
-        groups.set(key, {
-          key,
-          invoiceNumber: issued || "CHƯA XUẤT HĐ",
-          date: r.date,
-          partnerName: r.partnerName,
-          totalAmount: r.totalAmount,
-          items: [r],
-        });
-      }
-    });
-
-    return Array.from(groups.values()).sort((a, b) => {
-      return b.date.localeCompare(a.date);
-    });
-  }, [filteredRevenueByTime, revenuePartnerSearch]);
 
   // Derived State: Batches (Tracking stock per batch) - OPTIMIZED O(N)
   /**
@@ -6397,25 +6068,6 @@ export default function App() {
                   label: "Đơn BNC",
                   icon: Building2,
                   color: "#0284c7",
-                },
-              ]
-            : []),
-          /*
-           * Doanh thu cần CẢ HAI cờ xem, vì hai vai trò bị chặn vì hai lý do
-           * khác nhau: DNC thiếu `xemKho` (số của kho tổng không phải việc của
-           * khối cung ứng), người nhập hàng thiếu `xemXuat` (doanh thu sinh từ
-           * chiều xuất). Bỏ một cờ nào cũng lọt một trong hai.
-           *
-           * Riêng THAO TÁC trên doanh thu thì chỉ kế toán, chặn ở trong tab
-           * chứ không chặn ở menu.
-           */
-          ...(quyen.xemKho && quyen.xemXuat
-            ? [
-                {
-                  id: "revenue-mgmt",
-                  label: "Doanh thu",
-                  icon: FileSpreadsheet,
-                  color: "#8b5cf6",
                 },
               ]
             : []),
@@ -8299,699 +7951,18 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "revenue-mgmt" && daDuocDuyet && quyen.xemXuat && (
-              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                      Trung tâm Quản lý Doanh thu
-                    </h2>
-                    <p className="text-slate-400 text-sm font-bold uppercase tracking-widest leading-none">
-                      Phân tích & Theo dõi số liệu kinh doanh
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {/* Xuất Excel chỉ đọc số rồi tải về máy, không đụng gì tới
-                        dữ liệu — nên ai xem được thì tải được. */}
-                    <button
-                      className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
-                      onClick={handleExportRevenueToExcel}
-                    >
-                      <Download className="w-4 h-4 text-primary" /> Xuất Excel
-                      Doanh thu
-                    </button>
-                    {/*
-                      Nút dùng MỘT LẦN: dọn số doanh thu cũ nạp từ file Excel.
-                      Xoá dữ liệu nên chỉ kế toán thấy.
-                    */}
-                    {laKeToan && (
-                      <button
-                        className="flex items-center gap-2 px-6 py-3 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-rose-200 hover:scale-105 active:scale-95 transition-all"
-                        onClick={clearOldRevenueDocs}
-                      >
-                        <Trash2 className="w-4 h-4" /> Dọn số cũ
-                      </button>
-                    )}
-                  </div>
-                </div>
+            {/*
+              PHÂN HỆ DOANH THU ĐÃ GỠ (25/09/2026), theo yêu cầu của Khoa.
 
-                {/*
-                  XUAT HOA DON LEN SAP.
-                  De ngay dau tab, tren ca phan phan tich: day la viec phai lam
-                  hang ky, con phan phan tich la thu de xem.
-                */}
-                <SapExportPanel
-                  rows={sapSourceRows}
-                  jobs={sapJobs}
-                  canRun={laKeToan}
-                  busy={sapBusy}
-                  onCreate={handleCreateSapJob}
-                  onDownload={downloadSapJobFile}
-                  onChangeStatus={handleChangeSapJobStatus}
-                />
+              Doanh thu ở đây là số TÍNH RA từ xuất kho nhân đơn giá, không
+              phải dữ liệu nạp vào — nên gỡ màn hình đi không làm mất số liệu
+              gốc nào: mọi lần xuất vẫn nằm nguyên trong `transactions`, và
+              tiền vẫn tính được bất cứ lúc nào từ đó.
 
-                {revenueData.length > 0 ? (
-                  <>
-                    {/* Phân tích Doanh thu Chuyên sâu (CFO Dashboard) */}
-                    <div className="space-y-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <StatCard
-                          title="Doanh thu (trước VAT)"
-                          value={formatNumber(cfoMetrics.totalRevenue)}
-                          unit="VND"
-                          icon={DollarSign}
-                          color="primary"
-                          trend={
-                            timeFilter !== "all"
-                              ? `${cfoMetrics.revGrowth >= 0 ? "+" : ""}${cfoMetrics.revGrowth.toFixed(1)}%`
-                              : null
-                          }
-                          subtitle={`VAT ${formatNumber(cfoMetrics.totalVat)} đ · sau thuế ${formatNumber(cfoMetrics.totalAfterVat)} đ`}
-                        />
-                        <StatCard
-                          title="Sản lượng tiêu thụ"
-                          value={formatNumber(
-                            Math.round(cfoMetrics.totalQuantity),
-                          )}
-                          unit="LÍT"
-                          icon={Package}
-                          color="green"
-                          trend={
-                            timeFilter !== "all"
-                              ? `${cfoMetrics.qtyGrowth >= 0 ? "+" : ""}${cfoMetrics.qtyGrowth.toFixed(1)}%`
-                              : null
-                          }
-                          subtitle="Đã quy đổi lon và lít về cùng lít"
-                        />
-                        <StatCard
-                          title="Đơn giá bình quân / lít"
-                          value={formatNumber(Math.round(cfoMetrics.arpu))}
-                          unit="đ/L"
-                          icon={TrendingUp}
-                          color="amber"
-                          trend={
-                            timeFilter !== "all"
-                              ? `${cfoMetrics.arpuGrowth >= 0 ? "+" : ""}${cfoMetrics.arpuGrowth.toFixed(1)}%`
-                              : null
-                          }
-                          subtitle="Hiệu quả đơn giá"
-                        />
-                        <StatCard
-                          title="Index Tập trung KH"
-                          value={`${cfoMetrics.concentration.toFixed(1)}`}
-                          unit="%"
-                          icon={Users}
-                          color="rose"
-                          subtitle="Top 20% KH đóng góp DT"
-                        />
-                      </div>
-
-                      {/* CFO Advanced Insights Row */}
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <Card
-                          title="Cơ cấu Sản phẩm & Đối tác (Strategic Mix)"
-                          className="lg:col-span-2"
-                        >
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mt-6">
-                            <div className="space-y-6">
-                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                I. Tỷ trọng doanh thu theo SKU
-                              </p>
-                              <div className="h-[280px] w-full">
-                                <ResponsiveContainer
-                                  width="100%"
-                                  height={280}
-                                  minWidth={0}
-                                >
-                                  <BarChart
-                                    layout="vertical"
-                                    data={cfoMetrics.productStats.slice(0, 5)}
-                                    margin={{ left: 0, right: 30 }}
-                                  >
-                                    <XAxis type="number" hide />
-                                    <YAxis
-                                      dataKey="name"
-                                      type="category"
-                                      fontSize={10}
-                                      width={110}
-                                      axisLine={false}
-                                      tickLine={false}
-                                      tick={{
-                                        fill: chartColors.axis,
-                                        fontWeight: 700,
-                                      }}
-                                    />
-                                    <Tooltip
-                                      contentStyle={{
-                                        borderRadius: "16px",
-                                        border: chartColors.tooltipBorder,
-                                        backgroundColor: chartColors.tooltipBg,
-                                        color: chartColors.tooltipText,
-                                        boxShadow:
-                                          "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-                                      }}
-                                      itemStyle={{
-                                        color: chartColors.tooltipText,
-                                      }}
-                                      labelStyle={{
-                                        color: chartColors.tooltipText,
-                                      }}
-                                      cursor={{
-                                        fill: isDark
-                                          ? "rgba(255,255,255,0.06)"
-                                          : "rgba(0,0,0,0.04)",
-                                      }}
-                                      formatter={(val: number) =>
-                                        formatNumber(val) + " đ"
-                                      }
-                                    />
-                                    <Bar
-                                      dataKey="value"
-                                      fill={chartColors.accent}
-                                      radius={[0, 6, 6, 0]}
-                                      barSize={24}
-                                    />
-                                  </BarChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </div>
-                            <div className="space-y-6">
-                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] text-center mb-4">
-                                II. Top 5 Đối tác trọng điểm
-                              </p>
-                              <div className="h-[280px] w-full">
-                                <ResponsiveContainer
-                                  width="100%"
-                                  height={280}
-                                  minWidth={0}
-                                >
-                                  <PieChart>
-                                    <Pie
-                                      data={cfoMetrics.partnerStats.slice(0, 5)}
-                                      innerRadius={70}
-                                      outerRadius={95}
-                                      paddingAngle={8}
-                                      dataKey="value"
-                                      stroke="none"
-                                    >
-                                      {chartColors.series.map((color, index) => (
-                                        <Cell
-                                          key={`cell-${index}`}
-                                          fill={color}
-                                        />
-                                      ))}
-                                    </Pie>
-                                    <Tooltip
-                                      contentStyle={{
-                                        borderRadius: "16px",
-                                        border: chartColors.tooltipBorder,
-                                        backgroundColor: chartColors.tooltipBg,
-                                        color: chartColors.tooltipText,
-                                        boxShadow:
-                                          "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-                                      }}
-                                      itemStyle={{
-                                        color: chartColors.tooltipText,
-                                      }}
-                                      labelStyle={{
-                                        color: chartColors.tooltipText,
-                                      }}
-                                      formatter={(val: number) =>
-                                        formatNumber(val) + " đ"
-                                      }
-                                    />
-                                    <Legend
-                                      verticalAlign="bottom"
-                                      iconType="circle"
-                                      wrapperStyle={{
-                                        fontSize: "11px",
-                                        fontWeight: 700,
-                                        paddingTop: "30px",
-                                      }}
-                                    />
-                                  </PieChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </div>
-                          </div>
-                        </Card>
-
-                        <Card title="Xếp hạng SKU dẫn đầu">
-                          <div className="space-y-5 mt-4">
-                            {cfoMetrics.productStats.slice(0, 8).map((p, i) => (
-                              <div
-                                key={p.name}
-                                className="flex items-center justify-between group py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-3 rounded-2xl transition-all"
-                              >
-                                <div className="flex items-center gap-4">
-                                  <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[12px] font-black text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all shrink-0">
-                                    {i + 1}
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-[13px] font-bold text-slate-800 truncate max-w-[130px]">
-                                      {p.name}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
-                                      VP:{" "}
-                                      {(
-                                        (p.value /
-                                          (cfoMetrics.totalRevenue || 1)) *
-                                        100
-                                      ).toFixed(1)}
-                                      %
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[13px] font-black text-slate-900">
-                                    {formatNumber(p.value)}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </Card>
-                      </div>
-
-                      {/* Management Summary Report Section */}
-                      <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 text-white mt-8 shadow-2xl">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-10 mb-12 pb-10 border-b border-white/10">
-                          <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white shrink-0 shadow-2xl">
-                            <ShieldCheck className="w-12 h-12" />
-                          </div>
-                          <div>
-                            <h4 className="text-3xl font-black tracking-tight mb-1">
-                              Báo cáo tóm lược quản trị tài chính
-                            </h4>
-                            <p className="text-[12px] font-bold text-white/30 uppercase tracking-[0.4em]">
-                              Trích xuất trực tiếp từ dữ liệu quản trị hệ thống
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-20">
-                          <div className="space-y-8">
-                            <h5 className="text-[12px] font-black text-white/20 uppercase tracking-[0.2em] flex items-center gap-3">
-                              <div className="w-4 h-[1px] bg-white/20" /> I.
-                              Doanh thu & Thị trường
-                            </h5>
-                            <div className="space-y-8">
-                              <div className="flex gap-5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 shrink-0 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-                                <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Doanh thu (trước VAT) đạt{" "}
-                                  <span className="font-bold text-white underline decoration-white/20 underline-offset-4">
-                                    {formatNumber(cfoMetrics.totalRevenue)} đ
-                                  </span>
-                                   +
-           +
-          (canXoa.length
-            ? \n            : ), biến động{" "}
-                                  <span
-                                    className={cn(
-                                      "font-bold",
-                                      cfoMetrics.revGrowth >= 0
-                                        ? "text-emerald-400"
-                                        : "text-rose-400",
-                                    )}
-                                  >
-                                    {cfoMetrics.revGrowth >= 0
-                                      ? "tăng"
-                                      : "giảm"}{" "}
-                                    {Math.abs(cfoMetrics.revGrowth).toFixed(1)}%
-                                  </span>{" "}
-                                  so với kỳ trước.
-                                </p>
-                              </div>
-                              <div className="flex gap-5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0" />
-                                <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Đơn giá bình quân đạt{" "}
-                                  <span className="font-bold text-white">
-                                    {formatNumber(Math.round(cfoMetrics.arpu))}{" "}
-                                    đ/lít
-                                  </span>
-                                  . Thế trận giá bán{" "}
-                                  {cfoMetrics.arpuGrowth >= 0
-                                    ? "có sự cải thiện tốt về biên lợi nhuận"
-                                    : "đang chịu áp lực cạnh tranh"}
-                                  .
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="space-y-8 lg:border-l lg:border-white/5 lg:pl-20">
-                            <h5 className="text-[12px] font-black text-white/20 uppercase tracking-[0.2em] flex items-center gap-3">
-                              <div className="w-4 h-[1px] bg-white/20" /> II.
-                              Khách hàng & Rủi ro
-                            </h5>
-                            <div className="space-y-8">
-                              <div className="flex gap-5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0" />
-                                <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Chỉ số tập trung (Concentration Index):{" "}
-                                  <span className="font-bold text-white">
-                                    {cfoMetrics.concentration.toFixed(1)}%
-                                  </span>
-                                  .
-                                  {cfoMetrics.concentration > 70
-                                    ? "Cảnh báo rủi ro tập trung dòng tiền vào nhóm đối tác chiến lược vượt ngưỡng an toàn."
-                                    : "Cơ cấu đối tác duy trì độ phân tán tối ưu cho dòng tiền."}
-                                </p>
-                              </div>
-                              <div className="flex gap-5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white/20 mt-2 shrink-0" />
-                                <p className="text-[15px] text-white/70 leading-relaxed font-medium">
-                                  Đối tác hạt nhân{" "}
-                                  <span className="font-bold text-white">
-                                    {cfoMetrics.partnerStats[0]?.name || "N/A"}
-                                  </span>{" "}
-                                  đóng góp tỷ trọng lớn nhất với{" "}
-                                  <span className="font-bold text-white">
-                                    {(
-                                      ((cfoMetrics.partnerStats[0]?.value ||
-                                        0) /
-                                        (cfoMetrics.totalRevenue || 1)) *
-                                      100
-                                    ).toFixed(1)}
-                                    %
-                                  </span>
-                                  .
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="space-y-8 lg:border-l lg:border-white/5 lg:pl-20">
-                            <h5 className="text-[12px] font-black text-rose-400 uppercase tracking-[0.2em] flex items-center gap-3">
-                              <div className="w-4 h-[1px] bg-rose-400/20" />{" "}
-                              III. Khuyến nghị quản trị
-                            </h5>
-                            <div className="bg-white/[0.03] p-5 sm:p-6 rounded-2xl border border-white/5 shadow-inner backdrop-blur-sm">
-                              <p className="text-[15px] text-white/40 italic leading-relaxed font-medium">
-                                "
-                                {cfoMetrics.concentration > 70
-                                  ? "Hệ thống khuyến nghị BGĐ ưu tiên chiến lược 'Long-tail' (mở rộng tệp khách hàng tiềm năng để giảm thiểu rủi ro khi đối tác trọng điểm có biến động. Đồng thời siết chặt kiểm soát công nợ cho nhóm Sales dẫn đầu."
-                                  : "Thực trạng tài chính đang ở vùng ổn định. Khuyến nghị duy trì các chính sách chăm sóc khách hàng trọng điểm và chuẩn bị nguồn lực cho các SKU có dấu hiệu tăng trưởng nhanh."}
-                                "
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ĐỐI SOÁT XUẤT KHO ↔ HÓA ĐƠN
-                        Trả lời câu hỏi: hàng đã rời kho có ra hóa đơn đủ chưa.
-                        Hai bên ghi số theo đơn vị khác nhau nên hạ hết về lít. */}
-                    {/*
-                      ĐỐI SOÁT XUẤT KHO ↔ HÓA ĐƠN — TẠM GỠ KHỎI MÀN HÌNH.
-
-                      Bảng này trước đây so sản lượng đã rời kho với sản lượng
-                      trên hóa đơn nạp từ file Excel. Nay doanh thu SINH RA từ
-                      chính xuất kho, nên phép so đó là so một con số với chính
-                      nó: lúc nào cũng khớp 100%, và một bảng luôn báo "đạt"
-                      còn nguy hiểm hơn không có bảng nào.
-
-                      Phép tính vẫn giữ nguyên ở src/lib/reconcile.ts cùng 46
-                      test của nó. Nó sẽ có việc thật trở lại ở bước SAP: khi
-                      hóa đơn phát hành xong và số hóa đơn thật chạy ngược về
-                      app, đối soát sẽ so xuất kho với hóa đơn ĐÃ PHÁT HÀNH —
-                      lúc đó hai vế mới thật sự là hai nguồn khác nhau.
-                    */}
-
-                    {/* Sổ chi tiết. Khi lọc "Tất cả" thì chỉ dựng 50 hóa đơn
-                        gần nhất — trước đây khối này bị ẩn hẳn nên không có
-                        cách nào xem/sửa hóa đơn ở chế độ toàn thời gian. */}
-                    {(() => {
-                      const SHOW_ALL_LIMIT = 50;
-                      const isCapped =
-                        timeFilter === "all" &&
-                        groupedRevenue.length > SHOW_ALL_LIMIT;
-                      const visibleInvoices = isCapped
-                        ? groupedRevenue.slice(0, SHOW_ALL_LIMIT)
-                        : groupedRevenue;
-                      return (
-                      <div className="space-y-4 pt-12 border-t border-slate-100">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                          <h4 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-primary" />
-                            Sổ chi tiết giao dịch từ Báo cáo
-                          </h4>
-
-                          <div className="relative group flex-1 max-w-sm">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
-                            <input
-                              type="text"
-                              placeholder="Tìm kiếm đối tác / Đại lý..."
-                              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                              value={revenuePartnerSearch}
-                              onChange={(e) =>
-                                setRevenuePartnerSearch(e.target.value)
-                              }
-                            />
-                            {revenuePartnerSearch && (
-                              <button
-                                onClick={() => setRevenuePartnerSearch("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {isCapped && (
-                          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                            <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
-                              Đang ở chế độ "Tất cả" nên chỉ hiện{" "}
-                              {SHOW_ALL_LIMIT} hóa đơn gần nhất trong tổng{" "}
-                              {groupedRevenue.length} hóa đơn. Chọn lọc theo
-                              tháng hoặc năm để xem và sửa đầy đủ.
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="space-y-3">
-                          {visibleInvoices.length > 0 ? (
-                            visibleInvoices.map((invoice) => {
-                              const isExpanded = expandedInvoices.includes(
-                                invoice.key,
-                              );
-                              return (
-                                <div
-                                  key={invoice.key}
-                                  className="group"
-                                >
-                                  <div
-                                    className={cn(
-                                      "bg-white border rounded-2xl p-4 sm:p-5 transition-all duration-300 cursor-pointer relative z-10",
-                                      isExpanded
-                                        ? "border-primary shadow-xl shadow-primary/5"
-                                        : "border-slate-100 hover:border-primary/20 hover:shadow-md",
-                                    )}
-                                    onClick={() => {
-                                      setExpandedInvoices((prev) =>
-                                        prev.includes(invoice.key)
-                                          ? prev.filter((n) => n !== invoice.key)
-                                          : [...prev, invoice.key],
-                                      );
-                                    }}
-                                  >
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                      <div className="flex items-center gap-3 sm:gap-4">
-                                        <div
-                                          className={cn(
-                                            "w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center transition-all",
-                                            isExpanded
-                                              ? "bg-primary text-white"
-                                              : "bg-slate-50 text-slate-400 group-hover:bg-primary/5 group-hover:text-primary",
-                                          )}
-                                        >
-                                          <FileText className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                          <div className="flex items-center gap-2 mb-0.5">
-                                            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                              {formatDisplayDate(invoice.date)}
-                                            </p>
-                                            <span className="w-0.5 h-0.5 bg-slate-200 rounded-full" />
-                                            <span className="text-[8px] sm:text-[9px] font-bold text-primary/60 uppercase tracking-widest">
-                                              {invoice.items.length} MẶT HÀNG
-                                            </span>
-                                          </div>
-                                          <h5 className="text-[12px] sm:text-[13px] font-bold text-slate-800 tracking-tight group-hover:text-primary transition-colors italic">
-                                            Số HĐ:{" "}
-                                            <span className="not-italic">
-                                              {invoice.invoiceNumber}
-                                            </span>
-                                          </h5>
-                                          {/* Chưa phát hành thì nói rõ số hóa đơn sẽ do SAP cấp, đừng để người đọc tưởng app làm mất số. */}
-                                          {!invoice.items[0]?.invoiceNumber && (
-                                            <p className="text-[8px] font-bold text-amber-600 uppercase tracking-widest mt-0.5">
-                                              Số hóa đơn do SAP cấp sau khi phát hành
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <div className="grid grid-cols-2 md:flex items-center md:justify-end gap-x-4 gap-y-2 md:gap-8 w-full md:w-auto px-4 py-3 md:p-0 bg-slate-50/50 md:bg-transparent rounded-xl border border-slate-100 md:border-none">
-                                        <div className="text-left md:text-right">
-                                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 leading-none">
-                                            Đối tác
-                                          </p>
-                                          <p className="text-[10px] sm:text-[11px] font-bold text-slate-600 uppercase truncate max-w-[120px] sm:max-w-none">
-                                            {invoice.partnerName}
-                                          </p>
-                                        </div>
-                                        <div className="text-right">
-                                          <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 leading-none">
-                                            Doanh Thu
-                                          </p>
-                                          <p className="text-base sm:text-lg font-bold text-slate-900 leading-none">
-                                            {formatNumber(invoice.totalAmount)}
-                                            <span className="text-[9px] font-medium ml-0.5">
-                                              đ
-                                            </span>
-                                          </p>
-                                        </div>
-                                        {/*
-                                          Trước đây có nút xoá cả tờ hóa đơn,
-                                          để dọn khi nạp nhầm file. Bỏ đi vì
-                                          doanh thu không còn nạp vào nữa: nó
-                                          tính từ phiếu xuất, nên muốn bỏ một
-                                          dòng thì sửa phiếu xuất tương ứng.
-                                        */}
-                                        {(
-                                          <div
-                                            className={cn(
-                                              "col-span-2 md:col-span-1 flex w-full md:w-7 h-5 md:h-7 rounded-lg md:rounded-full bg-slate-100 md:bg-slate-50 items-center justify-center transition-all mt-1 md:mt-0",
-                                              isExpanded
-                                                ? "bg-primary/10 text-primary md:rotate-180"
-                                                : "text-slate-300",
-                                            )}
-                                          >
-                                            <ChevronDown
-                                              className={cn(
-                                                "w-4 h-4 transition-transform",
-                                                isExpanded &&
-                                                  "rotate-180 md:rotate-0",
-                                              )}
-                                            />
-                                            <span className="md:hidden text-[8px] font-black uppercase tracking-[0.2em] ml-1">
-                                              {isExpanded
-                                                ? "Thu gọn"
-                                                : "Xem chi tiết"}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Nested Detail View */}
-                                  {isExpanded && (
-                                    <div className="relative -mt-4 pt-8 pb-4 px-8 bg-slate-50/50 border-x border-b border-slate-100/60 rounded-b-2xl z-0 overflow-hidden">
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        {invoice.items.map((item, idx) => (
-                                          <div
-                                            key={item.id || idx}
-                                            className="bg-white border border-slate-100 p-4 rounded-xl shadow-sm group/item hover:border-primary/30 transition-all"
-                                          >
-                                            <div className="flex items-start justify-between gap-3">
-                                              <div className="space-y-0.5 min-w-0">
-                                                <p className="text-[10px] font-bold text-slate-700 line-clamp-1">
-                                                  {item.productName}
-                                                </p>
-                                                <p className="text-[9px] font-medium text-slate-400">
-                                                  MÃ:{" "}
-                                                  {item.materialCode || "N/A"}
-                                                </p>
-                                              </div>
-                                              <div className="text-right shrink-0">
-                                                <p className="text-[10px] font-bold text-slate-900">
-                                                  {formatNumber(item.quantity)}{" "}
-                                                  {item.unit ||
-                                                    products.find(
-                                                      (p) =>
-                                                        p.name ===
-                                                        item.productName,
-                                                    )?.unit ||
-                                                    "ĐV"}
-                                                </p>
-                                                <p className="text-[9px] font-bold text-emerald-600">
-                                                  {formatNumber(
-                                                    item.totalAmount,
-                                                  )}{" "}
-                                                  đ
-                                                </p>
-                                              </div>
-                                            </div>
-
-                                            {/*
-                                              Không sửa/xoá được từng dòng nữa:
-                                              dòng này là số TÍNH RA từ một
-                                              phiếu xuất. Sửa ở đây thì lần mở
-                                              app sau nó tính lại và số sửa biến
-                                              mất — nên chỉ đường về đúng gốc.
-                                            */}
-                                            <button
-                                              onClick={() =>
-                                                setActiveTab("reports")
-                                              }
-                                              title="Doanh thu tính từ phiếu xuất kho — sửa ở đó"
-                                              className="w-full flex items-center justify-center gap-1 mt-3 pt-2.5 border-t border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-primary transition-all"
-                                            >
-                                              <FileText className="w-3 h-3" />
-                                              Xem phiếu xuất gốc
-                                            </button>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="py-20 text-center">
-                              <Search className="w-10 h-10 text-slate-100 mx-auto mb-4" />
-                              <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-                                Không có dữ liệu hóa đơn
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      );
-                    })()}
-                  </>
-                ) : (
-                  <Card className="py-16 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-2 bg-slate-50/50 rounded-3xl">
-                    <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl text-slate-300">
-                      <FileSpreadsheet className="w-10 h-10" />
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-xl font-black text-slate-900">
-                        Chưa có doanh thu trong kỳ này
-                      </h4>
-                      <p className="text-sm text-slate-400 max-w-md mx-auto font-bold uppercase tracking-wider">
-                        Doanh thu tính thẳng từ xuất kho. Có phiếu xuất đã giao
-                        xong là số hiện ở đây, không phải nạp file nào.
-                      </p>
-                    </div>
-                    <button
-                      className="px-8 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all mt-4"
-                      onClick={() => setActiveTab("export")}
-                    >
-                      Sang tab Xuất kho
-                    </button>
-                  </Card>
-                )}
-              </div>
-            )}
+              Dữ liệu cũ trong collection `revenue` trên Firestore CỐ Ý KHÔNG
+              XOÁ — đó là dấu vết của thời nạp từ tệp Excel, xoá là không lấy
+              lại được, mà giữ thì không tốn gì ngoài dung lượng.
+            */}
 
             {activeTab === "in-transit" && (
               <div className="space-y-6">
@@ -11562,6 +10533,27 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       hoaDon={hoaDon}
                       onSaveHoaDon={handleSaveHoaDon}
                     />
+
+                    {/*
+                      XUẤT HÓA ĐƠN LÊN SAP — chuyển từ tab Doanh thu sang đây
+                      khi gỡ phân hệ đó (25/09/2026).
+
+                      Nó vốn nằm đầu tab Doanh thu, nhưng đây không phải việc
+                      phân tích: đây là lệnh mang hóa đơn đi phát hành, đúng
+                      cùng một bước với nút tải tệp TEMPLATE ngay trên. Để lại
+                      chỗ cũ thì gỡ Doanh thu là mất luôn đường vào.
+                    */}
+                    {theCongNo === "chua-xuat" && (
+                      <SapExportPanel
+                        rows={sapSourceRows}
+                        jobs={sapJobs}
+                        canRun={laKeToan}
+                        busy={sapBusy}
+                        onCreate={handleCreateSapJob}
+                        onDownload={downloadSapJobFile}
+                        onChangeStatus={handleChangeSapJobStatus}
+                      />
+                    )}
 
                     {/*
                       Tra cứu nằm NGAY DƯỚI bảng điền số, trong cùng một thẻ.
