@@ -53,7 +53,6 @@ import {
   Receipt,
   Loader2,
   Calculator,
-  FileSearch,
   Hash,
 } from "lucide-react";
 import {
@@ -824,12 +823,15 @@ export default function App() {
   );
 
   /*
-   * Phân hệ Công nợ · Hóa đơn chia làm BA thẻ, theo trạng thái của đơn.
+   * Phân hệ Công nợ · Hóa đơn chia làm HAI thẻ, theo trạng thái của đơn.
    *
-   *   "chua-xuat" — đơn chưa có số hóa đơn: tải tệp TEMPLATE mang đi phát
-   *                 hành, xong quay lại điền số và ngày thật.
-   *   "da-xuat"   — sổ theo dõi những đơn ĐÃ có số hóa đơn và ngày hóa đơn.
-   *   "tra-cuu"   — tra lại hóa đơn cũ và in ra tệp mẫu Chốt.
+   *   "chua-xuat" — đơn chưa mang đi xuất hóa đơn: tải tệp TEMPLATE mang đi
+   *                 phát hành.
+   *   "da-xuat"   — điền số và ngày hóa đơn, tra lại hóa đơn cũ, in mẫu Chốt.
+   *
+   * Thẻ tra cứu trước đây tách riêng, nay gộp vào "da-xuat": cả hai cùng trả
+   * lời một câu hỏi — hóa đơn này số bao nhiêu, ngày nào — nên tách ra chỉ làm
+   * người dùng phải nhớ thứ mình cần nằm ở thẻ nào.
    *
    * Hai thẻ đầu đều do `DebtExport` vẽ, chỉ khác tham số `phan`. Cố ý dựng
    * bằng CÙNG MỘT thẻ ở cùng một chỗ trong cây: đổi thẻ thì React giữ nguyên
@@ -840,9 +842,9 @@ export default function App() {
    * localStorage của một máy nên không tra chéo máy được) — xem
    * `src/lib/traCuuHoaDon.ts`.
    */
-  const [theCongNo, setTheCongNo] = useState<
-    "chua-xuat" | "da-xuat" | "tra-cuu"
-  >("chua-xuat");
+  const [theCongNo, setTheCongNo] = useState<"chua-xuat" | "da-xuat">(
+    "chua-xuat",
+  );
 
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   /*
@@ -11506,10 +11508,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     </h2>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                       {theCongNo === "chua-xuat"
-                        ? "Đơn còn phải xuất hóa đơn · tải tệp TEMPLATE · điền số thật"
-                        : theCongNo === "da-xuat"
-                          ? "Sổ theo dõi số hóa đơn và ngày hóa đơn đã phát hành"
-                          : "Tra lại hóa đơn cũ · in ra mẫu Chốt"}
+                        ? "Đơn còn phải xuất hóa đơn · tải tệp TEMPLATE"
+                        : "Điền số và ngày hóa đơn · tra lại · in mẫu Chốt"}
                     </p>
                   </div>
 
@@ -11525,11 +11525,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                           id: "da-xuat",
                           label: "Đã xuất hóa đơn",
                           icon: CheckCircle,
-                        },
-                        {
-                          id: "tra-cuu",
-                          label: "Tra cứu · in lại",
-                          icon: FileSearch,
                         },
                       ] as const
                     ).map((t) => (
@@ -11551,14 +11546,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 </div>
 
                 <Card>
-                  {theCongNo === "tra-cuu" ? (
-                    <TraCuuHoaDon
-                      transactions={transactions}
-                      products={products}
-                      partners={donVi}
-                      hoaDon={hoaDon}
-                    />
-                  ) : (
+                  <div className="space-y-6">
                     <DebtExport
                       phan={theCongNo === "da-xuat" ? "da" : "chua"}
                       transactions={transactions}
@@ -11569,7 +11557,22 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       hoaDon={hoaDon}
                       onSaveHoaDon={handleSaveHoaDon}
                     />
-                  )}
+
+                    {/*
+                      Tra cứu nằm NGAY DƯỚI bảng điền số, trong cùng một thẻ.
+                      Bảng trên là đơn của đợt đang khai — để điền cho xong;
+                      bảng dưới là toàn bộ hóa đơn đã ghi, không phụ thuộc đợt
+                      — để tra lại và in mẫu Chốt.
+                    */}
+                    {theCongNo === "da-xuat" && (
+                      <TraCuuHoaDon
+                        transactions={transactions}
+                        products={products}
+                        partners={donVi}
+                        hoaDon={hoaDon}
+                      />
+                    )}
+                  </div>
                 </Card>
               </div>
             )}
