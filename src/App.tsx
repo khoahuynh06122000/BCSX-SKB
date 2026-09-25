@@ -7118,19 +7118,24 @@ export default function App() {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-slate-50/30">
           {/*
-            Rộng 1600px chứ không phải max-w-7xl (1280px).
+            BỀ NGANG KHÁC NHAU THEO TỪNG PHÂN HỆ.
 
-            Trên màn hình 1920 thì thanh bên chiếm 288px, còn lại chừng 1630px —
-            cắt về 1280 là bỏ không hơn 350px mỗi bên, đúng hai khoảng trắng
-            Khoa chỉ ra. Mà bảng công nợ 18 cột lại đang phải kéo ngang.
+            Mặc định chặn ở 1600px: trên màn hình siêu rộng thì một dòng chữ dài
+            2000px đọc rất mỏi mắt, và phần lớn màn hình trong app là chữ với
+            bảng vài cột.
 
-            Không để tràn hết bề ngang: trên màn hình siêu rộng thì một dòng chữ
-            dài 2000px đọc rất mỏi mắt. 1600 là chỗ vừa đủ cho bảng rộng nhất
-            trong app mà chữ vẫn ngắt dòng hợp lý.
+            RIÊNG CÔNG NỢ · HÓA ĐƠN thì bỏ chặn. Bảng Chốt là thứ rộng nhất
+            app — 17 cột, tối thiểu 1420px — cộng thêm đệm của thẻ và của khung
+            là vượt 1600, nên nó phải kéo ngang trong khi hai bên màn hình vẫn
+            còn hai dải trắng. Ở đây không có đoạn văn dài nào để mà mỏi mắt,
+            toàn số xếp cột; dùng hết bề ngang là đúng.
           */}
           <div
             key={activeTab}
-            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24"
+            className={cn(
+              "mx-auto space-y-4 sm:space-y-8 pb-24",
+              activeTab === "debt" ? "max-w-none" : "max-w-[1600px]",
+            )}
           >
             {/*
               MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
