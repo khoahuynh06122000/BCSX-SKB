@@ -7,6 +7,8 @@ import {
   Plus,
   Trash2,
   CalendarRange,
+  CheckCircle2,
+  FileClock,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Transaction, Product, Partner } from "../types";
@@ -211,6 +213,27 @@ export default function DebtExport({
         stableHash,
       ),
     [bang.dong, dot, daGhi],
+  );
+
+  /**
+   * TÁCH LÀM HAI NHÓM: đơn CHƯA có số hóa đơn, và đơn ĐÃ có.
+   *
+   * Hai việc khác hẳn nhau nên phải nằm hai chỗ: nhóm chưa xuất là việc sắp
+   * phải làm — tải tệp TEMPLATE, đi xuất hóa đơn, rồi quay về điền số. Nhóm đã
+   * xuất là sổ theo dõi — chỉ xem lại số nào ngày nào, thỉnh thoảng sửa một
+   * chỗ gõ nhầm. Trộn chung một bảng thì nhìn vào không biết còn bao nhiêu đơn
+   * phải xuất, mà đó mới là câu hỏi mở màn hình này ra để trả lời.
+   *
+   * CHIA THEO SỐ ĐÃ LƯU, không theo chữ đang gõ. Chia theo chữ đang gõ thì gõ
+   * được nửa số là dòng nhảy sang bảng kia, con trỏ mất tiêu.
+   */
+  const chuaXuat = useMemo(
+    () => canDien.filter((d) => !String(d.soDaGhi || "").trim()),
+    [canDien],
+  );
+  const daXuat = useMemo(
+    () => canDien.filter((d) => !!String(d.soDaGhi || "").trim()),
+    [canDien],
   );
 
   /** Chữ đang gõ trong bảng, chưa bấm lưu. */
@@ -441,6 +464,86 @@ export default function DebtExport({
     setCauHinhSap((c) => ({ ...c, [truong]: giaTri }));
 
   const tien = (n: number) => formatNumber(Math.round(n));
+
+  /**
+   * Bảng dòng hóa đơn, dùng chung cho cả hai khối.
+   *
+   * Cùng một bộ cột, chỉ khác ô nhập có được tô cảnh báo hay không — chép
+   * thành hai bảng riêng thì sửa một cột phải nhớ sửa cả hai chỗ, và quên một
+   * chỗ là hai bảng lệch nhau mà không có gì báo.
+   */
+  const bangDongHoaDon = (ds: typeof canDien, canhBao: boolean) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left whitespace-nowrap">
+        <thead>
+          <tr>
+            {[
+              "Đợt",
+              "Đơn vị",
+              "Mã BP",
+              "Dòng",
+              "Thành tiền",
+              "Số hóa đơn",
+              "Ngày hóa đơn",
+            ].map((h) => (
+              <th
+                key={h}
+                className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ds.map((d) => {
+            const o = oCuaDong(d);
+            const chuaCo = !o.soHoaDon.trim();
+            return (
+              <tr
+                key={d.khoa}
+                className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
+              >
+                <td className="px-3.5 py-2.5">{d.nhanDot}</td>
+                <td className="px-3.5 py-2.5 text-slate-900">{d.donVi}</td>
+                <td className="px-3.5 py-2.5 font-mono text-slate-400">
+                  {d.maBp}
+                </td>
+                <td className="px-3.5 py-2.5 text-right tabular-nums">
+                  {d.soDong}
+                </td>
+                <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
+                  {tien(d.thanhTien)}
+                </td>
+                <td className="px-3.5 py-2.5">
+                  <input
+                    value={o.soHoaDon}
+                    onChange={(e) =>
+                      suaO(d.khoa, "soHoaDon", e.target.value, d)
+                    }
+                    placeholder={d.soGoiY}
+                    className={cn(
+                      "w-44 px-3 py-2.5 rounded-lg border bg-white text-[14px] font-black font-mono outline-none focus:border-primary",
+                      canhBao && chuaCo
+                        ? "border-amber-300 placeholder:text-amber-400"
+                        : "border-slate-200",
+                    )}
+                  />
+                </td>
+                <td className="px-3.5 py-2.5">
+                  <ONgay
+                    value={o.ngayHoaDon}
+                    onChange={(v: string) => suaO(d.khoa, "ngayHoaDon", v, d)}
+                    className="px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold outline-none focus:border-primary"
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
   const nghiemTrong = (loai: string) =>
     loai === "ngoai_dot" || loai === "thieu_ma_vat_tu" || loai === "thieu_ma_bp";
 
@@ -601,6 +704,27 @@ export default function DebtExport({
         ))}
       </div>
 
+      {/*
+        KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
+
+        Bảy khối số liệu xếp liền nhau thành một trang dài dằng dặc, và thứ
+        người dùng mở màn hình này ra để tìm — còn bao nhiêu đơn phải xuất hóa
+        đơn — thì lẫn vào giữa. Số liệu không bỏ đi đâu, chỉ thôi bày sẵn ra
+        cùng một lúc.
+      */}
+      <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
+        <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
+          <span className="text-[13px] font-black text-slate-700 tracking-tight">
+            Số liệu theo đợt
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-open:hidden">
+            Bung ra
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 hidden group-open:inline">
+            Thu lại
+          </span>
+        </summary>
+        <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-4">
       {/* ----- Thống kê theo đợt ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
@@ -666,125 +790,124 @@ export default function DebtExport({
         </div>
       </div>
 
-      {/* ----- Điền số hóa đơn thật ----- */}
-      {canDien.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-                Số hóa đơn đã phát hành · {canDien.length} hóa đơn
+        </div>
+      </details>
+
+      {/* ================================================================
+          HAI PHẦN, CHIA THEO VIỆC CÒN PHẢI LÀM HAY ĐÃ XONG.
+
+          Bản trước dồn tất cả vào một bảng "Số hóa đơn đã phát hành", nên mở
+          màn hình ra không trả lời được câu hỏi đầu tiên: còn bao nhiêu đơn
+          phải đi xuất hóa đơn? Nay đơn chưa có số nằm riêng ở trên, kèm luôn
+          nút tải tệp TEMPLATE — đúng việc tiếp theo phải làm. Đơn đã có số
+          xuống dưới thành sổ theo dõi.
+      ================================================================= */}
+
+      <div className="rounded-2xl border-2 border-amber-300 overflow-hidden">
+        <div className="px-4 py-3.5 bg-amber-50 border-b-2 border-amber-200 space-y-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <FileClock className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-[15px] font-black text-amber-900 tracking-tight">
+                Chưa xuất hóa đơn · {chuaXuat.length} đơn
               </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={dienGoiY}
-                  className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
-                >
-                  Điền số gợi ý
-                </button>
-                <button
-                  onClick={luuHoaDon}
-                  disabled={dangLuu}
-                  className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
-                >
-                  {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
-                </button>
-              </div>
             </div>
-            <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
-              Phát hành hóa đơn xong thì điền số và ngày thật vào đây. Số app tự
-              đánh chỉ là gợi ý — ghi một số không có thật vào sổ thì đối chiếu
-              với cơ quan thuế sau này không lần ra được gì.
+            {tepSap.oDong.length > 0 && (
+              <button
+                onClick={taiTepSap}
+                disabled={dangTaiSap}
+                className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-[12px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {dangTaiSap
+                  ? "Đang dựng tệp..."
+                  : `Tải tệp TEMPLATE (${tepSap.tong.soChungTu} chứng từ)`}
+              </button>
+            )}
+          </div>
+          <p className="text-[12px] font-bold text-amber-700 leading-relaxed">
+            Tải tệp TEMPLATE, xuất hóa đơn trên hệ thống hóa đơn, rồi quay lại
+            điền số và ngày thật vào đây. Bấm <strong>Lưu số hóa đơn</strong> là
+            đơn chuyển xuống phần <strong>Đã xuất hóa đơn</strong> bên dưới.
+          </p>
+          <p className="text-[12px] font-bold text-amber-700/80 leading-relaxed">
+            Số app tự đánh chỉ là <strong>gợi ý</strong> — ghi một số không có
+            thật vào sổ thì sau này đối chiếu với cơ quan thuế không lần ra được
+            gì.
+          </p>
+        </div>
+
+        {chuaXuat.length === 0 ? (
+          <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
+            Mọi đơn trong kỳ đã có số hóa đơn.
+          </p>
+        ) : (
+          <>
+            {bangDongHoaDon(chuaXuat, true)}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex gap-2 justify-end flex-wrap">
+              <button
+                onClick={dienGoiY}
+                className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"
+              >
+                Điền số gợi ý
+              </button>
+              <button
+                onClick={luuHoaDon}
+                disabled={dangLuu}
+                className="px-3.5 py-2.5 rounded-lg bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest hover:brightness-125 disabled:opacity-40"
+              >
+                {dangLuu ? "Đang lưu..." : "Lưu số hóa đơn"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="rounded-2xl border-2 border-emerald-200 overflow-hidden">
+        <div className="px-4 py-3.5 bg-emerald-50 border-b-2 border-emerald-200 space-y-1.5">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <p className="text-[15px] font-black text-emerald-900 tracking-tight">
+              Đã xuất hóa đơn · {daXuat.length} đơn
             </p>
           </div>
-
-          {bang.chuaCoSoThat > 0 && (
-            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200">
-              <p className="text-[13px] font-bold text-amber-800">
-                <strong>{bang.chuaCoSoThat}</strong> hóa đơn chưa có số thật —
-                file kết xuất đang dùng số app tự đánh cho những dòng đó.
-              </p>
-            </div>
-          )}
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
-              <thead>
-                <tr>
-                  {[
-                    "Đợt",
-                    "Đơn vị",
-                    "Mã BP",
-                    "Dòng",
-                    "Thành tiền",
-                    "Số hóa đơn",
-                    "Ngày hóa đơn",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {canDien.map((d) => {
-                  const o = oCuaDong(d);
-                  const chuaCo = !o.soHoaDon.trim();
-                  return (
-                    <tr
-                      key={d.khoa}
-                      className={cn(
-                        "border-t border-slate-100 text-[13px] font-bold text-slate-600",
-                        chuaCo && "bg-amber-50/40",
-                      )}
-                    >
-                      <td className="px-3.5 py-2.5">{d.nhanDot}</td>
-                      <td className="px-3.5 py-2.5 text-slate-900">{d.donVi}</td>
-                      <td className="px-3.5 py-2.5 font-mono text-slate-400">
-                        {d.maBp}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums">
-                        {d.soDong}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
-                        {tien(d.thanhTien)}
-                      </td>
-                      <td className="px-3.5 py-2.5">
-                        <input
-                          value={o.soHoaDon}
-                          onChange={(e) =>
-                            suaO(d.khoa, "soHoaDon", e.target.value, d)
-                          }
-                          placeholder={d.soGoiY}
-                          className={cn(
-                            "w-44 px-3 py-2.5 rounded-lg border bg-white text-[14px] font-black font-mono outline-none focus:border-primary",
-                            chuaCo
-                              ? "border-amber-300 placeholder:text-amber-400"
-                              : "border-slate-200",
-                          )}
-                        />
-                      </td>
-                      <td className="px-3.5 py-2.5">
-                        <ONgay
-                          value={o.ngayHoaDon}
-                          onChange={(v: string) =>
-                            suaO(d.khoa, "ngayHoaDon", v, d)
-                          }
-                          className="px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold outline-none focus:border-primary"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-[12px] font-bold text-emerald-700 leading-relaxed">
+            Sổ theo dõi số hóa đơn và ngày hóa đơn đã phát hành. Sửa được khi
+            gõ nhầm — sửa xong nhớ bấm <strong>Lưu số hóa đơn</strong> ở phần
+            trên.
+          </p>
         </div>
-      )}
 
+        {daXuat.length === 0 ? (
+          <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
+            Chưa có đơn nào được ghi số hóa đơn.
+          </p>
+        ) : (
+          bangDongHoaDon(daXuat, false)
+        )}
+      </div>
 
+      {/*
+        KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
+
+        Bảy khối số liệu xếp liền nhau thành một trang dài dằng dặc, và thứ
+        người dùng mở màn hình này ra để tìm — còn bao nhiêu đơn phải xuất hóa
+        đơn — thì lẫn vào giữa. Số liệu không bỏ đi đâu, chỉ thôi bày sẵn ra
+        cùng một lúc.
+      */}
+      <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
+        <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
+          <span className="text-[13px] font-black text-slate-700 tracking-tight">
+            Chi tiết số liệu · bảng giá · xem trước tệp
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-open:hidden">
+            Bung ra
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 hidden group-open:inline">
+            Thu lại
+          </span>
+        </summary>
+        <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-4">
       {/* ----- Thống kê theo đơn vị ----- */}
       {bang.theoDonVi.length > 0 && (
         <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -1247,6 +1370,9 @@ export default function DebtExport({
         </div>
       )}
 
+
+        </div>
+      </details>
 
       <button
         onClick={handleDownload}
