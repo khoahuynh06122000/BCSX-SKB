@@ -1832,6 +1832,9 @@ export default function App() {
   const handleXoaToanBoXuat = async () => {
     if (!isOwner) return;
 
+    /** Hai dấu xuống dòng, tách một đoạn trong hộp thoại. */
+    const NGAT = "\n\n";
+
     const dsXuat = transactions.filter(
       (t) => t.id && LOAI_CHIEU_XUAT.includes(t.type),
     );
@@ -1847,12 +1850,35 @@ export default function App() {
     const soDiDuong = dsXuat.filter((t) => t.status === "in_transit").length;
     const soHao = dsXuat.filter((t) => laDongHaoHut(t)).length;
 
+    /*
+     * BÁO TRƯỚC SỐ HÓA ĐƠN SẼ MẤT DÒNG HÀNG.
+     *
+     * Dòng chi tiết của hóa đơn KHÔNG được lưu — chúng dựng lại từ chính giao
+     * dịch xuất kho mỗi lần mở tra cứu. Xoá xuất kho là mọi hóa đơn đã ghi số
+     * mất hết dòng hàng, và tra cứu báo "không dựng lại được dòng nào".
+     *
+     * Luật Firestore KHÔNG cho xoá `hoa_don` (`allow delete: if false`) — cố ý,
+     * vì tờ hóa đơn đã phát hành là chứng từ đã lên cơ quan thuế. Nên ở đây chỉ
+     * báo trước, không xoá theo: người bấm phải biết mình sắp để lại bao nhiêu
+     * hóa đơn mồ côi.
+     */
+    const soHoaDonAnhHuong = hoaDon.filter((h) =>
+      String(h?.soHoaDon || "").trim(),
+    ).length;
+
     if (
       !window.confirm(
         `Xoá ${dsXuat.length} giao dịch xuất kho` +
           (soHao > 0 ? ` (trong đó ${soHao} dòng hao hụt)` : "") +
           (soDiDuong > 0 ? `, ${soDiDuong} đơn đang đi đường` : "") +
           ` và ${dsSo.length} dòng phiếu xuất trong Sổ số phiếu?\n\n` +
+          (soHoaDonAnhHuong > 0
+            ? `CẢNH BÁO: ${soHoaDonAnhHuong} hóa đơn đã ghi số sẽ MẤT HẾT DÒNG HÀNG. ` +
+              `Dòng chi tiết không được lưu — chúng dựng lại từ chính giao dịch xuất kho. ` +
+              `Bản ghi hóa đơn vẫn còn (luật không cho xoá), nhưng tra cứu sẽ báo ` +
+              `"không dựng lại được dòng nào" cho tới khi nạp lại đúng dữ liệu xuất kho của kỳ đó.` +
+              NGAT
+            : "") +
           `Bộ đếm số phiếu xuất cũng đặt lại, nên phiếu xuất sau khi xoá đánh lại từ đầu.\n\n` +
           `Nhập kho, tồn đầu kỳ, phiếu đã ký và đối tác được GIỮ NGUYÊN.\n\n` +
           `Không khôi phục lại được.`,
