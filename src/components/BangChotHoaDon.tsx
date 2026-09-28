@@ -4,46 +4,31 @@
  */
 
 /**
- * BẢNG HÓA ĐƠN ĐÃ XUẤT — DỰNG THEO SHEET "CHỐT".
+ * BẢNG HÓA ĐƠN ĐÃ XUẤT — GỌN TRƯỚC, CHI TIẾT KHI CẦN.
  *
- * Thứ tự cột bám tệp Excel của bộ phận, đảo hai cột lên đầu:
+ * Mặc định MỘT DÒNG CHO MỘT TỜ HÓA ĐƠN, chỉ sáu cột:
  *
- *     Số hóa đơn · Ngày hóa đơn · Ngày giao bia · Đơn vị · Mã BP · Mã vật tư ·
- *     Tên hàng hóa · ĐVT · Số lượng · [Đơn giá · Thành tiền · VAT · Sau thuế] ·
- *     [Đơn giá · Thành tiền · VAT · Sau thuế]
+ *     Số hóa đơn · Ngày hóa đơn · Ngày giao · Đơn vị ·
+ *     Sau thuế SKB→DNC · Sau thuế DNC→ĐVTV
  *
- * Khác tệp gốc ba chỗ, đều theo yêu cầu của người dùng:
+ * Bản trước bày thẳng 17 cột × mọi dòng hàng: mười một hóa đơn thành bốn mươi
+ * dòng, mỗi dòng mười bảy con số. Đọc bảng ấy không ra được câu hỏi thường gặp
+ * nhất — tờ này bao nhiêu tiền — vì số tiền của một tờ nằm rải trên bảy dòng.
  *
- *   - BỎ CỘT STT. Số thứ tự trong tệp chỉ để đánh dấu dòng khi in ra giấy;
- *     trên màn hình nó chiếm một cột mà không ai tra theo nó.
- *   - "SKB - TLĐ" gọi thẳng là ĐƠN GIÁ, cho khớp cột cùng nghĩa ở khối bên
- *     cạnh. Tiêu đề khối bên trên đã nói rõ đó là chặng nào.
- *   - MÃ BP ĐỨNG CẠNH ĐƠN VỊ. Trong tệp nó nằm ở cột cuối, cách tên đơn vị cả
- *     mười mấy cột — mà mã BP chính là mã của đơn vị ấy, đọc rời nhau thì phải
- *     lia mắt hai đầu bảng để ghép.
+ * Bấm vào một dòng thì bung ra đúng các cột còn lại của riêng tờ đó: mã vật
+ * tư, tên hàng hóa, đơn vị tính, số lượng, và hai khối giá đầy đủ.
  *
- * Trong sheet, số hóa đơn nằm ở cột M và ngày hóa đơn ở cột B — người tra phải
- * lia mắt hai đầu bảng mới ghép được một tờ hóa đơn. Đưa hai cột ấy lên đầu thì
- * nhìn là thấy; các cột còn lại giữ nguyên vị trí để đối chiếu với tệp Excel
- * không phải dò lại.
+ * TỆP XUẤT RA KHÔNG ĐỔI. Nút "Xuất mẫu Chốt" vẫn dựng đúng 18 cột phẳng như
+ * sheet của bộ phận — gọn ở màn hình là chuyện bày ra để đọc, không phải
+ * chuyện dữ liệu.
  *
- * BỀ NGANG PHẢI VỪA MÀN HÌNH, KHÔNG KÉO NGANG.
- *
- * 17 cột mà vẫn vừa được là nhờ cắt đúng chỗ tốn chỗ nhất — TIÊU ĐỀ, chứ
- * không phải số liệu. "Thành tiền sau thuế" viết hoa giãn chữ chiếm gần 150px
- * mỗi cột, trong khi con số bên dưới chỉ hơn 80px; hai cột như vậy ăn mất 300
- * px mà không chở thêm thông tin nào. Rút còn "Sau thuế" thì cột co theo số.
- *
- * Đệm ô cũng hạ từ 12px xuống 8px mỗi bên: 17 cột thì mỗi 4px tiết kiệm được
- * 136px.
- *
- * MỘT CHỖ DỰNG CHO MỌI NƠI HIỆN HÓA ĐƠN. Bảng này dùng ở cả hai phần của thẻ
- * "Đã xuất hóa đơn": bảng điền số của đợt đang khai, và phần tra cứu bên dưới.
- * Chép thành hai bản thì sửa một cột phải nhớ sửa cả hai chỗ, và quên một chỗ
- * là hai bảng lệch nhau mà không có gì báo — đúng cái đã xảy ra với chính bảng
- * này.
+ * MỘT CHỖ DỰNG CHO MỌI NƠI HIỆN HÓA ĐƠN: bảng điền số của đợt đang khai, và
+ * phần tra cứu bên dưới. Chép thành hai bản thì sửa một cột phải nhớ sửa cả
+ * hai chỗ, và quên một chỗ là hai bảng lệch nhau mà không có gì báo.
  */
 
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import type { DongCongNo } from "../lib/congNo";
 import { ngayVn } from "../lib/soPhieu";
 import { cn, formatNumber } from "../lib/utils";
@@ -64,7 +49,7 @@ interface Props {
   /**
    * Cho sửa số và ngày ngay trên bảng. Không truyền thì bảng chỉ để đọc.
    *
-   * Thẻ tra cứu cố ý KHÔNG truyền: ở đó người ta đi tìm một tờ hóa đơn cũ, và
+   * Phần tra cứu cố ý KHÔNG truyền: ở đó người ta đi tìm một tờ hóa đơn cũ, và
    * một ô nhập giữa màn hình tra cứu là lời mời sửa nhầm.
    */
   onSua?: (
@@ -79,11 +64,13 @@ interface Props {
 }
 
 const TH =
-  "px-2 py-2.5 text-[10px] font-black uppercase tracking-wide text-slate-500 border-b border-slate-200 whitespace-nowrap";
-const TD = "px-2 py-2 whitespace-nowrap";
-const TDS = "px-2 py-2 text-right tabular-nums whitespace-nowrap";
+  "px-3 py-2.5 text-[10px] font-black uppercase tracking-wide text-slate-500 border-b border-slate-200 whitespace-nowrap";
+const THP =
+  "px-2 py-2 text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap";
 
 const tien = (n: number) => formatNumber(Math.round(n));
+const cong = (ds: DongCongNo[], lay: (d: DongCongNo) => number) =>
+  ds.reduce((t, d) => t + (Number(lay(d)) || 0), 0);
 
 export default function BangChotHoaDon({
   khoi,
@@ -91,6 +78,21 @@ export default function BangChotHoaDon({
   goiYSo,
   cao = "max-h-[600px]",
 }: Props) {
+  /*
+   * Mở NHIỀU tờ cùng lúc, không phải một tờ tại một lúc.
+   *
+   * Việc thường làm là đối chiếu hai tờ với nhau; mở tờ này mà tờ kia tự đóng
+   * thì phải nhớ số trong đầu rồi bấm qua bấm lại.
+   */
+  const [dangMo, setDangMo] = useState<Set<string>>(new Set());
+  const bat = (k: string) =>
+    setDangMo((cu) => {
+      const m = new Set(cu);
+      if (m.has(k)) m.delete(k);
+      else m.add(k);
+      return m;
+    });
+
   if (khoi.length === 0) {
     return (
       <p className="px-4 py-10 text-center text-[13px] font-bold text-slate-400">
@@ -101,144 +103,203 @@ export default function BangChotHoaDon({
 
   return (
     <div className={cn("overflow-auto", cao)}>
-      <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[1180px]">
+      <table className="w-full text-left text-[13px] font-bold text-slate-600 min-w-[860px]">
         <thead className="bg-slate-50 sticky top-0 z-10">
-          {/* Hai khối giá tô hai màu như trong tệp: hai bộ cột Đơn giá /
-              Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng chỉ lệch
-              vài phần trăm nên đọc nhầm cũng không lộ ra. */}
           <tr>
-            <th className={TH} colSpan={9} />
-            <th
-              colSpan={4}
-              className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center border-b border-slate-200"
-            >
-              SKB - DNC
-            </th>
-            <th
-              colSpan={4}
-              className="px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center border-b border-slate-200"
-            >
-              DNC xuất BNC và ĐVTV
-            </th>
-          </tr>
-          <tr>
-            {[
-              "Số hóa đơn",
-              "Ngày HĐ",
-              "Ngày giao",
-              "Đơn vị",
-              "Mã BP",
-              "Mã vật tư",
-              "Tên hàng hóa",
-              "ĐVT",
-              "Số lượng",
-              "Đơn giá",
-              "Thành tiền",
-              "VAT",
-              "Sau thuế",
-              "Đơn giá",
-              "Thành tiền",
-              "VAT",
-              "Sau thuế",
-            ].map((h, i) => (
-              <th key={`${h}-${i}`} className={TH}>
-                {h}
-              </th>
-            ))}
+            <th className={TH} />
+            <th className={TH}>Số hóa đơn</th>
+            <th className={TH}>Ngày HĐ</th>
+            <th className={TH}>Ngày giao</th>
+            <th className={TH}>Đơn vị</th>
+            <th className={cn(TH, "text-right")}>Sau thuế SKB → DNC</th>
+            <th className={cn(TH, "text-right")}>Sau thuế DNC → ĐVTV</th>
           </tr>
         </thead>
         <tbody>
-          {khoi.map((k) =>
-            k.dong.map((r, i) => (
+          {khoi.map((k) => {
+            const dau = k.dong[0];
+            const mo = dangMo.has(k.khoa);
+            return [
               <tr
-                key={`${k.khoa}-${r.stt}-${i}`}
+                key={k.khoa}
                 className={cn(
-                  "border-t border-slate-100",
-                  i === 0 && "border-t-2 border-slate-200",
+                  "border-t border-slate-100 hover:bg-slate-50/70 transition-colors",
+                  mo && "bg-slate-50",
                 )}
               >
-                {/*
-                  SỐ HÓA ĐƠN VÀ NGÀY GỘP Ô THEO TỜ HÓA ĐƠN.
-                  Trong Excel chúng lặp trên từng dòng vì Excel không có cách
-                  nào khác. Trên màn hình, một số lặp chín lần chỉ tốn chỗ và
-                  làm người đọc tưởng là chín số khác nhau.
-                */}
-                {i === 0 && (
-                  <>
-                    <td
-                      rowSpan={k.dong.length}
-                      className="px-2 py-2 align-top border-r border-slate-100 bg-slate-50/50"
-                    >
-                      {onSua ? (
-                        <input
-                          value={k.soHoaDon}
-                          onChange={(e) =>
-                            onSua(k.khoa, "soHoaDon", e.target.value)
-                          }
-                          placeholder={goiYSo?.(k.khoa) || ""}
-                          className={cn(
-                            "w-40 px-2 py-2 rounded-lg border bg-white text-[13px] font-black font-mono outline-none focus:border-primary",
-                            k.soHoaDon.trim()
-                              ? "border-slate-200"
-                              : "border-amber-300 placeholder:text-amber-400",
-                          )}
-                        />
-                      ) : (
-                        <span className="font-mono font-black text-[13px] text-slate-900">
-                          {k.soHoaDon || "—"}
-                        </span>
+                <td className="pl-3 pr-1 py-2 w-9">
+                  <button
+                    onClick={() => bat(k.khoa)}
+                    title={mo ? "Thu lại" : "Xem chi tiết hàng hóa"}
+                    className="p-1 rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-200/70 transition-colors"
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "w-4 h-4 transition-transform",
+                        mo && "rotate-90",
                       )}
-                    </td>
-                    <td
-                      rowSpan={k.dong.length}
-                      className="px-2 py-2 align-top border-r border-slate-100 bg-slate-50/50"
-                    >
-                      {onSua ? (
-                        <ONgay
-                          value={k.ngayHoaDon}
-                          onChange={(v: string) =>
-                            onSua(k.khoa, "ngayHoaDon", v)
-                          }
-                          className="px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
-                        />
-                      ) : (
-                        <span className="font-mono text-[13px] text-slate-700">
-                          {k.ngayHoaDon ? ngayVn(k.ngayHoaDon) : "—"}
-                        </span>
+                    />
+                  </button>
+                </td>
+
+                <td className="px-3 py-2">
+                  {onSua ? (
+                    <input
+                      value={k.soHoaDon}
+                      onChange={(e) =>
+                        onSua(k.khoa, "soHoaDon", e.target.value)
+                      }
+                      placeholder={goiYSo?.(k.khoa) || ""}
+                      className={cn(
+                        "w-44 px-2.5 py-2 rounded-lg border bg-white text-[13px] font-black font-mono outline-none focus:border-primary",
+                        k.soHoaDon.trim()
+                          ? "border-slate-200"
+                          : "border-amber-300 placeholder:text-amber-400",
                       )}
-                    </td>
-                  </>
-                )}
-                <td className={TD}>{r.ngayGiaoBia}</td>
-                <td className={TD}>{r.donVi}</td>
-                <td className="px-2 py-2 font-mono text-slate-400 whitespace-nowrap">
-                  {r.maBp}
+                    />
+                  ) : (
+                    <span className="font-mono font-black text-slate-900">
+                      {k.soHoaDon || "—"}
+                    </span>
+                  )}
                 </td>
-                <td className="px-2 py-2 font-mono text-slate-400 whitespace-nowrap">
-                  {r.maVatTu}
+
+                <td className="px-3 py-2">
+                  {onSua ? (
+                    <ONgay
+                      value={k.ngayHoaDon}
+                      onChange={(v: string) => onSua(k.khoa, "ngayHoaDon", v)}
+                      className="px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary"
+                    />
+                  ) : (
+                    <span className="font-mono text-slate-700">
+                      {k.ngayHoaDon ? ngayVn(k.ngayHoaDon) : "—"}
+                    </span>
+                  )}
                 </td>
-                {/* Cột duy nhất được xuống dòng: tên bia dài, mà bắt nó một
-                    dòng thì cả bảng phải nới theo nó. */}
-                <td className="px-2 py-2 text-slate-900 min-w-[150px]">
-                  {r.tenHangHoa}
+
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {dau?.ngayGiaoBia || "—"}
                 </td>
-                <td className={TD}>{r.dvt}</td>
-                <td className={TDS}>{formatNumber(r.soLuong)}</td>
-                <td className={TDS}>{tien(r.donGiaSkb)}</td>
-                <td className={TDS}>{tien(r.thanhTienSkb)}</td>
-                <td className={TDS}>{tien(r.vatSkb)}</td>
-                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
-                  {tien(r.sauThueSkb)}
+                <td className="px-3 py-2 text-slate-900 whitespace-nowrap">
+                  {dau?.donVi || "—"}
+                  {/* Mã BP đi kèm tên đơn vị chứ không thành một cột riêng:
+                      nó là mã CỦA đơn vị đó, tách ra chỉ tốn thêm một cột. */}
+                  <span className="ml-1.5 font-mono text-[11px] font-bold text-slate-400">
+                    {dau?.maBp}
+                  </span>
                 </td>
-                <td className={TDS}>{tien(r.donGiaDnc)}</td>
-                <td className={TDS}>{tien(r.thanhTienDnc)}</td>
-                <td className={TDS}>{tien(r.vatDnc)}</td>
-                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
-                  {tien(r.sauThueDnc)}
+
+                <td className="px-3 py-2 text-right tabular-nums font-black text-slate-900 whitespace-nowrap">
+                  {tien(cong(k.dong, (d) => d.sauThueSkb))}
                 </td>
-              </tr>
-            )),
-          )}
+                <td className="px-3 py-2 text-right tabular-nums font-black text-slate-900 whitespace-nowrap">
+                  {tien(cong(k.dong, (d) => d.sauThueDnc))}
+                </td>
+              </tr>,
+
+              mo && (
+                <tr key={`${k.khoa}-ct`} className="bg-slate-50/60">
+                  <td />
+                  <td colSpan={6} className="px-3 pb-3">
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
+                      <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[900px]">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className={THP} colSpan={4} />
+                            <th
+                              colSpan={4}
+                              className="px-2 py-2 text-[9px] font-black uppercase tracking-wide text-white bg-[#1F4E5F] text-center"
+                            >
+                              SKB - DNC
+                            </th>
+                            <th
+                              colSpan={4}
+                              className="px-2 py-2 text-[9px] font-black uppercase tracking-wide text-white bg-[#6B4E71] text-center"
+                            >
+                              DNC xuất BNC và ĐVTV
+                            </th>
+                          </tr>
+                          <tr>
+                            {[
+                              "Mã vật tư",
+                              "Tên hàng hóa",
+                              "ĐVT",
+                              "Số lượng",
+                              "Đơn giá",
+                              "Thành tiền",
+                              "VAT",
+                              "Sau thuế",
+                              "Đơn giá",
+                              "Thành tiền",
+                              "VAT",
+                              "Sau thuế",
+                            ].map((h, i) => (
+                              <th
+                                key={`${h}-${i}`}
+                                className={cn(
+                                  THP,
+                                  "border-b border-slate-200",
+                                  i >= 3 && "text-right",
+                                )}
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {k.dong.map((r, i) => (
+                            <tr
+                              key={`${k.khoa}-${r.stt}-${i}`}
+                              className="border-t border-slate-100"
+                            >
+                              <td className="px-2 py-2 font-mono text-slate-400 whitespace-nowrap">
+                                {r.maVatTu}
+                              </td>
+                              <td className="px-2 py-2 text-slate-900 min-w-[160px]">
+                                {r.tenHangHoa}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">
+                                {r.dvt}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {formatNumber(r.soLuong)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.donGiaSkb)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.thanhTienSkb)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.vatSkb)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
+                                {tien(r.sauThueSkb)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.donGiaDnc)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.thanhTienDnc)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">
+                                {tien(r.vatDnc)}
+                              </td>
+                              <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
+                                {tien(r.sauThueDnc)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              ),
+            ];
+          })}
         </tbody>
       </table>
     </div>

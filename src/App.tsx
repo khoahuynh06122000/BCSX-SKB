@@ -6836,18 +6836,15 @@ export default function App() {
             2000px đọc rất mỏi mắt, và phần lớn màn hình trong app là chữ với
             bảng vài cột.
 
-            RIÊNG CÔNG NỢ · HÓA ĐƠN thì bỏ chặn. Bảng Chốt là thứ rộng nhất
-            app — 17 cột, tối thiểu 1420px — cộng thêm đệm của thẻ và của khung
-            là vượt 1600, nên nó phải kéo ngang trong khi hai bên màn hình vẫn
-            còn hai dải trắng. Ở đây không có đoạn văn dài nào để mà mỏi mắt,
-            toàn số xếp cột; dùng hết bề ngang là đúng.
+            CÔNG NỢ · HÓA ĐƠN từng được bỏ chặn vì Bảng Chốt khi đó bày thẳng
+            17 cột và không vừa. Nay bảng ấy gọn còn sáu cột (chi tiết bung ra
+            khi bấm), rộng chừng 860px — trải nó ra 1600px chỉ làm sáu cột nằm
+            cách nhau cả gang tay, mắt phải lần theo dòng kẻ mới ghép được số
+            với tên. Nên chặn lại như mọi phân hệ khác.
           */}
           <div
             key={activeTab}
-            className={cn(
-              "mx-auto space-y-4 sm:space-y-8 pb-24",
-              activeTab === "debt" ? "max-w-none" : "max-w-[1600px]",
-            )}
+            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24"
           >
             {/*
               MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
