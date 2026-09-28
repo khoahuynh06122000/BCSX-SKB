@@ -88,9 +88,22 @@ export default function DonBNC({ transactions, products, partners }: Props) {
    * hai điểm bán với nhau, mở cái này mà cái kia tự đóng thì phải nhớ số trong
    * đầu rồi bấm qua bấm lại.
    */
-  /** Lọc riêng của bảng Theo bộ phận: một ngày giao, một tên bia. */
-  const [locNgay, setLocNgay] = useState("");
-  const [locBia, setLocBia] = useState("");
+  /**
+   * Lọc chi tiết RIÊNG CHO TỪNG ĐIỂM BÁN đang mở, tra theo mã bộ phận.
+   *
+   * Không dùng một bộ lọc chung cho cả bảng: mở hai điểm bán cùng lúc để so
+   * với nhau là việc thường làm, mà bộ lọc chung thì soi được một bên là bên
+   * kia đổi theo — không so được nữa.
+   */
+  const [locChiTiet, setLocChiTiet] = useState<
+    Record<string, { ngay: string; bia: string }>
+  >({});
+  const locCua = (id: string) => locChiTiet[id] ?? { ngay: "", bia: "" };
+  const datLoc = (id: string, truong: "ngay" | "bia", giaTri: string) =>
+    setLocChiTiet((cu) => ({
+      ...cu,
+      [id]: { ...(cu[id] ?? { ngay: "", bia: "" }), [truong]: giaTri },
+    }));
 
   const [boPhanMo, setBoPhanMo] = useState<Set<string>>(new Set());
   const batBoPhan = (id: string) =>
@@ -279,53 +292,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
     XLSXDep.writeFile(wb, `Don BNC ${tuNgay} den ${denNgay}.xlsx`);
   };
 
-  const dsNgayGiao = useMemo(() => {
-    const t = new Set<string>();
-    bangGoc.theoBoPhan.forEach((o) => o.chiTiet.forEach((c) => t.add(c.ngay)));
-    return Array.from(t).sort((a, b) => b.localeCompare(a));
-  }, [bangGoc]);
-
-  const dsTenBia = useMemo(() => {
-    const t = new Set<string>();
-    bangGoc.theoBoPhan.forEach((o) =>
-      o.chiTiet.forEach((c) => t.add(c.tenHang)),
-    );
-    return Array.from(t).sort((a, b) => a.localeCompare(b));
-  }, [bangGoc]);
-
-  /**
-   * Bảng đã áp hai bộ lọc riêng của khối này.
-   *
-   * TỔNG LÍT VÀ LON TÍNH LẠI TỪ PHẦN CÒN LẠI, không giữ tổng cũ. Lọc "Bia
-   * Helios" mà cột Bia lít vẫn là tổng của cả bảy loại thì con số ấy nói dối
-   * ngay giữa màn hình.
-   *
-   * Bộ phận không còn dòng nào thì rời khỏi bảng — giữ lại một dòng toàn số 0
-   * chỉ làm dài bảng mà không nói thêm gì.
-   */
-  const bang = useMemo(() => {
-    if (!locNgay && !locBia) return bangGoc;
-    const theoBoPhan = bangGoc.theoBoPhan
-      .map((o) => {
-        const chiTiet = o.chiTiet.filter(
-          (c) =>
-            (!locNgay || c.ngay === locNgay) &&
-            (!locBia || c.tenHang === locBia),
-        );
-        return {
-          ...o,
-          chiTiet,
-          soLuongLit: chiTiet
-            .filter((c) => c.dvt !== "Lon")
-            .reduce((t, c) => t + c.soLuong, 0),
-          soLuongLon: chiTiet
-            .filter((c) => c.dvt === "Lon")
-            .reduce((t, c) => t + c.soLuong, 0),
-        };
-      })
-      .filter((o) => o.chiTiet.length > 0);
-    return { ...bangGoc, theoBoPhan };
-  }, [bangGoc, locNgay, locBia]);
+  const bang = bangGoc;
 
   const so = (n: number) => formatNumber(Math.round(n * 10) / 10);
 
@@ -610,66 +577,10 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
 
       {/* ----- Theo bộ phận ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-2">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-              Theo bộ phận · xếp theo sản lượng
-            </p>
-            {(locNgay || locBia) && (
-              <button
-                onClick={() => {
-                  setLocNgay("");
-                  setLocBia("");
-                }}
-                className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
-              >
-                Bỏ lọc
-              </button>
-            )}
-          </div>
-
-          {/*
-            HAI Ô LỌC RIÊNG CỦA KHỐI NÀY, tách khỏi bộ lọc ngày ở đầu màn hình.
-            Ô trên khoanh KHOẢNG ngày cho cả trang; hai ô này soi MỘT ngày giao
-            hoặc MỘT loại bia bên trong khoảng đó — "hôm 24/09 những quán nào
-            nhận Bia Helios".
-          */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <label className="block">
-              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                Ngày giao
-              </span>
-              <select
-                value={locNgay}
-                onChange={(e) => setLocNgay(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
-              >
-                <option value="">Tất cả {dsNgayGiao.length} ngày</option>
-                {dsNgayGiao.map((n) => (
-                  <option key={n} value={n}>
-                    {ngayVn(n)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                Tên bia
-              </span>
-              <select
-                value={locBia}
-                onChange={(e) => setLocBia(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
-              >
-                <option value="">Tất cả {dsTenBia.length} loại bia</option>
-                {dsTenBia.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            Theo bộ phận · xếp theo sản lượng
+          </p>
         </div>
         {bang.theoBoPhan.length === 0 ? (
           <p className="py-10 text-center text-xs font-bold text-slate-400">
@@ -739,63 +650,175 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                       </td>
                     </tr>,
 
-                    mo && (
-                      <tr key={`${o.partnerId}-ct`} className="bg-slate-50/60">
-                        <td />
-                        <td colSpan={3} className="px-3 pb-3">
-                          {o.chiTiet.length === 0 ? (
-                            <p className="py-3 text-[12px] font-bold text-slate-400">
-                              Không có lần nhận nào trong khoảng ngày này.
-                            </p>
-                          ) : (
-                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                              <table className="w-full text-left text-[12px] font-bold text-slate-600">
-                                <thead className="bg-slate-50">
-                                  <tr>
-                                    {["Ngày giao", "Tên bia", "Số lượng"].map(
-                                      (h, i) => (
-                                        <th
-                                          key={h}
-                                          className={cn(
-                                            "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
-                                            i === 2 && "text-right",
-                                          )}
-                                        >
-                                          {h}
-                                        </th>
-                                      ),
+                    mo &&
+                      (() => {
+                        /*
+                          BỘ LỌC NẰM TRONG CHI TIẾT CỦA TỪNG ĐIỂM BÁN.
+
+                          Mỗi điểm bán một bộ lọc riêng: mở hai điểm bán cùng
+                          lúc để so với nhau là việc thường làm, mà một bộ lọc
+                          dùng chung thì soi được một bên là bên kia đổi theo.
+
+                          Danh sách chọn dựng từ chính chi tiết của điểm bán
+                          này — bày một loại bia nó chưa hề nhận thì chọn vào là
+                          ra bảng trống.
+                        */
+                        const l = locCua(o.partnerId);
+                        const dsNgay = Array.from(
+                          new Set(o.chiTiet.map((c) => c.ngay)),
+                        ).sort((a, b) => b.localeCompare(a));
+                        const dsBia = Array.from(
+                          new Set(o.chiTiet.map((c) => c.tenHang)),
+                        ).sort((a, b) => a.localeCompare(b));
+                        const ds = o.chiTiet.filter(
+                          (c) =>
+                            (!l.ngay || c.ngay === l.ngay) &&
+                            (!l.bia || c.tenHang === l.bia),
+                        );
+
+                        return (
+                          <tr
+                            key={`${o.partnerId}-ct`}
+                            className="bg-slate-50/60"
+                          >
+                            <td />
+                            <td colSpan={3} className="px-3 pb-3">
+                              {o.chiTiet.length === 0 ? (
+                                <p className="py-3 text-[12px] font-bold text-slate-400">
+                                  Không có lần nhận nào trong khoảng ngày này.
+                                </p>
+                              ) : (
+                                <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                                  <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                                    <label className="block">
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                        Ngày giao
+                                      </span>
+                                      <select
+                                        value={l.ngay}
+                                        onChange={(e) =>
+                                          datLoc(
+                                            o.partnerId,
+                                            "ngay",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="w-full mt-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+                                      >
+                                        <option value="">
+                                          Tất cả {dsNgay.length} ngày
+                                        </option>
+                                        {dsNgay.map((n) => (
+                                          <option key={n} value={n}>
+                                            {ngayVn(n)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label className="block">
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                        Tên bia
+                                      </span>
+                                      <select
+                                        value={l.bia}
+                                        onChange={(e) =>
+                                          datLoc(
+                                            o.partnerId,
+                                            "bia",
+                                            e.target.value,
+                                          )
+                                        }
+                                        className="w-full mt-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+                                      >
+                                        <option value="">
+                                          Tất cả {dsBia.length} loại bia
+                                        </option>
+                                        {dsBia.map((t) => (
+                                          <option key={t} value={t}>
+                                            {t}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    {(l.ngay || l.bia) && (
+                                      <button
+                                        onClick={() =>
+                                          setLocChiTiet((cu) => ({
+                                            ...cu,
+                                            [o.partnerId]: {
+                                              ngay: "",
+                                              bia: "",
+                                            },
+                                          }))
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                                      >
+                                        Bỏ lọc
+                                      </button>
                                     )}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {o.chiTiet.map((c, i) => (
-                                    <tr
-                                      key={`${c.ngay}-${c.tenHang}-${i}`}
-                                      className="border-t border-slate-100"
-                                    >
-                                      <td className="px-3 py-2 font-mono whitespace-nowrap">
-                                        {ngayVn(c.ngay)}
-                                      </td>
-                                      <td className="px-3 py-2 text-slate-900">
-                                        {c.tenHang}
-                                      </td>
-                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
-                                        {c.dvt === "Lon"
-                                          ? formatNumber(c.soLuong)
-                                          : so(c.soLuong)}{" "}
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">
-                                          {c.dvt}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ),
+                                  </div>
+
+                                  {ds.length === 0 ? (
+                                    <p className="py-6 text-center text-[12px] font-bold text-slate-400">
+                                      Không có lần nhận nào khớp bộ lọc.
+                                    </p>
+                                  ) : (
+                                    <table className="w-full text-left text-[12px] font-bold text-slate-600">
+                                      <thead className="bg-slate-50">
+                                        <tr>
+                                          {[
+                                            "Ngày giao",
+                                            "Tên bia",
+                                            "Số lượng",
+                                            "Đơn vị tính",
+                                          ].map((h, i) => (
+                                            <th
+                                              key={h}
+                                              className={cn(
+                                                "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
+                                                i === 2 && "text-right",
+                                              )}
+                                            >
+                                              {h}
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {ds.map((c, i) => (
+                                          <tr
+                                            key={`${c.ngay}-${c.tenHang}-${i}`}
+                                            className="border-t border-slate-100"
+                                          >
+                                            <td className="px-3 py-2 font-mono whitespace-nowrap">
+                                              {ngayVn(c.ngay)}
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-900">
+                                              {c.tenHang}
+                                            </td>
+                                            {/* Số đứng một mình trong ô của nó,
+                                                đơn vị sang cột riêng — số nào
+                                                cũng kết thúc ở cùng một mép thì
+                                                đọc cột dọc mới nhanh. */}
+                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
+                                              {c.dvt === "Lon"
+                                                ? formatNumber(c.soLuong)
+                                                : so(c.soLuong)}
+                                            </td>
+                                            <td className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                                              {c.dvt}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })(),
                   ];
                 })}
               </tbody>
