@@ -390,10 +390,11 @@ eq(
 // ============================================ chi tiet tung bo phan
 
 /*
- * CHI TIET GOM THEO (NGAY x MAT HANG), khong de nguyen tung giao dich.
+ * CHI TIET GIU NGUYEN TUNG GIAO DICH, khong gop dong cung ngay cung mat hang.
  *
- * Mot lan giao co the tach lam may dong trong so — nguoi xem chi can biet hom
- * ay diem ban nhan bao nhieu lit cua loai nao.
+ * Mot diem ban co the nhan HAI CHUYEN trong cung mot ngay — NH 1901 ngay 12.09
+ * nhan 61,8 lit roi 123,6 lit, hai bien ban rieng, hai lan ky rieng. Gop lai
+ * thanh mot dong 185,4 thi doi chieu voi tap bien ban giay khong ra.
  */
 {
   const ds = [
@@ -418,14 +419,26 @@ eq(
   });
   const o = kq.theoBoPhan.find((x) => x.partnerId === "AD0103-1901")!;
 
-  eq("hai dong chi tiet", o.chiTiet.length, 2);
+  eq("ba dong chi tiet, khong gop", o.chiTiet.length, 3);
   // Moi nhat truoc.
   eq("moi nhat truoc", o.chiTiet[0].ngay, "2026-08-22");
   eq("dong lon dung don vi", o.chiTiet[0].dvt, "Lon");
   eq("dong lon dung so luong", o.chiTiet[0].soLuong, 24);
-  // Hai lan giao cung ngay cung loai thi cong lai.
-  eq("cung ngay cung loai thi cong lai", o.chiTiet[1].soLuong, 100);
-  eq("dong hoi dung don vi", o.chiTiet[1].dvt, "Lít");
+
+  /*
+   * VE QUAN TRONG: HAI CHUYEN CUNG NGAY VAN LA HAI DONG.
+   *
+   * Gop lai thanh mot dong 100 thi khong ai biet hom ay xe chay hai lan, va
+   * doi chieu voi hai to bien ban giay khong ra.
+   */
+  const cungNgay = o.chiTiet.filter((c) => c.ngay === "2026-08-21");
+  eq("hai chuyen cung ngay van la hai dong", cungNgay.length, 2);
+  eq(
+    "tong hai chuyen van du",
+    cungNgay.reduce((t, c) => t + c.soLuong, 0),
+    100,
+  );
+  eq("dong hoi dung don vi", cungNgay[0].dvt, "Lít");
 }
 
 /*

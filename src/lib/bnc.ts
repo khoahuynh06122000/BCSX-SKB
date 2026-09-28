@@ -70,9 +70,12 @@ export interface DonBNC {
 /**
  * Một dòng chi tiết của bộ phận: ngày nào, bia gì, bao nhiêu.
  *
- * Gom theo (ngày × mặt hàng) chứ không để nguyên từng giao dịch: một lần giao
- * có thể tách làm mấy dòng trong sổ, mà người xem chỉ cần biết hôm ấy điểm bán
- * nhận bao nhiêu lít của loại nào.
+ * GIỮ NGUYÊN TỪNG GIAO DỊCH, không gộp các dòng cùng ngày cùng mặt hàng.
+ *
+ * Một điểm bán có thể nhận HAI CHUYẾN trong cùng một ngày — NH 1901 ngày 12.09
+ * nhận 61,8 lít rồi 123,6 lít, hai biên bản riêng, hai lần ký riêng. Gộp lại
+ * thành một dòng 185,4 thì đối chiếu với tập biên bản giấy không ra, mà nhìn
+ * bảng cũng không biết hôm ấy xe chạy mấy lần.
  */
 export interface DongChiTietBoPhan {
   /** yyyy-MM-dd */
@@ -96,7 +99,7 @@ export interface TongBoPhan {
   lanCuoi: string;
   /** Đơn còn đang đi đường, chưa có biên bản. */
   donChuaXong: number;
-  /** Từng dòng bia đã nhận, mới nhất trước. */
+  /** Từng lần nhận, mỗi giao dịch một dòng, mới nhất trước. */
   chiTiet: DongChiTietBoPhan[];
 }
 
@@ -281,28 +284,27 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
    * BỎ HAO HỤT khỏi chi tiết: đây là bảng "điểm bán đã nhận bao nhiêu", mà hao
    * hụt là phần mình chịu, không giao tới ai.
    */
-  const gomChiTiet = new Map<string, Map<string, DongChiTietBoPhan>>();
+  const gomChiTiet = new Map<string, DongChiTietBoPhan[]>();
   cua.forEach((t) => {
     if (t.type !== "OUT") return;
     const sp = sanPham.get(t.productId);
-    const ten = sp?.name || t.productName || t.productId;
-    const dvt = (sp?.category ?? t.category) === "Lon" ? "Lon" : "Lít";
-    const ngay = ngayCua(t.date);
-    const khoa = `${ngay}|${ten}`;
-    let m = gomChiTiet.get(t.partnerId);
-    if (!m) {
-      m = new Map();
-      gomChiTiet.set(t.partnerId, m);
-    }
-    const cu = m.get(khoa);
-    if (cu) cu.soLuong += Number(t.quantity) || 0;
-    else m.set(khoa, { ngay, tenHang: ten, dvt, soLuong: Number(t.quantity) || 0 });
+    const ds = gomChiTiet.get(t.partnerId) ?? [];
+    ds.push({
+      ngay: ngayCua(t.date),
+      tenHang: sp?.name || t.productName || t.productId,
+      dvt: (sp?.category ?? t.category) === "Lon" ? "Lon" : "Lít",
+      soLuong: Number(t.quantity) || 0,
+    });
+    gomChiTiet.set(t.partnerId, ds);
   });
 
   theo.forEach((o, pid) => {
-    o.chiTiet = Array.from(gomChiTiet.get(pid)?.values() ?? []).sort(
-      (a, b) => b.ngay.localeCompare(a.ngay) || a.tenHang.localeCompare(b.tenHang),
-    );
+    o.chiTiet = (gomChiTiet.get(pid) ?? [])
+      .slice()
+      .sort(
+        (a, b) =>
+          b.ngay.localeCompare(a.ngay) || a.tenHang.localeCompare(b.tenHang),
+      );
   });
 
   const theoBoPhan = Array.from(theo.values()).sort(
