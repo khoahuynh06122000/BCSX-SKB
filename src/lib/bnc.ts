@@ -31,6 +31,7 @@ import {
   NHOM_BNC,
   type MaNhomBNC,
 } from "./nhomBNC";
+import { diaDiemTuGhiChu } from "./ghiChu";
 
 // Định nghĩa nhóm và cách nhận ra bộ phận của BNC nằm ở `nhomBNC.ts` — một nơi
 // duy nhất, để ô chọn khi lập đơn và báo cáo này không bao giờ chia khác nhau.
@@ -80,6 +81,14 @@ export interface DonBNC {
 export interface DongChiTietBoPhan {
   /** yyyy-MM-dd */
   ngay: string;
+  /**
+   * Điểm nhận thật, đọc từ ghi chú (VMT, Draff Bia...).
+   *
+   * Rỗng khi ghi chú không mang điểm nhận — dòng điền tay chẳng hạn. Với Nội
+   * bộ thì không cần vì điểm bán chính là đơn vị nhận; ba phần còn lại đều dồn
+   * về MỘT đơn vị nên đây là thứ duy nhất cho biết bia đi tới đâu.
+   */
+  diaDiem: string;
   tenHang: string;
   /** "Lít" hoặc "Lon" — đơn vị của chính mặt hàng đó. */
   dvt: string;
@@ -291,6 +300,7 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
     const ds = gomChiTiet.get(t.partnerId) ?? [];
     ds.push({
       ngay: ngayCua(t.date),
+      diaDiem: diaDiemTuGhiChu(t.notes),
       tenHang: sp?.name || t.productName || t.productId,
       dvt: (sp?.category ?? t.category) === "Lon" ? "Lon" : "Lít",
       soLuong: Number(t.quantity) || 0,

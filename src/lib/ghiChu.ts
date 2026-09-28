@@ -100,3 +100,24 @@ export function chuanTen(x?: string | null): string {
     .replace(/[^a-z0-9]+/gi, "")
     .toLowerCase();
 }
+
+/**
+ * ĐỊA ĐIỂM NHẬN, đọc ra từ ghi chú.
+ *
+ * Giao dịch không có trường riêng cho điểm nhận: lúc nạp tệp BBGN nó được ghép
+ * vào ghi chú dưới dạng `Điểm nhận: VMT`. Với phần Nội bộ thì không cần —
+ * điểm bán chính là đơn vị nhận. Nhưng Ngoại giao, HTKD và Chi phí khác đều
+ * dồn về MỘT đơn vị, nên điểm nhận là thứ duy nhất cho biết bia đi tới đâu.
+ *
+ * Trả về chuỗi rỗng khi ghi chú không mang điểm nhận nào — dòng điền tay
+ * chẳng hạn. Nơi gọi hiện "—" chứ đừng đoán.
+ */
+export function diaDiemTuGhiChu(notes?: string | null): string {
+  const s = String(notes ?? "");
+  if (!s) return "";
+  for (const manh of s.split("·")) {
+    const m = /^\s*Điểm nhận:\s*(.+?)\s*$/i.exec(manh);
+    if (m && m[1]) return m[1].trim();
+  }
+  return "";
+}

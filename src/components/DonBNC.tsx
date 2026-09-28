@@ -294,6 +294,26 @@ export default function DonBNC({ transactions, products, partners }: Props) {
 
   const bang = bangGoc;
 
+  /**
+   * Mọi dòng chi tiết của thẻ đang xem, gộp từ mọi bộ phận.
+   *
+   * Dùng cho ba thẻ Ngoại giao / HTKD / Chi phí khác: mỗi thẻ ấy chỉ có ĐÚNG
+   * MỘT bộ phận, nên bảng gom theo bộ phận chỉ ra một dòng — vô nghĩa. Thứ
+   * người xem cần là bia đi tới ĐỊA ĐIỂM nào, mà địa điểm nằm trong từng dòng.
+   */
+  const chiTietCaThe = useMemo(
+    () =>
+      bang.theoBoPhan
+        .flatMap((o) => o.chiTiet)
+        .sort(
+          (a, b) =>
+            b.ngay.localeCompare(a.ngay) ||
+            a.diaDiem.localeCompare(b.diaDiem) ||
+            a.tenHang.localeCompare(b.tenHang),
+        ),
+    [bang],
+  );
+
   const so = (n: number) => formatNumber(Math.round(n * 10) / 10);
 
   /**
@@ -575,7 +595,15 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         một việc.
       */}
 
-      {/* ----- Theo bộ phận ----- */}
+      {/*
+        HAI CÁCH BÀY, TÙY THẺ.
+
+        Nội bộ có mười tám điểm bán nên gom theo bộ phận rồi bung chi tiết là
+        đúng. Ba thẻ kia mỗi thẻ đúng MỘT bộ phận — gom theo bộ phận ra một
+        dòng duy nhất, chẳng nói lên gì. Ở đó bày thẳng từng dòng, kèm cột Địa
+        điểm: bia ngoại giao gửi cho VMT hay Draff Bia mới là thứ cần biết.
+      */}
+      {nhom === "NB" ? (
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
@@ -826,6 +854,76 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           </div>
         )}
       </div>
+      ) : (
+      <div className="rounded-2xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            {tenNhomBNC(nhom)} · {chiTietCaThe.length} lần giao
+          </p>
+        </div>
+        {chiTietCaThe.length === 0 ? (
+          <p className="py-10 text-center text-xs font-bold text-slate-400">
+            Không có lần giao nào trong khoảng ngày này.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[12px] font-bold text-slate-600">
+              <thead className="bg-slate-50">
+                <tr>
+                  {[
+                    "Ngày giao",
+                    "Địa điểm",
+                    "Tên bia",
+                    "Đơn vị tính",
+                    "Số lượng",
+                  ].map((h, i) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
+                        i === 4 && "text-right",
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {chiTietCaThe.map((c, i) => (
+                  <tr
+                    key={`${c.ngay}-${c.diaDiem}-${c.tenHang}-${i}`}
+                    className="border-t border-slate-100 hover:bg-slate-50/70 transition-colors"
+                  >
+                    <td className="px-3 py-2 font-mono whitespace-nowrap">
+                      {ngayVn(c.ngay)}
+                    </td>
+                    {/*
+                      Địa điểm trống nghĩa là ghi chú không mang điểm nhận —
+                      dòng điền tay chẳng hạn. Hiện "—" chứ không đoán.
+                    */}
+                    <td className="px-3 py-2 text-slate-900 whitespace-nowrap">
+                      {c.diaDiem || (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-slate-900">{c.tenHang}</td>
+                    <td className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                      {c.dvt}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900 font-black">
+                      {c.dvt === "Lon"
+                        ? formatNumber(c.soLuong)
+                        : so(c.soLuong)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      )}
 
       {/*
         BẢNG "TỪNG ĐƠN" ĐÃ BỎ (28/09/2026), theo yêu cầu của Khoa.
