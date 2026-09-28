@@ -314,10 +314,32 @@ service cloud.firestore {
      * no. KHONG CHO XOA: mot so hoa don da phat hanh la chung tu da len co
      * quan thue: dien nham thi sua lai, khong xoa dau vet.
      */
+    /*
+     * HOA DON DA GHI SO.
+     *
+     * XOA: CHI CHU SO HUU, va do la mot noi long co chu dich (28/09/2026).
+     *
+     * Truoc day cam tiet (`if false`) vi to hoa don da phat hanh la chung tu
+     * da len co quan thue — xoa la mat dau vet. Nhung dong chi tiet cua hoa
+     * don KHONG duoc luu: chung dung lai tu giao dich xuat kho. Nen khi du
+     * lieu xuat kho bi xoa (nap nham roi don lai chang han), ban ghi hoa don
+     * nam lai vinh vien, tra cuu bao "khong dung lai duoc dong nao", va khong
+     * co duong nao don — ke ca khi do chi la so thu nghiem.
+     *
+     * Chi mo cho CHU SO HUU, khong mo cho ke toan: ke toan van tao va sua
+     * duoc so hoa don (viec hang ngay), con xoa la viec hiem va nang, phai
+     * dung mot nguoi chiu trach nhiem.
+     *
+     * Giao dien chi bay nut xoa o dung nhung hoa don MO COI — xem
+     * TraCuuHoaDon.tsx. Nhung luat nay khong phan biet duoc dieu do, nen no
+     * rong hon giao dien mot chut: chu so huu mo DevTools van xoa duoc mot hoa
+     * don con nguyen dong hang. Do la danh doi co y — viet luat chat hon doi
+     * hoi doc ca bang giao dich trong rule, thu Firestore khong lam duoc.
+     */
     match /hoa_don/{key} {
       allow read: if isApproved();
       allow create, update: if isAccountant();
-      allow delete: if false;
+      allow delete: if isOwner();
     }
 
     match /partners/{partnerId} {

@@ -2698,6 +2698,40 @@ export default function App() {
     }
   };
 
+  /**
+   * XOÁ MỘT BẢN GHI HÓA ĐƠN — chỉ dùng cho hóa đơn mồ côi.
+   *
+   * "Mồ côi" là hóa đơn đã ghi số mà không còn giao dịch xuất kho nào bên dưới
+   * để dựng lại dòng hàng. Xảy ra khi dữ liệu xuất kho bị xoá sau lúc ghi số.
+   *
+   * Hộp thoại CỐ Ý dài và nhắc thẳng hậu quả: nếu tờ hóa đơn này đã phát hành
+   * thật thì xoá bản ghi là mất dấu vết duy nhất app còn giữ về nó, mà cơ quan
+   * thuế thì vẫn có. Đường đúng trong trường hợp ấy là nạp lại dữ liệu xuất
+   * kho của kỳ đó, không phải xoá.
+   */
+  const handleXoaHoaDon = async (h: HoaDonGhiNhan) => {
+    if (!isOwner) {
+      alert("Chỉ chủ sở hữu mới xoá được bản ghi hóa đơn ạ!");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Xoá bản ghi hóa đơn ${h.soHoaDon} (${h.donVi})?\n\n` +
+          `CHỈ XOÁ KHI ĐÂY LÀ SỐ THỬ NGHIỆM. Nếu tờ hóa đơn này đã phát hành ` +
+          `thật thì cơ quan thuế vẫn có nó, còn app thì mất dấu vết duy nhất — ` +
+          `lúc đó đường đúng là nạp lại dữ liệu xuất kho của kỳ đó để dòng hàng ` +
+          `nối lại, không phải xoá.\n\nKhông khôi phục lại được.`,
+      )
+    )
+      return;
+    try {
+      await deleteDoc(doc(db, "hoa_don", h.id));
+      showNotification(`Đã xoá bản ghi hóa đơn ${h.soHoaDon}`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "hoa_don"));
+    }
+  };
+
   /* ---------------- Phieu nhap kho ---------------- */
 
   /** Danh dau phieu da duoc in (de biet phieu nao dang cho ky). */
@@ -10593,6 +10627,9 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                         products={products}
                         partners={donVi}
                         hoaDon={hoaDon}
+                        /* Nút xoá chỉ hiện với chủ sở hữu, và chỉ ở những hóa
+                           đơn mồ côi. */
+                        onXoaMoCoi={isOwner ? handleXoaHoaDon : undefined}
                       />
                     )}
                   </div>

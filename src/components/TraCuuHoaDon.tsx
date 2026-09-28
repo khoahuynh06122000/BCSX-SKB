@@ -6,6 +6,7 @@ import {
   FileSearch,
   Receipt,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -48,9 +49,16 @@ interface Props {
   products: Product[];
   partners: Partner[];
   hoaDon: HoaDonGhiNhan[];
+  /**
+   * Xoá một bản ghi hóa đơn MỒ CÔI. Không truyền thì không hiện nút xoá.
+   *
+   * Chỉ chủ sở hữu mới được truyền vào — xem `handleXoaHoaDon` ở `App.tsx`.
+   */
+  onXoaMoCoi?: (h: HoaDonGhiNhan) => void;
 }
 
 export default function TraCuuHoaDon({
+  onXoaMoCoi,
   transactions,
   products,
   partners,
@@ -237,12 +245,33 @@ export default function TraCuuHoaDon({
                 {kq.thieuDong.map((h) => (
                   <span
                     key={h.id}
-                    className="px-2 py-1 bg-white border border-amber-200 rounded-lg text-[12px] font-black font-mono text-amber-900"
+                    className="pl-2 pr-1 py-1 bg-white border border-amber-200 rounded-lg text-[12px] font-black font-mono text-amber-900 inline-flex items-center gap-1.5"
                   >
                     {h.soHoaDon} · {h.donVi} · {ngayVietNam(h.ngayHoaDon)}
+                    {/*
+                      Nút xoá CHỈ hiện ở đây — tức là chỉ ở hóa đơn mồ côi, và
+                      chỉ với chủ sở hữu. Hóa đơn còn dựng được dòng hàng thì
+                      không có đường nào xoá trên giao diện.
+                    */}
+                    {onXoaMoCoi && (
+                      <button
+                        onClick={() => onXoaMoCoi(h)}
+                        title="Xoá bản ghi hóa đơn mồ côi này"
+                        className="p-1 rounded text-amber-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </span>
                 ))}
               </div>
+              {onXoaMoCoi && (
+                <p className="text-[12px] font-bold text-amber-700/80 mt-2 leading-snug">
+                  Chỉ xoá khi chắc đây là số thử nghiệm. Hóa đơn đã phát hành
+                  thật thì nạp lại dữ liệu xuất kho của kỳ đó để dòng hàng nối
+                  lại — đừng xoá.
+                </p>
+              )}
             </div>
           </div>
         </div>
