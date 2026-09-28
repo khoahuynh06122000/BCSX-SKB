@@ -4,14 +4,11 @@ import {
   Download,
   Truck,
   AlertTriangle,
-  CheckCircle2,
   ChevronRight,
-  Image as ImageIcon,
-  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Partner, Product, Transaction } from "../types";
-import { dungBangBNC, laBoPhanBNC, type DonBNC as DonBNCType } from "../lib/bnc";
+import { dungBangBNC, laBoPhanBNC } from "../lib/bnc";
 import {
   nhomCuaBoPhan,
   NHOM_BNC,
@@ -85,7 +82,6 @@ export default function DonBNC({ transactions, products, partners }: Props) {
    */
   const [nhom, setNhom] = useState<MaNhomBNC>("NB");
   /** Đơn đang mở khung xem ảnh biên bản; `null` là đang đóng. */
-  const [donDangXem, setDonDangXem] = useState<DonBNCType | null>(null);
 
   /*
    * Bộ phận đang bung chi tiết. Mở được NHIỀU cùng lúc — việc thường làm là so
@@ -686,191 +682,18 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         )}
       </div>
 
-      {/* ----- Từng đơn ----- */}
-      {bang.don.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-              Từng đơn · {formatNumber(bang.don.length)} đơn
-            </p>
-          </div>
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-            <table className="w-full text-left whitespace-nowrap">
-              <thead className="bg-slate-50 sticky top-0">
-                <tr>
-                  {[
-                    "Ngày",
-                    "Bộ phận",
-                    "Mặt hàng",
-                    "Lít hơi",
-                    "Lon",
-                    "Trạng thái",
-                    "Biên bản",
-                    "Ghi chú",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {bang.don.map((d) => (
-                  <tr
-                    key={d.id}
-                    className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
-                  >
-                    <td className="px-3 py-1.5">{isoSangVn(d.ngay) || d.ngay}</td>
-                    <td className="px-3 py-1.5 text-slate-900">{d.boPhan}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {d.soMatHang}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
-                      {so(d.soLuongLit)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {d.soLuongLon ? formatNumber(d.soLuongLon) : "—"}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <span
-                        className={cn(
-                          "px-2 py-0.5 rounded-full text-[9px] font-black uppercase inline-flex items-center gap-1",
-                          d.trangThai === "di_duong"
-                            ? "bg-amber-100 text-amber-700"
-                            : d.coAnh
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-rose-100 text-rose-700",
-                        )}
-                      >
-                        {d.trangThai === "di_duong" ? (
-                          <>
-                            <Truck className="w-2.5 h-2.5" /> Đi đường
-                          </>
-                        ) : d.coAnh ? (
-                          <>
-                            <CheckCircle2 className="w-2.5 h-2.5" /> Đã nhận
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="w-2.5 h-2.5" /> Thiếu ảnh
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {d.anh.length > 0 ? (
-                        <button
-                          onClick={() => setDonDangXem(d)}
-                          className="px-2 py-1 rounded-lg bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest hover:brightness-125 inline-flex items-center gap-1"
-                        >
-                          <ImageIcon className="w-3 h-3" />
-                          Xem {d.anh.length}
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-bold text-slate-300">
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 max-w-xs truncate">
-                      {d.ghiChu}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/*
-        KHUNG XEM ẢNH BIÊN BẢN.
+        BẢNG "TỪNG ĐƠN" ĐÃ BỎ (28/09/2026), theo yêu cầu của Khoa.
 
-        Ảnh to, giữ nguyên tỉ lệ, mỗi tấm một hàng — đây là tờ giấy viết tay,
-        người xem phải đọc được con số trên đó rồi dò với số lượng của đơn.
-        Cắt vuông cho gọn thì chữ số ở mép tờ giấy mất luôn.
+        Nó liệt kê từng chuyến giao với ngày, bộ phận, số lượng và trạng thái.
+        Từ khi bảng Theo bộ phận bung ra được từng lần nhận — ngày, loại bia,
+        số lượng, giữ nguyên từng giao dịch — thì nó nói lại đúng cùng một
+        chuyện, chỉ khác cách xếp.
 
-        Đầu khung ghi lại ngày, bộ phận và số lượng của chính đơn đó, để đối
-        chiếu ngay tại chỗ mà không phải nhớ hay cuộn về bảng.
+        Khung xem ảnh biên bản đi theo nó: đó là đường DUY NHẤT mở khung ấy.
+        Ảnh biên bản vẫn xem được đầy đủ ở Thư viện ảnh, lọc theo chiều xuất.
       */}
-      {donDangXem && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div
-            onClick={() => setDonDangXem(null)}
-            className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm"
-          />
-          <div className="relative w-full max-w-3xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
-            <div className="px-4 py-3 border-b border-slate-100 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-[15px] font-black text-slate-900 uppercase leading-tight">
-                  Biên bản giao nhận
-                </h3>
-                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
-                  {isoSangVn(donDangXem.ngay) || donDangXem.ngay} ·{" "}
-                  {donDangXem.boPhan}
-                </p>
-                <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                  {donDangXem.soMatHang} mặt hàng ·{" "}
-                  {donDangXem.soLuongLit > 0
-                    ? `${so(donDangXem.soLuongLit)} lít`
-                    : ""}
-                  {donDangXem.soLuongLit > 0 && donDangXem.soLuongLon > 0
-                    ? " · "
-                    : ""}
-                  {donDangXem.soLuongLon > 0
-                    ? `${formatNumber(donDangXem.soLuongLon)} lon`
-                    : ""}
-                </p>
-              </div>
-              <button
-                onClick={() => setDonDangXem(null)}
-                className="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 shrink-0"
-                aria-label="Đóng"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="p-4 space-y-3 overflow-y-auto">
-              {donDangXem.ghiChu && (
-                <p className="text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-100 rounded-xl p-3 leading-relaxed">
-                  {donDangXem.ghiChu}
-                </p>
-              )}
-              {donDangXem.anh.map((url, i) => (
-                <div
-                  key={url}
-                  className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100"
-                >
-                  <img
-                    src={url}
-                    alt={`Biên bản ${i + 1}`}
-                    /* KHÔNG dùng loading="lazy": người ta bấm mở khung này ra
-                       đúng là để xem ảnh ngay, hoãn tải chẳng được gì mà thêm
-                       một đường hỏng — đã gặp cảnh ảnh không bao giờ tải. */
-                    className="w-full max-h-[70vh] object-contain"
-                  />
-                  <span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-900/70 text-white text-[9px] font-black uppercase tracking-widest">
-                    Ảnh {i + 1}/{donDangXem.anh.length}
-                  </span>
-                  {/* Mở tấm gốc ở tab mới khi cần phóng to đọc chữ nhỏ. */}
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-white/90 text-slate-700 text-[9px] font-black uppercase tracking-widest hover:bg-white"
-                  >
-                    Mở ảnh gốc
-                  </a>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       <div className="flex flex-wrap gap-2">
         <button
           onClick={taiExcel}
