@@ -5,6 +5,7 @@ import {
   Truck,
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   Image as ImageIcon,
   X,
 } from "lucide-react";
@@ -85,6 +86,28 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   const [nhom, setNhom] = useState<MaNhomBNC>("NB");
   /** Đơn đang mở khung xem ảnh biên bản; `null` là đang đóng. */
   const [donDangXem, setDonDangXem] = useState<DonBNCType | null>(null);
+
+  /*
+   * Bộ phận đang bung chi tiết. Mở được NHIỀU cùng lúc — việc thường làm là so
+   * hai điểm bán với nhau, mở cái này mà cái kia tự đóng thì phải nhớ số trong
+   * đầu rồi bấm qua bấm lại.
+   */
+  const [boPhanMo, setBoPhanMo] = useState<Set<string>>(new Set());
+  const batBoPhan = (id: string) =>
+    setBoPhanMo((cu) => {
+      const m = new Set(cu);
+      if (m.has(id)) m.delete(id);
+      else m.add(id);
+      return m;
+    });
+
+  /**
+   * Bỏ tiền tố "BNC · " khỏi tên bộ phận.
+   *
+   * Cả bảng này đã nằm trong màn hình Đơn BNC, dưới một thẻ ghi rõ đang xem
+   * phần nào — nhắc lại "BNC" ở đầu mỗi dòng chỉ đẩy tên quán lùi vào trong.
+   */
+  const tenGon = (ten: string) => ten.replace(/^BNC\s*·\s*/i, "").trim();
 
   const dsBoPhan = useMemo(
     () => partners.filter((p) => laBoPhanBNC(p.id)),
@@ -536,22 +559,21 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
+            <table className="w-full text-left">
               <thead>
                 <tr>
+                  <th className="px-3 py-2 w-9" />
                   {[
                     "Bộ phận",
-                    "Phần",
-                    "Đơn",
-                    "Lít hơi",
-                    "Lon",
-                    "Quy đổi",
-                    "Hao hụt",
-                    "Ngày nhận gần nhất",
-                  ].map((h) => (
+                    "Bia lít",
+                    "Bia lon",
+                  ].map((h, i) => (
                     <th
                       key={h}
-                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
+                      className={cn(
+                        "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400",
+                        i > 0 && "text-right",
+                      )}
                     >
                       {h}
                     </th>
@@ -559,48 +581,105 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                 </tr>
               </thead>
               <tbody>
-                {bang.theoBoPhan.map((o) => (
-                  <tr
-                    key={o.partnerId}
-                    className="border-t border-slate-100 text-[11px] font-bold text-slate-600"
-                  >
-                    <td className="px-3 py-1.5 text-slate-900">
-                      {o.boPhan}
-                      {o.donChuaXong > 0 && (
-                        <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[8px] font-black uppercase">
-                          {o.donChuaXong} chờ
-                        </span>
+                {bang.theoBoPhan.map((o) => {
+                  const mo = boPhanMo.has(o.partnerId);
+                  return [
+                    <tr
+                      key={o.partnerId}
+                      className={cn(
+                        "border-t border-slate-100 text-[12px] font-bold text-slate-600 hover:bg-slate-50/70 transition-colors",
+                        mo && "bg-slate-50",
                       )}
-                    </td>
-                    <td className="px-3 py-1.5 text-slate-400">
-                      {tenNhomBNC(o.nhom)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {o.soDon}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
-                      {so(o.soLuongLit)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {formatNumber(o.soLuongLon)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-900">
-                      {so(o.litQuyDoi)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {o.haoHut > 0 ? so(o.haoHut) : "—"}
-                    </td>
-                    {/*
-                      NGÀY, không phải số lượng — và hiện theo ngày/tháng/năm
-                      như mọi chỗ khác. Trước đây cột tên "Nhận cuối" đứng giữa
-                      sáu cột số, lại in thô `2026-09-24`, nên nhìn không ra là
-                      ngày.
-                    */}
-                    <td className="px-3 py-1.5 font-mono text-slate-500">
-                      {o.lanCuoi ? ngayVn(o.lanCuoi) : "—"}
-                    </td>
-                  </tr>
-                ))}
+                    >
+                      <td className="pl-3 pr-1 py-2">
+                        <button
+                          onClick={() => batBoPhan(o.partnerId)}
+                          title={mo ? "Thu lại" : "Xem từng lần nhận"}
+                          className="p-1 rounded-lg text-slate-300 hover:text-slate-700 hover:bg-slate-200/70 transition-colors"
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "w-4 h-4 transition-transform",
+                              mo && "rotate-90",
+                            )}
+                          />
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-slate-900">
+                        {tenGon(o.boPhan)}
+                        {o.donChuaXong > 0 && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[8px] font-black uppercase">
+                            {o.donChuaXong} chờ
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-900 font-black">
+                        {o.soLuongLit > 0 ? so(o.soLuongLit) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-900 font-black">
+                        {o.soLuongLon > 0 ? formatNumber(o.soLuongLon) : "—"}
+                      </td>
+                    </tr>,
+
+                    mo && (
+                      <tr key={`${o.partnerId}-ct`} className="bg-slate-50/60">
+                        <td />
+                        <td colSpan={3} className="px-3 pb-3">
+                          {o.chiTiet.length === 0 ? (
+                            <p className="py-3 text-[12px] font-bold text-slate-400">
+                              Không có lần nhận nào trong khoảng ngày này.
+                            </p>
+                          ) : (
+                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                              <table className="w-full text-left text-[12px] font-bold text-slate-600">
+                                <thead className="bg-slate-50">
+                                  <tr>
+                                    {["Ngày giao", "Loại bia", "Số lượng"].map(
+                                      (h, i) => (
+                                        <th
+                                          key={h}
+                                          className={cn(
+                                            "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
+                                            i === 2 && "text-right",
+                                          )}
+                                        >
+                                          {h}
+                                        </th>
+                                      ),
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {o.chiTiet.map((c, i) => (
+                                    <tr
+                                      key={`${c.ngay}-${c.tenHang}-${i}`}
+                                      className="border-t border-slate-100"
+                                    >
+                                      <td className="px-3 py-2 font-mono whitespace-nowrap">
+                                        {ngayVn(c.ngay)}
+                                      </td>
+                                      <td className="px-3 py-2 text-slate-900">
+                                        {c.tenHang}
+                                      </td>
+                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
+                                        {c.dvt === "Lon"
+                                          ? formatNumber(c.soLuong)
+                                          : so(c.soLuong)}{" "}
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                          {c.dvt}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
               </tbody>
             </table>
           </div>

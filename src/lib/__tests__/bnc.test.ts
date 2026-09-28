@@ -387,5 +387,72 @@ eq(
   eq("bo phan khong thuoc nhom dang loc thi rong", lech.tong.soDon, 0);
 }
 
+// ============================================ chi tiet tung bo phan
+
+/*
+ * CHI TIET GOM THEO (NGAY x MAT HANG), khong de nguyen tung giao dich.
+ *
+ * Mot lan giao co the tach lam may dong trong so — nguoi xem chi can biet hom
+ * ay diem ban nhan bao nhieu lit cua loai nao.
+ */
+{
+  const ds = [
+    tx({ partnerId: "AD0103-1901", date: "2026-08-21T08:00:00.000Z", quantity: 60 }),
+    tx({ partnerId: "AD0103-1901", date: "2026-08-21T09:00:00.000Z", quantity: 40 }),
+    tx({
+      partnerId: "AD0103-1901",
+      date: "2026-08-22T08:00:00.000Z",
+      productId: "lon",
+      productName: "Bia lon 330",
+      category: "Lon",
+      quantity: 24,
+    }),
+  ];
+  const kq = dungBangBNC({
+    transactions: ds,
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    tenBoPhan: ten,
+  });
+  const o = kq.theoBoPhan.find((x) => x.partnerId === "AD0103-1901")!;
+
+  eq("hai dong chi tiet", o.chiTiet.length, 2);
+  // Moi nhat truoc.
+  eq("moi nhat truoc", o.chiTiet[0].ngay, "2026-08-22");
+  eq("dong lon dung don vi", o.chiTiet[0].dvt, "Lon");
+  eq("dong lon dung so luong", o.chiTiet[0].soLuong, 24);
+  // Hai lan giao cung ngay cung loai thi cong lai.
+  eq("cung ngay cung loai thi cong lai", o.chiTiet[1].soLuong, 100);
+  eq("dong hoi dung don vi", o.chiTiet[1].dvt, "Lít");
+}
+
+/*
+ * HAO HUT KHONG VAO CHI TIET.
+ *
+ * Bang nay tra loi "diem ban da nhan bao nhieu", ma hao hut la phan minh chiu,
+ * khong giao toi ai. De lot vao thi so trong chi tiet cao hon so thuc nhan.
+ */
+{
+  const ds = [
+    tx({ partnerId: "AD0103-1901", quantity: 100 }),
+    tx({ partnerId: "AD0103-1901", type: "LOSS", quantity: 3 }),
+  ];
+  const kq = dungBangBNC({
+    transactions: ds,
+    products,
+    tuNgay: "",
+    denNgay: "",
+    boPhan: "",
+    tenBoPhan: ten,
+  });
+  const o = kq.theoBoPhan.find((x) => x.partnerId === "AD0103-1901")!;
+  eq("chi mot dong chi tiet", o.chiTiet.length, 1);
+  eq("chi tiet khong gom hao hut", o.chiTiet[0].soLuong, 100);
+  // Nhung hao hut van duoc dem o cot rieng cua bo phan.
+  eq("hao hut van dem rieng", o.haoHut, 3);
+}
+
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
