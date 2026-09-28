@@ -12,10 +12,7 @@ import {
   MinusCircle,
   Package,
   Users,
-  History,
   Search,
-  ArrowUpRight,
-  ArrowDownLeft,
   Calendar,
   Clock,
   User,
@@ -216,7 +213,6 @@ import {
 } from "./lib/nhatKyKho";
 import {
   boGiaoDichPhieuDaHuy,
-  laGiaoDichDaHuy,
   nguonPhieuDaHuy,
 } from "./lib/phieuHuy";
 import { chuanTen, ghiChuHienThi } from "./lib/ghiChu";
@@ -812,7 +808,6 @@ export default function App() {
     "chua-xuat",
   );
 
-  const [historySearchQuery, setHistorySearchQuery] = useState("");
   /*
    * KHOẢNG NGÀY CỦA BÁO CÁO.
    *
@@ -2524,7 +2519,9 @@ export default function App() {
             `hàng tương ứng. Anh kiểm tra lại phần nhập trước rồi sửa các dòng này.`,
         );
       }
-      setActiveTab("history");
+      // Nạp xong thì sang Báo cáo tổng hợp — chỗ liệt kê giao dịch vừa ghi.
+      // (Trước đây sang Lịch sử, phân hệ đó đã gỡ.)
+      setActiveTab("reports");
     } catch (e: any) {
       alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
     } finally {
@@ -5586,21 +5583,6 @@ export default function App() {
     };
   }, [countedTransactionsByTime, partners, inventory, products]);
 
-  const filteredTransactions = useMemo(() => {
-    const q = historySearchQuery.toLowerCase().trim();
-    if (!q) return filteredTransactionsByTime;
-    return filteredTransactionsByTime.filter((t) => {
-      const basicMatch =
-        t.productName.toLowerCase().includes(q) ||
-        t.partnerName.toLowerCase().includes(q) ||
-        t.notes?.toLowerCase().includes(q);
-
-      if (basicMatch) return true;
-
-      const partner = donVi.find((p) => p.id === t.partnerId);
-      return partner?.sapCode?.toLowerCase().includes(q);
-    });
-  }, [filteredTransactionsByTime, historySearchQuery, donVi]);
 
   const handleAddTransaction = async (type: TransactionType) => {
     /*
@@ -6158,12 +6140,6 @@ export default function App() {
                 label: "Đối tác",
                 icon: Users,
                 color: "#6366f1",
-              },
-              {
-                id: "history",
-                label: "Lịch sử",
-                icon: History,
-                color: "#64748b",
               },
             ]
           : [],
@@ -10357,180 +10333,15 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "history" && quyen.xemXuat && (
-              <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="relative max-w-md w-full group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors hover:text-primary" />
-                    <input
-                      placeholder="Tìm kiếm lịch sử (Sản phẩm, Đối tác, Số lô...)"
-                      className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none text-sm transition-all premium-shadow"
-                      value={historySearchQuery}
-                      onChange={(e) => setHistorySearchQuery(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      className="bg-white border border-slate-100"
-                    >
-                      <Download className="w-4 h-4" /> Xuất dữ liệu
-                    </Button>
-                  </div>
-                </div>
+            {/*
+              PHÂN HỆ LỊCH SỬ ĐÃ GỠ (28/09/2026), theo yêu cầu của Khoa.
 
-                <Card noPadding>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="bg-slate-50/50">
-                          <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
-                            Ngày thực nhập/xuất
-                          </th>
-                          <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-center">
-                            Hoạt động
-                          </th>
-                          <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
-                            Sản phẩm
-                          </th>
-                          <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                            Số lượng
-                          </th>
-                          <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
-                            Ghi chú & Minh chứng
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredTransactions.length > 0 ? (
-                          filteredTransactions.map((t) => (
-                            <tr
-                              key={t.id}
-                              className="hover:bg-slate-50 transition-colors group"
-                            >
-                              <td className="py-4 px-6">
-                                <div className="text-[11px] font-bold text-slate-500 font-mono">
-                                  {formatDate(t.date).split(" ")[0]}
-                                </div>
-                                <div className="text-[10px] text-slate-400 font-bold">
-                                  {formatDate(t.date).split(" ")[1]}
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 text-center">
-                                <span
-                                  className={cn(
-                                    "inline-flex items-center justify-center w-8 h-8 rounded-lg",
-                                    t.type === "IN" || t.type === "OPENING"
-                                      ? "bg-emerald-50 text-emerald-600"
-                                      : t.type === "LOSS" || t.type === "DAMAGE"
-                                        ? "bg-rose-100 text-rose-700"
-                                        : "bg-rose-50 text-rose-600",
-                                  )}
-                                >
-                                  {t.type === "IN" || t.type === "OPENING" ? (
-                                    <ArrowDownLeft className="w-4 h-4" />
-                                  ) : (
-                                    <ArrowUpRight className="w-4 h-4" />
-                                  )}
-                                </span>
-                              </td>
-                              <td className="py-4 px-6">
-                                <div className="font-bold text-slate-900 text-sm leading-tight">
-                                  {t.productName}
-                                  {t.status === "in_transit" && (
-                                    <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-tighter flex inline-flex items-center gap-1 mt-1 md:mt-0">
-                                      <Truck className="w-3 h-3" />
-                                      Đang đi đường
-                                    </span>
-                                  )}
-                                  {(t.type === "LOSS" ||
-                                    t.type === "DAMAGE") && (
-                                    <span className="ml-2 px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[9px] font-black uppercase tracking-tighter mt-1 md:mt-0">
-                                      Hao hụt / Hư hại
-                                    </span>
-                                  )}
-                                  {/*
-                                    Dòng thuộc phiếu đã hủy VẪN HIỆN ở Lịch sử,
-                                    kèm nhãn. Ẩn hẳn thì người dùng thấy hàng
-                                    biến mất khỏi tồn kho mà không còn dấu vết
-                                    nào để tra vì sao — đây đúng là chỗ cần tra
-                                    lại.
-                                  */}
-                                  {laGiaoDichDaHuy(t, nguonDaHuy) && (
-                                    <span className="ml-2 px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-[9px] font-black uppercase tracking-tighter mt-1 md:mt-0">
-                                      Phiếu đã hủy · không tính tồn
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
-                                  {t.category} • {t.partnerName}
-                                </div>
-                              </td>
-                              <td className="py-4 px-6 text-right">
-                                <span
-                                  className={cn(
-                                    "font-mono font-black text-sm",
-                                    t.type === "IN" || t.type === "OPENING"
-                                      ? "text-emerald-600"
-                                      : "text-rose-600",
-                                  )}
-                                >
-                                  {t.type === "IN" || t.type === "OPENING"
-                                    ? "+"
-                                    : "-"}
-                                  {formatNumber(t.quantity)}
-                                </span>
-                              </td>
-                              <td className="py-4 px-6">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-xs text-slate-400 italic max-w-[120px] truncate">
-                                    {ghiChuHienThi(t.notes, t.partnerName) ||
-                                      "—"}
-                                  </span>
-                                  {t.evidencePhotoUrl && (
-                                    <div className="flex gap-1.5">
-                                      <button
-                                        onClick={() =>
-                                          window.open(
-                                            t.evidencePhotoUrl,
-                                            "_blank",
-                                          )
-                                        }
-                                        className="w-7 h-7 bg-primary/5 text-primary rounded-lg flex items-center justify-center hover:bg-primary hover:text-white transition-all shadow-sm"
-                                        title="Xem biên bản"
-                                      >
-                                        <ImageIcon className="w-4 h-4" />
-                                      </button>
-                                      <a
-                                        href={t.evidencePhotoUrl}
-                                        download={`bien-ban-${t.id}.png`}
-                                        className="w-7 h-7 bg-slate-100 text-slate-500 rounded-lg flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-                                        title="Tải ảnh về"
-                                      >
-                                        <Download className="w-4 h-4" />
-                                      </a>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td
-                              colSpan={5}
-                              className="py-20 text-center text-slate-400 text-sm font-bold uppercase tracking-widest opacity-30"
-                            >
-                              Không tìm thấy giao dịch phù hợp.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              </div>
-            )}
+              Nó chỉ bày lại danh sách giao dịch để đọc — không sửa, không xoá.
+              Mà hai bảng "Chi tiết nhật ký nhập/xuất kho" trong Báo cáo tổng
+              hợp đã liệt kê đúng những giao dịch ấy, kèm lọc theo ngày, theo
+              đối tác, xem ảnh chứng từ và nút xoá. Hai màn hình đọc cùng một
+              dữ liệu thì người dùng phải nhớ xem thứ mình cần nằm ở đâu.
+            */}
 
             {activeTab === "debt" && daDuocDuyet && quyen.xemXuat && (
               <div className="space-y-6">
