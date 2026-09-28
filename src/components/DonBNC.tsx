@@ -19,6 +19,7 @@ import {
   type MaNhomBNC,
 } from "../lib/nhomBNC";
 import { taoSheetDep, XLSXDep } from "../lib/excelDep";
+import { ngayVn } from "../lib/soPhieu";
 import mauDieuChuyenUrl from "../assets/mau-dieu-chuyen.xlsx?url";
 import { dungFileDieuChuyen, tomTatDieuChuyen } from "../lib/dieuChuyen";
 import {
@@ -143,7 +144,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           "Lít quy đổi",
           "Hao hụt (lít)",
           "Đơn chưa xong",
-          "Lần nhận cuối",
+          "Ngày nhận gần nhất",
         ],
         cot: [
           { rong: 6, kieu: "giua" },
@@ -167,7 +168,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           lam1(o.litQuyDoi),
           lam1(o.haoHut),
           o.donChuaXong,
-          o.lanCuoi,
+          o.lanCuoi ? ngayVn(o.lanCuoi) : "",
         ]),
         dongTong: [
           "",
@@ -546,7 +547,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     "Lon",
                     "Quy đổi",
                     "Hao hụt",
-                    "Nhận cuối",
+                    "Ngày nhận gần nhất",
                   ].map((h) => (
                     <th
                       key={h}
@@ -589,7 +590,15 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     <td className="px-3 py-1.5 text-right tabular-nums">
                       {o.haoHut > 0 ? so(o.haoHut) : "—"}
                     </td>
-                    <td className="px-3 py-1.5">{o.lanCuoi}</td>
+                    {/*
+                      NGÀY, không phải số lượng — và hiện theo ngày/tháng/năm
+                      như mọi chỗ khác. Trước đây cột tên "Nhận cuối" đứng giữa
+                      sáu cột số, lại in thô `2026-09-24`, nên nhìn không ra là
+                      ngày.
+                    */}
+                    <td className="px-3 py-1.5 font-mono text-slate-500">
+                      {o.lanCuoi ? ngayVn(o.lanCuoi) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
