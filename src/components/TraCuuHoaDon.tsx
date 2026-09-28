@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ChevronDown,
   Download,
   FileSearch,
-  Receipt,
   Search,
   Trash2,
   X,
 } from "lucide-react";
-import { format } from "date-fns";
 import type { Partner, Product, Transaction } from "../types";
 import type { HoaDonGhiNhan } from "../lib/hoaDon";
 import { invoiceUnitOf } from "../lib/invoice";
@@ -20,9 +17,8 @@ import {
   locTraCuu,
   nenTraCuu,
   tenTepTraCuu,
-  type HoaDonDaXuat,
 } from "../lib/traCuuHoaDon";
-import { cn, formatNumber } from "../lib/utils";
+import { formatNumber } from "../lib/utils";
 import BangChotHoaDon from "./BangChotHoaDon";
 
 import ONgay from "./ONgay";
@@ -67,8 +63,6 @@ export default function TraCuuHoaDon({
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
   const [tuKhoa, setTuKhoa] = useState("");
-  /** Hóa đơn đang mở xem chi tiết. Mở một tờ tại một lúc. */
-  const [dangMo, setDangMo] = useState<string>("");
 
   /*
    * Hai bước, hai memo — CỐ Ý. Bước dựng lại dòng chi tiết phải đi qua toàn bộ
@@ -318,272 +312,6 @@ export default function TraCuuHoaDon({
             />
           </div>
 
-          {/* Xem từng tờ một, kèm tổng của tờ — giữ lại cho lúc cần in. */}
-          <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
-            <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
-              <span className="text-[13px] font-black text-slate-700 tracking-tight">
-                Xem từng tờ hóa đơn
-              </span>
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-open:hidden">
-                Bung ra
-              </span>
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 hidden group-open:inline">
-                Thu lại
-              </span>
-            </summary>
-            <div className="p-3 space-y-2 border-t border-slate-100">
-          {kq.hoaDon.map((h) => (
-            <TheHoaDon
-              key={`${h.soHoaDon}|${h.maBp}|${h.nhanDot}`}
-              h={h}
-              mo={dangMo === `${h.soHoaDon}|${h.maBp}|${h.nhanDot}`}
-              onToggle={() =>
-                setDangMo((cu) => {
-                  const k = `${h.soHoaDon}|${h.maBp}|${h.nhanDot}`;
-                  return cu === k ? "" : k;
-                })
-              }
-            />
-          ))}
-            </div>
-          </details>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Một tờ hóa đơn: bấm để xem các dòng hàng bên trong. */
-function TheHoaDon({
-  h,
-  mo,
-  onToggle,
-}: {
-  h: HoaDonDaXuat;
-  mo: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "bg-white border rounded-2xl overflow-hidden transition-all",
-        mo ? "border-primary/40 premium-shadow" : "border-slate-100",
-      )}
-    >
-      <button
-        onClick={onToggle}
-        className="w-full px-4 py-3.5 flex items-center gap-3 text-left hover:bg-slate-50/60 transition-colors"
-      >
-        <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shrink-0">
-          <Receipt className="w-4 h-4 text-amber-400" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="font-mono font-black text-sm text-slate-900 leading-none">
-              {h.soHoaDon}
-            </span>
-            <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[12px] font-black uppercase tracking-tighter text-slate-700">
-              {h.donVi}
-            </span>
-            {h.maBp && (
-              <span className="text-[12px] font-mono font-bold text-slate-400">
-                {h.maBp}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-            <span className="text-[12px] font-black text-slate-500 uppercase tracking-widest">
-              HĐ {ngayVietNam(h.ngayHoaDon)}
-            </span>
-            <span className="text-[12px] font-bold text-slate-400">
-              giao {h.nhanDot}
-            </span>
-            <span className="text-[12px] font-bold text-slate-400">
-              {h.dong.length} mặt hàng · {formatNumber(h.soLuong)}
-            </span>
-          </div>
-        </div>
-
-        <div className="text-right shrink-0">
-          <p className="font-mono font-black text-sm text-slate-900 leading-none">
-            {formatNumber(Math.round(h.thanhTienSkb))}
-          </p>
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1 leading-none">
-            sau thuế {formatNumber(Math.round(h.sauThueSkb))}
-          </p>
-        </div>
-
-        <ChevronDown
-          className={cn(
-            "w-4 h-4 text-slate-300 shrink-0 transition-transform",
-            mo && "rotate-180",
-          )}
-        />
-      </button>
-
-      {mo && (
-        <div className="border-t border-slate-100">
-          {/*
-            Bề rộng cột đặt cứng, chỉ cột tên hàng hóa co giãn — đó là cột duy
-            nhất được xuống dòng. Nhờ vậy bảng vừa bề ngang thẻ, không phải kéo
-            ngang; trên khung hẹp (điện thoại) thì mới cuộn.
-          */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left table-fixed min-w-[860px]">
-              <colgroup>
-                <col className="w-[86px]" />
-                <col />
-                <col className="w-12" />
-                <col className="w-20" />
-                <col className="w-[62px]" />
-                <col className="w-[92px]" />
-                <col className="w-[82px]" />
-                <col className="w-[96px]" />
-                <col className="w-[62px]" />
-                <col className="w-[92px]" />
-                <col className="w-[82px]" />
-                <col className="w-[96px]" />
-              </colgroup>
-              <thead>
-                {/* Hai khối giá tô hai màu như trong tệp — hai bộ cột giống
-                    hệt nhau, không phân biệt thì rất dễ đọc nhầm chặng. */}
-                <tr>
-                  <th colSpan={4} className="bg-slate-50" />
-                  <th
-                    colSpan={4}
-                    className="py-1.5 px-3 font-black text-[11px] text-white uppercase tracking-widest bg-[#1F4E5F] text-center whitespace-nowrap"
-                  >
-                    SKB - DNC
-                  </th>
-                  <th
-                    colSpan={4}
-                    className="py-1.5 px-3 font-black text-[11px] text-white uppercase tracking-widest bg-[#6B4E71] text-center whitespace-nowrap"
-                  >
-                    DNC xuất BNC và ĐVTV
-                  </th>
-                </tr>
-                <tr className="bg-slate-50">
-                  {[
-                    "Mã vật tư",
-                    "Tên hàng hóa",
-                    "ĐVT",
-                    "Số lượng",
-                    "Đơn giá",
-                    "Thành tiền",
-                    "VAT",
-                    "Sau thuế",
-                    "Đơn giá",
-                    "Thành tiền",
-                    "VAT",
-                    "Sau thuế",
-                  ].map((t, i) => (
-                    <th
-                      key={i}
-                      className={cn(
-                        "py-2 px-2 font-black text-[11px] uppercase tracking-widest whitespace-nowrap",
-                        i >= 3 && "text-right",
-                        i >= 4 && i <= 7
-                          ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
-                          : i >= 8
-                            ? "bg-[#6B4E71]/10 text-[#6B4E71]"
-                            : "text-slate-400",
-                      )}
-                    >
-                      {t}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {h.dong.map((d) => (
-                  <tr key={`${d.maVatTu}|${d.dvt}`}>
-                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-500 whitespace-nowrap">
-                      {d.maVatTu || "—"}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-bold text-slate-800 leading-tight">
-                      {d.tenHangHoa}
-                    </td>
-                    <td className="py-2 px-2 text-[12px] font-black text-slate-400 uppercase">
-                      {d.dvt}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                      {formatNumber(d.soLuong)}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap">
-                      {formatNumber(d.donGiaSkb)}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
-                      {formatNumber(Math.round(d.thanhTienSkb))}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap">
-                      {formatNumber(Math.round(d.vatSkb))}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap">
-                      {formatNumber(Math.round(d.sauThueSkb))}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono text-slate-400 text-right whitespace-nowrap bg-[#6B4E71]/5">
-                      {formatNumber(d.donGiaDnc)}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
-                      {formatNumber(Math.round(d.thanhTienDnc))}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono text-slate-500 text-right whitespace-nowrap bg-[#6B4E71]/5">
-                      {formatNumber(Math.round(d.vatDnc))}
-                    </td>
-                    <td className="py-2 px-2 text-[13px] font-mono font-bold text-slate-800 text-right whitespace-nowrap bg-[#6B4E71]/5">
-                      {formatNumber(Math.round(d.sauThueDnc))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-50 border-t border-slate-200">
-                  <td
-                    colSpan={3}
-                    className="py-2 px-2 text-[12px] font-black text-slate-500 uppercase tracking-widest"
-                  >
-                    Tổng tờ này
-                  </td>
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                    {formatNumber(h.soLuong)}
-                  </td>
-                  <td />
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.thanhTienSkb))}
-                  </td>
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.vatSkb))}
-                  </td>
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.sauThueSkb))}
-                  </td>
-                  <td />
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.thanhTienDnc))}
-                  </td>
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-700 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.vatDnc))}
-                  </td>
-                  <td className="py-2 px-2 text-[13px] font-mono font-black text-slate-900 text-right whitespace-nowrap">
-                    {formatNumber(Math.round(h.sauThueDnc))}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* Ai điền số vào app và điền lúc nào — để truy khi số bị sai. */}
-          {(h.ghiBoi || h.ghiLuc) && (
-            <div className="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                Số điền bởi {h.ghiBoi || "không rõ"}
-                {h.ghiLuc
-                  ? ` · ${format(new Date(h.ghiLuc), "HH:mm dd/MM/yyyy")}`
-                  : ""}
-              </p>
-            </div>
-          )}
         </div>
       )}
     </div>
