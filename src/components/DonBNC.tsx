@@ -505,97 +505,14 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         </div>
       )}
 
-      {/* ----- Theo bốn phần của BNC ----- */}
-      <div className="rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-            Bốn phần của BNC
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead>
-              <tr>
-                {["Phần", "Bộ phận", "Đơn", "Lít hơi", "Lon", "Quy đổi", "Hao hụt"].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {bang.theoNhom.map((n) => {
-                /*
-                  Bấm vào một phần là lọc luôn — bảng bốn dòng thì thao tác tự
-                  nhiên nhất là bấm thẳng vào dòng, không phải kéo lên ô chọn.
-                  Bấm lại vào phần đang lọc thì bỏ lọc.
-                */
-                const dangLoc = nhom === n.nhom;
-                return (
-                  <tr
-                    key={n.nhom}
-                    onClick={() => {
-                      // Bấm một dòng là SANG thẻ đó. Trước đây bấm lại để
-                      // bỏ lọc, nhưng nay bốn phần là bốn thẻ — không có
-                      // trạng thái "không thẻ nào".
-                      setNhom(n.nhom);
-                      setBoPhan("");
-                    }}
-                    className={cn(
-                      "border-t border-slate-100 text-[11px] font-bold cursor-pointer",
-                      dangLoc
-                        ? "bg-slate-900 text-white"
-                        : "text-slate-600 hover:bg-slate-50",
-                    )}
-                  >
-                    <td
-                      className={cn(
-                        "px-3 py-1.5 font-black",
-                        dangLoc ? "text-white" : "text-slate-900",
-                      )}
-                    >
-                      {n.ten}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {formatNumber(n.soBoPhan)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {formatNumber(n.soDon)}
-                    </td>
-                    <td
-                      className={cn(
-                        "px-3 py-1.5 text-right tabular-nums",
-                        dangLoc ? "text-white" : "text-slate-900",
-                      )}
-                    >
-                      {so(n.soLuongLit)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {formatNumber(n.soLuongLon)}
-                    </td>
-                    <td
-                      className={cn(
-                        "px-3 py-1.5 text-right tabular-nums",
-                        dangLoc ? "text-white" : "text-slate-900",
-                      )}
-                    >
-                      {so(n.litQuyDoi)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {n.haoHut > 0 ? so(n.haoHut) : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/*
+        BẢNG "Bốn phần của BNC" ĐÃ BỎ (28/09/2026).
+
+        Nó là bảng tổng bốn dòng, mỗi dòng một phần, bấm vào để lọc. Từ khi bốn
+        phần thành bốn thẻ ngay đầu màn hình thì nó chỉ còn nói lại đúng thứ
+        thanh thẻ đã nói, và cái nút bấm-để-lọc thành đường thứ hai làm cùng
+        một việc.
+      */}
 
       {/* ----- Theo bộ phận ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
