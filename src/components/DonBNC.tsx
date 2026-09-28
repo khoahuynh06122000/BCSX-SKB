@@ -368,6 +368,38 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         </p>
       </div>
 
+      {/*
+        BỐN THẺ ĐỨNG TRƯỚC BỘ LỌC NGÀY.
+
+        Thứ tự đọc đúng với thứ tự nghĩ: chọn đang xem phần nào của BNC trước,
+        rồi mới khoanh khoảng ngày trong phần đó. Đặt bộ lọc lên trên thì người
+        dùng chọn ngày xong mới phát hiện mình đang ở nhầm phần, phải làm lại
+        từ đầu — mà đổi thẻ còn xoá luôn điểm bán đang lọc.
+      */}
+      {/* ----- Bốn thẻ theo dõi riêng ----- */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/60 rounded-2xl border border-slate-200/60 w-fit">
+        {NHOM_BNC.map((n) => (
+          <button
+            key={n.ma}
+            onClick={() => {
+              // Đổi thẻ thì bỏ điểm bán đang lọc: điểm bán cũ thuộc thẻ khác,
+              // để lại là ra bảng trống mà không hiểu vì sao.
+              setNhom(n.ma);
+              setBoPhan("");
+            }}
+            className={cn(
+              "px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+              nhom === n.ma
+                ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                : "text-slate-500 hover:text-slate-900 hover:bg-white",
+            )}
+            title={n.moTa}
+          >
+            {n.ten}
+          </button>
+        ))}
+      </div>
+
       {/* ----- Bộ lọc ----- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <label className="block">
@@ -421,30 +453,6 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
             </select>
           </label>
         )}
-      </div>
-
-      {/* ----- Bốn thẻ theo dõi riêng ----- */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/60 rounded-2xl border border-slate-200/60 w-fit">
-        {NHOM_BNC.map((n) => (
-          <button
-            key={n.ma}
-            onClick={() => {
-              // Đổi thẻ thì bỏ điểm bán đang lọc: điểm bán cũ thuộc thẻ khác,
-              // để lại là ra bảng trống mà không hiểu vì sao.
-              setNhom(n.ma);
-              setBoPhan("");
-            }}
-            className={cn(
-              "px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
-              nhom === n.ma
-                ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
-                : "text-slate-500 hover:text-slate-900 hover:bg-white",
-            )}
-            title={n.moTa}
-          >
-            {n.ten}
-          </button>
-        ))}
       </div>
 
       {/* ----- Tổng ----- */}
