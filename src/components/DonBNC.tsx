@@ -88,6 +88,10 @@ export default function DonBNC({ transactions, products, partners }: Props) {
    * hai điểm bán với nhau, mở cái này mà cái kia tự đóng thì phải nhớ số trong
    * đầu rồi bấm qua bấm lại.
    */
+  /** Lọc riêng của bảng Theo bộ phận: một ngày giao, một tên bia. */
+  const [locNgay, setLocNgay] = useState("");
+  const [locBia, setLocBia] = useState("");
+
   const [boPhanMo, setBoPhanMo] = useState<Set<string>>(new Set());
   const batBoPhan = (id: string) =>
     setBoPhanMo((cu) => {
@@ -127,7 +131,12 @@ export default function DonBNC({ transactions, products, partners }: Props) {
     return m;
   }, [dsBoPhan]);
 
-  const bang = useMemo(
+  /*
+   * Ngày giao và tên bia CÓ THẬT trong khoảng đang xem — dựng từ chính dữ liệu
+   * chứ không liệt kê cả danh mục. Bày một loại bia chưa hề giao thì chọn vào
+   * là ra bảng trống, người xem tưởng mất dữ liệu.
+   */
+  const bangGoc = useMemo(
     () =>
       dungBangBNC({
         transactions,
@@ -142,6 +151,15 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   );
 
   const taiExcel = () => {
+    /*
+     * TỆP XUẤT RA LẤY BẢNG GỐC, không theo hai ô lọc của khối Theo bộ phận.
+     *
+     * Hai ô đó là cách soi nhanh trên màn hình. Tệp thì luôn là báo cáo đầy đủ
+     * của khoảng ngày đang xem — nếu không, sheet "theo bộ phận" bị lọc còn
+     * sheet "từng đơn" thì không, và người mở tệp thấy hai sheet không khớp
+     * nhau mà không hiểu vì sao.
+     */
+    const bang = bangGoc;
     if (!bang.don.length) return;
     const wb = XLSXDep.utils.book_new();
     const lam1 = (n: number) => Math.round(n * 10) / 10;
@@ -260,6 +278,54 @@ export default function DonBNC({ transactions, products, partners }: Props) {
 
     XLSXDep.writeFile(wb, `Don BNC ${tuNgay} den ${denNgay}.xlsx`);
   };
+
+  const dsNgayGiao = useMemo(() => {
+    const t = new Set<string>();
+    bangGoc.theoBoPhan.forEach((o) => o.chiTiet.forEach((c) => t.add(c.ngay)));
+    return Array.from(t).sort((a, b) => b.localeCompare(a));
+  }, [bangGoc]);
+
+  const dsTenBia = useMemo(() => {
+    const t = new Set<string>();
+    bangGoc.theoBoPhan.forEach((o) =>
+      o.chiTiet.forEach((c) => t.add(c.tenHang)),
+    );
+    return Array.from(t).sort((a, b) => a.localeCompare(b));
+  }, [bangGoc]);
+
+  /**
+   * Bảng đã áp hai bộ lọc riêng của khối này.
+   *
+   * TỔNG LÍT VÀ LON TÍNH LẠI TỪ PHẦN CÒN LẠI, không giữ tổng cũ. Lọc "Bia
+   * Helios" mà cột Bia lít vẫn là tổng của cả bảy loại thì con số ấy nói dối
+   * ngay giữa màn hình.
+   *
+   * Bộ phận không còn dòng nào thì rời khỏi bảng — giữ lại một dòng toàn số 0
+   * chỉ làm dài bảng mà không nói thêm gì.
+   */
+  const bang = useMemo(() => {
+    if (!locNgay && !locBia) return bangGoc;
+    const theoBoPhan = bangGoc.theoBoPhan
+      .map((o) => {
+        const chiTiet = o.chiTiet.filter(
+          (c) =>
+            (!locNgay || c.ngay === locNgay) &&
+            (!locBia || c.tenHang === locBia),
+        );
+        return {
+          ...o,
+          chiTiet,
+          soLuongLit: chiTiet
+            .filter((c) => c.dvt !== "Lon")
+            .reduce((t, c) => t + c.soLuong, 0),
+          soLuongLon: chiTiet
+            .filter((c) => c.dvt === "Lon")
+            .reduce((t, c) => t + c.soLuong, 0),
+        };
+      })
+      .filter((o) => o.chiTiet.length > 0);
+    return { ...bangGoc, theoBoPhan };
+  }, [bangGoc, locNgay, locBia]);
 
   const so = (n: number) => formatNumber(Math.round(n * 10) / 10);
 
@@ -544,10 +610,66 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
 
       {/* ----- Theo bộ phận ----- */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-            Theo bộ phận · xếp theo sản lượng
-          </p>
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Theo bộ phận · xếp theo sản lượng
+            </p>
+            {(locNgay || locBia) && (
+              <button
+                onClick={() => {
+                  setLocNgay("");
+                  setLocBia("");
+                }}
+                className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+              >
+                Bỏ lọc
+              </button>
+            )}
+          </div>
+
+          {/*
+            HAI Ô LỌC RIÊNG CỦA KHỐI NÀY, tách khỏi bộ lọc ngày ở đầu màn hình.
+            Ô trên khoanh KHOẢNG ngày cho cả trang; hai ô này soi MỘT ngày giao
+            hoặc MỘT loại bia bên trong khoảng đó — "hôm 24/09 những quán nào
+            nhận Bia Helios".
+          */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Ngày giao
+              </span>
+              <select
+                value={locNgay}
+                onChange={(e) => setLocNgay(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+              >
+                <option value="">Tất cả {dsNgayGiao.length} ngày</option>
+                {dsNgayGiao.map((n) => (
+                  <option key={n} value={n}>
+                    {ngayVn(n)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Tên bia
+              </span>
+              <select
+                value={locBia}
+                onChange={(e) => setLocBia(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+              >
+                <option value="">Tất cả {dsTenBia.length} loại bia</option>
+                {dsTenBia.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
         {bang.theoBoPhan.length === 0 ? (
           <p className="py-10 text-center text-xs font-bold text-slate-400">
@@ -630,7 +752,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                               <table className="w-full text-left text-[12px] font-bold text-slate-600">
                                 <thead className="bg-slate-50">
                                   <tr>
-                                    {["Ngày giao", "Loại bia", "Số lượng"].map(
+                                    {["Ngày giao", "Tên bia", "Số lượng"].map(
                                       (h, i) => (
                                         <th
                                           key={h}
