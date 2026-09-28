@@ -428,10 +428,10 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
   };
 
   return (
-    <div className="space-y-4">
-      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
+    <div className="space-y-5">
+      <div className="px-4 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex gap-3">
         <Building2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-        <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+        <p className="text-[13px] font-bold text-slate-500 leading-relaxed">
           Hóa đơn xuất cho BNC là một khách hàng duy nhất mã{" "}
           <strong>AD0103</strong>, nên file công nợ chỉ có một dòng "BNC". Màn
           hình này tách ngược lại: BNC chia{" "}
@@ -450,7 +450,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         từ đầu — mà đổi thẻ còn xoá luôn điểm bán đang lọc.
       */}
       {/* ----- Bốn thẻ theo dõi riêng ----- */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/60 rounded-2xl border border-slate-200/60 w-fit">
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/70 rounded-2xl border border-slate-200/70 w-full sm:w-fit">
         {NHOM_BNC.map((n) => (
           <button
             key={n.ma}
@@ -461,7 +461,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
               setBoPhan("");
             }}
             className={cn(
-              "px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+              "flex-1 sm:flex-none px-5 py-3 rounded-xl text-[13px] font-black uppercase tracking-wide transition-all whitespace-nowrap",
               nhom === n.ma
                 ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
                 : "text-slate-500 hover:text-slate-900 hover:bg-white",
@@ -474,9 +474,9 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       </div>
 
       {/* ----- Bộ lọc ----- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <label className="block">
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
             Từ ngày
           </span>
           <div className="relative mt-1">
@@ -484,19 +484,19 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
               value={tuNgay}
               max={denNgay || undefined}
               onChange={(v: string) => setTuNgay(v)}
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-900"
             />
           </div>
         </label>
         <label className="block">
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
             Đến ngày
           </span>
           <ONgay
             value={denNgay}
             min={tuNgay || undefined}
             onChange={(v: string) => setDenNgay(v)}
-            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-900"
           />
         </label>
         {/*
@@ -507,13 +507,13 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         */}
         {phaiChonBoPhan(nhom) && (
           <label className="block sm:col-span-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
               Điểm bán
             </span>
             <select
               value={boPhan}
               onChange={(e) => setBoPhan(e.target.value)}
-              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[14px] font-bold text-slate-900"
             >
               <option value="">
                 Tất cả {boPhanTheoNhom.length} điểm bán
@@ -529,7 +529,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       </div>
 
       {/* ----- Tổng ----- */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
           { nhan: "Số đơn", giaTri: formatNumber(bang.tong.soDon) },
           { nhan: "Bộ phận nhận", giaTri: formatNumber(bang.tong.soBoPhan) },
@@ -539,12 +539,12 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         ].map((o) => (
           <div
             key={o.nhan}
-            className="p-3 rounded-xl bg-white border border-slate-200"
+            className="px-4 py-3.5 rounded-2xl bg-white border border-slate-200"
           >
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+            <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
               {o.nhan}
             </p>
-            <p className="text-sm font-black text-slate-900 mt-0.5 tabular-nums">
+            <p className="text-lg font-black text-slate-900 mt-1 tabular-nums leading-none">
               {o.giaTri}
             </p>
           </div>
@@ -555,29 +555,29 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       {(bang.tong.donChuaXong > 0 ||
         bang.tong.donThieuAnh > 0 ||
         bang.tong.haoHut > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {bang.tong.donChuaXong > 0 && (
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex gap-2">
+            <div className="px-4 py-3.5 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2.5">
               <Truck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
+              <p className="text-[13px] font-bold text-amber-800 leading-relaxed">
                 <strong>{bang.tong.donChuaXong} đơn</strong> còn đi đường, chờ
                 ảnh biên bản
               </p>
             </div>
           )}
           {bang.tong.donThieuAnh > 0 && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex gap-2">
+            <div className="px-4 py-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] font-bold text-rose-800 leading-relaxed">
+              <p className="text-[13px] font-bold text-rose-800 leading-relaxed">
                 <strong>{bang.tong.donThieuAnh} đơn</strong> đã ghi nhận mà
                 không có ảnh — thiếu chứng từ
               </p>
             </div>
           )}
           {bang.tong.haoHut > 0 && (
-            <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 flex gap-2">
+            <div className="px-4 py-3.5 rounded-2xl bg-slate-100 border border-slate-200 flex gap-2.5">
               <AlertTriangle className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-              <p className="text-[11px] font-bold text-slate-600 leading-relaxed">
+              <p className="text-[13px] font-bold text-slate-600 leading-relaxed">
                 Hao hụt <strong>{so(bang.tong.haoHut)} lít</strong> — không tính
                 vào sản lượng giao
               </p>
@@ -605,8 +605,8 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       */}
       {nhom === "NB" ? (
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+          <p className="text-[12px] font-black uppercase tracking-wide text-slate-500">
             Theo bộ phận · xếp theo sản lượng
           </p>
         </div>
@@ -619,7 +619,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
             <table className="w-full text-left">
               <thead>
                 <tr>
-                  <th className="px-3 py-2 w-9" />
+                  <th className="px-3.5 py-2.5 w-9" />
                   {[
                     "Bộ phận",
                     "Bia lít",
@@ -628,7 +628,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     <th
                       key={h}
                       className={cn(
-                        "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400",
+                        "px-3.5 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-400",
                         i > 0 && "text-right",
                       )}
                     >
@@ -644,7 +644,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     <tr
                       key={o.partnerId}
                       className={cn(
-                        "border-t border-slate-100 text-[12px] font-bold text-slate-600 hover:bg-slate-50/70 transition-colors",
+                        "border-t border-slate-100 text-[13px] font-bold text-slate-600 hover:bg-slate-50/70 transition-colors",
                         mo && "bg-slate-50",
                       )}
                     >
@@ -662,18 +662,18 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                           />
                         </button>
                       </td>
-                      <td className="px-3 py-2 text-slate-900">
+                      <td className="px-3.5 py-2.5 text-slate-900">
                         {tenGon(o.boPhan)}
                         {o.donChuaXong > 0 && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[8px] font-black uppercase">
+                          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black uppercase">
                             {o.donChuaXong} chờ
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-900 font-black">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900 font-black">
                         {o.soLuongLit > 0 ? so(o.soLuongLit) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-900 font-black">
+                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900 font-black">
                         {o.soLuongLon > 0 ? formatNumber(o.soLuongLon) : "—"}
                       </td>
                     </tr>,
@@ -712,14 +712,14 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                             <td />
                             <td colSpan={3} className="px-3 pb-3">
                               {o.chiTiet.length === 0 ? (
-                                <p className="py-3 text-[12px] font-bold text-slate-400">
+                                <p className="py-3 text-[13px] font-bold text-slate-400">
                                   Không có lần nhận nào trong khoảng ngày này.
                                 </p>
                               ) : (
                                 <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                                   <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
                                     <label className="block">
-                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
                                         Ngày giao
                                       </span>
                                       <select
@@ -731,7 +731,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             e.target.value,
                                           )
                                         }
-                                        className="w-full mt-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+                                        className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                                       >
                                         <option value="">
                                           Tất cả {dsNgay.length} ngày
@@ -744,7 +744,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                       </select>
                                     </label>
                                     <label className="block">
-                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
                                         Tên bia
                                       </span>
                                       <select
@@ -756,7 +756,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             e.target.value,
                                           )
                                         }
-                                        className="w-full mt-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900"
+                                        className="w-full mt-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
                                       >
                                         <option value="">
                                           Tất cả {dsBia.length} loại bia
@@ -779,7 +779,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             },
                                           }))
                                         }
-                                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                                        className="px-3 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
                                       >
                                         Bỏ lọc
                                       </button>
@@ -787,11 +787,11 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                   </div>
 
                                   {ds.length === 0 ? (
-                                    <p className="py-6 text-center text-[12px] font-bold text-slate-400">
+                                    <p className="py-6 text-center text-[13px] font-bold text-slate-400">
                                       Không có lần nhận nào khớp bộ lọc.
                                     </p>
                                   ) : (
-                                    <table className="w-full text-left text-[12px] font-bold text-slate-600">
+                                    <table className="w-full text-left text-[13px] font-bold text-slate-600">
                                       <thead className="bg-slate-50">
                                         <tr>
                                           {[
@@ -803,7 +803,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             <th
                                               key={h}
                                               className={cn(
-                                                "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
+                                                "px-3.5 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
                                                 i === 2 && "text-right",
                                               )}
                                             >
@@ -818,22 +818,22 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             key={`${c.ngay}-${c.tenHang}-${i}`}
                                             className="border-t border-slate-100"
                                           >
-                                            <td className="px-3 py-2 font-mono whitespace-nowrap">
+                                            <td className="px-3.5 py-2.5 font-mono whitespace-nowrap">
                                               {ngayVn(c.ngay)}
                                             </td>
-                                            <td className="px-3 py-2 text-slate-900">
+                                            <td className="px-3.5 py-2.5 text-slate-900">
                                               {c.tenHang}
                                             </td>
                                             {/* Số đứng một mình trong ô của nó,
                                                 đơn vị sang cột riêng — số nào
                                                 cũng kết thúc ở cùng một mép thì
                                                 đọc cột dọc mới nhanh. */}
-                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900">
+                                            <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap text-slate-900">
                                               {c.dvt === "Lon"
                                                 ? formatNumber(c.soLuong)
                                                 : so(c.soLuong)}
                                             </td>
-                                            <td className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                                            <td className="px-3.5 py-2.5 text-[13px] font-bold text-slate-400 uppercase whitespace-nowrap">
                                               {c.dvt}
                                             </td>
                                           </tr>
@@ -856,8 +856,8 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       </div>
       ) : (
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+          <p className="text-[12px] font-black uppercase tracking-wide text-slate-500">
             {tenNhomBNC(nhom)} · {chiTietCaThe.length} lần giao
           </p>
         </div>
@@ -867,7 +867,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[12px] font-bold text-slate-600">
+            <table className="w-full text-left text-[13px] font-bold text-slate-600">
               <thead className="bg-slate-50">
                 <tr>
                   {[
@@ -880,7 +880,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     <th
                       key={h}
                       className={cn(
-                        "px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
+                        "px-3.5 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
                         i === 4 && "text-right",
                       )}
                     >
@@ -895,23 +895,23 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     key={`${c.ngay}-${c.diaDiem}-${c.tenHang}-${i}`}
                     className="border-t border-slate-100 hover:bg-slate-50/70 transition-colors"
                   >
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap">
                       {ngayVn(c.ngay)}
                     </td>
                     {/*
                       Địa điểm trống nghĩa là ghi chú không mang điểm nhận —
                       dòng điền tay chẳng hạn. Hiện "—" chứ không đoán.
                     */}
-                    <td className="px-3 py-2 text-slate-900 whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 text-slate-900 whitespace-nowrap">
                       {c.diaDiem || (
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-slate-900">{c.tenHang}</td>
-                    <td className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 text-slate-900">{c.tenHang}</td>
+                    <td className="px-3.5 py-2.5 text-[13px] font-bold text-slate-400 uppercase whitespace-nowrap">
                       {c.dvt}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-slate-900 font-black">
+                    <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap text-slate-900 font-black">
                       {c.dvt === "Lon"
                         ? formatNumber(c.soLuong)
                         : so(c.soLuong)}
@@ -937,11 +937,11 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         Ảnh biên bản vẫn xem được đầy đủ ở Thư viện ảnh, lọc theo chiều xuất.
       */}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         <button
           onClick={taiExcel}
           disabled={bang.don.length === 0}
-          className="px-5 py-3 rounded-xl bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
+          className="px-5 py-3.5 rounded-2xl bg-primary text-white text-[12px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50"
         >
           <Download className="w-4 h-4" /> Tải Excel ({bang.don.length} đơn)
         </button>
@@ -965,7 +965,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
               ? tomTatDieuChuyen(tepDieuChuyen)
               : `Điều chuyển bia về kho từng điểm bán · ${tomTatDieuChuyen(tepDieuChuyen)}`
           }
-          className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2 disabled:opacity-50"
+          className="px-5 py-3.5 rounded-2xl bg-slate-900 text-white text-[12px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2 disabled:opacity-50"
         >
           <Truck className="w-4 h-4" /> File điều chuyển (
           {tepDieuChuyen.dong.length} dòng)
@@ -981,7 +981,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
       {nhom === "NB" && tepDieuChuyen.ngoaiNoiBo.length > 0 && (
         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex gap-2 items-start">
           <Building2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-          <div className="text-[11px] font-bold text-slate-500 leading-relaxed">
+          <div className="text-[13px] font-bold text-slate-500 leading-relaxed">
             <p>
               Không điều chuyển vì không thuộc phần Nội bộ — đúng theo thiết kế,
               nhưng nói ra để khỏi tưởng app bỏ sót:
@@ -1002,7 +1002,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           tepDieuChuyen.thieuMaVatTu.length > 0) && (
         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-[11px] font-bold text-amber-800 leading-relaxed">
+          <div className="text-[13px] font-bold text-amber-800 leading-relaxed">
             <p>Không điều chuyển được, đã giữ lại ngoài tệp:</p>
             <ul className="mt-1 space-y-0.5">
               {tepDieuChuyen.thieuMaKho.map((o) => (
