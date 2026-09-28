@@ -14,6 +14,7 @@ import { dungBangBNC, laBoPhanBNC, type DonBNC as DonBNCType } from "../lib/bnc"
 import {
   nhomCuaBoPhan,
   NHOM_BNC,
+  phaiChonBoPhan,
   tenNhomBNC,
   type MaNhomBNC,
 } from "../lib/nhomBNC";
@@ -65,7 +66,22 @@ export default function DonBNC({ transactions, products, partners }: Props) {
   const [denNgay, setDenNgay] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [boPhan, setBoPhan] = useState("");
   /** Lọc theo một trong bốn phần của BNC; rỗng là lấy hết. */
-  const [nhom, setNhom] = useState<MaNhomBNC | "">("");
+  /*
+   * BỐN PHẦN CỦA BNC LÀ BỐN THẺ, không phải một ô lọc.
+   *
+   * Bốn phần này theo dõi tách bạch: Nội bộ là bia bán trong khu, Ngoại giao
+   * là biếu tặng, HTKD là hợp tác kinh doanh, Chi phí khác là phần còn lại.
+   * Gộp cả bốn vào một bảng rồi lọc bằng ô chọn thì mở màn hình ra là thấy một
+   * bảng trộn đủ thứ — đúng cái "nhìn mà loạn".
+   *
+   * Mặc định mở Nội bộ: đó là phần đông đơn nhất và là phần duy nhất có việc
+   * phải làm tiếp (xuất tệp điều chuyển).
+   *
+   * KHÔNG CÒN LỰA CHỌN "cả bốn phần": cộng chung bốn phần ra một con số không
+   * dùng được vào việc gì — bia biếu tặng và bia bán trong khu không cộng lại
+   * với nhau được.
+   */
+  const [nhom, setNhom] = useState<MaNhomBNC>("NB");
   /** Đơn đang mở khung xem ảnh biên bản; `null` là đang đóng. */
   const [donDangXem, setDonDangXem] = useState<DonBNCType | null>(null);
 
@@ -378,48 +394,57 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
             className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
           />
         </label>
-        <label className="block">
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-            Phần của BNC
-          </span>
-          <select
-            value={nhom}
-            onChange={(e) => {
-              // Đổi nhóm thì bỏ bộ phận đang lọc: bộ phận cũ gần như luôn
-              // thuộc nhóm khác, để lại là ra bảng trống.
-              setNhom(e.target.value as MaNhomBNC | "");
+        {/*
+          Ô CHỌN ĐIỂM BÁN CHỈ CÓ Ở NỘI BỘ.
+
+          Ba phần kia mỗi phần đúng MỘT bộ phận (`boPhan` khai sẵn trong
+          `NHOM_BNC`), nên một ô chọn chỉ có một dòng là ô vô nghĩa.
+        */}
+        {phaiChonBoPhan(nhom) && (
+          <label className="block sm:col-span-2">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Điểm bán
+            </span>
+            <select
+              value={boPhan}
+              onChange={(e) => setBoPhan(e.target.value)}
+              className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+            >
+              <option value="">
+                Tất cả {boPhanTheoNhom.length} điểm bán
+              </option>
+              {boPhanTheoNhom.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {/* ----- Bốn thẻ theo dõi riêng ----- */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-100/60 rounded-2xl border border-slate-200/60 w-fit">
+        {NHOM_BNC.map((n) => (
+          <button
+            key={n.ma}
+            onClick={() => {
+              // Đổi thẻ thì bỏ điểm bán đang lọc: điểm bán cũ thuộc thẻ khác,
+              // để lại là ra bảng trống mà không hiểu vì sao.
+              setNhom(n.ma);
               setBoPhan("");
             }}
-            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
+            className={cn(
+              "px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all",
+              nhom === n.ma
+                ? "bg-slate-900 text-white shadow-lg shadow-slate-200"
+                : "text-slate-500 hover:text-slate-900 hover:bg-white",
+            )}
+            title={n.moTa}
           >
-            <option value="">Cả bốn phần</option>
-            {NHOM_BNC.map((n) => (
-              <option key={n.ma} value={n.ma}>
-                {n.ten}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-            Bộ phận
-          </span>
-          <select
-            value={boPhan}
-            onChange={(e) => setBoPhan(e.target.value)}
-            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
-          >
-            <option value="">
-              Tất cả {boPhanTheoNhom.length} bộ phận
-              {nhom ? ` · ${tenNhomBNC(nhom)}` : ""}
-            </option>
-            {boPhanTheoNhom.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            {n.ten}
+          </button>
+        ))}
       </div>
 
       {/* ----- Tổng ----- */}
@@ -486,18 +511,6 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
             Bốn phần của BNC
           </p>
-          {nhom && (
-            <button
-              type="button"
-              onClick={() => {
-                setNhom("");
-                setBoPhan("");
-              }}
-              className="text-[9px] font-black uppercase tracking-widest text-primary"
-            >
-              Xem cả bốn
-            </button>
-          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left whitespace-nowrap">
@@ -527,7 +540,10 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                   <tr
                     key={n.nhom}
                     onClick={() => {
-                      setNhom(dangLoc ? "" : n.nhom);
+                      // Bấm một dòng là SANG thẻ đó. Trước đây bấm lại để
+                      // bỏ lọc, nhưng nay bốn phần là bốn thẻ — không có
+                      // trạng thái "không thẻ nào".
+                      setNhom(n.nhom);
                       setBoPhan("");
                     }}
                     className={cn(
@@ -852,10 +868,16 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         </button>
 
         {/*
-          TỆP ĐIỀU CHUYỂN — chỉ cho phần Nội bộ, vì ba phần còn lại của BNC
-          không có kho riêng. Nút luôn hiện chứ không ẩn theo ô lọc: ẩn đi thì
-          người dùng đang lọc Ngoại giao sẽ tưởng app không có chức năng này.
+          TỆP ĐIỀU CHUYỂN CHỈ THUỘC THẺ NỘI BỘ.
+
+          Ba phần còn lại của BNC không có kho riêng nên không điều chuyển được.
+          Trước đây nút vẫn hiện ở mọi phần — lý do lúc đó là "ẩn đi thì người
+          đang lọc Ngoại giao tưởng app không có chức năng này". Nay bốn phần
+          thành bốn thẻ tách bạch, nút nằm đúng thẻ của nó là rõ nghĩa hơn: ở
+          thẻ Ngoại giao mà thấy nút "File điều chuyển · Nội bộ" mới là thứ khó
+          hiểu.
         */}
+        {nhom === "NB" && (
         <button
           onClick={taiTepDieuChuyen}
           disabled={dangTaiDc || tepDieuChuyen.dong.length === 0}
@@ -866,9 +888,10 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
           }
           className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2 disabled:opacity-50"
         >
-          <Truck className="w-4 h-4" /> File điều chuyển · Nội bộ (
+          <Truck className="w-4 h-4" /> File điều chuyển (
           {tepDieuChuyen.dong.length} dòng)
         </button>
+        )}
       </div>
 
       {/*
@@ -876,7 +899,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         thiếu mã kho là thiếu vĩnh viễn cho tới khi bộ phận cấp mã, mà tệp xuất
         ra thì trông vẫn bình thường.
       */}
-      {tepDieuChuyen.ngoaiNoiBo.length > 0 && (
+      {nhom === "NB" && tepDieuChuyen.ngoaiNoiBo.length > 0 && (
         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex gap-2 items-start">
           <Building2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
           <div className="text-[11px] font-bold text-slate-500 leading-relaxed">
@@ -895,8 +918,9 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
         </div>
       )}
 
-      {(tepDieuChuyen.thieuMaKho.length > 0 ||
-        tepDieuChuyen.thieuMaVatTu.length > 0) && (
+      {nhom === "NB" &&
+        (tepDieuChuyen.thieuMaKho.length > 0 ||
+          tepDieuChuyen.thieuMaVatTu.length > 0) && (
         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-[11px] font-bold text-amber-800 leading-relaxed">
