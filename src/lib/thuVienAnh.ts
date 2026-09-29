@@ -61,8 +61,6 @@ export interface AnhThuVien {
   soDongDungChung?: number;
   /** Chữ phụ gốc, giữ lại để dựng lại khi gộp trùng. */
   phuGoc: string;
-  /** Chữ để tra cứu: mã lô, mã phiếu, tên đối tác, tên hàng. Đã hạ chữ thường. */
-  timKiem: string;
 }
 
 /** `2026-08-05T08:00:00Z` → `2026-08-05`, để so với biên ngày người dùng chọn. */
@@ -93,7 +91,6 @@ export interface ThuVienInput {
    */
   tuNgay: string;
   denNgay: string;
-  tuKhoa: string;
 }
 
 /**
@@ -120,7 +117,6 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
       if (!anh.length) return;
       const lienQuan = theoPhieu.get(s.code) || [];
       const tenHang = lienQuan.map((t) => t.productName).filter(Boolean);
-      const lo: string[] = [];
       // Ngày của phiếu lấy theo giao dịch nếu có: `slips.date` chỉ có ngày,
       // còn giao dịch có cả giờ nên xếp thứ tự sát thực tế hơn.
       const ngay = lienQuan[0]?.date || s.date;
@@ -139,7 +135,6 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phuGoc: phuPhieu,
           donVi: lienQuan[0]?.partnerName || "",
           maDonVi: lienQuan[0]?.partnerId || "",
-          timKiem: [s.code, ...lo, ...tenHang].join(" ").toLowerCase(),
         });
       });
     });
@@ -158,9 +153,6 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
-          timKiem: [t.productName, t.partnerName]
-            .join(" ")
-            .toLowerCase(),
         });
       });
     });
@@ -178,15 +170,11 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
-          timKiem: [t.partnerName, t.productName]
-            .join(" ")
-            .toLowerCase(),
         });
       });
     });
   }
 
-  const q = input.tuKhoa.trim().toLowerCase();
   const tu = input.tuNgay.trim();
   const den = input.denNgay.trim();
 
@@ -201,7 +189,6 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
         // biên.
         if (tu && ngay < tu) return false;
         if (den && ngay > den) return false;
-        if (q && !a.timKiem.includes(q)) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date)),

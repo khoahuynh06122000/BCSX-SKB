@@ -133,7 +133,6 @@ const nhap = dungAnhThuVien({
   loai: "IN",
   tuNgay: "",
     denNgay: "",
-  tuKhoa: "",
 });
 
 // Hai ảnh phiếu ký + một ảnh nhập kiểu cũ.
@@ -167,7 +166,6 @@ const xuat = dungAnhThuVien({
   loai: "OUT",
   tuNgay: "",
     denNgay: "",
-  tuKhoa: "",
 });
 // Lấy cả mảng nhiều ảnh, và không đếm hai lần tấm nằm ở cả hai trường.
 //
@@ -195,7 +193,6 @@ kiemTra(
     loai: "IN",
     tuNgay: "2026-08-05",
     denNgay: "2026-08-05",
-    tuKhoa: "",
   }).length,
   2,
 );
@@ -207,7 +204,6 @@ kiemTra(
     loai: "IN",
     tuNgay: "2026-08-01",
     denNgay: "",
-    tuKhoa: "",
   }).length,
   2,
 );
@@ -219,7 +215,6 @@ kiemTra(
     loai: "IN",
     tuNgay: "",
     denNgay: "2026-07-31",
-    tuKhoa: "",
   }).length,
   1,
 );
@@ -231,66 +226,16 @@ kiemTra(
     loai: "IN",
     tuNgay: "2026-09-01",
     denNgay: "2026-09-30",
-    tuKhoa: "",
   }).length,
   0,
 );
 
 // Tra cứu: nhập kho tra được cả mã phiếu lẫn mã lô.
-kiemTra(
-  "tra theo ma phieu",
-  dungAnhThuVien({
-    transactions,
-    slips,
-    loai: "IN",
-    tuNgay: "",
-    denNgay: "",
-    tuKhoa: "PN-260805-01",
-  }).length,
-  2,
-);
 /*
- * KHONG CON TRA THEO MA LO. Kho da bo theo doi theo lo, nen khong anh nao con
- * mang ma lo de ma tra — tra bang mot chuoi kieu ma lo phai ra RONG chu khong
- * duoc vo tinh khop nham sang truong khac.
+ * KHONG CON PHEP KIEM TRA CUU. O tra cuu trong Thu vien anh da go: nhan cua no
+ * hua tra duoc "MA LO", ma kho thi bo theo doi theo lo tu lau — mot o hua thu
+ * khong con ton tai. Bo o thi bo luon truong `timKiem` dung sau no.
  */
-kiemTra(
-  "tra bang ma lo cu thi khong con ra gi",
-  dungAnhThuVien({
-    transactions,
-    slips,
-    loai: "IN",
-    tuNgay: "",
-    denNgay: "",
-    tuKhoa: "lot-01",
-  }).length,
-  0,
-);
-kiemTra(
-  "tra khong ra thi rong",
-  dungAnhThuVien({
-    transactions,
-    slips,
-    loai: "IN",
-    tuNgay: "",
-    denNgay: "",
-    tuKhoa: "khong-co-that",
-  }).length,
-  0,
-);
-// Xuất kho tra theo tên đơn vị.
-kiemTra(
-  "tra theo don vi",
-  dungAnhThuVien({
-    transactions,
-    slips,
-    loai: "OUT",
-    tuNgay: "",
-    denNgay: "",
-    tuKhoa: "1901",
-  }).length,
-  2,
-);
 
 // Không có gì thì không vỡ.
 kiemTra(
@@ -301,7 +246,6 @@ kiemTra(
     loai: "IN",
     tuNgay: "",
     denNgay: "",
-    tuKhoa: "",
   }).length,
   0,
 );
@@ -315,7 +259,6 @@ kiemTra(
     loai: "OUT",
     tuNgay: "",
     denNgay: "",
-    tuKhoa: "",
   });
 
   // Danh sach phai lay tu chinh bo anh dang xem, khong lay tu danh muc doi tac:
@@ -496,7 +439,6 @@ kiemTra("moi kieu deu co cau giai thich rieng", new Set(
     phuGoc: "NVT",
     donVi: "NVT",
     maDonVi: "AC0104",
-    timKiem: "",
     ...o,
   });
 

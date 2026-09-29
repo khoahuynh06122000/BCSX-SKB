@@ -630,7 +630,6 @@ export default function App() {
   const [galleryDenNgay, setGalleryDenNgay] = useState(() =>
     format(new Date(), "yyyy-MM-dd"),
   );
-  const [gallerySearchQuery, setGallerySearchQuery] = useState("");
   /**
    * Giao dịch đang xem ảnh minh chứng ở chế độ toàn màn hình.
    *
@@ -4394,7 +4393,6 @@ export default function App() {
         loai: galleryFilter,
         tuNgay: galleryTuNgay,
         denNgay: galleryDenNgay,
-        tuKhoa: gallerySearchQuery,
       }),
     [
       transactions,
@@ -4402,7 +4400,6 @@ export default function App() {
       galleryFilter,
       galleryTuNgay,
       galleryDenNgay,
-      gallerySearchQuery,
     ],
   );
 
@@ -4565,7 +4562,6 @@ export default function App() {
         loai: galleryFilter,
         tuNgay: "",
         denNgay: "",
-        tuKhoa: "",
       }).length,
     [transactions, slips, galleryFilter],
   );
@@ -6427,9 +6423,19 @@ export default function App() {
                                                     ? "IN"
                                                     : "OUT",
                                                 );
-                                                setGallerySearchQuery(
+                                                /*
+                                                  Loc thang bang O CHON DON VI,
+                                                  khong con o go chu de nham
+                                                  vao. O chon nay so khop dung
+                                                  bang ten don vi, chat hon go
+                                                  tay, va neu don vi do khong
+                                                  co anh thi chinh o chon noi ra
+                                                  dieu ay.
+                                                */
+                                                setGalleryDonVi(
                                                   t.partnerName || "",
                                                 );
+                                                setGalleryBoPhan("");
                                                 // Mở thư viện đúng ngày của
                                                 // giao dịch này, không phải cả
                                                 // tháng.
@@ -9188,36 +9194,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">
-                    {/* Search Dynamic Field */}
-                    <div className="relative group w-full lg:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
-                      <input
-                        type="text"
-                        /*
-                          Chieu xuat da co o chon don vi ben canh nen o nay
-                          khong con de tra cuu don vi nua: bay hai cach lam mot
-                          viec thi nguoi dung go ten don vi vao day roi khong
-                          hieu vi sao khong ra. O nay de tra ten hang va ma lo.
-                        */
-                        placeholder={
-                          galleryFilter === "IN"
-                            ? "Tra cứu MÃ PHIẾU / MÃ LÔ..."
-                            : "Tra cứu MẶT HÀNG / MÃ LÔ..."
-                        }
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700"
-                        value={gallerySearchQuery}
-                        onChange={(e) => setGallerySearchQuery(e.target.value)}
-                      />
-                      {gallerySearchQuery && (
-                        <button
-                          onClick={() => setGallerySearchQuery("")}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-
                     {/* Khoảng ngày: từ ngày — đến ngày */}
                     <div className="flex items-center gap-2 w-full lg:w-auto">
                       <div className="relative flex-1 lg:w-40">
