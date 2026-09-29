@@ -236,60 +236,14 @@ export default function DonBNC({ transactions, products, partners }: Props) {
       "Theo bộ phận",
     );
 
-    XLSXDep.utils.book_append_sheet(
-      wb,
-      taoSheetDep({
-        tieuDeTren: [
-          "ĐƠN BNC — TỪNG ĐƠN",
-          `Từ ${isoSangVn(tuNgay) || "đầu"} đến ${isoSangVn(denNgay) || "nay"}`,
-        ],
-        tieuDe: [
-          "STT",
-          "Ngày",
-          "Phần",
-          "Bộ phận",
-          // Cột này là SỐ ĐẾM mặt hàng trong đơn, không phải tên bia. Tên
-          // "Mặt hàng" làm người đọc chờ một cái tên rồi thấy con số 3.
-          "Số mặt hàng",
-          "Lít hơi",
-          "Lon",
-          "Lít quy đổi",
-          "Hao hụt",
-          "Trạng thái",
-          "Có ảnh",
-          "Ghi chú",
-        ],
-        cot: [
-          { rong: 6, kieu: "giua" },
-          { rong: 12, kieu: "giua" },
-          { rong: 14 },
-          { rong: 26 },
-          { rong: 11, kieu: "so" },
-          { rong: 12, kieu: "so" },
-          { rong: 10, kieu: "so" },
-          { rong: 13, kieu: "so" },
-          { rong: 11, kieu: "so" },
-          { rong: 16, kieu: "giua" },
-          { rong: 9, kieu: "giua" },
-          { rong: 44 },
-        ],
-        hang: bang.don.map((d, i) => [
-          i + 1,
-          isoSangVn(d.ngay) || d.ngay,
-          tenNhomBNC(d.nhom),
-          d.boPhan,
-          d.soMatHang,
-          lam1(d.soLuongLit),
-          d.soLuongLon,
-          lam1(d.litQuyDoi),
-          lam1(d.haoHut),
-          d.trangThai === "di_duong" ? "Đang đi đường" : "Đã ghi nhận",
-          d.coAnh ? "Có" : "Chưa",
-          d.ghiChu,
-        ]),
-      }),
-      "Từng đơn",
-    );
+    /*
+      SHEET "TỪNG ĐƠN" ĐÃ BỎ (29/09/2026), theo yêu cầu của Khoa.
+
+      Nó cộng theo chuyến nhưng mất tên bia, nên nằm lửng giữa hai sheet còn
+      lại: muốn tổng thì đã có "Theo bộ phận", muốn chi tiết thì đã có "Chi
+      tiết" — mà sheet giữa ấy không trả lời trọn câu hỏi nào.
+    */
+
 
     /*
      * SHEET CHI TIẾT — TỪNG DÒNG BIA.
@@ -311,8 +265,6 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         tieuDe: [
           "STT",
           "Ngày giao",
-          "Phần",
-          "Bộ phận",
           "Địa điểm",
           "Tên bia",
           "Đơn vị tính",
@@ -321,9 +273,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         cot: [
           { rong: 6, kieu: "giua" },
           { rong: 12, kieu: "giua" },
-          { rong: 14 },
-          { rong: 26 },
-          { rong: 22 },
+          { rong: 30 },
           { rong: 38 },
           { rong: 12, kieu: "giua" },
           { rong: 13, kieu: "so" },
@@ -332,9 +282,15 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           .flatMap((o) =>
             o.chiTiet.map((c) => ({
               ngay: isoSangVn(c.ngay) || c.ngay,
-              phan: tenNhomBNC(o.nhom),
-              boPhan: o.boPhan,
-              diaDiem: c.diaDiem,
+              /*
+                MỘT CỘT ĐỊA ĐIỂM, KHÔNG PHẢI HAI.
+
+                Với Nội bộ thì điểm bán CHÍNH LÀ bộ phận, nên ghi chú không
+                mang "Điểm nhận" và `diaDiem` rỗng — bỏ cột Bộ phận mà không
+                thay thế là dòng ấy mất hẳn thông tin bia đi tới đâu. Lấy tên
+                bộ phận làm nơi lui.
+              */
+              diaDiem: c.diaDiem || tenGon(o.boPhan),
               tenHang: c.tenHang,
               dvt: c.dvt,
               soLuong: c.dvt === "Lon" ? c.soLuong : lam1(c.soLuong),
@@ -345,8 +301,6 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           .map((r, i) => [
             i + 1,
             r.ngay,
-            r.phan,
-            r.boPhan,
             r.diaDiem,
             r.tenHang,
             r.dvt,
