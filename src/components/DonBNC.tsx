@@ -248,7 +248,9 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           "Ngày",
           "Phần",
           "Bộ phận",
-          "Mặt hàng",
+          // Cột này là SỐ ĐẾM mặt hàng trong đơn, không phải tên bia. Tên
+          // "Mặt hàng" làm người đọc chờ một cái tên rồi thấy con số 3.
+          "Số mặt hàng",
           "Lít hơi",
           "Lon",
           "Lít quy đổi",
@@ -287,6 +289,71 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         ]),
       }),
       "Từng đơn",
+    );
+
+    /*
+     * SHEET CHI TIẾT — TỪNG DÒNG BIA.
+     *
+     * Hai sheet trên chỉ có TỔNG: sheet "Theo bộ phận" cộng cả kỳ, sheet "Từng
+     * đơn" cộng theo chuyến. Cả hai đều mất tên bia, nên mở tệp ra không trả
+     * lời được câu hỏi thường gặp nhất — quán này nhận loại bia nào.
+     *
+     * Giữ NGUYÊN từng giao dịch, không gộp dòng cùng ngày cùng loại: một điểm
+     * bán có thể nhận hai chuyến trong một ngày, hai biên bản riêng.
+     */
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: [
+          "ĐƠN BNC — CHI TIẾT TỪNG DÒNG BIA",
+          `Từ ${isoSangVn(tuNgay) || "đầu"} đến ${isoSangVn(denNgay) || "nay"}`,
+        ],
+        tieuDe: [
+          "STT",
+          "Ngày giao",
+          "Phần",
+          "Bộ phận",
+          "Địa điểm",
+          "Tên bia",
+          "Đơn vị tính",
+          "Số lượng",
+        ],
+        cot: [
+          { rong: 6, kieu: "giua" },
+          { rong: 12, kieu: "giua" },
+          { rong: 14 },
+          { rong: 26 },
+          { rong: 22 },
+          { rong: 38 },
+          { rong: 12, kieu: "giua" },
+          { rong: 13, kieu: "so" },
+        ],
+        hang: bang.theoBoPhan
+          .flatMap((o) =>
+            o.chiTiet.map((c) => ({
+              ngay: isoSangVn(c.ngay) || c.ngay,
+              phan: tenNhomBNC(o.nhom),
+              boPhan: o.boPhan,
+              diaDiem: c.diaDiem,
+              tenHang: c.tenHang,
+              dvt: c.dvt,
+              soLuong: c.dvt === "Lon" ? c.soLuong : lam1(c.soLuong),
+            })),
+          )
+          // Đánh số sau khi đã gộp mọi bộ phận, để STT chạy liền một mạch
+          // trong tệp thay vì bắt đầu lại ở mỗi bộ phận.
+          .map((r, i) => [
+            i + 1,
+            r.ngay,
+            r.phan,
+            r.boPhan,
+            r.diaDiem,
+            r.tenHang,
+            r.dvt,
+            r.soLuong,
+          ]),
+      }),
+      "Chi tiết",
     );
 
     XLSXDep.writeFile(wb, `Don BNC ${tuNgay} den ${denNgay}.xlsx`);
