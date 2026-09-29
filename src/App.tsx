@@ -7,10 +7,8 @@ import React, { useState, useMemo, useEffect, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import {
   Building2,
-  LayoutDashboard,
   PlusCircle,
   MinusCircle,
-  Package,
   Users,
   Search,
   Calendar,
@@ -18,11 +16,9 @@ import {
   User,
   Download,
   LogOut,
-  CheckCircle2,
   ChevronRight,
   ChevronDown,
   TrendingUp,
-  TrendingDown,
   AlertCircle,
   Info,
   Menu,
@@ -35,7 +31,6 @@ import {
   Layers,
   FileText,
   AlertTriangle,
-  DollarSign,
   Trash2,
   RefreshCw,
   ShieldCheck,
@@ -52,12 +47,6 @@ import {
   Hash,
 } from "lucide-react";
 import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from "recharts";
-
-import {
   isValid,
   parse,
   startOfDay,
@@ -71,7 +60,6 @@ import {
   isWithinInterval,
   parseISO,
   format,
-  subDays,
 } from "date-fns";
 import {
   Transaction,
@@ -167,8 +155,7 @@ import {
 } from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
-import { dauCuaLoai, dungBangTonKy, moTaKy } from "./lib/tonKho";
-import { NHAN_MUC_DO, phanTichKho } from "./lib/phanTich";
+import { dauCuaLoai } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
@@ -388,169 +375,6 @@ const Card = ({
   </div>
 );
 
-const StatCard = ({
-  title,
-  value,
-  unit,
-  icon: Icon,
-  color = "primary",
-  subtitle,
-  target,
-  trend,
-  chartData,
-}: any) => (
-  <Card className="relative group overflow-hidden border-none ring-1 ring-slate-100/50 pb-0 transition-all duration-300 hover:-translate-y-0.5 hover:ring-amber-500/30 hover:shadow-[0_12px_28px_-8px_rgba(217,119,6,0.18)]">
-    {/* Vach mau tren dau the - chi tiet nhan dien hoc tu app mau */}
-    <div
-      className={cn(
-        "absolute top-0 left-0 right-0 h-1",
-        color === "primary"
-          ? "bg-gradient-to-r from-amber-500 to-amber-600"
-          : color === "green"
-            ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-            : color === "amber"
-              ? "bg-gradient-to-r from-amber-400 to-yellow-500"
-              : "bg-gradient-to-r from-rose-500 to-rose-400",
-      )}
-    />
-    <div className="flex items-center justify-between mb-2 sm:mb-4">
-      <div
-        className={cn(
-          "w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm",
-          color === "primary"
-            ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-amber-500/25"
-            : color === "green"
-              ? "bg-emerald-500 text-white shadow-emerald-500/25"
-              : color === "amber"
-                ? "bg-amber-500 text-white shadow-amber-500/25"
-                : "bg-rose-500 text-white shadow-rose-500/25",
-        )}
-      >
-        {Icon && <Icon className="w-4 h-4 sm:w-6 sm:h-6" />}
-      </div>
-      {trend && (
-        <div
-          className={cn(
-            "px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[8px] sm:text-[10px] font-black tracking-wider flex items-center gap-1 shadow-sm border",
-            trend.startsWith("+")
-              ? "bg-emerald-50 border-emerald-100 text-emerald-600"
-              : "bg-rose-50 border-rose-100 text-rose-600",
-          )}
-        >
-          {trend.startsWith("+") ? (
-            <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-          ) : (
-            <TrendingDown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-          )}
-          {trend}
-        </div>
-      )}
-    </div>
-
-    <div className="flex flex-col mb-2 sm:mb-4">
-      <p className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sm:tracking-[0.25em] mb-0.5">
-        {title}
-      </p>
-      <h4 className="text-lg sm:text-3xl font-black text-slate-900 tracking-tight flex items-baseline gap-1.5 sm:gap-2">
-        <span className="font-mono leading-none">{value}</span>
-        {unit && (
-          <span className="text-[8px] sm:text-xs font-black text-slate-400 uppercase tracking-widest">
-            {unit}
-          </span>
-        )}
-      </h4>
-      {target && (
-        <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 mt-0.5 sm:mt-1 uppercase tracking-wider uppercase tracking-wider">
-          Mục tiêu: {target}
-        </p>
-      )}
-      {subtitle && (
-        <p className="text-[9px] sm:text-xs font-bold text-slate-500 mt-1.5 sm:mt-3 italic flex items-center gap-1 sm:gap-1.5 font-sans">
-          {!trend && (
-            <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-500" />
-          )}
-          {subtitle}
-        </p>
-      )}
-    </div>
-
-    {chartData && (
-      <div className="h-16 w-full -mx-8 mt-2 overflow-hidden">
-        {/* Dung chieu cao co dinh (khong dung "100%") de Recharts khong do ra -1
-            roi ve lai lien tuc gay rung man hinh. */}
-        <ResponsiveContainer width="100%" height={64} minWidth={0}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient
-                id={`gradient-${color}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="5%"
-                  stopColor={
-                    color === "primary"
-                      ? "#d97706"
-                      : color === "green"
-                        ? "#10b981"
-                        : color === "amber"
-                          ? "#f59e0b"
-                          : "#f43f5e"
-                  }
-                  stopOpacity={0.2}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={
-                    color === "primary"
-                      ? "#d97706"
-                      : color === "green"
-                        ? "#10b981"
-                        : color === "amber"
-                          ? "#f59e0b"
-                          : "#f43f5e"
-                  }
-                  stopOpacity={0}
-                />
-              </linearGradient>
-            </defs>
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke={
-                color === "primary"
-                  ? "#d97706"
-                  : color === "green"
-                    ? "#10b981"
-                    : color === "amber"
-                      ? "#f59e0b"
-                      : "#f43f5e"
-              }
-              strokeWidth={2}
-              fillOpacity={1}
-              fill={`url(#gradient-${color})`}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    )}
-
-    <div
-      className={cn(
-        "absolute bottom-0 right-0 w-32 h-32 blur-[60px] opacity-10 rounded-full -mr-12 -mb-12 transition-all duration-700 group-hover:opacity-20 group-hover:scale-125",
-        color === "primary"
-          ? "bg-primary"
-          : color === "green"
-            ? "bg-emerald-500"
-            : color === "amber"
-              ? "bg-amber-500"
-              : "bg-rose-500",
-      )}
-    />
-  </Card>
-);
 
 const Button = ({
   children,
@@ -753,7 +577,7 @@ export default function App() {
     [revenueBuild],
   );
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("");
   /**
    * Tab con trong mục Báo cáo. Ba giá trị này đúng với ba nút trên giao diện.
    *
@@ -5136,149 +4960,6 @@ export default function App() {
     };
   }, [transactions, approvedSlips, products]);
 
-  /* ---------------- Ton kho theo ky ---------------- */
-
-  /**
-   * Khoảng ngày của màn hình tồn kho, mặc định từ đầu tháng tới hôm nay.
-   *
-   * Riêng của màn hình này, KHÔNG dùng chung `dateRange` với bảng điều khiển:
-   * hai chỗ trả lời hai câu khác nhau, dùng chung thì đổi ở đây là đổi luôn số
-   * trên bảng điều khiển mà không ai ngờ.
-   */
-  const [tonTuNgay, setTonTuNgay] = useState(() =>
-    format(new Date(new Date().setDate(1)), "yyyy-MM-dd"),
-  );
-  const [tonDenNgay, setTonDenNgay] = useState(() =>
-    format(new Date(), "yyyy-MM-dd"),
-  );
-  const [tonTuKhoa, setTonTuKhoa] = useState("");
-
-  const bangTonKy = useMemo(
-    () =>
-      dungBangTonKy({
-        giaoDichTinhTon: countedTransactions,
-        giaoDichChoKy: pendingSlipTransactions(transactions, approvedSlips),
-        products,
-        tuNgay: tonTuNgay,
-        denNgay: tonDenNgay,
-        tuKhoa: tonTuKhoa,
-        dinhMucChung: DEFAULT_MIN_STOCK,
-      }),
-    [
-      countedTransactions,
-      transactions,
-      approvedSlips,
-      products,
-      tonTuNgay,
-      tonDenNgay,
-      tonTuKhoa,
-    ],
-  );
-
-  /** Tải bảng nhập · xuất · tồn đang xem ra Excel. */
-  const taiTonKhoExcel = () => {
-    if (!bangTonKy.dong.length) return;
-    const wb = XLSXDep.utils.book_new();
-    const lam1 = (n: number) => Math.round(n * 10) / 10;
-    XLSXDep.utils.book_append_sheet(
-      wb,
-      taoSheetDep({
-        tieuDeTren: [
-          "NHẬP · XUẤT · TỒN",
-          `${moTaKy(tonTuNgay, tonDenNgay)}${tonTuKhoa ? ` · lọc "${tonTuKhoa}"` : ""}`,
-        ],
-        tieuDe: [
-          "STT",
-          "Mặt hàng",
-          "ĐVT",
-          "Đầu kỳ",
-          "Nhập",
-          "Xuất bán",
-          "Hao hụt",
-          "Cuối kỳ",
-          "Chờ ký",
-        ],
-        cot: [
-          { rong: 6, kieu: "giua" },
-          { rong: 40 },
-          { rong: 8, kieu: "giua" },
-          { rong: 13, kieu: "so" },
-          { rong: 13, kieu: "so" },
-          { rong: 13, kieu: "so" },
-          { rong: 12, kieu: "so" },
-          { rong: 13, kieu: "so" },
-          { rong: 12, kieu: "so" },
-        ],
-        hang: bangTonKy.dong.map((d, i) => [
-          i + 1,
-          d.tenHang,
-          d.unit,
-          lam1(d.dauKy),
-          lam1(d.nhap),
-          lam1(d.xuatBan),
-          lam1(d.haoHut),
-          lam1(d.cuoiKy),
-          lam1(d.choKy),
-        ]),
-        dongTong: [
-          "",
-          "TỔNG CỘNG",
-          "",
-          lam1(bangTonKy.tong.dauKy),
-          lam1(bangTonKy.tong.nhap),
-          lam1(bangTonKy.tong.xuatBan),
-          lam1(bangTonKy.tong.haoHut),
-          lam1(bangTonKy.tong.cuoiKy),
-          lam1(bangTonKy.tong.choKy),
-        ],
-      }),
-      "Nhap xuat ton",
-    );
-    XLSXDep.writeFile(wb, `Nhap xuat ton ${tonTuNgay} den ${tonDenNgay}.xlsx`);
-  };
-
-  /* ---------------- Phan tich kho cho bang dieu khien ---------------- */
-
-  /**
-   * Khoảng ngày của bảng điều khiển, mặc định 30 ngày gần nhất.
-   *
-   * Riêng của màn hình này. Bảng điều khiển trả lời "kho đang chạy thế nào",
-   * mà nhịp độ thì phải đo trên một khoảng — tồn hiện tại chia cho lượng xuất
-   * mỗi ngày mới ra được "còn đủ bán mấy ngày".
-   */
-  const [ptTuNgay, setPtTuNgay] = useState(() =>
-    format(subDays(new Date(), 29), "yyyy-MM-dd"),
-  );
-  const [ptDenNgay, setPtDenNgay] = useState(() =>
-    format(new Date(), "yyyy-MM-dd"),
-  );
-
-  const phanTich = useMemo(
-    () =>
-      phanTichKho({
-        giaoDichTinhTon: countedTransactions,
-        giaoDichChoKy: pendingSlipTransactions(transactions, approvedSlips),
-        /*
-         * KHÔNG CÒN TỒN THEO LÔ nên không có lô nào để báo "nằm kho quá lâu".
-         * Giữ nguyên tham số và phép tính bên `phanTich.ts`: nó vô hại khi danh
-         * sách rỗng, và còn nguyên nếu sau này kho quay lại theo dõi theo lô.
-         */
-        loTon: [],
-        products,
-        tuNgay: ptTuNgay,
-        denNgay: ptDenNgay,
-        homNay: format(new Date(), "yyyy-MM-dd"),
-      }),
-    [
-      countedTransactions,
-      transactions,
-      approvedSlips,
-      products,
-      ptTuNgay,
-      ptDenNgay,
-    ],
-  );
-
   const inventory = useMemo(() => {
     const invMap = new Map<string, InventoryItem>();
 
@@ -5326,69 +5007,6 @@ export default function App() {
       (a, b) => b.stock + b.pendingStock - (a.stock + a.pendingStock),
     );
   }, [tonTheoMatHang, products, transactions, approvedSlips]);
-
-  // Derived State: Stats & Turnover
-  const stats = useMemo(() => {
-    let totalIn = 0;
-    let totalOut = 0;
-
-    // Da duyet: the "Tong nhap" phai khop voi ton kho, khong dem hang cho ky.
-    countedTransactionsByTime.forEach((t) => {
-      if (t.type === "IN") {
-        totalIn += t.quantity;
-      } else if (
-        t.status !== "in_transit" &&
-        (t.type === "OUT" || t.type === "LOSS" || t.type === "DAMAGE")
-      ) {
-        totalOut += t.quantity;
-      }
-    });
-
-    const currentStock = inventory.reduce((acc, curr) => acc + curr.stock, 0);
-    const partnerCount = partners.length;
-    const totalLiters = inventory.reduce(
-      (acc, curr) => acc + curr.totalLiters,
-      0,
-    );
-
-    const avgInventory = totalIn / 2 || 1;
-    const turnoverRate = Number((totalOut / avgInventory).toFixed(2));
-
-    const totalValue = inventory.reduce((acc, curr) => {
-      const product = products.find((p) => p.id === curr.productId);
-      return acc + curr.stock * (product?.price || 0);
-    }, 0);
-
-    let lowStockItems = 0;
-    let outOfStockItems = 0;
-    let healthyItems = 0;
-
-    inventory.forEach((i) => {
-      // Dùng đúng định mức của từng sản phẩm (đã có mặc định khi tính
-      // inventory), thay vì một con số 10 riêng ở đây — trước kia thẻ "Cảnh
-      // báo cạn kho" và danh sách "sắp hết hàng" chạy theo hai ngưỡng khác
-      // nhau nên đếm ra hai kết quả lệch nhau.
-      if (i.stock <= 0) outOfStockItems++;
-      else if (i.stock < i.minStock) lowStockItems++;
-      else healthyItems++;
-    });
-
-    return {
-      totalIn,
-      totalOut,
-      currentStock,
-      partnerCount,
-      totalLiters,
-      turnoverRate,
-      totalValue,
-      inventoryHealth: {
-        low: lowStockItems,
-        out: outOfStockItems,
-        healthy: healthyItems,
-      },
-    };
-  }, [countedTransactionsByTime, partners, inventory, products]);
-
 
   const handleAddTransaction = async (type: TransactionType) => {
     /*
@@ -5782,27 +5400,6 @@ export default function App() {
     const isOwnerRole = userRole === "OWNER";
     const groups = [
       {
-        id: "overview",
-        title: "Tổng quan",
-        // Bảng điều khiển và Tồn kho là số của kho tổng — DNC không xem.
-        items: !quyen.xemKho
-          ? []
-          : [
-          {
-            id: "dashboard",
-            label: "Bảng điều khiển",
-            icon: LayoutDashboard,
-            color: "#3b82f6",
-          },
-          {
-            id: "inventory",
-            label: "Tồn kho",
-            icon: Package,
-            color: "#f59e0b",
-          },
-            ],
-      },
-      {
         id: "operations",
         title: "Nhập · Xuất",
         /*
@@ -5966,7 +5563,7 @@ export default function App() {
   useEffect(() => {
     const navIds = navItems.map((i) => i.id);
     if (user && !navIds.includes(activeTab)) {
-      setActiveTab(navIds[0] || "dashboard");
+      setActiveTab(navIds[0] || "");
     }
   }, [user, activeTab, navItems]);
 
@@ -6655,7 +6252,7 @@ export default function App() {
             {isAuthorizedFull &&
               quyen.napFile &&
               quyen.ghiNhap &&
-              activeTab === "dashboard" && (
+              activeTab === "import" && (
                 <div className="flex justify-end">
                   <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
                     <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
@@ -6669,679 +6266,16 @@ export default function App() {
                 </div>
               )}
 
-            {activeTab === "dashboard" && (
-              <>
-                {/*
-                  KHOẢNG NGÀY CỦA BẢNG ĐIỀU KHIỂN.
+            {/*
+              ĐÃ GỠ "BẢNG ĐIỀU KHIỂN" VÀ "TỒN KHO" (29/09/2026).
 
-                  Bảng này trả lời "kho đang chạy thế nào", mà nhịp độ thì phải
-                  đo trên một khoảng: tồn hiện tại chia cho lượng xuất mỗi ngày
-                  mới ra được "còn đủ bán mấy ngày".
-                */}
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      Nhịp độ đo trong kỳ
-                    </p>
-                    <p className="text-sm font-black text-slate-900">
-                      {moTaKy(ptTuNgay, ptDenNgay)} ·{" "}
-                      {phanTich.thongSo.soNgayTrongKy} ngày
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ONgay
-                      value={ptTuNgay}
-                      max={ptDenNgay || undefined}
-                      onChange={(v: string) => setPtTuNgay(v)}
-                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
-                    />
-                    <span className="text-slate-300 font-black">—</span>
-                    <ONgay
-                      value={ptDenNgay}
-                      min={ptTuNgay || undefined}
-                      onChange={(v: string) => setPtDenNgay(v)}
-                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
-                    />
-                    {[
-                      { nhan: "30 ngày", ngay: 29 },
-                      { nhan: "90 ngày", ngay: 89 },
-                    ].map((o) => (
-                      <button
-                        key={o.nhan}
-                        onClick={() => {
-                          setPtTuNgay(
-                            format(subDays(new Date(), o.ngay), "yyyy-MM-dd"),
-                          );
-                          setPtDenNgay(format(new Date(), "yyyy-MM-dd"));
-                        }}
-                        className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
-                      >
-                        {o.nhan}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/*
-                  NĂM CON SỐ, TẤT CẢ TÍNH TỪ DỮ LIỆU THẬT.
-
-                  "Còn đủ bán bao nhiêu ngày" thay cho "vòng quay tồn kho" của
-                  bản cũ: vòng quay phải quy đổi trong đầu mới hiểu, còn số ngày
-                  thì đọc là hành động được ngay — và với bia thì so thẳng được
-                  với hạn dùng.
-                */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
-                  {[
-                    {
-                      nhan: "Tồn hiện tại",
-                      so: formatNumber(phanTich.thongSo.tonLit),
-                      donVi: "lít quy đổi",
-                      mau: "text-slate-900",
-                    },
-                    {
-                      nhan: "Còn đủ bán",
-                      so:
-                        phanTich.thongSo.soNgayConBan === null
-                          ? "—"
-                          : formatNumber(phanTich.thongSo.soNgayConBan),
-                      donVi:
-                        phanTich.thongSo.soNgayConBan === null
-                          ? "kỳ này chưa xuất"
-                          : "ngày, theo nhịp hiện tại",
-                      mau: "text-primary",
-                    },
-                    {
-                      nhan: "Xuất mỗi ngày",
-                      so: formatNumber(phanTich.thongSo.xuatMoiNgayLit),
-                      donVi: "lít quy đổi",
-                      mau: "text-slate-900",
-                    },
-                    {
-                      nhan: "Hao hụt",
-                      so: `${(phanTich.thongSo.tyLeHaoHut * 100).toFixed(1)}%`,
-                      donVi: `${formatNumber(phanTich.thongSo.haoHutLit)} lít`,
-                      mau:
-                        phanTich.thongSo.tyLeHaoHut > 0.02
-                          ? "text-rose-600"
-                          : "text-slate-900",
-                    },
-                    {
-                      nhan: "Chứng từ thiếu",
-                      so: formatNumber(
-                        phanTich.thongSo.donThieuAnh +
-                          phanTich.thongSo.phieuChoKyLau +
-                          phanTich.thongSo.donDiDuongLau,
-                      ),
-                      donVi: "đơn và phiếu",
-                      mau:
-                        phanTich.thongSo.donThieuAnh +
-                          phanTich.thongSo.phieuChoKyLau +
-                          phanTich.thongSo.donDiDuongLau >
-                        0
-                          ? "text-amber-600"
-                          : "text-emerald-600",
-                    },
-                  ].map((o) => (
-                    <div
-                      key={o.nhan}
-                      className="p-3 sm:p-4 rounded-2xl bg-white border border-slate-200"
-                    >
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                        {o.nhan}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-lg sm:text-xl font-black mt-1 tabular-nums leading-none",
-                          o.mau,
-                        )}
-                      >
-                        {o.so}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 mt-1">
-                        {o.donVi}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* ĐỀ XUẤT — biến số liệu thành việc phải làm. */}
-                <Card title="Đề xuất · việc cần xử">
-                  {phanTich.kienNghi.length === 0 ? (
-                    <div className="py-8 text-center space-y-2">
-                      <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                      <p className="text-sm font-black text-slate-900">
-                        Không có việc nào cần xử
-                      </p>
-                      <p className="text-[11px] font-bold text-slate-500">
-                        Kho đủ hàng, chứng từ đủ, không lô nào tồn lâu.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {phanTich.kienNghi.map((k) => {
-                        const m = NHAN_MUC_DO[k.mucDo];
-                        return (
-                          <div
-                            key={k.ma}
-                            className={cn(
-                              "p-3 sm:p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-start gap-3",
-                              m.mau === "rose"
-                                ? "bg-rose-50 border-rose-200"
-                                : m.mau === "amber"
-                                  ? "bg-amber-50 border-amber-200"
-                                  : "bg-slate-50 border-slate-200",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "shrink-0 self-start px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                                m.mau === "rose"
-                                  ? "bg-rose-600 text-white"
-                                  : m.mau === "amber"
-                                    ? "bg-amber-500 text-white"
-                                    : "bg-slate-500 text-white",
-                              )}
-                            >
-                              {m.ten}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="text-[13px] font-black text-slate-900 leading-snug">
-                                {k.tieuDe}
-                              </p>
-                              <p className="text-[11px] font-bold text-slate-500 mt-0.5 leading-relaxed">
-                                {k.chiTiet}
-                              </p>
-                              <p className="text-[11px] font-black text-slate-700 mt-1.5 leading-relaxed">
-                                → {k.viecCanLam}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card title="Còn đủ bán bao nhiêu ngày" noPadding>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left whitespace-nowrap">
-                        <thead>
-                          <tr className="bg-slate-50/50">
-                            {["Mặt hàng", "Tồn", "Xuất/ngày", "Còn"].map(
-                              (h, i) => (
-                                <th
-                                  key={h}
-                                  className={cn(
-                                    "font-bold text-[9px] uppercase tracking-widest text-slate-400 py-2.5 px-3",
-                                    i > 0 && "text-right",
-                                  )}
-                                >
-                                  {h}
-                                </th>
-                              ),
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {phanTich.duBan.map((d) => (
-                            <tr
-                              key={d.productId}
-                              className="text-[11px] font-bold text-slate-600"
-                            >
-                              <td className="py-2 px-3 text-slate-900">
-                                {d.tenHang}
-                              </td>
-                              <td className="py-2 px-3 text-right tabular-nums">
-                                {formatNumber(d.ton)} {d.unit}
-                              </td>
-                              <td className="py-2 px-3 text-right tabular-nums">
-                                {d.xuatMoiNgay > 0
-                                  ? formatNumber(d.xuatMoiNgay)
-                                  : "—"}
-                              </td>
-                              <td
-                                className={cn(
-                                  "py-2 px-3 text-right tabular-nums font-black",
-                                  d.soNgayConBan === null
-                                    ? "text-slate-300"
-                                    : d.soNgayConBan < 7
-                                      ? "text-rose-600"
-                                      : d.soNgayConBan < 14
-                                        ? "text-amber-600"
-                                        : "text-slate-900",
-                                )}
-                                title={
-                                  d.soNgayConBan === null
-                                    ? "Kỳ này không xuất lần nào nên không tính được"
-                                    : undefined
-                                }
-                              >
-                                {d.soNgayConBan === null
-                                  ? "—"
-                                  : `${formatNumber(d.soNgayConBan)} ngày`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </Card>
-
-                  <div className="space-y-4">
-                    <Card title="Tuổi lô hàng còn tồn" noPadding>
-                      <div className="divide-y divide-slate-100">
-                        {phanTich.tuoiLo.map((n, i) => (
-                          <div
-                            key={n.nhan}
-                            className="px-4 py-2.5 flex items-center justify-between text-[11px] font-bold"
-                          >
-                            <span
-                              className={cn(
-                                i === 3 && n.soLo > 0
-                                  ? "text-rose-600"
-                                  : "text-slate-600",
-                              )}
-                            >
-                              {n.nhan}
-                            </span>
-                            <span className="tabular-nums text-slate-900 font-black">
-                              {n.soLo} lô · {formatNumber(n.ton)} lít
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-
-                    <Card title="Đơn vị nhận nhiều nhất trong kỳ" noPadding>
-                      {phanTich.topDonVi.length === 0 ? (
-                        <p className="py-6 text-center text-xs font-bold text-slate-400">
-                          Kỳ này chưa có đơn xuất nào.
-                        </p>
-                      ) : (
-                        <div className="divide-y divide-slate-100">
-                          {phanTich.topDonVi.map((o) => (
-                            <div
-                              key={o.ten}
-                              className="px-4 py-2.5 flex items-center justify-between gap-3 text-[11px] font-bold"
-                            >
-                              <span className="text-slate-900 truncate">
-                                {o.ten}
-                              </span>
-                              <span className="tabular-nums text-slate-500 shrink-0">
-                                {formatNumber(o.litQuyDoi)} lít · {o.soDon} đơn
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </Card>
-                  </div>
-                </div>
-
-                {userRole === "OWNER" && (
-                  /*
-                    Còn HAI thẻ. Ba thẻ kia — Tỷ lệ lấy đầy, Độ chính xác tồn
-                    kho, Chi phí lưu kho — ghi số cứng trong mã, không đọc dữ
-                    liệu nào cả: 98,5% / 99,8% / 12,4 hiện y nguyên dù kho có gì
-                    đi nữa. Số giả nằm cạnh số thật là loại sai khó chịu nhất,
-                    vì nhìn vào ai cũng tin, và chụp màn hình gửi lãnh đạo là
-                    báo cáo một con số không có thật.
-                  */
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
-                    <StatCard
-                      title="TỔNG DOANH THU"
-                      value={formatNumber(
-                        filteredRevenueByTime.reduce(
-                          (a, b) => a + b.totalAmount,
-                          0,
-                        ),
-                      )}
-                      unit="đ"
-                      icon={DollarSign}
-                      color="green"
-                      subtitle="Dữ liệu theo kỳ"
-                      trend={
-                        filteredRevenueByTime.length > 0
-                          ? `+${filteredRevenueByTime.length} GD`
-                          : "0 GD"
-                      }
-                      chartData={filteredRevenueByTime
-                        .slice(-10)
-                        .map((r) => ({ value: r.totalAmount }))}
-                    />
-                    <StatCard
-                      title="VÒNG QUAY TỒN KHO"
-                      value={stats.turnoverRate}
-                      unit="x"
-                      icon={RefreshCw}
-                      color="primary"
-                      subtitle="Xuất chia tồn bình quân"
-                    />
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  {/* Operations & Storage Center */}
-                  {/*
-                    Đổi tên thẻ theo đúng thứ còn lại. Tên cũ "Vận hành Kho &
-                    Bảo quản" là để gọi ba ô cảm biến; bỏ chúng đi mà giữ tên
-                    thì tiêu đề hứa nhiều hơn nội dung.
-                  */}
-                  {/*
-                    Thẻ "Lô hàng tồn lâu" đã bỏ cùng lúc bỏ theo dõi theo lô:
-                    không còn lô thì không đếm được lô nào nằm kho quá 15 ngày.
-                    Thẻ cảnh báo tồn thấp bên dưới nay chiếm trọn bề ngang.
-                  */}
-                  {/* Stock-out & Low Inventory Defense Center */}
-                  <Card
-                    title="⚠️ Cảnh báo Đứt hàng & Tồn thấp"
-                    className="lg:col-span-12 bg-slate-900 border-none shadow-2xl"
-                  >
-                    <div className="space-y-4 sm:space-y-6">
-                      {inventory.filter((i) => i.stock <= i.minStock).length ===
-                      0 ? (
-                        <div className="py-8 sm:py-12 flex flex-col items-center text-center">
-                          <ShieldCheck className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-500 mb-4 sm:mb-6 opacity-20" />
-                          <p className="text-[10px] sm:text-sm font-bold text-white uppercase tracking-widest">
-                            Toàn bộ kho hàng ổn định
-                          </p>
-                        </div>
-                      ) : (
-                        inventory
-                          .filter((i) => i.stock <= i.minStock)
-                          .slice(0, 5)
-                          .map((item) => (
-                            <div
-                              key={item.productId}
-                              className="group cursor-help"
-                            >
-                              <div className="flex justify-between items-center mb-2 sm:mb-3">
-                                <div className="flex flex-col">
-                                  <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight group-hover:text-amber-400 transition-colors leading-none">
-                                    {item.productName}
-                                  </span>
-                                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase mt-1 sm:mt-1.5">
-                                    Min: {item.minStock} {item.unit}
-                                  </span>
-                                </div>
-                                <div className="text-right">
-                                  <span
-                                    className={cn(
-                                      "text-sm sm:text-base font-black font-mono",
-                                      item.stock <= 0
-                                        ? "text-rose-500"
-                                        : "text-amber-500",
-                                    )}
-                                  >
-                                    {item.stock}{" "}
-                                    <span className="text-[9px] sm:text-[10px] opacity-40">
-                                      {item.unit}
-                                    </span>
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="h-1.5 sm:h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                                <div
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-1000 ease-out",
-                                    item.stock <= 0
-                                      ? "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]"
-                                      : "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]",
-                                  )}
-                                  style={{
-                                    width: `${Math.min(100, (item.stock / (item.minStock || 1)) * 100)}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))
-                      )}
-
-                      {inventory.filter((i) => i.stock <= i.minStock).length >
-                        5 && (
-                        <button
-                          onClick={() => setActiveTab("inventory")}
-                          className="w-full py-3 sm:py-4 bg-white/5 hover:bg-white/10 rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-[0.2em] transition-all border border-white/5"
-                        >
-                          Tất cả{" "}
-                          {
-                            inventory.filter((i) => i.stock <= i.minStock)
-                              .length
-                          }{" "}
-                          cảnh báo
-                        </button>
-                      )}
-                    </div>
-                  </Card>
-                </div>
-              </>
-            )}
-
-            {activeTab === "inventory" && (
-              <div className="space-y-6">
-                {/*
-                  KHOẢNG NGÀY + TRA CỨU.
-
-                  Ô tra cứu trước đây không nối vào gì cả — không có `value`,
-                  không có `onChange` — nên gõ vào không lọc được gì. Nút xuất
-                  Excel cũng không có `onClick`. Nay cả ba đều chạy thật.
-                */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="relative group lg:col-span-2">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary transition-colors" />
-                    <input
-                      value={tonTuKhoa}
-                      onChange={(e) => setTonTuKhoa(e.target.value)}
-                      placeholder="Tìm mặt hàng hoặc mã vật tư..."
-                      className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary/5 focus:border-primary outline-none text-sm transition-all premium-shadow"
-                    />
-                  </div>
-                  <label className="block">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      Từ ngày
-                    </span>
-                    <ONgay
-                      value={tonTuNgay}
-                      max={tonDenNgay || undefined}
-                      onChange={(v: string) => setTonTuNgay(v)}
-                      className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      Đến ngày
-                    </span>
-                    <ONgay
-                      value={tonDenNgay}
-                      min={tonTuNgay || undefined}
-                      onChange={(v: string) => setTonDenNgay(v)}
-                      className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    {/* Bỏ chặn ngày để xem tồn tới hiện tại, không phải chỉnh
-                        tay hai ô về rỗng. */}
-                    <button
-                      onClick={() => {
-                        setTonTuNgay("");
-                        setTonDenNgay("");
-                      }}
-                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
-                    >
-                      Toàn bộ thời gian
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTonTuNgay(
-                          format(new Date(new Date().setDate(1)), "yyyy-MM-dd"),
-                        );
-                        setTonDenNgay(format(new Date(), "yyyy-MM-dd"));
-                      }}
-                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all"
-                    >
-                      Tháng này
-                    </button>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="bg-white"
-                    onClick={taiTonKhoExcel}
-                    disabled={bangTonKy.dong.length === 0}
-                  >
-                    <Download className="w-4 h-4" /> Xuất báo cáo Excel
-                  </Button>
-                </div>
-
-                {/*
-                  BỐN CON SỐ CỦA KỲ. Tồn là một MỐC chứ không phải một khoảng:
-                  chọn khoảng ngày nghĩa là đầu kỳ — nhập — xuất — cuối kỳ, chứ
-                  không có con số nào tên là "tồn trong khoảng".
-                */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-                  {[
-                    { nhan: "Đầu kỳ", giaTri: bangTonKy.tong.dauKy, mau: "text-slate-900" },
-                    { nhan: "Nhập trong kỳ", giaTri: bangTonKy.tong.nhap, mau: "text-emerald-600" },
-                    { nhan: "Xuất bán", giaTri: bangTonKy.tong.xuatBan, mau: "text-rose-600" },
-                    { nhan: "Hao hụt", giaTri: bangTonKy.tong.haoHut, mau: "text-amber-600" },
-                    { nhan: "Cuối kỳ", giaTri: bangTonKy.tong.cuoiKy, mau: "text-slate-900" },
-                  ].map((o) => (
-                    <div
-                      key={o.nhan}
-                      className="p-3 rounded-xl bg-white border border-slate-200"
-                    >
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                        {o.nhan}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-sm font-black mt-0.5 tabular-nums",
-                          o.mau,
-                        )}
-                      >
-                        {formatNumber(Math.round(o.giaTri * 10) / 10)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <Card
-                  title={`Nhập · Xuất · Tồn — ${moTaKy(tonTuNgay, tonDenNgay)}`}
-                  noPadding
-                >
-                  {bangTonKy.dong.length === 0 ? (
-                    <p className="py-10 text-center text-xs font-bold text-slate-400">
-                      Không có mặt hàng nào khớp.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left whitespace-nowrap">
-                        <thead>
-                          <tr className="bg-slate-50/50">
-                            {[
-                              "Mặt hàng",
-                              "ĐVT",
-                              "Đầu kỳ",
-                              "Nhập",
-                              "Xuất bán",
-                              "Hao hụt",
-                              "Cuối kỳ",
-                              "Chờ ký",
-                            ].map((h, i) => (
-                              <th
-                                key={h}
-                                className={cn(
-                                  "font-bold text-[9px] sm:text-[10px] uppercase tracking-widest py-3 px-3 sm:px-4",
-                                  h === "Chờ ký"
-                                    ? "text-amber-600"
-                                    : "text-slate-400",
-                                  i >= 2 && "text-right",
-                                )}
-                                title={
-                                  h === "Chờ ký"
-                                    ? "Đã điền trong kỳ nhưng chưa có ảnh phiếu ký. CHƯA nằm trong bốn cột bên trái."
-                                    : undefined
-                                }
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {bangTonKy.dong.map((d) => {
-                            const duoiDinhMuc =
-                              d.minStock > 0 && d.cuoiKy < d.minStock;
-                            return (
-                              <tr
-                                key={d.productId}
-                                className="hover:bg-slate-50 transition-colors text-[11px] sm:text-xs font-bold text-slate-600"
-                              >
-                                <td className="py-2.5 px-3 sm:px-4">
-                                  <p className="font-bold text-slate-900 leading-tight">
-                                    {d.tenHang}
-                                  </p>
-                                  {duoiDinhMuc && (
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-rose-500">
-                                      Dưới định mức {formatNumber(d.minStock)}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-slate-400">
-                                  {d.unit}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums">
-                                  {formatNumber(Math.round(d.dauKy * 10) / 10)}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-emerald-600">
-                                  {d.nhap > 0
-                                    ? formatNumber(Math.round(d.nhap * 10) / 10)
-                                    : "—"}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-rose-600">
-                                  {d.xuatBan > 0
-                                    ? formatNumber(
-                                        Math.round(d.xuatBan * 10) / 10,
-                                      )
-                                    : "—"}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-amber-600">
-                                  {d.haoHut > 0
-                                    ? formatNumber(
-                                        Math.round(d.haoHut * 10) / 10,
-                                      )
-                                    : "—"}
-                                </td>
-                                <td
-                                  className={cn(
-                                    "py-2.5 px-3 sm:px-4 text-right tabular-nums text-sm font-black",
-                                    duoiDinhMuc
-                                      ? "text-rose-600"
-                                      : "text-slate-900",
-                                  )}
-                                >
-                                  {formatNumber(Math.round(d.cuoiKy * 10) / 10)}
-                                </td>
-                                <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-amber-600">
-                                  {d.choKy > 0
-                                    ? `+${formatNumber(Math.round(d.choKy * 10) / 10)}`
-                                    : "—"}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-
-
-              </div>
-            )}
+              Hai màn hình này không có số nào của riêng mình: tồn, nhập, xuất,
+              hao hụt đều tính lại từ cùng một nguồn mà Báo cáo tổng hợp đã bày
+              ra đầy đủ hơn — kèm khoảng ngày, kèm cột hao hụt, kèm xuất Excel.
+              Giữ hai bản rút gọn bên cạnh một bản đầy đủ nghĩa là mỗi lần sửa
+              cách tính phải nhớ sửa ba chỗ, và chỉ cần quên một chỗ là hai màn
+              hình cùng nói về một kho mà ra hai con số.
+            */}
 
             {activeTab === "reports" && (
               <div className="space-y-8">
@@ -9498,7 +8432,7 @@ export default function App() {
                     <Button
                       variant="secondary"
                       className="w-full sm:w-auto px-10 py-5"
-                      onClick={() => setActiveTab("dashboard")}
+                      onClick={() => setActiveTab("reports")}
                     >
                       Hủy bỏ
                     </Button>
