@@ -4424,8 +4424,8 @@ export default function App() {
 
   /** Điểm bán có ảnh trong phần đang lọc; rỗng thì không bày ô chọn thứ hai. */
   const boPhanCoAnh = useMemo(
-    () => danhSachBoPhanBNC(anhTruocLocBoPhan),
-    [anhTruocLocBoPhan],
+    () => danhSachBoPhanBNC(anhTruocLocBoPhan, galleryDonVi),
+    [anhTruocLocBoPhan, galleryDonVi],
   );
 
   const anhThuVien = useMemo(
@@ -9313,9 +9313,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       </div>
                     )}
 
-                    {/* Ô THỨ HAI — điểm bán, chỉ hiện khi phần đang lọc có từ
-                        hai bộ phận trở lên (thực tế là Nội bộ với 17 điểm bán).
-                        Ba phần kia chỉ có một bộ phận nên ô này vô nghĩa. */}
+                    {/* Ô THỨ HAI — điểm bán. Chỉ hiện SAU KHI đã chọn một phần
+                        của BNC, và phần đó phải có từ hai bộ phận trở lên (thực
+                        tế là Nội bộ với 17 điểm bán). Ba phần kia chỉ có một bộ
+                        phận nên ô này vô nghĩa. */}
                     {galleryFilter === "OUT" && boPhanCoAnh.length > 0 && (
                       <div className="relative w-full lg:w-52 shrink-0">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />

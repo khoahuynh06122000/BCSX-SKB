@@ -263,11 +263,21 @@ export function locTheoDonVi(anh: AnhThuVien[], donVi: string): AnhThuVien[] {
 /**
  * Điểm bán có ảnh trong một phần của BNC, để bày ô chọn thứ hai.
  *
+ * CHỈ CÓ NGHĨA SAU KHI ĐÃ CHỌN MỘT PHẦN. Đang để "Tất cả đơn vị" mà bày ô
+ * điểm bán thì ô thứ hai hiện ngay từ đầu với đủ 17 quán của Nội bộ — người
+ * dùng thấy hai ô chọn cùng lúc, không biết ô nào lọc trước ô nào, và chọn
+ * một quán trong khi ô thứ nhất vẫn nói "Tất cả đơn vị" thì hai ô đọc lên
+ * mâu thuẫn nhau. Thứ tự đúng là: chọn phần (Nội bộ) rồi mới soi xuống quán.
+ *
  * Trả rỗng khi phần đó chỉ có đúng một bộ phận (Ngoại giao, HTKD, Chi phí
  * khác): bày một ô chọn có đúng một dòng thì chỉ làm rối, chọn hay không cũng
  * ra cùng bộ ảnh.
  */
-export function danhSachBoPhanBNC(anh: AnhThuVien[]): string[] {
+export function danhSachBoPhanBNC(
+  anh: AnhThuVien[],
+  donViDangLoc: string,
+): string[] {
+  if (!String(donViDangLoc ?? "").startsWith(TIEN_TO_PHAN)) return [];
   const co = new Set<string>();
   anh.forEach((a) => {
     if (!laBoPhanBNC(a.maDonVi)) return;

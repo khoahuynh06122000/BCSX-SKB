@@ -343,18 +343,32 @@ kiemTra(
     anh.filter((a) => a.donVi.trim() !== "").length,
   );
 
-  // O CHON THU HAI — diem ban, chi co nghia khi phan co tu hai bo phan.
+  // O CHON THU HAI — diem ban, chi co nghia SAU KHI da chon mot phan.
   kiemTra(
     "Noi bo co hai diem ban de soi tiep",
-    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NB")),
+    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NB"), "BNC:NB"),
     ["BNC · 1901", "BNC · Cầu Vàng"],
   );
   kiemTra(
     "phan mot bo phan thi khong bay o thu hai",
-    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NG")),
+    danhSachBoPhanBNC(locTheoDonVi(anh, "BNC:NG"), "BNC:NG"),
     [],
   );
-  kiemTra("don vi ngoai BNC khong co o thu hai", danhSachBoPhanBNC(loc), []);
+  kiemTra(
+    "don vi ngoai BNC khong co o thu hai",
+    danhSachBoPhanBNC(loc, "FV"),
+    [],
+  );
+  /*
+   * Chua chon phan nao thi CHUA BAY o diem ban — du trong bo anh co du hai
+   * quan Noi bo. Day dung la cho tung sai: loc rong thi ham nhin thay ca 17
+   * quan va bay o thu hai ra ngay tu dau.
+   */
+  kiemTra(
+    "chua chon phan thi chua bay o diem ban",
+    danhSachBoPhanBNC(anh, ""),
+    [],
+  );
 
   // Ten hien thi cua gia tri loc.
   kiemTra("ten cua phan", tenLocDonVi("BNC:NG"), "BNC · Ngoại giao");
