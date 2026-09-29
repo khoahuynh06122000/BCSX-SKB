@@ -142,11 +142,10 @@ export function hoaDonDaCoSo(ds: HoaDonGhiNhan[]): HoaDonGhiNhan[] {
 /**
  * Dựng lại danh sách đợt từ chính các hóa đơn đã ghi.
  *
- * Một (tuNgay, denNgay) là một đợt. `ngayHoaDon` của đợt chỉ dùng làm phương án
- * dự phòng — mỗi hóa đơn đã mang ngày riêng của nó — nên lấy ngày SỚM NHẤT đã
- * ghi trong đợt đó cho ổn định, không lấy ngày của tài liệu gặp đầu tiên (thứ
- * tự tài liệu từ Firestore không cố định, lấy như vậy thì mỗi lần tải lại ra
- * một kết quả khác).
+ * Một (tuNgay, denNgay) là một đợt — đó là tất cả những gì một đợt còn mang.
+ * Ngày hóa đơn không nằm ở đây nữa: mỗi hóa đơn đã có ngày riêng của nó, gom
+ * chúng lại thành một ngày chung cho cả đợt chỉ tạo ra một con số không đúng
+ * với tờ nào.
  */
 export function dotTuHoaDon(ds: HoaDonGhiNhan[]): DotChot[] {
   const m = new Map<string, DotChot>();
@@ -155,13 +154,7 @@ export function dotTuHoaDon(ds: HoaDonGhiNhan[]): DotChot[] {
     const denNgay = String(h.denNgay || "").slice(0, 10);
     if (!tuNgay || !denNgay) return;
     const k = `${tuNgay}|${denNgay}`;
-    const ngay = String(h.ngayHoaDon || "").slice(0, 10) || denNgay;
-    const cu = m.get(k);
-    if (!cu) {
-      m.set(k, { id: `dot-${k}`, tuNgay, denNgay, ngayHoaDon: ngay });
-    } else if (ngay < cu.ngayHoaDon) {
-      cu.ngayHoaDon = ngay;
-    }
+    if (!m.has(k)) m.set(k, { id: `dot-${k}`, tuNgay, denNgay });
   });
   return Array.from(m.values()).sort((a, b) => a.tuNgay.localeCompare(b.tuNgay));
 }

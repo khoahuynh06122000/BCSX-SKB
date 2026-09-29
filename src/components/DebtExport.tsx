@@ -109,7 +109,6 @@ function dotMacDinh(): DotChot[] {
       id: "d1",
       tuNgay: format(dau, "yyyy-MM-dd"),
       denNgay: format(now, "yyyy-MM-dd"),
-      ngayHoaDon: format(now, "yyyy-MM-dd"),
     },
   ];
 }
@@ -120,9 +119,7 @@ function docDotDaLuu(): DotChot[] {
     if (!raw) return dotMacDinh();
     const v = JSON.parse(raw);
     if (!Array.isArray(v) || v.length === 0) return dotMacDinh();
-    return v.filter(
-      (d) => d && d.id && d.tuNgay && d.denNgay && d.ngayHoaDon,
-    ) as DotChot[];
+    return v.filter((d) => d && d.id && d.tuNgay && d.denNgay) as DotChot[];
   } catch {
     return dotMacDinh();
   }
@@ -346,7 +343,6 @@ export default function DebtExport({
         id: `d${Date.now()}`,
         tuNgay: sau,
         denNgay: sau,
-        ngayHoaDon: sau,
       },
     ]);
   };
@@ -758,7 +754,7 @@ export default function DebtExport({
           {dot.map((d, i) => (
             <div
               key={d.id}
-              className="grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-2 items-center"
+              className="grid grid-cols-[auto_1fr_1fr_auto] gap-2 items-center"
             >
               <span className="text-[12px] font-black text-slate-300 w-5 text-center">
                 {i + 1}
@@ -767,7 +763,6 @@ export default function DebtExport({
                 [
                   ["tuNgay", "Từ ngày"],
                   ["denNgay", "Đến ngày"],
-                  ["ngayHoaDon", "Ngày hóa đơn"],
                 ] as [keyof DotChot, string][]
               ).map(([truong, nhan]) => (
                 <label key={truong} className="block">
@@ -898,7 +893,6 @@ export default function DebtExport({
               <tr>
                 {[
                   "Ngày giao bia",
-                  "Ngày hóa đơn",
                   "Dòng",
                   "Đơn vị",
                   "Số HĐ",
@@ -924,7 +918,6 @@ export default function DebtExport({
                   <td className="px-3.5 py-2.5 text-slate-900">
                     {d.nhanNgayGiao}
                   </td>
-                  <td className="px-3.5 py-2.5">{d.ngayHoaDon}</td>
                   <td className="px-3.5 py-2.5 text-right tabular-nums">
                     {d.soDong}
                   </td>

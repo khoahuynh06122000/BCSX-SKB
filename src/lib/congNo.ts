@@ -52,13 +52,19 @@ import {
 } from "./invoice";
 import { billableTransactions } from "./sapExport";
 
-/** Một đợt chốt hóa đơn. Ngày dạng `yyyy-MM-dd`. */
+/**
+ * Một đợt chốt hóa đơn. Ngày dạng `yyyy-MM-dd`.
+ *
+ * ĐỢT KHÔNG MANG NGÀY HÓA ĐƠN. Trước đây có, để app điền sẵn cột "Ngày hóa
+ * đơn" của tệp TEMPLATE. Nhưng ngày hóa đơn là ngày HỆ THỐNG HÓA ĐƠN đóng
+ * dấu khi phát hành, người dùng chép về sau — nên con số điền sẵn ấy luôn bị
+ * ghi đè, chỉ tồn tại để bị xóa. Một ô bắt khai mà kết quả không giữ lại là ô
+ * thừa, nên bỏ. Dòng chưa có hóa đơn thật lấy tạm `denNgay` của đợt.
+ */
 export interface DotChot {
   id: string;
   tuNgay: string;
   denNgay: string;
-  /** Ngày ghi ở cột "Ngày hóa đơn (ngày nhận)". */
-  ngayHoaDon: string;
 }
 
 /**
@@ -214,7 +220,6 @@ export interface CanhBaoCongNo {
 export interface TongDot {
   dotId: string;
   nhanNgayGiao: string;
-  ngayHoaDon: string;
   soDong: number;
   soDonVi: number;
   soHoaDon: number;
@@ -420,7 +425,7 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
     );
     if (that?.soHoaDon) {
       soTheoDonVi.set(k, that.soHoaDon);
-      ngayTheoDonVi.set(k, ngayVietNam(that.ngayHoaDon || d.ngayHoaDon));
+      ngayTheoDonVi.set(k, ngayVietNam(that.ngayHoaDon || d.denNgay));
     } else {
       soTheoDonVi.set(k, goiY);
       chuaCoSoThat += 1;
@@ -436,7 +441,7 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       ngayGiaoBia: nhanNgayGiao(d.tuNgay, d.denNgay),
       ngayHoaDon:
         ngayTheoDonVi.get(`${g.dotIndex}|${g.maBp || g.donVi}`) ||
-        ngayVietNam(d.ngayHoaDon),
+        ngayVietNam(d.denNgay),
       stt: i + 1,
       donVi: g.donVi,
       maVatTu: g.maVatTu,
@@ -460,15 +465,12 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
   // ----- Thống kê theo đợt -----
   const theoDot: TongDot[] = dot.map((d, i) => {
     const cua = dong.filter(
-      (r) =>
-        r.ngayGiaoBia === nhanNgayGiao(d.tuNgay, d.denNgay) &&
-        r.ngayHoaDon === ngayVietNam(d.ngayHoaDon),
+      (r) => r.ngayGiaoBia === nhanNgayGiao(d.tuNgay, d.denNgay),
     );
     void i;
     return {
       dotId: d.id,
       nhanNgayGiao: nhanNgayGiao(d.tuNgay, d.denNgay),
-      ngayHoaDon: ngayVietNam(d.ngayHoaDon),
       soDong: cua.length,
       soDonVi: new Set(cua.map((r) => r.maBp || r.donVi)).size,
       soHoaDon: new Set(cua.map((r) => r.soHoaDon)).size,

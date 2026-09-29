@@ -156,13 +156,11 @@ const dot: DotChot[] = [
     id: "d1",
     tuNgay: "2026-08-01",
     denNgay: "2026-08-12",
-    ngayHoaDon: "2026-08-15",
   },
   {
     id: "d2",
     tuNgay: "2026-08-13",
     denNgay: "2026-08-16",
-    ngayHoaDon: "2026-08-19",
   },
 ];
 
@@ -241,7 +239,7 @@ gan("dong 1 VAT DNC", d1.vatDnc, 31_402_880);
 gan("dong 1 sau thue DNC", d1.sauThueDnc, 345_431_680);
 kiemTra("dong 1 so hoa don", d1.soHoaDon, "C26TKB#00000192");
 kiemTra("dong 1 ngay giao", d1.ngayGiaoBia, "01.08-12.08");
-kiemTra("dong 1 ngay hoa don", d1.ngayHoaDon, "15.08.2026");
+kiemTra("dong chua co HD that lay denNgay", d1.ngayHoaDon, "12.08.2026");
 kiemTra("dong 1 gop 2 nguon", d1.nguon.length, 2);
 
 /*
@@ -357,7 +355,6 @@ const chong = dungBangCongNo({
       id: "d3",
       tuNgay: "2026-08-04",
       denNgay: "2026-08-06",
-      ngayHoaDon: "2026-08-08",
     },
   ],
   tienToHoaDon: "C26TKB#",
@@ -409,7 +406,7 @@ kiemTra(
   // Don vi khac trong cung dot KHONG bi anh huong.
   const bng = b2.dong.find((r) => r.maBp === "AC0118")!;
   kiemTra("don vi khac giu so tu danh", bng.soHoaDon, "C26TKB#00000193");
-  kiemTra("don vi khac giu ngay cua dot", bng.ngayHoaDon, "15.08.2026");
+  kiemTra("don vi khac lay denNgay cua dot", bng.ngayHoaDon, "12.08.2026");
 
   kiemTra("dem lai con ba chua co so that", b2.chuaCoSoThat, 3);
 

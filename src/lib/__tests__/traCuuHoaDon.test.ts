@@ -195,15 +195,20 @@ kiemTra("bien dot dung", [dot[1].tuNgay, dot[1].denNgay], [
   "2026-08-13",
   "2026-08-16",
 ]);
-kiemTra("ngay hoa don cua dot", dot[0].ngayHoaDon, "2026-08-15");
-
-// Ngày hóa đơn của đợt lấy ngày SỚM NHẤT, không phụ thuộc thứ tự tài liệu.
+// Đợt chỉ còn là một KHOẢNG NGÀY GIAO. Hai hóa đơn cùng khoảng mà khác ngày
+// phát hành vẫn phải gom về đúng một đợt — trước đây ngày hóa đơn nằm trên đợt
+// nên dựng lại đợt phải đi chọn một ngày đại diện cho cả nhóm.
 {
   const nguoc = dotTuHoaDon([
     { ...hoaDon[0], ngayHoaDon: "2026-08-18" },
     { ...hoaDon[1], ngayHoaDon: "2026-08-15" },
   ]);
-  kiemTra("lay ngay som nhat trong dot", nguoc[0].ngayHoaDon, "2026-08-15");
+  kiemTra("khac ngay phat hanh van mot dot", nguoc.length, 1);
+  kiemTra(
+    "dot chi giu khoang ngay giao",
+    Object.keys(nguoc[0]).sort(),
+    ["denNgay", "id", "tuNgay"],
+  );
 }
 
 // ---------------------------------------------------------- tra cứu cả kỳ
