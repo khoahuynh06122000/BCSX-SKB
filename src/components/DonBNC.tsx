@@ -818,14 +818,14 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                           {[
                                             "Ngày giao",
                                             "Tên bia",
-                                            "Số lượng",
                                             "Đơn vị tính",
+                                            "Số lượng",
                                           ].map((h, i) => (
                                             <th
                                               key={h}
                                               className={cn(
                                                 "px-3.5 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200",
-                                                i === 2 && "text-right",
+                                                i === 3 && "text-right",
                                               )}
                                             >
                                               {h}
@@ -845,17 +845,25 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             <td className="px-3.5 py-2.5 text-slate-900">
                                               {c.tenHang}
                                             </td>
-                                            {/* Số đứng một mình trong ô của nó,
-                                                đơn vị sang cột riêng — số nào
-                                                cũng kết thúc ở cùng một mép thì
-                                                đọc cột dọc mới nhanh. */}
+                                            {/*
+                                              Đơn vị tính ĐỨNG TRƯỚC số lượng,
+                                              cùng thứ tự với bảng của ba thẻ
+                                              kia. Hai bảng cùng bộ cột mà xếp
+                                              khác nhau thì đổi thẻ là mắt phải
+                                              dò lại đầu cột.
+
+                                              Số vẫn đứng một mình trong ô của
+                                              nó và canh phải — số nào cũng kết
+                                              thúc ở cùng một mép thì đọc cột
+                                              dọc mới nhanh.
+                                            */}
+                                            <td className="px-3.5 py-2.5 text-[13px] font-bold text-slate-400 uppercase whitespace-nowrap">
+                                              {c.dvt}
+                                            </td>
                                             <td className="px-3.5 py-2.5 text-right tabular-nums whitespace-nowrap text-slate-900">
                                               {c.dvt === "Lon"
                                                 ? formatNumber(c.soLuong)
                                                 : so(c.soLuong)}
-                                            </td>
-                                            <td className="px-3.5 py-2.5 text-[13px] font-bold text-slate-400 uppercase whitespace-nowrap">
-                                              {c.dvt}
                                             </td>
                                           </tr>
                                         ))}
