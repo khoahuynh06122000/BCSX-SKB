@@ -28,6 +28,8 @@ import {
   Camera,
   Image as ImageIcon,
   ImageOff,
+  Maximize2,
+  Minimize2,
   Layers,
   FileText,
   AlertTriangle,
@@ -653,6 +655,18 @@ export default function App() {
    */
   const [selectedGalleryImage, setSelectedGalleryImage] =
     useState<AnhThuVien | null>(null);
+  /**
+   * Chế độ xem ảnh: vừa khung, hay cỡ thật (cuộn được).
+   *
+   * Biên bản giao nhận là ảnh chụp giấy A4 dựng đứng. Bóp cả tờ vào chiều cao
+   * màn hình thì đọc được tiêu đề nhưng không đọc nổi dòng số lượng — mà dòng
+   * số lượng mới là thứ người ta mở ảnh lên để dò. Nên cho bấm vào ảnh để đổi
+   * sang cỡ thật rồi cuộn.
+   */
+  const [anhCoThat, setAnhCoThat] = useState(false);
+  useEffect(() => {
+    setAnhCoThat(false);
+  }, [selectedGalleryImage?.id]);
   /**
    * Tiến trình tải hàng loạt ảnh thư viện.
    *
@@ -9908,40 +9922,70 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
 
             {/* Fullscreen Image View Modal */}
             {selectedGalleryImage && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-5">
                 <div
                   onClick={() => setSelectedGalleryImage(null)}
                   className="absolute inset-0 bg-slate-950/95 backdrop-blur-2xl"
                 />
-                <div className="relative w-full max-w-4xl max-h-[85vh] flex flex-col">
-                  <div className="absolute -top-16 left-0 right-0 flex items-center justify-between pointer-events-none">
-                    <div className="flex flex-col">
-                      <h3 className="text-white font-black text-xl uppercase tracking-tighter">
+                {/*
+                  KHUNG XEM ẢNH — CAO ĐÚNG BẰNG CHỖ CÒN LẠI, KHÔNG HƠN.
+
+                  Bản cũ để thanh tiêu đề `absolute -top-16`, tức nó đứng NGOÀI
+                  khung, phía trên. Khung lại `max-h-[85vh]` mà không đặt chiều
+                  cao, nên tấm ảnh bên trong (`h-full` trên cha cao tự động =
+                  không ràng buộc gì) nở đúng cỡ thật của nó, tràn qua cả mép
+                  trên lẫn mép dưới màn hình. Người xem thấy đúng như anh Khoa
+                  gặp: tờ biên bản bị cắt cả đầu lẫn chân.
+
+                  Nay thanh tiêu đề nằm TRONG khung và chiếm chỗ thật của nó;
+                  vùng ảnh là `flex-1 min-h-0` nên nó nhận đúng phần cao còn
+                  thừa. `min-h-0` là chỗ dễ quên: thiếu nó thì một ô flex không
+                  chịu co nhỏ hơn nội dung, và mọi ràng buộc chiều cao ở trên
+                  thành vô nghĩa.
+                */}
+                <div className="relative w-full max-w-5xl h-full flex flex-col gap-3">
+                  <div className="shrink-0 flex items-start justify-between gap-4">
+                    <div className="flex flex-col min-w-0">
+                      <h3 className="text-white font-black text-base sm:text-xl uppercase tracking-tighter truncate">
                         {selectedGalleryImage.tieuDe}
                       </h3>
-                      <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">
+                      <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1 truncate">
                         {formatDate(selectedGalleryImage.date)} •{" "}
                         {selectedGalleryImage.phu}
                       </p>
                     </div>
-                    <div className="flex gap-4 pointer-events-auto">
+                    <div className="flex gap-2 sm:gap-3 shrink-0">
+                      {!anhLoi.has(selectedGalleryImage.id) && (
+                        <button
+                          onClick={() => setAnhCoThat((v) => !v)}
+                          title={anhCoThat ? "Vừa khung" : "Cỡ thật"}
+                          className="w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
+                        >
+                          {anhCoThat ? (
+                            <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                          ) : (
+                            <Maximize2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                          )}
+                        </button>
+                      )}
                       <a
                         href={selectedGalleryImage.url}
                         download={`BCSX-${selectedGalleryImage.id}.png`}
-                        className="w-12 h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
+                        className="w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
                       >
-                        <Download className="w-6 h-6" />
+                        <Download className="w-5 h-5 sm:w-6 sm:h-6" />
                       </a>
                       <button
                         onClick={() => setSelectedGalleryImage(null)}
-                        className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-2xl transition-all active:scale-90"
+                        className="w-11 h-11 sm:w-12 sm:h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-2xl transition-all active:scale-90"
                       >
-                        <X className="w-6 h-6" />
+                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
                       </button>
                     </div>
                   </div>
+                  <div className="flex-1 min-h-0 overflow-auto rounded-3xl flex">
                   {anhLoi.has(selectedGalleryImage.id) ? (
-                    <div className="w-full h-full rounded-3xl bg-slate-100 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                    <div className="m-auto w-full rounded-3xl bg-slate-100 flex flex-col items-center justify-center gap-3 py-12 px-6 text-center">
                       <ImageOff className="w-12 h-12 text-slate-300" />
                       <p className="text-xs font-black uppercase tracking-widest text-slate-500">
                         Không tải được ảnh
@@ -9961,13 +10005,26 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       </code>
                     </div>
                   ) : (
+                    /*
+                      Bấm thẳng vào ảnh cũng đổi được cỡ — không bắt người ta
+                      rê lên nút trên góc. Cỡ thật thì trải hết bề ngang rồi
+                      cuộn dọc; vừa khung thì `max-h-full` giữ cả tờ trong tầm
+                      mắt.
+                    */
                     <img
                       src={selectedGalleryImage.url}
                       onError={() => ghiAnhLoi(selectedGalleryImage.id)}
-                      className="w-full h-full object-contain rounded-3xl shadow-2xl"
+                      onClick={() => setAnhCoThat((v) => !v)}
+                      className={cn(
+                        "m-auto rounded-3xl shadow-2xl",
+                        anhCoThat
+                          ? "w-full h-auto cursor-zoom-out"
+                          : "max-w-full max-h-full object-contain cursor-zoom-in",
+                      )}
                       alt="Zoomed"
                     />
                   )}
+                  </div>
                 </div>
               </div>
             )}
