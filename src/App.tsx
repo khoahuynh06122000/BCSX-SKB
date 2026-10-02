@@ -131,7 +131,19 @@ import {
   type AnhThuVien,
 } from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
+import { anhThuNho } from "./lib/anhCloudinary";
+import { ghiDeAnh, giuAnhCu } from "./lib/anhMinhChung";
+import { traLuot, xinLuot } from "./lib/hangDoiAnh";
+import {
+  baoCaoSoatAnh,
+  nhanDinhSoatAnh,
+  nhomCuaMa,
+  tomTatSoatAnh,
+  type KetQuaMotAnh,
+  type TomTatSoatAnh,
+} from "./lib/soatAnh";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
+import AnhLuoi from "./components/AnhLuoi";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import {
@@ -715,9 +727,23 @@ export default function App() {
       return moi;
     });
   const thuLaiTatCaAnh = () => setLanThuAnh({});
-  /** Đuôi đổi đường dẫn để trình duyệt không lấy lại kết quả hỏng đã đệm. */
-  const duongDanThu = (id: string, url: string) =>
-    lanThuAnh[id] ? `${url}${url.includes("?") ? "&" : "?"}thu=${lanThuAnh[id]}` : url;
+  /**
+   * ĐƯỜNG DẪN ĐỂ TẢI MỘT Ô THU NHỎ.
+   *
+   * ĐÃ BỎ MẸO `?thu=N`. Ý định của nó là làm trình duyệt đừng lấy lại kết quả
+   * hỏng trong bộ nhớ đệm, nhưng nó phản tác dụng: thêm một tham số lạ thì
+   * Cloudinary coi đây là một đường dẫn KHÁC, nên trượt bộ đệm biên và lượt
+   * thử lại đi thẳng vào máy chủ gốc — đúng chỗ đang chặn. Tức là mẹo chống
+   * đệm làm cho lượt thử lại KHÓ thành công hơn lượt đầu.
+   *
+   * Thay vào đó xin bản THU NHỎ. Lưới bốn cột trên màn hình của anh Khoa cho
+   * ô rộng chừng 245px, Windows đang phóng 150% nên cần khoảng 368px điểm ảnh
+   * thật — 400px là vừa đủ sắc mà không tải thừa.
+   *
+   * Đo thật trên một tờ biên bản: 46.967 B xuống 23.190 B, nhẹ đi một nửa.
+   * Xem `anhCloudinary.ts`.
+   */
+  const duongDanO = (url: string) => anhThuNho(url, 400);
   const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
     tong: 0,
     xong: 0,
@@ -1926,7 +1952,22 @@ export default function App() {
           d.type === "OPENING"
             ? "Tồn đầu kỳ · nạp từ file BBGN"
             : "Nhập kho · nạp từ file BBGN",
-        evidencePhotoUrls: [],
+        /*
+         * GIỮ ẢNH CỦA DÒNG CŨ.
+         *
+         * Mã dòng cố định theo nội dung nên lần nạp lại đè thẳng lên dòng của
+         * lần trước — cố ý, để không đẻ bản ghi trùng. Nhưng bản cũ ghi kèm
+         * `evidencePhotoUrls: []`, mà `batch.set` không merge, nên nạp lại
+         * một tệp đã nạp rồi là XOÁ SẠCH mọi tờ biên bản đã gắn vào sau đó.
+         *
+         * Âm thầm hoàn toàn: không báo, không hỏi, và ảnh nằm ở màn hình khác
+         * nên vài hôm sau mở Thư viện mới thấy thiếu — lúc ấy không ai còn nối
+         * được chuyện thiếu ảnh với việc đã nạp lại tệp.
+         *
+         * Tệp Excel không mang theo ảnh nào, tức lần nạp này không có gì để
+         * nói về ảnh. Không nói gì thì không được đổi gì.
+         */
+        ...giuAnhCu(transactions.find((x) => x.id === id)),
         createdBy: user || "Guest",
         status: "completed",
       };
@@ -2218,7 +2259,8 @@ export default function App() {
           partnerId: d.partnerId,
           partnerName: d.partnerName,
           notes: noteParts.join(" · "),
-          evidencePhotoUrls: [],
+          // Giữ ảnh của dòng cũ — xem ghi chú dài ở đường nạp tệp nhập.
+          ...giuAnhCu(transactions.find((x) => x.id === id)),
           createdBy: user || "Guest",
           referenceGroupId,
           status: quaDiDuong ? "in_transit" : "completed",
@@ -2260,7 +2302,7 @@ export default function App() {
               partnerId: d.partnerId,
               partnerName: d.partnerName,
               notes: `[Hao hụt] ${noteParts.join(" · ")}`,
-              evidencePhotoUrls: [],
+              ...giuAnhCu(transactions.find((x) => x.id === idHao)),
               createdBy: user || "Guest",
               referenceGroupId,
               /*
@@ -3799,8 +3841,14 @@ export default function App() {
                 `${trx.notes || ""} [Hao hụt: ${lossForThisTrx} ${p?.unit || "đv"}, Lý do: ${lossReason || "Chênh lệch"}]`.trim(),
               date: finalDate,
               updatedAt: now,
-              evidencePhotoUrl: photoUrls[0] || null,
-              evidencePhotoUrls: photoUrls,
+              /*
+               * CÓ ẢNH MỚI THÌ THAY, KHÔNG CÓ THÌ GIỮ.
+               *
+               * Bản cũ ghi thẳng `photoUrls`, nên xác nhận một đơn đã có ảnh
+               * mà lần này không đính gì là xoá mất tờ biên bản cũ. Bấm xác
+               * nhận lần thứ hai cho chắc cũng xoá.
+               */
+              ...ghiDeAnh(photoUrls, trx),
             });
 
             /*
@@ -3835,8 +3883,12 @@ export default function App() {
                 partnerName: trx.partnerName,
                 notes:
                   `Hao hụt đơn đi đường — không ghi công nợ · Lý do: ${lossReason || "Chênh lệch"}`.trim(),
-                evidencePhotoUrl: photoUrls[0] || null,
-                evidencePhotoUrls: photoUrls,
+                // Mã cố định nên bấm xác nhận lại cũng đè lên chính nó: phải
+                // giữ ảnh đã có, y như đường nạp lại tệp.
+                ...ghiDeAnh(
+                  photoUrls,
+                  transactions.find((x) => x.id === haoId),
+                ),
                 createdBy: user || "Guest",
                 referenceGroupId: trx.referenceGroupId,
                 status: "completed",
@@ -3849,8 +3901,7 @@ export default function App() {
               date: finalDate,
               updatedAt: now,
               // Không thêm chữ gì: cột Trạng thái đã nói là đơn đã xong.
-              evidencePhotoUrl: photoUrls[0] || null,
-              evidencePhotoUrls: photoUrls,
+              ...ghiDeAnh(photoUrls, trx),
             });
           }
         }
@@ -4435,6 +4486,77 @@ export default function App() {
         : anhTruocLocBoPhan,
     [anhTruocLocBoPhan, galleryBoPhan],
   );
+
+  /* ---------------- Soat anh ---------------- */
+
+  const [dangSoat, setDangSoat] = useState({ tong: 0, xong: 0 });
+  const [ketQuaSoat, setKetQuaSoat] = useState<TomTatSoatAnh | null>(null);
+
+  /**
+   * HỎI MỘT TẤM VÀ LẤY VỀ MÃ TRẠNG THÁI THẬT.
+   *
+   * Bản soát cũ tải thử bằng thẻ `<img>`. Thẻ ảnh chỉ biết nói "tôi tải không
+   * được" — nó không cho biết máy chủ trả về gì, mà ba chuyện khác hẳn nhau
+   * lại cho ra đúng tín hiệu ấy: ảnh đã xoá (404), bị chặn tạm (429), tài
+   * khoản từ chối (403/420). Không phân biệt được thì mọi câu chữ hiện lên
+   * đều là phỏng đoán.
+   *
+   * `fetch` đọc được `res.status`. Hỏi trên bản thu nhỏ 64px: cùng một tệp
+   * gốc nên cùng một câu trả lời, mà tốn gần như không gì.
+   *
+   * Ném lỗi thì trả 0 — nghĩa là CHƯA KẾT LUẬN ĐƯỢC GÌ về tấm ảnh, chỉ biết
+   * là không hỏi tới nơi. Không được lẫn 0 với 404.
+   */
+  const hoiMotAnh = async (url: string): Promise<number> => {
+    await xinLuot();
+    try {
+      const r = await fetch(anhThuNho(url, 64), { cache: "no-store" });
+      // Đọc hết thân để trả kết nối về, không thì luồng bị ngậm lại.
+      await r.arrayBuffer().catch(() => undefined);
+      return r.status;
+    } catch {
+      return 0;
+    } finally {
+      traLuot();
+    }
+  };
+
+  /**
+   * Soát cả khoảng ngày đang xem, KHÔNG theo đơn vị đang lọc.
+   *
+   * Câu cần trả lời là "mất theo quy luật nào" — hỏng sạch tới một mốc ngày
+   * là một chuyện, hỏng rải rác là chuyện khác hẳn. Lọc còn một đơn vị thì
+   * không thấy được quy luật nào cả.
+   */
+  const soatAnhThuVien = async () => {
+    if (dangSoat.tong > 0) return;
+    const ds = anhTruocLocDonVi;
+    if (!ds.length) {
+      showNotification("Không có ảnh nào trong khoảng đang xem", "error");
+      return;
+    }
+    setKetQuaSoat(null);
+    setDangSoat({ tong: ds.length, xong: 0 });
+
+    const ra: KetQuaMotAnh[] = [];
+    for (const a of ds) {
+      const ma = await hoiMotAnh(a.url);
+      ra.push({
+        id: a.id,
+        url: a.url,
+        date: a.date,
+        donVi: a.donVi || "(không rõ)",
+        ma,
+      });
+      // Đánh dấu ô xám cho đúng kết quả vừa đo, để lưới và bảng soát nói
+      // cùng một chuyện.
+      if (nhomCuaMa(ma) !== "duoc") ghiAnhLoi(a.id);
+      setDangSoat((t) => ({ ...t, xong: t.xong + 1 }));
+    }
+
+    setKetQuaSoat(tomTatSoatAnh(ra));
+    setDangSoat({ tong: 0, xong: 0 });
+  };
 
   /** Số tấm lỗi trong đúng bộ đang xem, không đếm những tấm đã lọc ra ngoài. */
   const soAnhLoi = useMemo(
@@ -9366,8 +9488,115 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       )}
                     </button>
 
+                    {/*
+                      SOÁT ẢNH — hỏi từng tấm rồi gom theo MÃ LỖI THẬT.
+                      Nhìn từng ô xám thì chỉ biết "tấm này chưa ra"; mà ảnh
+                      đã xoá, bị chặn tạm và tài khoản từ chối là ba chuyện
+                      phải xử lý ba kiểu khác nhau.
+                    */}
+                    <button
+                      onClick={soatAnhThuVien}
+                      disabled={
+                        dangSoat.tong > 0 || anhTruocLocDonVi.length === 0
+                      }
+                      title={`Hỏi thử ${anhTruocLocDonVi.length} tấm trong khoảng ngày này (mọi đơn vị) và đọc mã lỗi thật của máy chủ ảnh`}
+                      className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {dangSoat.tong > 0 ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Đang soát {formatNumber(dangSoat.xong)}/
+                          {formatNumber(dangSoat.tong)}
+                        </>
+                      ) : (
+                        <>
+                          <ImageOff className="w-4 h-4" />
+                          Soát ảnh ({formatNumber(anhTruocLocDonVi.length)})
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
+
+                {/*
+                  KẾT QUẢ SOÁT. Một câu nói thẳng phải làm gì ở trên, ba bảng
+                  số ở dưới để gửi cho người viết code. Có nút sao chép vì
+                  không ai gõ lại được hai chục dòng số.
+                */}
+                {ketQuaSoat && (
+                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex gap-2">
+                        <ImageOff className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Kết quả soát · {formatNumber(ketQuaSoat.tong)} tấm,
+                            hỏng {formatNumber(ketQuaSoat.hong)}
+                          </p>
+                          <p className="text-[13px] font-bold text-slate-700 mt-1 leading-relaxed">
+                            {nhanDinhSoatAnh(ketQuaSoat)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard
+                            ?.writeText(baoCaoSoatAnh(ketQuaSoat))
+                            .then(() => showNotification("Đã sao chép báo cáo"))
+                            .catch(() =>
+                              showNotification("Không sao chép được", "error"),
+                            );
+                        }}
+                        className="shrink-0 px-3 py-2 rounded-lg bg-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 transition-all"
+                      >
+                        Sao chép
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      {[
+                        { ten: "Theo nhóm nguyên nhân", ds: ketQuaSoat.theoNhom },
+                        { ten: "Theo tháng", ds: ketQuaSoat.theoThang },
+                        { ten: "Theo đơn vị", ds: ketQuaSoat.theoDonVi },
+                      ].map((b) => (
+                        <div
+                          key={b.ten}
+                          className="rounded-xl border border-slate-200 overflow-hidden"
+                        >
+                          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              {b.ten}
+                            </p>
+                          </div>
+                          <div className="max-h-56 overflow-y-auto">
+                            {b.ds.map((o) => (
+                              <div
+                                key={o.ten}
+                                className="px-3 py-1.5 flex items-center justify-between gap-2 border-t border-slate-50 text-[11px] font-bold"
+                              >
+                                <span className="truncate text-slate-600">
+                                  {o.ten}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "tabular-nums shrink-0",
+                                    o.hong === 0
+                                      ? "text-emerald-600"
+                                      : o.hong === o.tong
+                                        ? "text-rose-600"
+                                        : "text-amber-600",
+                                  )}
+                                >
+                                  {o.hong}/{o.tong}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/*
                   Đếm số tấm lỗi trong đúng bộ đang xem. Ảnh lỗi không tự lộ ra
@@ -9437,12 +9666,17 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                               </button>
                             </div>
                           ) : (
-                            <img
-                              src={duongDanThu(t.id, t.url)}
+                            /*
+                              XIN ẢNH THEO HÀNG ĐỢI, không để 91 thẻ ảnh cùng
+                              hỏi một lúc. Xem `hangDoiAnh.ts` và `AnhLuoi`.
+                            */
+                            <AnhLuoi
+                              key={`${t.id}-${lanThuAnh[t.id] ?? 0}`}
+                              src={duongDanO(t.url)}
                               alt={t.tieuDe}
-                              loading="lazy"
                               onError={() => ghiAnhLoi(t.id)}
                               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                              classNameCho="w-full h-full"
                             />
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
