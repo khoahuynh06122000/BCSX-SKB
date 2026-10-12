@@ -112,7 +112,16 @@ export interface CauHinhSap {
   taiKhoanDoanhThu: string;
   /** `3331110000` — tài khoản thuế GTGT phải nộp. */
   taiKhoanThue: string;
-  /** Tiền tố tiêu đề chứng từ, ví dụ `CN Beer SKB T8_`. */
+  /**
+   * Mẫu tiêu đề chứng từ, ví dụ `CN Beer SKB {T}_`.
+   *
+   * `{T}` là chỗ điền THÁNG GIAO của chứng từ: đợt giao tháng 10 thành `T10`.
+   * Trước đây ô này ghi cứng `T8`, nên kết xuất đơn tháng 9, tháng 10 vẫn ra
+   * `CN Beer SKB T8_BNC` ở cột Header Text và Text — sai tháng trên chứng từ
+   * kế toán mà mở tệp ra không ai để ý, vì chữ nào cũng trông đúng khuôn.
+   *
+   * Không có `{T}` thì giữ nguyên chữ người dùng gõ: đó là ý họ muốn cố định.
+   */
   tieuDeChungTu: string;
 }
 
@@ -127,8 +136,44 @@ export const CAU_HINH_MAC_DINH: CauHinhSap = {
   taiKhoanPhaiThu: "AK0101",
   taiKhoanDoanhThu: "5111526200",
   taiKhoanThue: "3331110000",
-  tieuDeChungTu: "CN Beer SKB T8_",
+  tieuDeChungTu: "CN Beer SKB {T}_",
 };
+
+/** Chỗ giữ tháng trong mẫu tiêu đề. */
+export const CHO_THANG = "{T}";
+
+/**
+ * Tháng của một nhãn đợt giao, lấy theo NGÀY CUỐI của đợt.
+ *
+ *     "25.09.2026"     → 9
+ *     "17.09-21.09"    → 9
+ *     "28.09-03.10"    → 10   (đợt vắt qua hai tháng: tính theo ngày chốt)
+ *
+ * Vì sao ngày cuối: đợt chốt khép lại ở ngày cuối, hóa đơn cũng lập sau ngày
+ * đó, nên chứng từ thuộc tháng của ngày cuối. Lấy ngày đầu thì đợt
+ * 28.09–03.10 bị ghi T9 trong khi hóa đơn của nó nằm ở sổ tháng 10.
+ *
+ * Trả 0 khi không đọc được — nơi gọi tự chọn đường lùi, không đoán ở đây.
+ */
+export function thangCuaNhanDot(nhan: string): number {
+  const cuoi = String(nhan ?? "").trim().split("-").pop() ?? "";
+  const m = /^\s*\d{1,2}\.(\d{1,2})/.exec(cuoi);
+  if (!m) return 0;
+  const t = Number(m[1]);
+  return t >= 1 && t <= 12 ? t : 0;
+}
+
+/**
+ * Điền tháng vào mẫu tiêu đề: `CN Beer SKB {T}_` + 10 → `CN Beer SKB T10_`.
+ *
+ * Tháng không hợp lệ thì để nguyên `{T}` cho lộ ra ngay trên tệp, thay vì lặng
+ * lẽ điền một tháng đoán — chứng từ sai tháng khó thấy hơn chứng từ có chữ lạ.
+ */
+export function dienThang(mau: string, thang: number): string {
+  const t = Math.trunc(Number(thang) || 0);
+  if (t < 1 || t > 12) return mau;
+  return mau.split(CHO_THANG).join(`T${t}`);
+}
 
 /** Một dòng hàng đã gộp, đầu vào của phép dựng. */
 export interface DongHangSap {
@@ -138,6 +183,11 @@ export interface DongHangSap {
    * tệp mẫu, vốn là một đợt 21–22/08.
    */
   khoaDot?: string;
+  /**
+   * Tháng giao của dòng, 1–12, để điền vào `{T}` của tiêu đề. Bỏ trống thì
+   * lấy tháng của ngày chứng từ.
+   */
+  thang?: number;
   maBp: string;
   donVi: string;
   tenHangHoa: string;
@@ -279,7 +329,9 @@ export function dungTepSap(input: DungTepSapInput): TepSap {
   theoDonVi.forEach((ds) => {
     const donVi = ds[0].donVi;
     const maBp = ds[0].maBp || donVi;
-    const tieuDe = `${c.tieuDeChungTu}${donVi}`;
+    // Mỗi chứng từ một (đợt × đơn vị), nên cả nhóm cùng một tháng giao.
+    const thang = ds[0].thang || Number(input.ngayChungTu.slice(5, 7));
+    const tieuDe = `${dienThang(c.tieuDeChungTu, thang)}${donVi}`;
 
     // Làm tròn từng dòng về đồng trước, rồi mới cộng — cộng số lẻ rồi làm tròn
     // thì tổng lệch với các dòng chi tiết, và chứng từ không cân.

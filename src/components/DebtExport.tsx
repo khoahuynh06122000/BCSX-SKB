@@ -33,7 +33,9 @@ import { taoWorkbookCongNo } from "../lib/congNoExcel";
 import { XLSXDep } from "../lib/excelDep";
 import {
   CAU_HINH_MAC_DINH,
+  dienThang,
   dungTepSap,
+  thangCuaNhanDot,
   kiemCanChungTu,
   type CauHinhSap,
   type DongHangSap,
@@ -423,6 +425,7 @@ export default function DebtExport({
       )
       .map((r) => ({
         khoaDot: r.ngayGiaoBia,
+        thang: thangCuaNhanDot(r.ngayGiaoBia),
         maBp: r.maBp,
         donVi: r.donVi,
         tenHangHoa: r.tenHangHoa,
@@ -1461,7 +1464,9 @@ export default function DebtExport({
                   className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900 font-mono"
                 />
                 <span className="block text-[11px] font-bold text-slate-400 mt-1">
-                  Nối thêm tên đơn vị: {cauHinhSap.tieuDeChungTu}BNC
+                  <strong>{"{T}"}</strong> tự đổi theo tháng giao của từng
+                  đợt. Ví dụ đơn giao tháng 10:{" "}
+                  {dienThang(cauHinhSap.tieuDeChungTu, 10)}BNC
                 </span>
               </label>
             </div>

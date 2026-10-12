@@ -14,6 +14,7 @@
 
 import {
   CAU_HINH_MAC_DINH,
+  dienThang,
   dungTepSap,
   kiemCanChungTu,
   KIEU_TRUONG_SAP,
@@ -22,6 +23,7 @@ import {
   NHOM_TRUONG_1,
   NHOM_TRUONG_2,
   TEN_TRUONG_SAP,
+  thangCuaNhanDot,
   viTriCot,
   type DongHangSap,
 } from "../sapTemplate";
@@ -310,6 +312,55 @@ eq(
     cuoi[iX],
     { t: "s", v: tep.chungTu[tep.chungTu.length - 1].donVi },
   );
+}
+
+// ============================================ thang tren tieu de chung tu
+//
+// Truoc day tieu de ghi cung "T8", nen ket xuat don thang 9, thang 10 van ra
+// "CN Beer SKB T8_BNC" o cot Header Text va Text.
+
+eq("mau mac dinh co cho thang", CAU_HINH_MAC_DINH.tieuDeChungTu, "CN Beer SKB {T}_");
+
+eq("nhan mot ngay", thangCuaNhanDot("25.09.2026"), 9);
+eq("nhan mot khoang", thangCuaNhanDot("17.09-21.09"), 9);
+eq("thang hai chu so", thangCuaNhanDot("01.10-05.10"), 10);
+eq("dot vat qua hai thang lay ngay cuoi", thangCuaNhanDot("28.09-03.10"), 10);
+eq("thang mot chu so khong co so 0", thangCuaNhanDot("5.8.2026"), 8);
+eq("nhan rong", thangCuaNhanDot(""), 0);
+eq("nhan rac", thangCuaNhanDot("abc"), 0);
+eq("thang 13 khong hop le", thangCuaNhanDot("01.13"), 0);
+
+eq("dien thang 10", dienThang("CN Beer SKB {T}_", 10), "CN Beer SKB T10_");
+eq("dien thang 8", dienThang("CN Beer SKB {T}_", 8), "CN Beer SKB T8_");
+eq("khong co cho thang thi giu nguyen", dienThang("CN Beer SKB T8_", 10), "CN Beer SKB T8_");
+eq("thang khong hop le thi de lo {T}", dienThang("CN Beer SKB {T}_", 0), "CN Beer SKB {T}_");
+
+{
+  // Hai dot khac thang trong cung mot lan ket xuat: moi chung tu mot thang.
+  const t = dungTepSap({
+    dong: [
+      { khoaDot: "25.09.2026", thang: 9, maBp: "AD0103", donVi: "BNC", tenHangHoa: "Bia Wings Dark Lager", dvt: "LIT", soLuong: 10, thanhTien: 300_000 },
+      { khoaDot: "02.10.2026", thang: 10, maBp: "AD0103", donVi: "BNC", tenHangHoa: "Bia Wings Dark Lager", dvt: "LIT", soLuong: 20, thanhTien: 600_000 },
+    ],
+    ngayChungTu: "2026-10-12",
+    cauHinh: CAU_HINH_MAC_DINH,
+  });
+  eq("dot thang 9 ra T9", t.chungTu[0].tieuDe, "CN Beer SKB T9_BNC");
+  eq("dot thang 10 ra T10", t.chungTu[1].tieuDe, "CN Beer SKB T10_BNC");
+  // Header Text (BKTXT) va Text (SGTXT) cua dong No phai thu deu mang dung thang.
+  const no10 = t.oDong[3];
+  eq("Header Text dung thang", no10[MA_TRUONG_SAP.indexOf("BKTXT")], { t: "s", v: "CN Beer SKB T10_BNC" });
+  eq("Text dung thang", no10[MA_TRUONG_SAP.indexOf("SGTXT")], { t: "s", v: "CN Beer SKB T10_BNC" });
+}
+
+{
+  // Khong co thang cua dot thi lay thang cua ngay chung tu.
+  const t = dungTepSap({
+    dong: [{ maBp: "AC0103", donVi: "ITC", tenHangHoa: "Bia Wings Dark Lager", dvt: "LIT", soLuong: 1, thanhTien: 30_000 }],
+    ngayChungTu: "2026-10-12",
+    cauHinh: CAU_HINH_MAC_DINH,
+  });
+  eq("thieu thang thi lay thang ngay chung tu", t.chungTu[0].tieuDe, "CN Beer SKB T10_ITC");
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
