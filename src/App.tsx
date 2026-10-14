@@ -201,6 +201,7 @@ import {
 } from "./lib/soPhieuKho";
 
 import ONgay from "./components/ONgay";
+import { DaiSucKhoe } from "./components/DaiSucKhoe";
 
 import { dungKeHoachDoiSo } from "./lib/doiSoPhieuCu";
 import {
@@ -461,8 +462,8 @@ export default function App() {
    * chủ cũ thì cả năm kho cùng hỏng — năm thông báo chồng nhau, che mất màn
    * hình, mà nội dung na ná nhau. Nói một lần, kèm tên từng kho, là đủ.
    *
-   * Đọc được thì tự xoá khỏi danh sách, nên dán lại phân quyền xong là dải
-   * cảnh báo biến mất mà không phải tải lại trang.
+   * Listener đã hỏng thì Firestore đóng luôn nó, không tự thử lại — nên dải
+   * này có nút Tải lại trang. Đọc được lại thì tự xoá khỏi danh sách.
    */
   const [loiDoc, setLoiDoc] = useState<Record<string, string>>({});
   const ghiNhanLoiDoc = (kho: string, loi: string | null) =>
@@ -1139,11 +1140,21 @@ export default function App() {
     // Sync User Configs (Only for OWNER)
     let unsubUsers = () => {};
     if (userRole === "OWNER") {
-      unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
-        setAllUserProfiles(
-          snapshot.docs.map((d) => ({ ...d.data(), uid: d.id }) as UserProfile),
-        );
-      });
+      unsubUsers = onSnapshot(
+        collection(db, "users"),
+        (snapshot) => {
+          setAllUserProfiles(
+            snapshot.docs.map((d) => ({ ...d.data(), uid: d.id }) as UserProfile),
+          );
+          ghiNhanLoiDoc("users", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "users",
+            handleFirestoreError(error, OperationType.GET, "users"),
+          );
+        },
+      );
     }
 
     /*
@@ -3058,6 +3069,15 @@ export default function App() {
 
     if (ma === "unavailable" || ma === "deadline-exceeded") {
       return `Không kết nối được máy chủ nên chưa ${viec} được. Kiểm tra mạng rồi thử lại.`;
+    }
+
+    // Hết hạn mức ngày của Firebase: mọi lệnh hỏng tới khi hạn mức đặt lại,
+    // làm lại ngay cũng vô ích — nói rõ để không ai bấm đi bấm lại.
+    if (ma === "resource-exhausted") {
+      return (
+        `Firebase đã hết hạn mức hôm nay nên chưa ${viec} được. Hạn mức đặt ` +
+        "lại lúc 14h–15h chiều giờ Việt Nam; làm lại sau giờ đó."
+      );
     }
 
     return `Không ${viec} được: ${err?.message || "lỗi không rõ"}`;
@@ -6636,6 +6656,28 @@ export default function App() {
               </div>
             )}
 
+            {/*
+              NGUỒN DỮ LIỆU CÓ CHUYỆN — mọi người dùng đều thấy: hết hạn mức,
+              mất mạng, ghi treo / ghi hỏng, Cloudinary từ chối ảnh. Xem
+              src/lib/sucKhoe.ts.
+            */}
+            <DaiSucKhoe />
+
+            {/*
+              Dung lượng ước tính chạm 50% gói miễn phí — chỉ admin thấy.
+            */}
+            {isOwner && storageForecast.level !== "safe" && (
+              <div className="p-3 rounded-2xl border border-amber-200 bg-amber-50 flex gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="min-w-0 text-[12px] font-bold text-slate-700 leading-relaxed">
+                  <strong>Dung lượng Firebase ước tính đã dùng{" "}
+                  {storageForecast.usedPercent.toFixed(0)}% gói miễn phí.</strong>{" "}
+                  Xem Cài đặt → Sức khỏe hệ thống. Số ước tính cao hơn số thật
+                  (đo thật xem ở Firebase Console → Firestore → Usage).
+                </p>
+              </div>
+            )}
+
             {Object.keys(loiDoc).length > 0 && (
               <div className="p-3 rounded-2xl border border-rose-200 bg-rose-50 flex gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -6644,9 +6686,19 @@ export default function App() {
                     Không đọc được {Object.keys(loiDoc).length} kho dữ liệu:{" "}
                     {Object.keys(loiDoc).join(", ")}
                   </p>
-                  <p className="text-[11px] font-bold text-rose-700/90 leading-relaxed">
+                  <p className="text-[11px] font-bold text-rose-700/90 leading-relaxed whitespace-pre-line">
                     {Object.values(loiDoc)[0]}
                   </p>
+                  {/* Listener đã hỏng thì Firestore đóng luôn, không tự thử
+                      lại — phải tải lại trang mới đọc tiếp được. */}
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-[11px] font-black text-rose-700 hover:bg-rose-100"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Tải lại trang
+                  </button>
                 </div>
               </div>
             )}

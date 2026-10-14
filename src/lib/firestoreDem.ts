@@ -27,6 +27,7 @@ import {
   writeBatch as fsWriteBatch,
 } from "firebase/firestore";
 import { BO_DEM, soDocCuaSnapshot } from "./doLuong";
+import { SUC_KHOE } from "./sucKhoe";
 
 /* =========================================================================
  * BỘ ĐO LƯỢT GỌI — gắn ở cửa duy nhất mọi lệnh Firestore của app đi qua.
@@ -36,6 +37,10 @@ import { BO_DEM, soDocCuaSnapshot } from "./doLuong";
  * đường gọi viết thêm sau này — không phải nhớ cài bộ đếm vào từng chỗ.
  *
  * Cách đếm theo đúng cách Firestore tính lượt: xem `src/lib/doLuong.ts`.
+ *
+ * Cũng ở cửa này, mọi lệnh ghi được `SUC_KHOE` theo dõi (treo quá lâu, máy
+ * chủ từ chối) và mọi listener hỏng vì máy chủ được báo lên dải cảnh báo —
+ * xem `src/lib/sucKhoe.ts`.
  * ========================================================================= */
 
 const onSnapshot = ((ref: unknown, ...thamSo: any[]) => {
@@ -49,8 +54,19 @@ const onSnapshot = ((ref: unknown, ...thamSo: any[]) => {
   const i = thamSo.findIndex(
     (x) => typeof x === "function" || (x && typeof x.next === "function"),
   );
+  // Listener hỏng thì Firestore đóng luôn nó — báo lên dải cảnh báo, rồi
+  // vẫn chuyển lỗi cho hàm báo lỗi của nơi gọi như cũ.
+  const baoLoi = (goc?: (e: unknown) => void) => (e: unknown) => {
+    SUC_KHOE.baoLoiDoc(e);
+    return goc?.(e);
+  };
   if (i >= 0) {
     const goc = thamSo[i];
+    if (typeof goc === "function") {
+      thamSo[i + 1] = baoLoi(
+        typeof thamSo[i + 1] === "function" ? thamSo[i + 1] : undefined,
+      );
+    }
     thamSo[i] =
       typeof goc === "function"
         ? (snap: any) => {
@@ -63,6 +79,7 @@ const onSnapshot = ((ref: unknown, ...thamSo: any[]) => {
               dem(snap);
               return goc.next(snap);
             },
+            error: baoLoi(goc.error?.bind(goc)),
           };
   }
   return (fsOnSnapshot as any)(ref, ...thamSo);
@@ -87,17 +104,17 @@ const getDocFromServer = (async (...a: Parameters<typeof fsGetDocFromServer>) =>
 }) as typeof fsGetDocFromServer;
 
 const setDoc = (async (...a: any[]) => {
-  await (fsSetDoc as any)(...a);
+  await SUC_KHOE.theoDoiGhi((fsSetDoc as any)(...a));
   BO_DEM.them("ghi", 1);
 }) as typeof fsSetDoc;
 
 const updateDoc = (async (...a: any[]) => {
-  await (fsUpdateDoc as any)(...a);
+  await SUC_KHOE.theoDoiGhi((fsUpdateDoc as any)(...a));
   BO_DEM.them("ghi", 1);
 }) as typeof fsUpdateDoc;
 
 const deleteDoc = (async (...a: Parameters<typeof fsDeleteDoc>) => {
-  await fsDeleteDoc(...a);
+  await SUC_KHOE.theoDoiGhi(fsDeleteDoc(...a));
   BO_DEM.them("xoa", 1);
 }) as typeof fsDeleteDoc;
 
@@ -126,7 +143,7 @@ const writeBatch = ((...a: Parameters<typeof fsWriteBatch>) => {
     return b;
   };
   b.commit = async () => {
-    await commit();
+    await SUC_KHOE.theoDoiGhi(commit());
     BO_DEM.them("ghi", ghi);
     BO_DEM.them("xoa", xoa);
   };
@@ -138,7 +155,7 @@ const writeBatch = ((...a: Parameters<typeof fsWriteBatch>) => {
  * nhiều lần khi đụng độ — mỗi lần chạy lại là lượt đọc / ghi thật, nên đếm cả.
  */
 const runTransaction = ((dbx: any, hamGoc: any, ...con: any[]) =>
-  (fsRunTransaction as any)(
+  SUC_KHOE.theoDoiGhi((fsRunTransaction as any)(
     dbx,
     (tx: any) => {
       const boc = {
@@ -166,7 +183,7 @@ const runTransaction = ((dbx: any, hamGoc: any, ...con: any[]) =>
       return hamGoc(boc);
     },
     ...con,
-  )) as typeof fsRunTransaction;
+  ))) as typeof fsRunTransaction;
 
 export {
   onSnapshot,

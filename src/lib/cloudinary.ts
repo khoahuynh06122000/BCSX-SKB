@@ -11,6 +11,7 @@
  */
 
 import { NHAN_ANH_APP } from './soAnh';
+import { SUC_KHOE } from './sucKhoe';
 
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string;
@@ -31,6 +32,18 @@ if (!CLOUD_NAME || !UPLOAD_PRESET) {
 export async function uploadToCloudinary(
   fileOrDataUri: string | Blob,
 ): Promise<string> {
+  // Báo lên dải cảnh báo chung: hỏng thì hiện, lần tải sau được thì tự tắt.
+  try {
+    const url = await taiMotAnh(fileOrDataUri);
+    SUC_KHOE.baoAnh(true);
+    return url;
+  } catch (e) {
+    SUC_KHOE.baoAnh(false, e instanceof Error ? e.message.slice(0, 80) : '');
+    throw e;
+  }
+}
+
+async function taiMotAnh(fileOrDataUri: string | Blob): Promise<string> {
   const guiLen = (coNhan: boolean) => {
     const formData = new FormData();
     formData.append('file', fileOrDataUri);
