@@ -22,6 +22,8 @@
  * sau này cần tra.
  */
 
+import { normalizeKey } from "./khopMatHang";
+
 /** Những mẩu chữ máy tự thêm, nay không còn nghĩa gì với người đọc. */
 const RAC: RegExp[] = [
   // Dấu vết của FIFO — đã bỏ theo dõi theo lô.
@@ -91,14 +93,15 @@ export function ghiChuHienThi(
     .trim();
 }
 
-/** Bỏ dấu, bỏ khoảng trắng thừa, về chữ thường — để so tên cho khớp. */
+/**
+ * Bỏ dấu, bỏ khoảng trắng thừa, về chữ thường — để so tên cho khớp.
+ *
+ * Gọi về MỘT hàm chuẩn hóa chung của app (`normalizeKey`) thay vì tự viết
+ * một bản riêng như trước; phép kiểm `khopMatHang.test.ts` chốt hai bên ra y
+ * hệt nhau.
+ */
 export function chuanTen(x?: string | null): string {
-  return String(x ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/gi, "d")
-    .replace(/[^a-z0-9]+/gi, "")
-    .toLowerCase();
+  return normalizeKey(x);
 }
 
 /**

@@ -53,13 +53,6 @@ import {
   parse,
   startOfDay,
   endOfDay,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-  isWithinInterval,
   parseISO,
   format,
 } from "date-fns";
@@ -77,7 +70,6 @@ import {
 import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
-import { revenueFromStockOut } from "./lib/revenueFromStock";
 import {
   approvedSlipCodes,
   nextSlipCode,
@@ -604,31 +596,6 @@ export default function App() {
   const [partners, setPartners] = useState<Partner[]>([]);
   // Danh muc san pham hien lay cung tu constants.ts (chua co giao dien sua).
   const [products] = useState<Product[]>(INITIAL_PRODUCTS);
-  /**
-   * DOANH THU — SỐ TÍNH RA TỪ XUẤT KHO, KHÔNG PHẢI DỮ LIỆU LƯU.
-   *
-   * Trước đây doanh thu là một collection riêng, nạp vào bằng file Excel hàng
-   * tháng. Bỏ hẳn cách đó: xuất kho là gốc, doanh thu suy ra từ nó. Kho và
-   * doanh thu vì vậy không còn hai nguồn để lệch nhau.
-   *
-   * Hệ quả phải nhớ: sửa một phiếu xuất là doanh thu kỳ đó đổi theo ngay, và
-   * không sửa tay được một dòng doanh thu lẻ nào — muốn đổi thì sửa phiếu xuất.
-   *
-   * Giá và thuế nằm ở `src/lib/invoice.ts`, phép dựng ở
-   * `src/lib/revenueFromStock.ts`.
-   */
-  const revenueBuild = useMemo(
-    () => revenueFromStockOut({ transactions, products, partners }),
-    [transactions, products, partners],
-  );
-  const revenueData = useMemo(
-    () =>
-      revenueBuild.records.map((r) => ({
-        ...r,
-        _parsedDate: parseDateSafe(r.date),
-      })),
-    [revenueBuild],
-  );
 
   const [activeTab, setActiveTab] = useState("");
   /**
@@ -826,38 +793,6 @@ export default function App() {
     new Set(),
   );
 
-  /**
-   * Bộ lọc thời gian dùng chung cho Tổng quan / Tồn kho / Báo cáo / Doanh thu.
-   *
-   * Năm giá trị này đúng với năm nút trên thanh lọc. Bản cũ khai
-   * "today" | "yesterday" | "custom" — không có giá trị nào được dùng thật,
-   * nên mọi phép so sánh với "day"/"year" đều bị TypeScript coi là vô nghĩa và
-   * không còn ai canh giúp khi gõ sai tên bộ lọc.
-   */
-  /*
-    Bỏ thanh chọn kỳ (Tất cả / Ngày / Tuần / Tháng / Năm) ngày 27/08/2026 theo
-    yêu cầu: nó nằm trên đầu năm màn hình khác nhau, mà mỗi màn hình lại đã có
-    bộ lọc riêng đúng với việc của nó — tồn kho có khoảng ngày, thư viện ảnh có
-    khoảng ngày, Đơn BNC có khoảng ngày. Hai tầng lọc chồng nhau thì số trên
-    màn hình phụ thuộc một ô người dùng đã quên là mình đặt.
-
-    Giữ lại biến ở dạng HẰNG SỐ "all" thay vì gỡ hết 34 chỗ đọc nó: gỡ hết là
-    sửa vào phép tính của bảng điều khiển, đồ thị và báo cáo doanh thu — nhiều
-    hơn hẳn việc được nhờ. Khai kiểu tường minh để những phép so sánh với
-    "day"/"month" ở dưới vẫn hợp lệ.
-  */
-  const timeFilter: "all" | "day" | "week" | "month" | "year" = "all";
-
-  /**
-   * Mốc thời gian đang xem. Là Date vì mọi nơi đều đưa thẳng vào date-fns
-   * (startOfDay, subMonths, format...). Bản cũ khởi tạo bằng chuỗi
-   * "yyyy-MM-dd" rồi các nút lại gán Date vào — chạy được nhờ date-fns tự đổi
-   * chuỗi thành Date, nhưng kiểu thì sai và rất dễ vỡ về sau.
-   */
-  // Mốc thời gian của thanh lọc cũ. Không còn ai đổi được nữa nhưng vẫn phải có
-  // giá trị vì các phép tính bên dưới nhận nó làm tham số. Dựng một lần để
-  // không sinh Date mới mỗi lần vẽ lại, kéo theo tính lại mọi memo.
-  const filterBaseDate = useMemo(() => new Date(), []);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   // Cac o nhap mat khau / PIN da duoc go bo: viec xac thuc nay do Google lo.
 
@@ -1094,11 +1029,6 @@ export default function App() {
         );
       },
     );
-
-    // Doanh thu KHÔNG còn đọc từ Firestore. Nó suy ra từ chính `transactions`
-    // — xem `revenueData` bên dưới và `src/lib/revenueFromStock.ts`. Nhờ vậy
-    // mỗi lần mở app bớt hẳn một collection phải tải, và kho với doanh thu
-    // không bao giờ lệch nhau được nữa.
 
     /*
      * Sync phieu nhap kho (chi trang thai + anh ky, noi dung suy tu transactions).
@@ -1401,9 +1331,8 @@ export default function App() {
 
   const demoTransactionCount = useMemo(
     () =>
-      transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX)).length +
-      revenueData.filter((r) => r.id?.startsWith(DEMO_PREFIX)).length,
-    [transactions, revenueData],
+      transactions.filter((t) => t.id?.startsWith(DEMO_PREFIX)).length,
+    [transactions],
   );
 
   const handleGenerateDemoData = async () => {
@@ -3028,19 +2957,6 @@ export default function App() {
     );
   };
 
-  /**
-   * DỌN DỮ LIỆU DOANH THU CŨ — việc làm MỘT LẦN.
-   *
-   * Doanh thu nay tính thẳng từ xuất kho nên collection `revenue` không còn ai
-   * đọc. Nhưng số cũ nạp từ file Excel vẫn nằm đó, chiếm dung lượng và dễ gây
-   * hiểu nhầm cho người mở Firebase Console sau này.
-   *
-   * Cố ý đọc thẳng collection bằng `getDocs` chứ không dựa vào `revenueData`:
-   * `revenueData` giờ là số tính từ xuất kho, khoá của nó (`dt-...`) không phải
-   * khoá của tài liệu cũ — lấy nó đi xoá thì không trúng gì cả.
-   */
-
-
   // Error Handling Helper
   /** Tên việc đang làm, để ghép vào câu báo lỗi cho người đọc hiểu. */
   const TEN_VIEC: Record<string, string> = {
@@ -4367,8 +4283,6 @@ export default function App() {
     };
 
     const txBytes = byteSize(transactions);
-    // Doanh thu khong con la tai lieu luu tren Firestore nen khong chiem dung
-    // luong va khong ton luot doc nao nua - xem revenueData o tren.
     const partnerBytes = byteSize(partners);
     // Sáu bảng còn lại — bản cũ bỏ sót nên ước tính luôn thấp hơn thực tế.
     const khacBytes = byteSize([
@@ -4481,29 +4395,6 @@ export default function App() {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
-  // Filtering Logic
-  const dateRange = useMemo(() => {
-    if (timeFilter === "all") return null;
-
-    let start: Date;
-    let end: Date;
-
-    if (timeFilter === "day") {
-      start = startOfDay(filterBaseDate);
-      end = endOfDay(filterBaseDate);
-    } else if (timeFilter === "week") {
-      start = startOfWeek(filterBaseDate, { weekStartsOn: 1 });
-      end = endOfWeek(filterBaseDate, { weekStartsOn: 1 });
-    } else if (timeFilter === "month") {
-      start = startOfMonth(filterBaseDate);
-      end = endOfMonth(filterBaseDate);
-    } else {
-      start = startOfYear(filterBaseDate);
-      end = endOfYear(filterBaseDate);
-    }
-
-    return { start, end };
-  }, [timeFilter, filterBaseDate]);
 
   /**
    * DUYET SO LIEU BANG CHU KY GIAY
@@ -4546,57 +4437,7 @@ export default function App() {
     [transactions, approvedSlips, nguonDaHuy],
   );
 
-  const filteredTransactionsByTime = useMemo(() => {
-    if (!dateRange) return transactions;
 
-    return transactions.filter((t) => {
-      const date = parseISO(t.date);
-      return isWithinInterval(date, {
-        start: dateRange.start,
-        end: dateRange.end,
-      });
-    });
-  }, [transactions, dateRange]);
-
-  /** Ban da loc theo thoi gian VA da bo hang chua ky - dung cho thong ke, do thi. */
-  const countedTransactionsByTime = useMemo(
-    () =>
-      boGiaoDichPhieuDaHuy(
-        stockTransactions(filteredTransactionsByTime, approvedSlips),
-        nguonDaHuy,
-      ),
-    [filteredTransactionsByTime, approvedSlips, nguonDaHuy],
-  );
-
-  const filteredRevenueByTime = useMemo(() => {
-    if (timeFilter === "all") return revenueData;
-
-    let start: Date;
-    let end: Date;
-
-    if (timeFilter === "day") {
-      start = startOfDay(filterBaseDate);
-      end = endOfDay(filterBaseDate);
-    } else if (timeFilter === "week") {
-      start = startOfWeek(filterBaseDate, { weekStartsOn: 1 });
-      end = endOfWeek(filterBaseDate, { weekStartsOn: 1 });
-    } else if (timeFilter === "month") {
-      start = startOfMonth(filterBaseDate);
-      end = endOfMonth(filterBaseDate);
-    } else {
-      start = startOfYear(filterBaseDate);
-      end = endOfYear(filterBaseDate);
-    }
-
-    return revenueData.filter((r) => {
-      try {
-        const date = (r as any)._parsedDate || parseDateSafe(r.date);
-        return isWithinInterval(date, { start, end });
-      } catch {
-        return false;
-      }
-    });
-  }, [revenueData, timeFilter, filterBaseDate]);
 
 
 
@@ -4708,7 +4549,7 @@ export default function App() {
     // Bao cao phai khop voi ton kho, nen cung bo hang chua co anh phieu ky.
     // De lot vao day thi cot "Tong Nhap" se cao hon "Ton cuoi" mot cach khong
     // giai thich duoc, va file Excel xuat ra cung sai theo.
-    let filtered = countedTransactionsByTime;
+    let filtered = countedTransactions;
 
     if (reportTuNgay) {
       const tu = startOfDay(parseISO(reportTuNgay));
@@ -4727,7 +4568,7 @@ export default function App() {
 
     return filtered;
   }, [
-    countedTransactionsByTime,
+    countedTransactions,
     reportTuNgay,
     reportHetNgayDen,
     reportPartnerSearch,
@@ -5285,21 +5126,6 @@ export default function App() {
       }
     });
 
-    /* 
-    // 1.1 Add Revenue data to Outflows - Removed to avoid double counting
-    // Stock flow should follow physical transactions. Revenue is for reconciliation.
-    filteredRevenueByTime.forEach(r => {
-      const product = products.find(p => p.name === r.productName);
-      if (product) {
-        const entry = summaryMap.get(product.id);
-        if (entry) {
-          entry.out += r.quantity;
-          entry.outValue += r.totalAmount;
-        }
-      }
-    });
-    */
-
     // 2. Calculate Closing Stock (Stock at the end of period)
     /*
      * Tồn cuối tính trên TOÀN BỘ sổ, không phải trên phần đã lọc theo ngày:
@@ -5315,8 +5141,7 @@ export default function App() {
         const transDate = parseISO(t.date);
         // Không chọn ngày đến thì tồn cuối là tồn hiện tại.
         const isBeforeOrAtEnd =
-          (!dateRange || transDate <= dateRange.end) &&
-          (!reportHetNgayDen || transDate <= reportHetNgayDen);
+          !reportHetNgayDen || transDate <= reportHetNgayDen;
 
         if (isBeforeOrAtEnd) {
           const multiplier = t.type === "IN" || t.type === "OPENING" ? 1 : -1;
@@ -5347,10 +5172,8 @@ export default function App() {
     return Array.from(summaryMap.values());
   }, [
     filteredTransactionsForReport,
-    filteredRevenueByTime,
     countedTransactions,
     products,
-    dateRange,
     reportHetNgayDen,
   ]);
 

@@ -37,7 +37,7 @@
  */
 
 import type { Product, Transaction } from "../types";
-import { matchRevenueProduct, normalizeKey } from "./reconcile";
+import { khopMatHang, normalizeKey } from "./khopMatHang";
 /*
  * Đọc số bằng ĐÚNG hàm của đường nạp tệp xuất kho, để cả app chỉ có một quy
  * ước: dấu phẩy là thập phân, dấu chấm ngăn nghìn — "12,345" là 12,345 lít.
@@ -227,7 +227,7 @@ export function lapKeHoachDongBo(
   const theoMatHang = new Map<string, { p: Product; d: DongTep; so: Record<LoaiDongBo, number> }>();
   const xungDot = new Set<string>();
   dongTep.forEach((d) => {
-    const p = matchRevenueProduct(products as Product[], {
+    const p = khopMatHang(products, {
       materialCode: d.maVatTu,
       productName: d.sanPham,
     });

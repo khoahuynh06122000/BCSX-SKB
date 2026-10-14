@@ -23,6 +23,8 @@
  * "KS Novotrl" / "KS Novotel" hay "KAKAZ" / "Kavkaz" không chuẩn hoá gộp được.
  */
 
+import { normalizeKey } from "./khopMatHang";
+
 export interface DiemBanEntry {
   /** Tên đúng như trong sheet, giữ nguyên cách viết. */
   ten: string;
@@ -91,12 +93,10 @@ export const DIEM_BAN: DiemBanEntry[] = [
  * riêng: nó là chữ cái Latin độc lập nên normalize("NFD") không tách được.
  */
 export function normalizeDiemBan(s: string): string {
-  return String(s ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]/g, "");
+  // CÙNG một hàm chuẩn hóa với cả app. Đây là KHOÁ TÀI LIỆU của bảng
+  // `diem_ban` trên Firestore — phép kiểm khopMatHang.test.ts chốt kết quả
+  // không đổi, lệch một ký tự là điểm bán đã gán từ trước không tìm thấy nữa.
+  return normalizeKey(s);
 }
 
 /**
