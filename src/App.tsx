@@ -168,6 +168,12 @@ import {
   type MaNhomBNC,
 } from "./lib/nhomBNC";
 import { stableHash } from "./lib/hash";
+import {
+  DOI_TAC_DONG_BO,
+  docBangTonKho,
+  lapKeHoachDongBo,
+  TEN_LOAI,
+} from "./lib/napTonKho";
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
 import { dauCuaLoai } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
@@ -259,57 +265,6 @@ const parseDateSafe = (dateStr: any): Date => {
 };
 
 
-const parseExcelNumberSafe = (val: any): number => {
-  if (val === null || val === undefined) return 0;
-  if (typeof val === "number") return isNaN(val) ? 0 : val;
-
-  const trimmed = String(val).trim().replace(/\s/g, "");
-  if (!trimmed) return 0;
-
-  let isNegative = false;
-  let clean = trimmed;
-  if (clean.startsWith("(") && clean.endsWith(")")) {
-    isNegative = true;
-    clean = clean.slice(1, -1);
-  } else if (clean.startsWith("-")) {
-    isNegative = true;
-    clean = clean.slice(1);
-  }
-
-  if (clean.includes(".") && clean.includes(",")) {
-    if (clean.indexOf(".") < clean.indexOf(",")) {
-      clean = clean.replace(/\./g, "").replace(/,/g, ".");
-    } else {
-      clean = clean.replace(/,/g, "");
-    }
-  } else if (clean.includes(",")) {
-    const parts = clean.split(",");
-    if (parts.length > 2) {
-      clean = clean.replace(/,/g, "");
-    } else {
-      const lastPart = parts[parts.length - 1];
-      if (lastPart.length === 3 && parts[0] !== "0") {
-        clean = clean.replace(/,/g, "");
-      } else {
-        clean = clean.replace(/,/g, ".");
-      }
-    }
-  } else if (clean.includes(".")) {
-    const parts = clean.split(".");
-    if (parts.length > 2) {
-      clean = clean.replace(/\./g, "");
-    } else {
-      const lastPart = parts[parts.length - 1];
-      if (lastPart.length === 3 && parts[0] !== "0") {
-        clean = clean.replace(/\./g, "");
-      }
-    }
-  }
-
-  const parsed = parseFloat(clean);
-  const finalVal = isNaN(parsed) ? 0 : parsed;
-  return isNegative ? -finalVal : finalVal;
-};
 
 /**
  * Định mức tồn tối thiểu dùng chung cho sản phẩm chưa đặt định mức riêng.
@@ -3178,133 +3133,196 @@ export default function App() {
     return `Không ${viec} được: ${err?.message || "lỗi không rõ"}`;
   };
 
+  /**
+   * NẠP EXCEL TỒN KHO — đồng bộ số tổng theo mặt hàng, KHÔNG nhân đôi.
+   *
+   * Bản cũ đặt mã tài liệu bằng `Date.now()` + `Math.random()`: nạp lại cùng
+   * tệp là thêm một bộ giao dịch mới. Nay mỗi (mặt hàng × loại số) có đúng một
+   * dòng, mã suy từ hai thứ đó — xem `src/lib/napTonKho.ts`, nơi đặt toàn bộ
+   * phép tính và phép kiểm.
+   *
+   * Ở đây chỉ còn: đọc tệp → lập kế hoạch → hỏi MỘT lần cho nhóm lệch → ghi →
+   * báo lại bằng con số từng nhóm.
+   */
   const handleImportInventoryExcel = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const xongTep = () => {
+      if (event.target) event.target.value = "";
+    };
 
-    if (!window.confirm("Bắt đầu nhập dữ liệu Tồn kho từ file Excel?")) return;
+    let kh: ReturnType<typeof lapKeHoachDongBo>;
+    try {
+      const wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), {
+        type: "array",
+      });
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+        header: 1,
+        defval: "",
+      }) as unknown[][];
+      const dong = docBangTonKho(aoa);
+      if (!dong.length) {
+        alert(
+          "Không đọc được dòng nào.\n\nSheet đầu tiên phải có một dòng tiêu đề với cột \"Sản phẩm\" " +
+            "(hoặc \"Mã vật tư\"), cùng các cột Tồn đầu / Tổng nhập / Tổng xuất / Hao hụt.",
+        );
+        xongTep();
+        return;
+      }
+      kh = lapKeHoachDongBo(dong, products, transactions);
+    } catch (e) {
+      console.error(e);
+      alert(`Không đọc được tệp Excel: ${e instanceof Error ? e.message : String(e)}`);
+      xongTep();
+      return;
+    }
+
+    const so = (n: number) => n.toLocaleString("vi-VN", { maximumFractionDigits: 3 });
+    const baoBoQua = [
+      kh.khongKhop.length
+        ? `${kh.khongKhop.length} dòng KHÔNG khớp danh mục (bỏ qua): ` +
+          kh.khongKhop.map((d) => `dòng ${d.dongExcel} "${d.sanPham || d.maVatTu}"`).join(", ")
+        : "",
+      kh.lechDonVi.length
+        ? `${kh.lechDonVi.length} dòng LỆCH ĐƠN VỊ (bỏ qua, không tự quy đổi): ` +
+          kh.lechDonVi
+            .map((x) => `dòng ${x.d.dongExcel} ghi "${x.d.donViTinh}", kho đếm "${x.donViKho}"`)
+            .join(", ")
+        : "",
+      kh.xungDot.length
+        ? `${kh.xungDot.length} mặt hàng có hai dòng số khác nhau (bỏ qua): ${kh.xungDot.join(", ")}`
+        : "",
+    ].filter(Boolean);
+
+    /*
+     * NHÂN ĐÔI KIỂU THỨ HAI: số tổng chồng lên giao dịch chi tiết đã có.
+     * Không tự chặn — có thể anh cố ý — nhưng đặt lên ĐẦU hộp xác nhận.
+     */
+    const canhBaoChiTiet = kh.daCoChiTiet.length
+      ? `CẢNH BÁO NHÂN ĐÔI: ${kh.daCoChiTiet.length} mặt hàng ĐÃ CÓ giao dịch chi tiết trong app ` +
+        `(nhập/xuất từng lần). Nạp thêm số tổng là cộng hai lần:\n` +
+        kh.daCoChiTiet
+          .slice(0, 10)
+          .map((x) => `• ${x.productName}: ${x.soDong} giao dịch`)
+          .join("\n") +
+        (kh.daCoChiTiet.length > 10 ? `\n… và ${kh.daCoChiTiet.length - 10} mặt hàng nữa` : "") +
+        `\n\nNếu đây là tệp Báo cáo tổng hợp xuất từ chính app thì ĐỪNG nạp.\n\n`
+      : "";
+
+    if (!kh.ghiMoi.length && !kh.lech.length) {
+      alert(
+        `Không có gì để ghi: ${kh.giongHet.length} số đã có y nguyên trong app.` +
+          (baoBoQua.length ? `\n\n${baoBoQua.join("\n\n")}` : ""),
+      );
+      xongTep();
+      return;
+    }
+
+    if (
+      !window.confirm(
+        canhBaoChiTiet +
+          `Nạp Excel tồn kho:\n\n` +
+          `• Ghi mới ${kh.ghiMoi.length} số\n` +
+          `• Bỏ qua ${kh.giongHet.length} số đã có y nguyên\n` +
+          (kh.lech.length ? `• ${kh.lech.length} số khác với số đang có — hỏi ở bước sau\n` : "") +
+          (kh.lapTrongTep ? `• Bỏ ${kh.lapTrongTep} dòng lặp y hệt trong tệp\n` : "") +
+          (baoBoQua.length ? `\n${baoBoQua.join("\n\n")}\n` : "") +
+          `\nTiếp tục?`,
+      )
+    ) {
+      xongTep();
+      return;
+    }
+
+    /*
+     * NHÓM LỆCH — HỎI MỘT LẦN CHO CẢ NHÓM, kèm từng số cũ → số mới.
+     *
+     * "Đang có N dòng" là bản trùng do lỗi mã ngẫu nhiên của bản cũ để lại:
+     * thay thế là gỡ hết chúng, chỉ để lại một dòng đúng.
+     */
+    let thay = false;
+    if (kh.lech.length) {
+      const ds = kh.lech
+        .slice(0, 25)
+        .map((l) => {
+          const cu = l.cu.reduce((t, x) => t + (Number(x.quantity) || 0), 0);
+          return (
+            `• ${l.moi.productName} · ${TEN_LOAI[l.moi.loai]}: ${so(cu)} → ${so(l.moi.soLuong)}` +
+            (l.cu.length > 1 ? ` (đang có ${l.cu.length} dòng trùng)` : "")
+          );
+        })
+        .join("\n");
+      thay = window.confirm(
+        `${kh.lech.length} số trong tệp KHÁC số đang có trong app:\n\n${ds}` +
+          (kh.lech.length > 25 ? `\n… và ${kh.lech.length - 25} số nữa` : "") +
+          `\n\nOK = thay bằng số trong tệp.\nHủy = GIỮ NGUYÊN số đang có (vẫn ghi phần mới).`,
+      );
+    }
 
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+    try {
+      const cuCanXoa = thay ? kh.lech.flatMap((l) => l.cu) : [];
+      // Quy tắc của app: mọi lệnh xoá giao dịch phải giữ ảnh vào sổ trước.
+      await damBaoSoAnh(cuCanXoa);
 
-        let successCount = 0;
-        const syncBy = `User Upload (${user})`;
-        const syncDate = new Date().toISOString();
-
-        const docsToSave: { docRef: any; data: any }[] = [];
-        let idxCounter = 0;
-
-
-        for (const row of jsonData) {
-          const productName = row["Sản phẩm"] || row["Product"] || "";
-          const totalImport = parseExcelNumberSafe(
-            row["Tổng Nhập"] || row["Total Import"] || "0",
-          );
-          const totalExport = parseExcelNumberSafe(
-            row["Tổng Xuất"] || row["Total Export"] || "0",
-          );
-          const openingStock = parseExcelNumberSafe(
-            row["Tồn Đầu"] || row["Opening Stock"] || "0",
-          );
-          const unit = row["Đơn vị"] || row["Unit"] || "";
-
-          if (!productName) continue;
-
-          const product = products.find(
-            (p) =>
-              p.name?.toLowerCase().trim() === productName.toLowerCase().trim(),
-          );
-
-          if (product) {
-            let finalIn = totalImport + openingStock;
-            let finalOut = totalExport;
-
-            const unitStr = String(unit).toLowerCase().trim();
-            if (
-              product.category === "Lon" &&
-              unitStr === "lon"
-            ) {
-              finalIn = finalIn / (product.conversionFactor || 1);
-              finalOut = finalOut / (product.conversionFactor || 1);
-            }
-
-            if (finalIn > 0) {
-              idxCounter++;
-              const importId = `import-in-${product.id}-${Date.now()}-${idxCounter}-${Math.random().toString(36).substr(2, 4)}`;
-              const docRef = doc(db, "transactions", importId);
-              docsToSave.push({
-                docRef,
-                data: {
-                  id: importId,
-                  date: syncDate,
-                  type: "IN",
-                  productId: product.id,
-                  productName: product.name,
-                  quantity: finalIn,
-                  partnerId: "SYSTEM_SYNC",
-                  partnerName: "Excel Import",
-                  category: product.category,
-                  createdBy: syncBy,
-                },
-              });
-            }
-
-            if (finalOut > 0) {
-              idxCounter++;
-              const exportId = `import-out-${product.id}-${Date.now()}-${idxCounter}-${Math.random().toString(36).substr(2, 4)}`;
-              const docRef = doc(db, "transactions", exportId);
-              docsToSave.push({
-                docRef,
-                data: {
-                  id: exportId,
-                  date: syncDate,
-                  type: "OUT",
-                  productId: product.id,
-                  productName: product.name,
-                  quantity: finalOut,
-                  partnerId: "SYSTEM_SYNC",
-                  partnerName: "Excel Import",
-                  category: product.category,
-                  createdBy: syncBy,
-                },
-              });
-            }
-            successCount++;
-          }
-        }
-
-        if (docsToSave.length > 0) {
-          const CHUNK_SIZE = 40; // Safely below standard network congestion and rate limits
-          for (let i = 0; i < docsToSave.length; i += CHUNK_SIZE) {
-            const chunk = docsToSave.slice(i, i + CHUNK_SIZE);
-            await Promise.all(
-              chunk.map(({ docRef, data }) => setDoc(docRef, data))
-            );
-          }
-        }
-        setLoading(false);
-        showNotification("Hệ thống cập nhật data thành công");
-      } catch (err) {
-        console.error(err);
-        setLoading(false);
-        showNotification(
-          "Lỗi khi đọc file Excel. Vui lòng kiểm tra định dạng.",
-          "error",
-        );
-      } finally {
-        if (event.target) event.target.value = "";
+      const ghi = [
+        ...kh.ghiMoi,
+        ...(thay ? kh.lech.map((l) => l.moi).filter((d) => d.soLuong > 0) : []),
+      ];
+      const giuLai = new Set(ghi.map((d) => d.id));
+      const now = new Date().toISOString();
+      const nguoi = `Nạp Excel tồn kho (${user})`;
+      const viec: ((b: ReturnType<typeof writeBatch>) => void)[] = [
+        // Dòng cũ trùng mã với dòng sắp ghi thì `set` đè lên luôn, không xoá.
+        ...cuCanXoa
+          .filter((t) => !giuLai.has(t.id))
+          .map((t) => (b: ReturnType<typeof writeBatch>) => b.delete(doc(db, "transactions", t.id))),
+        ...ghi.map((d) => (b: ReturnType<typeof writeBatch>) => {
+          const p = products.find((x) => x.id === d.productId)!;
+          const tx: Transaction = {
+            id: d.id,
+            date: now,
+            type: d.loai,
+            productId: p.id,
+            productName: p.name,
+            category: p.category,
+            quantity: d.soLuong,
+            partnerId: DOI_TAC_DONG_BO,
+            partnerName: "Đồng bộ Excel tồn kho",
+            notes: `${TEN_LOAI[d.loai]} · nạp từ Excel tồn kho`,
+            evidencePhotoUrls: [],
+            createdBy: nguoi,
+            status: "completed",
+          };
+          b.set(doc(db, "transactions", d.id), tx);
+        }),
+      ];
+      const CHUNK = 400;
+      for (let k = 0; k < viec.length; k += CHUNK) {
+        const batch = writeBatch(db);
+        viec.slice(k, k + CHUNK).forEach((f) => f(batch));
+        await batch.commit();
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      const soXoa = cuCanXoa.filter((t) => !giuLai.has(t.id)).length;
+      showNotification(
+        `Đã ghi mới ${kh.ghiMoi.length} số` +
+          (kh.lech.length
+            ? thay
+              ? `, thay ${kh.lech.length} số (gỡ ${soXoa} dòng cũ)`
+              : `, GIỮ NGUYÊN ${kh.lech.length} số đang có`
+            : "") +
+          `, bỏ qua ${kh.giongHet.length} số đã có y nguyên` +
+          (baoBoQua.length ? `. Có dòng bị bỏ qua — xem lại tệp.` : "."),
+      );
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
+    } finally {
+      setLoading(false);
+      xongTep();
+    }
   };
 
   // FIFO Helper for auto-allocation
@@ -5926,22 +5944,30 @@ export default function App() {
          * DNC thì NGƯỢC LẠI — đây là nhóm chính của họ, nên đừng đem `xemKho`
          * ra chặn ở đây.
          */
-        items: quyen.xemXuat
-          ? [
-              {
-                id: "gallery",
-                label: "Thư viện ảnh",
-                icon: ImageIcon,
-                color: "#ec4899",
-              },
-              {
-                id: "partners",
-                label: "Đối tác",
-                icon: Users,
-                color: "#6366f1",
-              },
-            ]
-          : [],
+        items: [
+          // Thư viện ảnh có cờ riêng — người xuất kho xem được mà không thấy
+          // Công nợ, Đơn BNC. Xem `xemAnh` trong quyen.ts.
+          ...(quyen.xemAnh
+            ? [
+                {
+                  id: "gallery",
+                  label: "Thư viện ảnh",
+                  icon: ImageIcon,
+                  color: "#ec4899",
+                },
+              ]
+            : []),
+          ...(quyen.xemXuat
+            ? [
+                {
+                  id: "partners",
+                  label: "Đối tác",
+                  icon: Users,
+                  color: "#6366f1",
+                },
+              ]
+            : []),
+        ],
       },
       {
         id: "system",
@@ -9785,7 +9811,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "gallery" && quyen.xemXuat && (
+            {activeTab === "gallery" && quyen.xemAnh && (
               <div className="space-y-8">
                 {/*
                   TIÊU ĐỀ KHÔNG ĐƯỢC BỊ BÓP.

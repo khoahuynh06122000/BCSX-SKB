@@ -96,6 +96,18 @@ export interface Quyen {
    * lô hàng.
    */
   xemKho: boolean;
+  /**
+   * Xem THƯ VIỆN ẢNH.
+   *
+   * Tách khỏi `xemXuat` (14/10/2026): người xuất kho là người chụp và tải ảnh
+   * biên bản giao hàng lên, nên phải xem lại được ảnh của chính mình — nhưng
+   * KHÔNG vì thế mà thấy luôn Công nợ · Hóa đơn và Đơn BNC, vốn đi theo
+   * `xemXuat`. Một cờ cho một màn hình thì mở cái này không kéo theo cái kia.
+   *
+   * Luật Firestore không phải sửa: Thư viện đọc giao dịch, phiếu nhập và sổ
+   * ảnh, mà ba bảng đó ai `xemKho` cũng đã đọc được.
+   */
+  xemAnh: boolean;
   /** Ghi giao dịch chiều nhập, tạo phiếu nhập và tải ảnh phiếu đã ký. */
   ghiNhap: boolean;
   /** Ghi giao dịch chiều xuất, hao hụt, và sửa đối tác / điểm bán. */
@@ -132,6 +144,7 @@ export interface Quyen {
 
 const KHONG: Quyen = {
   xemXuat: false,
+  xemAnh: false,
   xemKho: false,
   ghiNhap: false,
   ghiXuat: false,
@@ -151,6 +164,7 @@ export function quyenCua(role: UserRole | string): Quyen {
     case "OWNER":
       return {
         xemXuat: true,
+        xemAnh: true,
         xemKho: true,
         ghiNhap: true,
         ghiXuat: true,
@@ -162,6 +176,7 @@ export function quyenCua(role: UserRole | string): Quyen {
       return {
         ...KHONG,
         xemXuat: true,
+        xemAnh: true,
         xemKho: true,
         ghiNhap: true,
         ghiXuat: true,
@@ -175,10 +190,11 @@ export function quyenCua(role: UserRole | string): Quyen {
     // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
     // viec trong kho, khong dinh toi phan tien.
     case "XUAT_KHO":
-      return { ...KHONG, xemKho: true, ghiXuat: true, napFile: true };
+      // Xem Thư viện ảnh: họ là người tải ảnh biên bản lên (14/10/2026).
+      return { ...KHONG, xemKho: true, ghiXuat: true, napFile: true, xemAnh: true };
     // Khối cung ứng: CHỈ XEM, và chỉ xem chiều xuất.
     case "DNC":
-      return { ...KHONG, xemXuat: true };
+      return { ...KHONG, xemXuat: true, xemAnh: true };
     default:
       return KHONG;
   }

@@ -82,6 +82,7 @@ eq("chuoi rong", laChieuNhap("") || laChieuXuat(""), false);
 
 eq("chu so huu toan quyen", quyenCua("OWNER"), {
   xemXuat: true,
+  xemAnh: true,
   xemKho: true,
   ghiNhap: true,
   ghiXuat: true,
@@ -92,6 +93,7 @@ eq("chu so huu toan quyen", quyenCua("OWNER"), {
 
 eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
   xemXuat: true,
+  xemAnh: true,
   xemKho: true,
   ghiNhap: true,
   ghiXuat: true,
@@ -103,6 +105,7 @@ eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
 // HAI VAI TRO MOT CHIEU. Nguoi nhap kho khong xem chieu xuat (02/09/2026).
 eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
   xemXuat: false,
+  xemAnh: false,
   xemKho: true,
   ghiNhap: true,
   ghiXuat: false,
@@ -112,6 +115,7 @@ eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
 });
 eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
   xemXuat: false,
+  xemAnh: true,
   xemKho: true,
   ghiNhap: false,
   ghiXuat: true,
@@ -123,6 +127,7 @@ eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
 // DNC — KHOI CUNG UNG: vai tro duy nhat bi chan ca phan XEM.
 eq("DNC chi xem chieu xuat", quyenCua("DNC"), {
   xemXuat: true,
+  xemAnh: true,
   xemKho: false,
   ghiNhap: false,
   ghiXuat: false,
@@ -320,6 +325,14 @@ dung(
   const cho = DANH_SACH_VAI_TRO.find((v) => v.ma === "PENDING")!;
   dung("nhan Cho duyet noi ca cach thu hoi quyen", cho.moTa.includes("thu hồi quyền"));
 }
+
+/*
+ * THU VIEN ANH MO CHO XUAT KHO (14/10/2026) — nhung CHI Thu vien anh.
+ * Neu ai do mo bang cach bat `xemXuat` thi nguoi xuat kho thay luon Cong no
+ * va Don BNC; phep kiem nay chan dung kieu sua tat do.
+ */
+eq("xuat kho xem duoc thu vien anh", quyenCua("XUAT_KHO").xemAnh, true);
+eq("xuat kho van KHONG thay cong no / don BNC", quyenCua("XUAT_KHO").xemXuat, false);
 
 eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên nhập kho");
 eq("ten vai tro la thi tra ve nguyen chuoi", tenVaiTro("ABC"), "ABC");
