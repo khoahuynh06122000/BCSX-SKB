@@ -4756,6 +4756,32 @@ export default function App() {
   const [dangXoaAnh, setDangXoaAnh] = useState(false);
 
   /**
+   * KIỂM TRA KHOÁ XOÁ ẢNH — không xoá gì.
+   *
+   * Khoá Cloudinary đặt trên Vercel, app không nhìn thấy được. Không có nút
+   * này thì lần xoá đơn thật đầu tiên chính là phép thử, và nếu khoá sai thì
+   * dữ liệu đã xoá mà ảnh còn nằm lại.
+   */
+  const [dangKiemKhoa, setDangKiemKhoa] = useState(false);
+  const kiemTraKhoaXoaAnh = async () => {
+    if (!isOwner || dangKiemKhoa) return;
+    setDangKiemKhoa(true);
+    try {
+      const r = await callAiApi("/api/anh/xoa", { kiemTra: true });
+      const d: any = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
+      alert(
+        `KHOÁ ĐÚNG — máy chủ đã nối được vào kho Cloudinary "${d?.kho}".\n\n` +
+          `Từ giờ xoá dữ liệu là app xoá luôn ảnh trên Cloudinary. Phép kiểm này không xoá gì.`,
+      );
+    } catch (e) {
+      alert(`KHOÁ CHƯA DÙNG ĐƯỢC.\n\n${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setDangKiemKhoa(false);
+    }
+  };
+
+  /**
    * XOÁ THẬT NHỮNG TẤM ẢNH NÀY TRÊN CLOUDINARY, rồi xoá dòng sổ của chúng.
    *
    * Dữ liệu và ảnh đi một cụm: mọi lệnh xoá dữ liệu gọi vào đây với đúng
@@ -9978,6 +10004,23 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                         </>
                       )}
                     </button>
+
+                    {/* Kiểm tra khoá xoá ảnh — chỉ admin, không xoá gì. */}
+                    {isOwner && (
+                      <button
+                        onClick={kiemTraKhoaXoaAnh}
+                        disabled={dangKiemKhoa}
+                        title="Thử khoá Cloudinary trên máy chủ — không xoá ảnh nào (chỉ admin)"
+                        className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {dangKiemKhoa ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4" />
+                        )}
+                        Kiểm tra khoá xoá ảnh
+                      </button>
+                    )}
 
                     {/*
                       SOÁT ẢNH — hỏi từng tấm rồi gom theo MÃ LỖI THẬT.

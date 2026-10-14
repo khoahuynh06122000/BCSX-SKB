@@ -36,6 +36,39 @@ export function cauHinhCloudinary() {
   return { cloud, key, secret };
 }
 
+/**
+ * KIỂM TRA KHOÁ MÀ KHÔNG XOÁ GÌ.
+ *
+ * Gọi lệnh `ping` của Admin API bằng đúng khoá sẽ dùng để xoá. Khoá sai thì
+ * Cloudinary trả 401 ở đây, ngay lúc kiểm — chứ không phải lúc admin xoá một
+ * đơn thật rồi mới biết ảnh không xoá được.
+ */
+export async function kiemTraKhoaCloudinary(): Promise<string> {
+  const { cloud, key, secret } = cauHinhCloudinary();
+  const r = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloud)}/ping`,
+    {
+      headers: {
+        Authorization:
+          "Basic " + Buffer.from(`${key}:${secret}`).toString("base64"),
+      },
+    },
+  );
+  const d: any = await r.json().catch(() => null);
+  if (r.status === 401 || r.status === 403) {
+    throw new Error(
+      `Cloudinary từ chối khoá (${r.status}). Kiểm tra lại CLOUDINARY_API_KEY và ` +
+        `CLOUDINARY_API_SECRET trên Vercel có đúng của kho "${cloud}" không, rồi Redeploy.`,
+    );
+  }
+  if (!r.ok) {
+    throw new Error(
+      `Cloudinary trả lỗi ${r.status}: ${d?.error?.message || "không rõ lý do"}`,
+    );
+  }
+  return cloud;
+}
+
 /** Tối đa mỗi lượt gọi — giới hạn của Cloudinary cho lệnh xoá theo danh sách. */
 export const TOI_DA_MOT_LUOT = 100;
 

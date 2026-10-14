@@ -22,6 +22,7 @@
 import { requireOwner } from "../_auth.js";
 import {
   cauHinhCloudinary,
+  kiemTraKhoaCloudinary,
   ThieuCauHinh,
   TOI_DA_MOT_LUOT,
   xoaNhieuAnhCloudinary,
@@ -34,6 +35,17 @@ export default async function handler(req: any, res: any) {
   }
   const user = await requireOwner(req, res);
   if (!user) return;
+
+  // `{ kiemTra: true }` — chỉ thử khoá, KHÔNG xoá gì. Đi chung cửa admin.
+  if (req.body?.kiemTra === true) {
+    try {
+      const kho = await kiemTraKhoaCloudinary();
+      return res.status(200).json({ ok: true, kho });
+    } catch (e: any) {
+      const ma = e instanceof ThieuCauHinh ? 500 : 502;
+      return res.status(ma).json({ error: e?.message || "Không kiểm được khoá." });
+    }
+  }
 
   let cloud: string;
   try {
