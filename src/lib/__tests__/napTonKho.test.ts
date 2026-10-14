@@ -84,6 +84,17 @@ function daGhi(kh: KeHoachDongBo): Transaction[] {
 
 eq("khong co dong tieu de nao thi tra rong", docBangTonKho([["a", "b"], [1, 2]]), []);
 
+/*
+ * MOT QUY UOC SO CHO CA APP: dau phay la thap phan. Duong nap tep xuat kho doc
+ * "12,345" la 12,345 lit; nut nay tung doc ra muoi hai nghin — hai duong nap
+ * doc cung mot o ra hai so chenh nhau nghin lan.
+ */
+eq(
+  "12,345 la muoi hai phay ba bon lam, khong phai muoi hai nghin",
+  docBangTonKho([["Sản phẩm", "Tổng nhập"], ["X", "12,345"]])[0].so.IN,
+  12.35,
+);
+
 {
   // Ten cot viet khac nhau van doc duoc.
   const tep = docBangTonKho([

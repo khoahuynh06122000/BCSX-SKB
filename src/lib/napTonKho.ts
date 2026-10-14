@@ -38,7 +38,13 @@
 
 import type { Product, Transaction } from "../types";
 import { matchRevenueProduct, normalizeKey } from "./reconcile";
-import { parseExcelNumberSafe } from "./soExcel";
+/*
+ * Đọc số bằng ĐÚNG hàm của đường nạp tệp xuất kho, để cả app chỉ có một quy
+ * ước: dấu phẩy là thập phân, dấu chấm ngăn nghìn — "12,345" là 12,345 lít.
+ * Ngày 14/10/2026 nút này từng dùng một hàm khác hiểu "12,345" là mười hai
+ * nghìn: hai đường nạp đọc cùng một ô ra hai số chênh nhau nghìn lần.
+ */
+import { toTkhoNumber } from "./tkhoXuat";
 
 /** Mã đối tác của mọi dòng đồng bộ — cả dòng do bản cũ để lại cũng mang mã này. */
 export const DOI_TAC_DONG_BO = "SYSTEM_SYNC";
@@ -126,7 +132,7 @@ export function docBangTonKho(aoa: readonly (readonly unknown[])[]): DongTep[] {
     if (/^t[oổ]ng\s*c[oộ]ng$/i.test(sanPham)) return;
     const so = {} as Record<LoaiDongBo, number>;
     LOAI.forEach((l) => {
-      so[l] = parseExcelNumberSafe(layCot(r, l));
+      so[l] = toTkhoNumber(layCot(r, l));
     });
     ra.push({
       dongExcel: viTri + i + 2,
