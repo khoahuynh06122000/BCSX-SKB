@@ -125,22 +125,6 @@ export interface Transaction {
   slipCode?: string;
 }
 
-/**
- * KHÔNG CÒN DÙNG — kho đã bỏ theo dõi theo lô.
- *
- * Giữ lại kiểu này vì `phanTich.ts` vẫn nhận tham số `loTon` (nay luôn rỗng),
- * để nếu có ngày quay lại theo dõi theo lô thì phép tính bên đó còn nguyên.
- */
-export interface BatchInfo {
-  batchNumber: string;
-  productId: string;
-  productName: string;
-  category: Category;
-  stock: number;
-  importDate: string;
-  lastExportDate?: string;
-}
-
 export interface InventoryItem {
   productId: string;
   productName: string;
@@ -189,45 +173,3 @@ export interface ImportSlip {
   updatedAt?: string;
 }
 
-/**
- * MỘT DÒNG HÀNG TRÊN HÓA ĐƠN BÁN.
- *
- * Về tiền: file Excel của các đơn vị không thống nhất cột nào là trước thuế,
- * cột nào là sau thuế. Bản cũ đọc "Thành tiền sau thuế", không có thì lấy
- * "Thành tiền" (trước thuế) và nhồi cả hai vào `totalAmount` — nạp hai file
- * khác định dạng là tổng doanh thu lệch đúng phần VAT mà không ai thấy.
- *
- * Nay lưu tách bạch ba số. `totalAmount` giữ nguyên tên (nhiều nơi đang đọc)
- * nhưng luôn mang nghĩa DOANH THU TRƯỚC VAT — đúng nghĩa doanh thu.
- */
-export interface RevenueRecord {
-  id: string;
-  date: string;
-  productName: string;
-  materialCode?: string;
-  unit?: string;
-  quantity: number;
-  unitPrice: number;
-  /** Doanh thu trước VAT. Đây là số dùng cho mọi báo cáo doanh thu. */
-  totalAmount: number;
-  vatAmount?: number;
-  /** = totalAmount, để dành đọc cho rõ nghĩa khi viết code mới. */
-  amountBeforeVat?: number;
-  /** Tổng tiền khách trả (trước VAT + VAT). */
-  amountAfterVat?: number;
-  invoiceNumber?: string;
-  partnerName: string;
-  partnerId?: string;
-  deptCode?: string;
-  /** Thuế tiêu thụ đặc biệt đã bóc ra khỏi thành tiền. */
-  exciseTax?: number;
-  /** Thành tiền sau khi bóc thuế TTĐB — số ghi vào tài khoản 511. */
-  revenue511?: number;
-  /**
-   * Dòng xuất kho đã sinh ra dòng doanh thu này.
-   *
-   * Doanh thu là số TÍNH RA từ xuất kho, không phải dữ liệu nạp vào, nên luôn
-   * tra ngược được về lần giao hàng gốc. Xem `src/lib/revenueFromStock.ts`.
-   */
-  sourceTransactionId?: string;
-}

@@ -10,7 +10,6 @@ import {
   dungAnhThuVien,
   gopAnhTrung,
   kieuDuongDanAnh,
-  laAnhNhung,
   locTheoDonVi,
   lyDoAnhLoi,
   tenLocDonVi,
@@ -385,10 +384,6 @@ kiemTra(
 // Hai nguyen nhan khac nhau va cach xu ly khac nhau, nen loi phai noi ra dung
 // cai nao: anh nhung thi chay phan "Chuyen anh cu", anh Cloudinary thi phai di
 // tim lai to bien ban.
-kiemTra("anh nhung base64", laAnhNhung("data:image/jpeg;base64,/9j/4AA"), true);
-kiemTra("anh nhung dang khac", laAnhNhung("data:image/png;base64,iVBOR"), true);
-kiemTra("duong dan Cloudinary khong phai anh nhung", laAnhNhung(U(1)), false);
-kiemTra("chuoi rong khong phai anh nhung", laAnhNhung(""), false);
 
 kiemTra(
   "ly do anh nhung",

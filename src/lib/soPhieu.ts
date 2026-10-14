@@ -103,17 +103,6 @@ export function laLoaiHuy(loai: LoaiPhieu): boolean {
 }
 
 /**
- * Hai chữ số năm của một ngày `yyyy-MM-dd`.
- *
- * Trả chuỗi rỗng nếu ngày không đọc được — nơi gọi phải chặn, vì cấp số cho một
- * ngày không rõ là đẩy phiếu vào nhầm dãy năm.
- */
-export function namHaiSo(ngay: string): string {
-  const m = /^(\d{4})-\d{2}-\d{2}/.exec(String(ngay ?? ""));
-  return m ? m[1].slice(2) : "";
-}
-
-/**
  * Ngày `yyyy-MM-dd` → `yyMMdd` để nhét vào số phiếu.
  *
  * Cắt chuỗi chứ không đi qua `new Date()`: chuỗi `yyyy-MM-dd` đưa vào `Date` bị

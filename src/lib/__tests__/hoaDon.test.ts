@@ -9,10 +9,8 @@ import {
   boDauKetXuat,
   danhDauKetXuat,
   dongCanDienHoaDon,
-  hoaDonRoiRa,
   khoaHoaDon,
   type DongCanDien,
-  type HoaDonGhiNhan,
 } from "../hoaDon";
 
 let pass = 0;
@@ -100,44 +98,6 @@ eq(
   2,
 );
 eq("danh sach rong", dongCanDienHoaDon([], dot, daGhi, stableHash).length, 0);
-
-// --------------------------------------------------------------- roi ra
-
-const luu: HoaDonGhiNhan[] = [
-  {
-    id: K("2026-08-01", "2026-08-12", "AD0103"),
-    tuNgay: "2026-08-01",
-    denNgay: "2026-08-12",
-    maBp: "AD0103",
-    donVi: "BNC",
-    soHoaDon: "C26TKB#00007777",
-    ngayHoaDon: "2026-08-16",
-  },
-  {
-    // Dot cu, nay nguoi dung da sua bien dot -> khong con khop.
-    id: K("2026-07-01", "2026-07-15", "AD0103"),
-    tuNgay: "2026-07-01",
-    denNgay: "2026-07-15",
-    maBp: "AD0103",
-    donVi: "BNC",
-    soHoaDon: "C26TKB#00006666",
-    ngayHoaDon: "2026-07-16",
-  },
-];
-const dangDung = new Set(ds.map((d) => d.khoa));
-const roi = hoaDonRoiRa(luu, dangDung);
-eq("mot hoa don roi ra", roi.length, 1);
-eq("dung cai bi roi", roi[0].soHoaDon, "C26TKB#00006666");
-
-// So rong thi khong tinh la roi ra — von chua dien gi.
-eq(
-  "so rong khong tinh la roi ra",
-  hoaDonRoiRa(
-    [{ ...luu[1], soHoaDon: "" }],
-    dangDung,
-  ).length,
-  0,
-);
 
 // ====================================================== moc DA KET XUAT
 

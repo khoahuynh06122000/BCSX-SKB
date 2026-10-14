@@ -16,7 +16,7 @@
  * không bị bỏ. Lệch một ngày ở đây là sai số đầu kỳ của cả kỳ sau.
  */
 
-import { dauCuaLoai, dungBangTonKy, moTaKy } from "../tonKho";
+import { dauCuaLoai, dungBangTonKy } from "../tonKho";
 import type { Product, Transaction } from "../../types";
 
 let pass = 0;
@@ -304,17 +304,6 @@ dung("giao dich sau ky khong lot vao ky", p1.nhap !== 230 + 999);
 }
 
 // ------------------------------------------------------------ mo ta ky
-
-/*
- * Dong tieu de bay ra cho nguoi doc thi theo NGAY/THANG/NAM. `yyyy-MM-dd` chi
- * la dang luu va dang dem ra so, khong phai dang de doc.
- */
-eq("ca hai dau", moTaKy("2026-08-01", "2026-08-25"), "Từ 01/08/2026 đến 25/08/2026");
-eq("khong chan gi", moTaKy("", ""), "Toàn bộ thời gian");
-eq("chi chan cuoi", moTaKy("", "2026-08-25"), "Đến hết 25/08/2026");
-eq("chi chan dau", moTaKy("2026-08-01", ""), "Từ 01/08/2026 đến nay");
-// Chuoi khong phai ngay thi giu nguyen, khong nuot mat.
-eq("chuoi la thi giu nguyen", moTaKy("linh tinh", ""), "Từ linh tinh đến nay");
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

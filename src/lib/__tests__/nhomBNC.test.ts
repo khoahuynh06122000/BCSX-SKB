@@ -19,7 +19,6 @@ import {
   NHOM_BNC,
   phaiChonBoPhan,
   tenNhomBNC,
-  tenNhomCuaBoPhan,
   type MaNhomBNC,
 } from "../nhomBNC";
 
@@ -73,8 +72,6 @@ eq("diem ban la Noi bo", nhomCuaBoPhan("AD0103-1901"), "NB");
 eq("bo phan la roi vao Noi bo", nhomCuaBoPhan("AD0103-QUANMOI"), "NB");
 
 eq("ten nhom", tenNhomBNC("NG"), "Ngoại giao");
-eq("ten nhom cua bo phan", tenNhomCuaBoPhan("AD0103-CV"), "Nội bộ");
-eq("ngoai BNC thi ten rong", tenNhomCuaBoPhan("AC0107"), "");
 eq("khong co nhom thi ten rong", tenNhomBNC(null), "");
 
 // ------------------------------------------------------------ tren danh muc that

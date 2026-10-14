@@ -55,9 +55,6 @@
 
 import type { UserRole } from "../types";
 
-/** Loại giao dịch, đúng như trường `type` của tài liệu `transactions`. */
-export type LoaiGiaoDich = "IN" | "OPENING" | "OUT" | "LOSS";
-
 /**
  * Giao dịch thuộc chiều NHẬP: nhập kho và tồn đầu kỳ.
  *

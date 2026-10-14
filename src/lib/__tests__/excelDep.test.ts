@@ -18,7 +18,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import XLSXr from "xlsx";
-import { doRongCot, taoSheetDep, XLSXDep } from "../excelDep";
+import { taoSheetDep, XLSXDep } from "../excelDep";
 
 let pass = 0;
 let fail = 0;
@@ -33,25 +33,6 @@ const eq = (ten: string, a: unknown, b: unknown) => {
 
 // ------------------------------------------------------------ bề rộng cột
 
-{
-  const tieuDe = ["Tên", "SL"];
-  const hang: (string | number | null)[][] = [
-    ["Bia Golden Bridge Helles Lager lon330ml", 1757.8],
-    ["Bia A", 10],
-  ];
-  const rong = doRongCot(tieuDe, hang);
-  // Cột tên phải rộng theo tên dài nhất (39 ký tự + 2 lề).
-  eq("cot ten rong theo noi dung", rong[0], 41);
-  // Cột số hẹp nhưng không dưới mức tối thiểu, không thì Excel hiện ####.
-  eq("cot so khong duoi muc toi thieu", rong[1] >= 8, true);
-  // Ghi chú rất dài không được kéo cột rộng hết màn hình.
-  eq(
-    "chan tren 46",
-    doRongCot(["G"], [["x".repeat(300)]])[0],
-    46,
-  );
-  eq("danh sach rong van ra so hop le", doRongCot(["A"], [])[0], 8);
-}
 
 // ------------------------------------------------- ghi tệp thật rồi soát XML
 

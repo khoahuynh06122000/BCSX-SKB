@@ -214,9 +214,3 @@ export function boDauKetXuat(d: DongCanDien): HoaDonGhiNhan {
   };
 }
 
-export function hoaDonRoiRa(
-  daGhi: HoaDonGhiNhan[],
-  khoaDangDung: Set<string>,
-): HoaDonGhiNhan[] {
-  return daGhi.filter((h) => h.soHoaDon && !khoaDangDung.has(h.id));
-}

@@ -31,9 +31,6 @@ import type { Category } from '../types';
 /** Thuế giá trị gia tăng. */
 export const VAT_RATE = 0.1;
 
-/** Thuế tiêu thụ đặc biệt với bia. */
-export const EXCISE_RATE = 0.65;
-
 /** Đơn vị tính ghi trên hóa đơn — chỉ có hai loại. */
 export type InvoiceUnit = 'LIT' | 'LON';
 
@@ -63,15 +60,6 @@ export function breakdown(quantity: number, unitPrice: number): AmountBreakdown 
   const amount = quantity * unitPrice;
   const vat = amount * VAT_RATE;
   return { amount, vat, amountWithVat: amount + vat };
-}
-
-/** Bóc thuế tiêu thụ đặc biệt ra khỏi thành tiền chặng SKB→DNC. */
-export function exciseSplit(amount: number): {
-  revenue511: number;
-  exciseTax: number;
-} {
-  const revenue511 = amount / (1 + EXCISE_RATE);
-  return { revenue511, exciseTax: amount - revenue511 };
 }
 
 /**

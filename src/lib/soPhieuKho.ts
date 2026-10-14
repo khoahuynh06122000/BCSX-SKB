@@ -31,7 +31,7 @@
 import type { Firestore } from "firebase/firestore";
 import { doc } from "firebase/firestore";
 // Đọc ghi qua bản đã bọc bộ đo lượt gọi — xem src/lib/firestoreDem.ts.
-import { getDoc, runTransaction, setDoc } from "./firestoreDem";
+import { runTransaction } from "./firestoreDem";
 import {
   DAU_SO,
   MA_LOAI,
@@ -285,28 +285,3 @@ export function laBoDemChieuNhap(id: string): boolean {
   );
 }
 
-/**
- * Dựng lại bộ đếm từ sổ thật.
- *
- * Dùng khi bộ đếm lệch — chẳng hạn sau khi phục hồi dữ liệu, hoặc lần đầu bật
- * tính năng trên một cơ sở dữ liệu đã có sẵn số phiếu. Đặt bộ đếm về `max + 1`
- * của dãy đó.
- *
- * KHÔNG BAO GIỜ ĐẶT LÙI. Đặt lùi là cấp lại một số đã in ra giấy.
- */
-export async function chinhLaiBoDem(
-  db: Firestore,
-  ds: GhiSoPhieu[],
-  kyDem: string,
-): Promise<number> {
-  let max = 0;
-  ds.forEach((g) => {
-    const p = docSoPhieu(g?.soPhieu);
-    if (p && p.kyDem === kyDem && p.thuTu > max) max = p.thuTu;
-  });
-  const ref = doc(db, KHO_BO_DEM, khoaBoDem(kyDem));
-  const hienTai = Number((await getDoc(ref)).data()?.tiep) || 0;
-  const tiep = Math.max(hienTai, max + 1);
-  await setDoc(ref, { kyDem, tiep }, { merge: true });
-  return tiep;
-}

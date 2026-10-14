@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isoSangVn, vnSangIso, goNgay, goXong } from "../oNgay";
+import { isoSangVn, vnSangIso, goNgay } from "../oNgay";
 
 let dung = 0;
 let sai = 0;
@@ -15,14 +15,6 @@ function eq(ten: string, thuc: unknown, mong: unknown) {
   else {
     sai++;
     console.log(`SAI ${ten}\n   thuc: ${a}\n   mong: ${b}`);
-  }
-}
-
-function that(ten: string, dk: boolean) {
-  if (dk) dung++;
-  else {
-    sai++;
-    console.log(`SAI ${ten}`);
   }
 }
 
@@ -81,10 +73,6 @@ eq("go lai chuoi da co gach", goNgay("15/09/2026"), "15/09/2026");
 eq("xoa bot van chay dung", goNgay("15/09/20"), "15/09/20");
 
 // ------------------------------------------------------------ da go xong chua
-that("day du thi bao xong", goXong("15/09/2026"));
-that("do dang thi chua xong", !goXong("15/09"));
-that("rong thi chua xong", !goXong(""));
-that("ngay khong co that thi chua xong", !goXong("31/02/2026"));
 
 // ------------------------------------------------------------ di mot vong
 /*

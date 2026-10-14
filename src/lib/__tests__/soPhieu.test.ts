@@ -32,7 +32,6 @@ import {
   laLoaiHuy,
   locSoPhieu,
   loaiHuyCua,
-  namHaiSo,
   ngayGioVn,
   ngayVn,
   soPhieuHuy,
@@ -168,10 +167,6 @@ kiemTra("khong co loai huy cua phieu huy", loaiHuyCua("HUY_NHAP"), null);
 
 // ------------------------------------------------- năm lấy theo ngày chứng từ
 
-kiemTra("nam hai so", namHaiSo("2026-08-31"), "26");
-kiemTra("nam hai so sang nam", namHaiSo("2027-01-02"), "27");
-kiemTra("ngay hong thi rong", namHaiSo("31/08/2026"), "");
-kiemTra("ngay rong thi rong", namHaiSo(""), "");
 
 // ------------------------------------------------- dữ liệu mẫu
 

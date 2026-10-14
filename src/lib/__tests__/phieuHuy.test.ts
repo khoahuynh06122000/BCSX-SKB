@@ -13,7 +13,6 @@
 
 import {
   boGiaoDichPhieuDaHuy,
-  laGiaoDichDaHuy,
   nguonCuaGiaoDich,
   nguonPhieuDaHuy,
 } from "../phieuHuy";
@@ -161,25 +160,6 @@ eq("so rong", nguonPhieuDaHuy([]).size, 0);
 {
   const ds = [{ id: "a1", type: "IN", slipCode: "SLIP-11" }];
   eq("khong co phieu huy nao", boGiaoDichPhieuDaHuy(ds, new Set()).length, 1);
-}
-
-// ============================================ hoi tung dong
-
-{
-  const daHuy = new Set(["SLIP-11"]);
-  dung(
-    "dong cua phieu da huy",
-    laGiaoDichDaHuy({ type: "IN", slipCode: "SLIP-11" }, daHuy),
-  );
-  dung(
-    "dong cua phieu khac",
-    !laGiaoDichDaHuy({ type: "IN", slipCode: "SLIP-10" }, daHuy),
-  );
-  dung("ton dau ky", !laGiaoDichDaHuy({ type: "OPENING", id: "t" }, daHuy));
-  dung(
-    "khong co phieu huy nao thi khong dong nao bi ke",
-    !laGiaoDichDaHuy({ type: "IN", slipCode: "SLIP-11" }, new Set()),
-  );
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

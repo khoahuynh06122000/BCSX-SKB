@@ -62,7 +62,6 @@ export const VIEN = {
 export const DINH_DANG_TIEN = "#,##0";
 /** Số lượng: giữ tối đa 2 chữ số lẻ, không hiện `,00` thừa. */
 export const DINH_DANG_SO_LUONG = "#,##0.##";
-export const DINH_DANG_NGAY = "dd/mm/yyyy";
 
 export interface KieuCot {
   /** Bề rộng cột, đơn vị ký tự. */
@@ -213,33 +212,6 @@ function dinhDangCua(cot: KieuCot): string | undefined {
   if (cot.kieu === "tien") return DINH_DANG_TIEN;
   if (cot.kieu === "so") return DINH_DANG_SO_LUONG;
   return undefined;
-}
-
-/**
- * Ước bề rộng cột theo nội dung dài nhất.
- *
- * Đặt tay từng cột thì mỗi lần đổi tên hàng lại phải chỉnh lại; đo theo nội
- * dung thì tự vừa. Chặn trên 46 để một ghi chú dài không kéo cột rộng hết màn
- * hình, và chặn dưới 8 để cột số không hẹp tới mức hiện `####`.
- */
-export function doRongCot(
-  tieuDe: string[],
-  hang: (string | number | null)[][],
-  min = 8,
-  max = 46,
-): number[] {
-  return tieuDe.map((t, c) => {
-    let dai = String(t ?? "").length;
-    hang.forEach((h) => {
-      const v = h[c];
-      const n =
-        typeof v === "number"
-          ? Math.round(v).toLocaleString("vi-VN").length
-          : String(v ?? "").length;
-      if (n > dai) dai = n;
-    });
-    return Math.min(max, Math.max(min, dai + 2));
-  });
 }
 
 export { XLSX as XLSXDep };

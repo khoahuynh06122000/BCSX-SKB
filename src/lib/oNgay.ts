@@ -79,12 +79,3 @@ export function goNgay(raw: string): string {
   return `${so.slice(0, 2)}/${so.slice(2, 4)}/${so.slice(4)}`;
 }
 
-/**
- * Đã gõ đủ một ngày hoàn chỉnh chưa.
- *
- * Dùng để biết lúc nào báo giá trị mới ra ngoài: báo ngay từng ký tự thì bộ
- * lọc chạy trên một ngày dở dang như `01/01/0002`.
- */
-export function goXong(vn: string): boolean {
-  return vnSangIso(vn) !== "";
-}

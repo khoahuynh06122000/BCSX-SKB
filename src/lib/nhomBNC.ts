@@ -99,11 +99,6 @@ export function tenNhomBNC(ma: MaNhomBNC | null): string {
   return NHOM_BNC.find((n) => n.ma === ma)?.ten ?? "";
 }
 
-/** Nhóm của một bộ phận, dạng tên đã sẵn để in ra. Rỗng nếu ngoài BNC. */
-export function tenNhomCuaBoPhan(partnerId: string): string {
-  return tenNhomBNC(nhomCuaBoPhan(partnerId));
-}
-
 /** Nhóm này có phải chọn tiếp bộ phận hay không. */
 export function phaiChonBoPhan(ma: MaNhomBNC): boolean {
   return !NHOM_BNC.find((n) => n.ma === ma)?.boPhan;

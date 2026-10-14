@@ -372,11 +372,6 @@ export function kieuDuongDanAnh(url: string): KieuDuongDanAnh {
   return "mang";
 }
 
-/** Ảnh nhúng thẳng vào tài liệu chứ không phải đường dẫn. */
-export function laAnhNhung(url: string): boolean {
-  return kieuDuongDanAnh(url) === "nhung";
-}
-
 /** Câu giải thích khi một tấm không tải được, để ô ảnh nói ra thay vì để trắng. */
 export function lyDoAnhLoi(url: string): string {
   switch (kieuDuongDanAnh(url)) {

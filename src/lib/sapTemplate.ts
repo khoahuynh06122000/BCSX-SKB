@@ -219,7 +219,6 @@ export function ngayDDMMYYYY(iso: string): string {
  * phải giải thích. Thay vào đó đếm lại và báo ra để người dùng tự quyết.
  */
 export const GIOI_HAN_BKTXT = 25;
-export const GIOI_HAN_SGTXT = 50;
 
 export interface DungTepSapInput {
   dong: DongHangSap[];

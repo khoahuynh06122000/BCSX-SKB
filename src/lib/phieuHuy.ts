@@ -76,12 +76,3 @@ export function boGiaoDichPhieuDaHuy<T extends GiaoDichCoNguon>(
   return transactions.filter((t) => !daHuy.has(nguonCuaGiaoDich(t)));
 }
 
-/** Giao dịch này thuộc một chứng từ đã hủy. */
-export function laGiaoDichDaHuy(
-  t: GiaoDichCoNguon,
-  daHuy: Set<string>,
-): boolean {
-  if (!daHuy || daHuy.size === 0) return false;
-  const n = nguonCuaGiaoDich(t);
-  return !!n && daHuy.has(n);
-}

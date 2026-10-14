@@ -25,7 +25,7 @@ import {
   dungFileDieuChuyen,
   KHO_DIEM_BAN,
   khungDong,
-  ngayDDMMYYYY,
+  ngayCham,
   SO_COT_DC,
   tieuDeChungTu,
   tomTatDieuChuyen,
@@ -59,10 +59,10 @@ const dung = (ten: string, x: boolean) => eq(ten, x, true);
 
 // ------------------------------------------------------------ ngay va tieu de
 
-eq("ngay dang DD.MM.YYYY", ngayDDMMYYYY("2026-08-27"), "27.08.2026");
-eq("ngay co gio phut", ngayDDMMYYYY("2026-08-27T15:00:00.000Z"), "27.08.2026");
-eq("ngay rong", ngayDDMMYYYY(""), "");
-eq("ngay khong dung dang", ngayDDMMYYYY("27/08/2026"), "");
+eq("ngay dang DD.MM.YYYY", ngayCham("2026-08-27"), "27.08.2026");
+eq("ngay co gio phut", ngayCham("2026-08-27T15:00:00.000Z"), "27.08.2026");
+eq("ngay rong", ngayCham(""), "");
+eq("ngay khong dung dang", ngayCham("27/08/2026"), "");
 eq("tieu de chung tu", tieuDeChungTu("LHB", "2026-07-28"), "ĐC Bia LHB 28.07");
 eq("tieu de dung dd.MM cua chinh ngay do", tieuDeChungTu("CV", "2026-12-01"), "ĐC Bia CV 01.12");
 

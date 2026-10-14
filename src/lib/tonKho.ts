@@ -26,7 +26,6 @@
  */
 
 import type { Product, Transaction } from "../types";
-import { isoSangVn } from "./oNgay";
 
 /**
  * Loại giao dịch này làm tồn kho tăng, giảm, hay không đụng tới.
@@ -257,15 +256,3 @@ export function dungBangTonKy(input: BangTonKyInput): BangTonKy {
   };
 }
 
-/** Câu mô tả khoảng ngày, để in lên đầu báo cáo. */
-export function moTaKy(tuNgay: string, denNgay: string): string {
-  const tu = String(tuNgay ?? "").trim();
-  const den = String(denNgay ?? "").trim();
-  if (!tu && !den) return "Toàn bộ thời gian";
-  // Ngày bày ra cho người đọc thì theo ngày/tháng/năm; `yyyy-MM-dd` chỉ là
-  // dạng lưu và dạng đem ra so, không phải dạng để đọc.
-  const h = (iso: string) => isoSangVn(iso) || iso;
-  if (!tu) return `Đến hết ${h(den)}`;
-  if (!den) return `Từ ${h(tu)} đến nay`;
-  return `Từ ${h(tu)} đến ${h(den)}`;
-}

@@ -212,15 +212,19 @@ const ngayCua = (iso: string): string => String(iso ?? "").slice(0, 10);
  *
  * Cắt chuỗi chứ không dựng `Date`: dựng Date rồi format lại thì lệch một ngày ở
  * hai đầu biên vì múi giờ, mà ngày chứng từ lệch một ngày là sai kỳ hạch toán.
+ *
+ * Tên cũ `ngayDDMMYYYY` trùng với hàm cùng tên ở sapTemplate.ts mà ra định
+ * dạng khác ("27082026", không chấm) — import nhầm là tệp ra sai khuôn mà không
+ * báo lỗi gì. Đổi tên 14/10/2026 cho tên nói đúng kết quả.
  */
-export function ngayDDMMYYYY(iso: string): string {
+export function ngayCham(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
   return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
 }
 
 /** Tiêu đề chứng từ: `ĐC Bia LHB 28.07`, đúng công thức trong tệp mẫu. */
 export function tieuDeChungTu(viet: string, iso: string): string {
-  return `ĐC Bia ${viet} ${ngayDDMMYYYY(iso).slice(0, 5)}`;
+  return `ĐC Bia ${viet} ${ngayCham(iso).slice(0, 5)}`;
 }
 
 const chu = (v: string): ODc => ({ t: "s", v });
@@ -229,7 +233,7 @@ const so = (v: number): ODc => ({ t: "n", v });
 /** Dựng một dòng đủ 28 ô, đặt từng giá trị vào đúng cột của nó. */
 export function khungDong(d: DongDieuChuyen): ODc[] {
   const o: ODc[] = new Array(SO_COT_DC).fill(chu(""));
-  const ngay = ngayDDMMYYYY(d.ngay);
+  const ngay = ngayCham(d.ngay);
   o[COT.ngayChungTu] = chu(ngay);
   o[COT.ngayNhapXuat] = chu(ngay);
   o[COT.execAction] = chu(CO_DINH.execAction);
