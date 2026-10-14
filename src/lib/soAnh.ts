@@ -26,15 +26,20 @@
  * Nên ảnh có SỔ RIÊNG: bảng `anh_minh_chung`, mỗi tấm một tài liệu, khoá theo
  * mã ảnh trên Cloudinary. Sổ này:
  *
- *   · KHÔNG bị xoá theo giao dịch. Xoá giao dịch, xoá phiếu, xoá toàn bộ nhập
- *     xuất — sổ ảnh đứng yên. Thư viện ảnh đọc từ sổ, nên ảnh không rơi khỏi
- *     Thư viện được nữa.
- *   · Mang KHOÁ NHÓM (`nhom`) của lượt giao. Đơn nạp từ tệp có khoá băm theo
- *     nội dung (ngày · đối tác · cột), nên xoá rồi nạp lại đúng tệp ấy ra
- *     đúng khoá cũ — và ảnh tự gắn lại vào đơn.
- *   · CHỈ ADMIN XOÁ ĐƯỢC, và xoá là xoá thật: xoá luôn tệp trên Cloudinary qua
- *     máy chủ (`api/anh/xoa`). Không còn trạng thái lửng lơ "tệp còn mà không
- *     ai thấy".
+ *   · Là TRƯỜNG MÓC ĐÚNG TẤM ẢNH: mã ảnh Cloudinary (`publicId`). Dữ liệu và
+ *     ảnh đi một cụm — xoá dữ liệu thì app lấy đúng mã này xoá luôn tệp trên
+ *     Cloudinary (`api/anh/xoa`, chỉ admin). Không còn trạng thái lửng lơ
+ *     "tệp còn mà không ai thấy".
+ *   · CỤM LÀ CẢ CHUYẾN, không phải từng dòng: một tờ biên bản gắn chín dòng
+ *     cùng lượt giao. Xoá một dòng thì ảnh ở lại cho tám dòng kia; xoá dòng
+ *     cuối cùng thì ảnh đi theo. Xem `anhSeMatLienKet`.
+ *   · Mang KHOÁ NHÓM (`nhom`) của lượt giao. NẠP ĐÈ một tệp đã nạp (không xoá
+ *     trước) thì lệnh nạp tự dọn dòng cũ rồi ghi lại — dòng nào đổi mã, ảnh
+ *     của nó vẫn tự về đúng chuyến nhờ khoá này. Nạp đè không phải xoá, nên
+ *     không bao giờ làm mất ảnh.
+ *   · Thư viện đọc cả từ sổ: tấm nào dữ liệu không còn trỏ tới mà chưa bị
+ *     xoá thật (gỡ ảnh khỏi phiếu, thay ảnh khi xác nhận đơn, hay lượt xoá
+ *     trên Cloudinary bị hỏng) vẫn hiện ra, admin xoá nốt được.
  *
  * Ở đây chỉ có phần tính thuần, chạy phép kiểm không cần mạng. Phần ghi nằm ở
  * nơi gọi.
@@ -44,6 +49,15 @@ import type { ImportSlip, Transaction } from "../types";
 
 /** Bảng Firestore của sổ ảnh. */
 export const KHO_SO_ANH = "anh_minh_chung";
+
+/**
+ * NHÃN DÁN LÊN MỌI ẢNH APP NÀY TẢI LÊN CLOUDINARY.
+ *
+ * Kho Cloudinary của anh Khoa DÙNG CHUNG với một web app khác. Nhãn này để
+ * mở trang Cloudinary ra lọc được ngay ảnh nào của app nào. App không dựa vào
+ * nhãn để xoá — xoá luôn đi theo mã ảnh lưu trong chính dữ liệu của app.
+ */
+export const NHAN_ANH_APP = "bcsx-skb";
 
 /** Chiều của ảnh. Rỗng là ảnh tìm lại từ Cloudinary, chưa biết thuộc đơn nào. */
 export type ChieuAnh = "XUAT" | "NHAP" | "";
@@ -70,8 +84,8 @@ export interface BanGhiAnh {
   nhom: string;
   /** Tên mặt hàng / phiếu để Thư viện có chữ hiện khi đơn đã bị xoá. */
   tieuDe: string;
-  /** Ảnh vào sổ từ đâu. `cloudinary` là tìm lại tệp mồ côi trên máy chủ ảnh. */
-  nguon: "giao-dich" | "phieu" | "cloudinary";
+  /** Ảnh vào sổ từ đâu. */
+  nguon: "giao-dich" | "phieu";
   /** Lúc ghi vào sổ, ISO. */
   vaoSoLuc: string;
   vaoSoBoi: string;
@@ -257,51 +271,6 @@ export function anhTheoNhom(so: readonly BanGhiAnh[]): Map<string, string[]> {
     else if (!ds.includes(b.url)) ds.push(b.url);
   });
   return m;
-}
-
-/** Một tệp ảnh do máy chủ liệt kê từ Cloudinary. */
-export interface TepCloudinary {
-  publicId: string;
-  url: string;
-  /** ISO. */
-  taoLuc: string;
-}
-
-/**
- * Tệp ảnh trên Cloudinary mà sổ chưa biết — ảnh mồ côi từ những lần xoá trước
- * khi có sổ. Ghi chúng vào sổ với chiều rỗng để Thư viện bày ra ở mục "Chưa
- * gắn đơn": tệp còn thì phải thấy được, rồi admin quyết giữ hay xoá.
- */
-export function dongMoCoiTuCloudinary(
-  tep: readonly TepCloudinary[],
-  so: readonly Pick<BanGhiAnh, "id">[],
-  nguoi: string,
-  luc: string,
-): BanGhiAnh[] {
-  const co = new Set(so.map((b) => b.id));
-  const ra: BanGhiAnh[] = [];
-  tep.forEach((t) => {
-    const publicId = lamSach(t.publicId);
-    if (!publicId) return;
-    const id = idSoAnh(publicId);
-    if (co.has(id)) return;
-    co.add(id);
-    ra.push({
-      id,
-      url: lamSach(t.url),
-      publicId,
-      chieu: "",
-      ngay: lamSach(t.taoLuc).slice(0, 10),
-      partnerId: "",
-      partnerName: "",
-      nhom: "",
-      tieuDe: "Ảnh chưa gắn đơn",
-      nguon: "cloudinary",
-      vaoSoLuc: luc,
-      vaoSoBoi: nguoi,
-    });
-  });
-  return ra;
 }
 
 /**

@@ -496,7 +496,7 @@ kiemTra(
   const so = [
     { id: "bien-ban", url: URL_X, publicId: "bien-ban", chieu: "XUAT" as const, ngay: "2026-10-03", partnerId: "AD0103-1901", partnerName: "BNC · 1901", nhom: "multi-1", tieuDe: "Bia Wings Dark Lager", nguon: "giao-dich" as const, vaoSoLuc: "", vaoSoBoi: "" },
     { id: "phieu", url: URL_N, publicId: "phieu", chieu: "NHAP" as const, ngay: "2026-10-01", partnerId: "", partnerName: "", nhom: "PN-1", tieuDe: "Phiếu PN-1", nguon: "phieu" as const, vaoSoLuc: "", vaoSoBoi: "" },
-    { id: "mo-coi", url: URL_M, publicId: "mo-coi", chieu: "" as const, ngay: "2026-09-20", partnerId: "", partnerName: "", nhom: "", tieuDe: "Ảnh chưa gắn đơn", nguon: "cloudinary" as const, vaoSoLuc: "", vaoSoBoi: "" },
+    { id: "mo-coi", url: URL_M, publicId: "mo-coi", chieu: "" as const, ngay: "2026-09-20", partnerId: "", partnerName: "", nhom: "", tieuDe: "Chưa rõ chiều", nguon: "giao-dich" as const, vaoSoLuc: "", vaoSoBoi: "" },
   ];
 
   // Khong con giao dich nao (da xoa toan bo) — anh van phai hien.
@@ -504,13 +504,14 @@ kiemTra(
   kiemTra("xoa het giao dich, anh xuat van hien", xuat.map((a) => a.url), [URL_X]);
   kiemTra("danh dau la chi con trong so", xuat[0].chiConTrongSo, true);
   kiemTra("van loc duoc theo don vi cu", xuat[0].donVi, "BNC · 1901");
-  kiemTra("chu phu noi ro don da xoa", /đơn đã xoá/.test(xuat[0].phu), true);
+  kiemTra("chu phu noi ro khong con gan don", /không còn gắn đơn/.test(xuat[0].phu), true);
 
   const nhap = dungAnhThuVien({ transactions: [], slips: [], loai: "IN", tuNgay: "", denNgay: "", soAnh: so });
   kiemTra("anh nhap chi hien o chieu nhap", nhap.map((a) => a.url), [URL_N]);
 
-  const chuaGan = dungAnhThuVien({ transactions: [], slips: [], loai: "CHUA_GAN", tuNgay: "", denNgay: "", soAnh: so });
-  kiemTra("anh mo coi chi hien o muc chua gan", chuaGan.map((a) => a.url), [URL_M]);
+  // Anh chua ro chieu khong hien o chieu nao.
+  kiemTra("anh chua ro chieu khong lan vao chieu xuat", xuat.some((a) => a.url === URL_M), false);
+  kiemTra("anh chua ro chieu khong lan vao chieu nhap", nhap.some((a) => a.url === URL_M), false);
 
   // Don con song thi KHONG hien trung lan nua tu so.
   const conSong = dungAnhThuVien({

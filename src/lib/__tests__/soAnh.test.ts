@@ -14,7 +14,6 @@ import type { ImportSlip, Transaction } from "../../types";
 import {
   anhTheoNhom,
   dongChuaVaoSo,
-  dongMoCoiTuCloudinary,
   dongSoTuDuLieu,
   idSoAnh,
   nhomCuaGiaoDich,
@@ -162,57 +161,26 @@ const gd = (o: Partial<Transaction>): Transaction =>
   eq("so da du thi khong ghi gi", dongChuaVaoSo(tu, tu).length, 0);
 }
 
-// ===================== XOA ROI NAP LAI: anh phai gan lai dung don cu
+// ============ NAP DE TEP: lenh nap tu don dong cu, anh phai ve dung chuyen
 
 {
   // Buoc 1: don nap tu tep co anh -> vao so.
-  const truocXoa = [
+  const truocNap = [
     gd({ id: "tkho-a-0", referenceGroupId: "multi-h1", evidencePhotoUrls: [A1] }),
     gd({ id: "tkho-b-0", referenceGroupId: "multi-h2", evidencePhotoUrls: [A2] }),
   ];
-  const so = dongSoTuDuLieu(truocXoa, [], "khoa", "x");
+  const so = dongSoTuDuLieu(truocNap, [], "khoa", "x");
 
-  // Buoc 2: xoa toan bo xuat kho -> giao dich mat het, so van con.
-  const sauXoa: Transaction[] = [];
-  eq("xoa giao dich khong lam so mat dong nao", dongChuaVaoSo(dongSoTuDuLieu(sauXoa, [], "k", "x"), so).length, 0);
-  eq("so van du hai tam sau khi xoa", so.length, 2);
+  // Buoc 2: lenh nap de tu don dong cu truoc khi ghi -> so van giu.
+  const giuaChung: Transaction[] = [];
+  eq("don dong cu khong lam so mat dong nao", dongChuaVaoSo(dongSoTuDuLieu(giuaChung, [], "k", "x"), so).length, 0);
+  eq("so van du hai tam", so.length, 2);
 
-  // Buoc 3: nap lai dung tep -> cung khoa nhom (bam theo noi dung) -> gan lai.
+  // Buoc 3: ghi lai -> cung khoa nhom (bam theo noi dung) -> anh ve dung chuyen.
   const m = anhTheoNhom(so);
   eq("nap lai: luot giao 1 lay lai dung anh", m.get("multi-h1"), [A1]);
   eq("nap lai: luot giao 2 lay lai dung anh", m.get("multi-h2"), [A2]);
   eq("luot giao khong co anh thi khong co gi", m.get("multi-khac"), undefined);
-}
-
-{
-  // Anh tim lai tu Cloudinary chua ro chieu: KHONG duoc gan vao don nao.
-  const so = dongMoCoiTuCloudinary(
-    [{ publicId: "mo-coi", url: `${B}/v1/mo-coi.jpg`, taoLuc: "2026-09-20T10:00:00Z" }],
-    [],
-    "khoa",
-    "x",
-  );
-  eq("anh mo coi khong gan vao nhom nao", anhTheoNhom(so).size, 0);
-  eq("anh mo coi chua ro chieu", so[0].chieu, "");
-  eq("anh mo coi lay ngay tai len", so[0].ngay, "2026-09-20");
-}
-
-// ============================================ tim anh mo coi tren Cloudinary
-
-{
-  const daCo = [{ id: "qzzyesrmtcoubozvyrt3" }];
-  const moi = dongMoCoiTuCloudinary(
-    [
-      { publicId: "qzzyesrmtcoubozvyrt3", url: A1, taoLuc: "2026-09-01T00:00:00Z" },
-      { publicId: "thu-muc/x", url: `${B}/v1/thu-muc/x.jpg`, taoLuc: "2026-09-02T00:00:00Z" },
-      { publicId: "thu-muc/x", url: `${B}/v1/thu-muc/x.jpg`, taoLuc: "2026-09-02T00:00:00Z" },
-      { publicId: "", url: "", taoLuc: "" },
-    ],
-    daCo,
-    "khoa",
-    "x",
-  );
-  eq("chi lay tep so chua biet, bo trung, bo rong", moi.map((b) => b.id), ["thu-muc~x"]);
 }
 
 // ================================================= noi dang dung mot tam anh

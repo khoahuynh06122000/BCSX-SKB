@@ -10,6 +10,8 @@
  * nguyên chữ ký (base64 vào, URL ra) để các điểm gọi thay đổi tối thiểu.
  */
 
+import { NHAN_ANH_APP } from './soAnh';
+
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string;
 
@@ -29,14 +31,30 @@ if (!CLOUD_NAME || !UPLOAD_PRESET) {
 export async function uploadToCloudinary(
   fileOrDataUri: string | Blob,
 ): Promise<string> {
-  const formData = new FormData();
-  formData.append('file', fileOrDataUri);
-  formData.append('upload_preset', UPLOAD_PRESET);
+  const guiLen = (coNhan: boolean) => {
+    const formData = new FormData();
+    formData.append('file', fileOrDataUri);
+    formData.append('upload_preset', UPLOAD_PRESET);
+    // Dán nhãn của app: kho Cloudinary dùng chung với web app khác, có nhãn
+    // thì mở trang Cloudinary ra lọc được ảnh của app này. Xem `NHAN_ANH_APP`.
+    if (coNhan) formData.append('tags', NHAN_ANH_APP);
+    return fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+      { method: 'POST', body: formData },
+    );
+  };
 
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-    { method: 'POST', body: formData },
-  );
+  /*
+   * Gửi kèm nhãn trước; preset từ chối nhãn thì gửi lại không nhãn.
+   *
+   * Lượt đầu hỏng thì chưa có tệp nào được tạo, nên gửi lại không đẻ bản
+   * trùng. Thà ảnh không có nhãn còn hơn biên bản không lên được — không có
+   * ảnh thì đơn đi đường không xác nhận được.
+   */
+  let res = await guiLen(true);
+  if (!res.ok && res.status >= 400 && res.status < 500) {
+    res = await guiLen(false);
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

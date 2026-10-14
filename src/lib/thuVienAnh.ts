@@ -63,8 +63,9 @@ export interface AnhThuVien {
   /** Chữ phụ gốc, giữ lại để dựng lại khi gộp trùng. */
   phuGoc: string;
   /**
-   * Tấm này CHỈ CÒN TRONG SỔ ẢNH — đơn từng trỏ tới nó đã bị xoá, hoặc nó là
-   * tệp tìm lại từ Cloudinary. Ảnh vẫn nguyên; chỉ là không còn gắn đơn nào.
+   * Tấm này CHỈ CÒN TRONG SỔ ẢNH — tệp còn trên Cloudinary nhưng không dòng
+   * dữ liệu nào trỏ tới nữa (gỡ khỏi phiếu, bị thay khi xác nhận đơn, hay lượt
+   * xoá trên Cloudinary bị hỏng). Bày ra để admin thấy mà xoá nốt.
    */
   chiConTrongSo?: boolean;
 }
@@ -87,11 +88,7 @@ function gomUrl(...v: (string | undefined | null)[]): string[] {
 export interface ThuVienInput {
   transactions: Transaction[];
   slips: ImportSlip[];
-  /**
-   * `CHUA_GAN` — ảnh tìm lại từ Cloudinary, chưa biết thuộc chiều nào. Chỉ
-   * đọc từ sổ ảnh.
-   */
-  loai: "IN" | "OUT" | "CHUA_GAN";
+  loai: "IN" | "OUT";
   /**
    * Sổ ảnh (`anh_minh_chung`). Có sổ thì ảnh của đơn đã xoá vẫn hiện — đây là
    * thứ làm cho Thư viện không mất ảnh được nữa. Xem `soAnh.ts`.
@@ -193,19 +190,16 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
   /*
    * ẢNH CHỈ CÒN TRONG SỔ.
    *
-   * Tấm nào sổ còn giữ mà dữ liệu sống không còn trỏ tới — đơn đã xoá, phiếu
-   * đã gỡ ảnh, tệp tìm lại trên Cloudinary — vẫn phải bày ra. Trước khi có sổ,
-   * xoá đơn là tấm ảnh rơi khỏi Thư viện vĩnh viễn, dù tệp còn nguyên.
+   * Tấm nào sổ còn giữ mà dữ liệu sống không còn trỏ tới vẫn phải bày ra: tệp
+   * còn trên Cloudinary thì phải thấy được. Không bày thì nó thành đúng loại
+   * "tệp còn mà không ai thấy" — tốn chỗ, và không ai biết để xoá.
    */
-  const chieuCan = loai === "IN" ? "NHAP" : loai === "OUT" ? "XUAT" : "";
+  const chieuCan = loai === "IN" ? "NHAP" : "XUAT";
   const dangSong = new Set(ra.map((a) => a.url));
   (input.soAnh ?? []).forEach((b) => {
     if (b.chieu !== chieuCan || !b.url || dangSong.has(b.url)) return;
     dangSong.add(b.url);
-    const phu =
-      b.nguon === "cloudinary"
-        ? "Tìm lại trên Cloudinary · chưa gắn đơn"
-        : `${b.partnerName ? `${b.partnerName} · ` : ""}đơn đã xoá — ảnh vẫn giữ`;
+    const phu = `${b.partnerName ? `${b.partnerName} · ` : ""}không còn gắn đơn nào`;
     ra.push({
       id: `so-${b.id}`,
       url: b.url,

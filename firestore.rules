@@ -352,8 +352,10 @@ service cloud.firestore {
      * Doc: nhu giao dich — ai xem duoc kho thi doc het, DNC chi doc chieu xuat.
      *
      * Tao: ai ghi duoc kho deu dua anh vao so duoc, vi so phai giu moi tam bat
-     * ke ai tai len. Nhung chi duong dan Cloudinary, va chieu rong (anh mo coi
-     * tim lai tren may chu) chi admin tao.
+     * ke ai tai len. Chi duong dan Cloudinary, chi hai chieu XUAT / NHAP.
+     *
+     * DU LIEU VA ANH DI MOT CUM: xoa du lieu thi app xoa luon tep tren
+     * Cloudinary va xoa dong so — khong co anh mo coi nao phai di tim.
      *
      * Sua va XOA: CHI ADMIN. Xoa dong so la buoc cuoi cua xoa anh that — tep
      * tren Cloudinary do may chu xoa sau cua requireOwner (api/_auth.ts). Hai
@@ -364,7 +366,7 @@ service cloud.firestore {
         || (laDNC() && resource.data.get('chieu', '') == 'XUAT');
       allow create: if (ghiNhapKho() || ghiXuatKho())
         && request.resource.data.get('url', '').matches('^https://res[.]cloudinary[.]com/.+')
-        && (request.resource.data.get('chieu', '') in ['XUAT', 'NHAP'] || isOwner());
+        && request.resource.data.get('chieu', '') in ['XUAT', 'NHAP'];
       allow update, delete: if isOwner();
     }
 

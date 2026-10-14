@@ -4,19 +4,28 @@
  */
 
 /**
- * POST /api/anh/xoa  { url }  — XOÁ THẬT một tấm ảnh trên Cloudinary.
+ * POST /api/anh/xoa  { urls: string[] }  — XOÁ THẬT ảnh trên Cloudinary.
+ *
+ * Dữ liệu và ảnh đi một cụm: xoá dữ liệu thì trình duyệt gọi vào đây để xoá
+ * luôn những tấm ảnh không còn dòng nào dùng. Admin xoá một tấm trong Thư viện
+ * ảnh cũng đi đường này.
  *
  * Chỉ admin (xem `requireOwner`). Máy chủ tự lấy mã ảnh từ đường dẫn chứ
- * không nhận mã ảnh do trình duyệt gửi: nhận thẳng mã thì một lời gọi giả có
- * thể xoá bất kỳ tệp nào trong kho, kể cả tệp không thuộc app này. Đường dẫn
- * còn phải đúng tên kho của app.
+ * không nhận mã ảnh do trình duyệt gửi, và đường dẫn phải đúng tên kho của
+ * app. Kho Cloudinary dùng chung với web app khác — nhận thẳng mã ảnh thì một
+ * lời gọi sai có thể xoá ảnh của app kia.
  *
- * Chỉ xoá TỆP. Gỡ đường dẫn khỏi Firestore là phần của trình duyệt, chạy sau
- * khi lượt này trả về thành công — có luật Firestore chặn riêng, cũng chỉ admin.
+ * Chỉ xoá TỆP. Gỡ đường dẫn khỏi Firestore là phần của trình duyệt, có luật
+ * Firestore chặn riêng, cũng chỉ admin.
  */
 
 import { requireOwner } from "../_auth";
-import { ThieuCauHinh, xoaAnhCloudinary } from "../_cloudinary";
+import {
+  cauHinhCloudinary,
+  ThieuCauHinh,
+  TOI_DA_MOT_LUOT,
+  xoaNhieuAnhCloudinary,
+} from "../_cloudinary";
 import { publicIdTuUrl } from "../../src/lib/soAnh";
 
 export default async function handler(req: any, res: any) {
@@ -26,24 +35,52 @@ export default async function handler(req: any, res: any) {
   const user = await requireOwner(req, res);
   if (!user) return;
 
-  const url = String(req.body?.url || "").trim();
-  const cloud =
-    process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME || "";
-  if (!cloud || !url.startsWith(`https://res.cloudinary.com/${cloud}/image/upload/`)) {
-    return res.status(400).json({ error: "Đường dẫn này không thuộc kho ảnh của app." });
+  let cloud: string;
+  try {
+    cloud = cauHinhCloudinary().cloud;
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Thiếu cấu hình." });
   }
-  const publicId = publicIdTuUrl(url);
-  if (!publicId) {
-    return res.status(400).json({ error: "Không đọc được mã ảnh từ đường dẫn." });
+
+  const vao: unknown[] = Array.isArray(req.body?.urls)
+    ? req.body.urls
+    : req.body?.url
+      ? [req.body.url]
+      : [];
+  const urls = [...new Set(vao.map((u) => String(u ?? "").trim()).filter(Boolean))];
+  if (!urls.length) {
+    return res.status(400).json({ error: "Không có đường dẫn ảnh nào." });
+  }
+  if (urls.length > TOI_DA_MOT_LUOT) {
+    return res
+      .status(400)
+      .json({ error: `Mỗi lượt xoá tối đa ${TOI_DA_MOT_LUOT} tấm.` });
+  }
+
+  const tienTo = `https://res.cloudinary.com/${cloud}/image/upload/`;
+  const theoMa = new Map<string, string>();
+  for (const u of urls) {
+    const pid = u.startsWith(tienTo) ? publicIdTuUrl(u) : "";
+    if (!pid) {
+      return res
+        .status(400)
+        .json({ error: `Đường dẫn không thuộc kho ảnh của app: ${u.slice(0, 120)}` });
+    }
+    theoMa.set(pid, u);
   }
 
   try {
-    const ketQua = await xoaAnhCloudinary(publicId);
-    if (ketQua !== "ok" && ketQua !== "not found") {
-      return res.status(502).json({ error: `Cloudinary trả về "${ketQua}", chưa chắc đã xoá.` });
-    }
-    console.log(`Xoa anh ${publicId} (${ketQua}) boi ${user.email}`);
-    return res.status(200).json({ ok: true, publicId, ketQua });
+    const kq = await xoaNhieuAnhCloudinary([...theoMa.keys()]);
+    const ketQua = [...theoMa.entries()].map(([pid, url]) => ({
+      url,
+      publicId: pid,
+      ketQua: kq[pid] || "khong-ro",
+    }));
+    console.log(
+      `Xoa ${ketQua.length} anh boi ${user.email}: ` +
+        ketQua.map((k) => `${k.publicId}=${k.ketQua}`).join(", "),
+    );
+    return res.status(200).json({ ok: true, ketQua });
   } catch (e: any) {
     const ma = e instanceof ThieuCauHinh ? 500 : 502;
     return res.status(ma).json({ error: e?.message || "Không xoá được ảnh." });

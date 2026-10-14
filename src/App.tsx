@@ -141,14 +141,12 @@ import {
 import {
   anhTheoNhom,
   dongChuaVaoSo,
-  dongMoCoiTuCloudinary,
   dongSoTuDuLieu,
   idSoAnh,
   KHO_SO_ANH,
   noiDangDungAnh,
   publicIdTuUrl,
   type BanGhiAnh,
-  type TepCloudinary,
 } from "./lib/soAnh";
 import { traLuot, xinLuot } from "./lib/hangDoiAnh";
 import {
@@ -715,9 +713,7 @@ export default function App() {
   const [reportDenNgay, setReportDenNgay] = useState("");
   const [reportPartnerSearch, setReportPartnerSearch] = useState("");
 
-  const [galleryFilter, setGalleryFilter] = useState<
-    "IN" | "OUT" | "CHUA_GAN"
-  >("IN");
+  const [galleryFilter, setGalleryFilter] = useState<"IN" | "OUT">("IN");
   /*
    * Khoảng ngày của thư viện ảnh.
    *
@@ -1641,8 +1637,21 @@ export default function App() {
   const handleHardReset = async () => {
     if (!isOwner) return;
 
+    // Dọn sạch là xoá MỌI THỨ — kể cả ảnh chỉ còn trong sổ.
+    const anhDonSach = anhSeMatLienKet(
+      [
+        ...transactions.map((t) => gomAnh(t)),
+        ...slips.map((sl) => sl.signedPhotoUrls || []),
+        soAnh.map((b) => b.url),
+      ],
+      [],
+    );
     const confirmReset = window.confirm(
-      `Xoá sạch ${transactions.length} giao dịch, ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký) và ${soPhieu.length} dòng trong Sổ số phiếu?\n\nBộ đếm số phiếu cũng đặt lại, nên số phiếu sau khi dọn sẽ đánh lại từ đầu.\n\nĐối tác và danh mục sản phẩm được giữ lại.\n\nKhông khôi phục lại được.`,
+      `Xoá sạch ${transactions.length} giao dịch, ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký) và ${soPhieu.length} dòng trong Sổ số phiếu?\n\n` +
+        (anhDonSach.length
+          ? `XOÁ LUÔN ${anhDonSach.length} ảnh trên Cloudinary — dữ liệu và ảnh đi một cụm.\n\n`
+          : "") +
+        `Bộ đếm số phiếu cũng đặt lại, nên số phiếu sau khi dọn sẽ đánh lại từ đầu.\n\nĐối tác và danh mục sản phẩm được giữ lại.\n\nKhông khôi phục lại được.`,
     );
 
     if (!confirmReset) return;
@@ -1658,8 +1667,9 @@ export default function App() {
        * nhập kho, và tab Phiếu nhập còn lại một đống phiếu mồ côi không còn
        * dòng hàng nào bên dưới. Sạch một nửa còn khó hiểu hơn không dọn.
        *
-       * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại
-       * còn dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
+       * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: ảnh trên Cloudinary xoá theo (xem
+       * `xoaAnhTrenMayChu`). Bản cũ chỉ bỏ liên kết và để tệp nằm lại — đúng
+       * loại tệp "còn mà không ai thấy" đã làm rối chuyện mất ảnh bao lần.
        *
        * XOÁ CẢ SỔ SỐ PHIẾU VÀ BỘ ĐẾM.
        *
@@ -1712,10 +1722,12 @@ export default function App() {
        * file Excel thì dọn bằng nút "Dọn số cũ" trong tab Doanh thu.
        */
 
+      const kqAnh = await xoaAnhTrenMayChu(anhDonSach);
       setLoading(false);
       showNotification(
-        `Đã xoá ${transactions.length} giao dịch, ${slips.length} phiếu nhập và ${soPhieu.length} dòng sổ số phiếu`,
+        `Đã xoá ${transactions.length} giao dịch, ${slips.length} phiếu nhập, ${soPhieu.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}`,
       );
+      baoAnhChuaXoa(kqAnh);
     } catch (error) {
       console.error("Hard Reset Error:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1804,10 +1816,10 @@ export default function App() {
      * Cloudinary nhưng app mất đường nối tới nó.
      */
     const idXoaXuat = new Set(dsXuat.map((t) => t.id));
-    const anhMatXuat = anhSeMatLienKet(
-      dsXuat.map((t) => gomAnh(t)),
-      transactions.filter((t) => !idXoaXuat.has(t.id)).map((t) => gomAnh(t)),
-    );
+    const anhMatXuat = anhSeMatLienKet(dsXuat.map((t) => gomAnh(t)), [
+      ...transactions.filter((t) => !idXoaXuat.has(t.id)).map((t) => gomAnh(t)),
+      ...slips.map((sl) => sl.signedPhotoUrls || []),
+    ]);
 
     if (
       !window.confirm(
@@ -1823,9 +1835,9 @@ export default function App() {
               NGAT
             : "") +
           (anhMatXuat.length > 0
-            ? `${anhMatXuat.length} ảnh biên bản KHÔNG mất: chúng được giữ trong sổ ảnh và vẫn ` +
-              `hiện trong Thư viện ảnh. Nạp lại đúng tệp xuất kho thì ảnh tự gắn lại vào đơn. ` +
-              `Muốn xoá ảnh thật thì admin xoá từng tấm trong Thư viện ảnh.` +
+            ? `XOÁ LUÔN ${anhMatXuat.length} ảnh biên bản trên Cloudinary — dữ liệu và ảnh đi một cụm.` +
+              NGAT +
+              `Chỉ muốn nạp lại số liệu thì KHÔNG cần xoá: nạp đè tệp lên là đủ, nạp đè giữ nguyên ảnh.` +
               NGAT
             : "") +
           `Bộ đếm số phiếu xuất cũng đặt lại, nên phiếu xuất sau khi xoá đánh lại từ đầu.\n\n` +
@@ -1860,10 +1872,12 @@ export default function App() {
         await batch.commit();
       }
 
+      const kqAnh = await xoaAnhTrenMayChu(anhMatXuat);
       setLoading(false);
       showNotification(
-        `Đã xoá ${dsXuat.length} giao dịch xuất và ${dsSo.length} dòng sổ số phiếu. Anh nạp lại tệp được rồi ạ.`,
+        `Đã xoá ${dsXuat.length} giao dịch xuất, ${dsSo.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}.`,
       );
+      baoAnhChuaXoa(kqAnh);
     } catch (error) {
       console.error("Xoa giao dich xuat:", error);
       setLoading(false);
@@ -1879,8 +1893,8 @@ export default function App() {
    * còn một đống phiếu mồ côi không còn dòng hàng nào bên dưới. Sạch một nửa
    * khó hiểu hơn không dọn.
    *
-   * Ảnh trên Cloudinary CỐ Ý không xoá theo: đó là chứng từ đã ký, giữ lại còn
-   * dấu vết nếu sau này cần tra. Chỉ bỏ liên kết trong cơ sở dữ liệu.
+   * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: ảnh phiếu đã ký trên Cloudinary xoá theo. Chỉ
+   * muốn nạp lại số liệu thì nạp đè tệp, không cần xoá — nạp đè giữ ảnh.
    *
    * TỒN ĐẦU KỲ KHÔNG BAO GIỜ BỊ ĐỤNG TỚI, và cố ý không có ô chọn nào để bật
    * lên. Nó là số dư mang sang, khai một lần rồi thôi — trong khi nút này dùng
@@ -1929,8 +1943,8 @@ export default function App() {
             : "") +
           `Xuất kho và đối tác cũng giữ nguyên.\n\n` +
           (anhMatNhap.length > 0
-            ? `${anhMatNhap.length} ảnh phiếu đã ký KHÔNG mất: chúng được giữ trong sổ ảnh và vẫn ` +
-              `hiện trong Thư viện ảnh. Muốn xoá ảnh thật thì admin xoá từng tấm trong Thư viện ảnh.\n\n`
+            ? `XOÁ LUÔN ${anhMatNhap.length} ảnh phiếu đã ký trên Cloudinary — dữ liệu và ảnh đi một cụm.\n\n` +
+              `Chỉ muốn nạp lại số liệu thì KHÔNG cần xoá: nạp đè tệp lên là đủ.\n\n`
             : "") +
           `Không khôi phục lại được.`,
       )
@@ -1963,10 +1977,12 @@ export default function App() {
         await batch.commit();
       }
 
+      const kqAnh = await xoaAnhTrenMayChu(anhMatNhap);
       setLoading(false);
       showNotification(
-        `Đã xoá ${dsNhap.length} giao dịch nhập, ${dsPhieu.length} phiếu nhập và ${dsSo.length} dòng sổ số phiếu.`,
+        `Đã xoá ${dsNhap.length} giao dịch nhập, ${dsPhieu.length} phiếu nhập, ${dsSo.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}.`,
       );
+      baoAnhChuaXoa(kqAnh);
     } catch (error) {
       console.error("Xoa du lieu nhap:", error);
       setLoading(false);
@@ -2861,8 +2877,10 @@ export default function App() {
    * thi phieu quay ve chua duyet, va toan bo so luong tren phieu do RA KHOI
    * ton kho ngay lap tuc. Chi lam khi tai nham to phieu.
    *
-   * Chi xoa lien ket trong Firestore, KHONG xoa file tren Cloudinary — de con
-   * dau vet neu can tra lai ve sau.
+   * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: admin gỡ thì tệp trên Cloudinary xoá theo
+   * (nếu không phiếu / dòng nào khác còn dùng). Người nhập kho gỡ thì không
+   * xoá được tệp — chỉ admin xoá ảnh — nên tấm ảnh nằm lại trong sổ và hiện ở
+   * Thư viện ảnh với chữ "không còn gắn đơn nào", admin xoá nốt.
    */
   const handleRemoveSignedSlipPhoto = async (code: string, url: string) => {
     const existing = slips.find((s) => s.code === code);
@@ -2870,20 +2888,34 @@ export default function App() {
 
     const remaining = (existing.signedPhotoUrls || []).filter((u) => u !== url);
 
+    // Tấm này còn ai dùng nữa không — phiếu khác, dòng giao dịch khác.
+    const anhMatGo = anhSeMatLienKet(
+      [[url]],
+      [
+        remaining,
+        ...slips.filter((sl) => sl.code !== code).map((sl) => sl.signedPhotoUrls || []),
+        ...transactions.map((t) => gomAnh(t)),
+      ],
+    );
+
     try {
-      // Gỡ khỏi phiếu KHÔNG phải xoá ảnh: giữ vào sổ trước, admin muốn xoá
-      // hẳn thì xoá ở Thư viện ảnh.
+      // Giữ vào sổ trước: xoá tệp có hỏng thì ảnh vẫn hiện để xoá lại.
       await damBaoSoAnh([], [existing]);
       await updateDoc(doc(db, "slips", code), {
         signedPhotoUrls: remaining,
         status: remaining.length ? "signed" : existing.printedAt ? "printed" : "draft",
         updatedAt: new Date().toISOString(),
       });
+      const kqAnh = isOwner
+        ? await xoaAnhTrenMayChu(anhMatGo)
+        : { tong: 0, daXoa: 0, loi: "" };
       showNotification(
-        remaining.length
+        (remaining.length
           ? `Đã gỡ 1 ảnh khỏi phiếu ${code}`
-          : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`,
+          : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`) +
+          (kqAnh.daXoa > 0 ? " · đã xoá tệp trên Cloudinary" : ""),
       );
+      baoAnhChuaXoa(kqAnh);
     } catch (e: any) {
       alert(handleFirestoreError(e, OperationType.WRITE, "slips"));
     }
@@ -3666,11 +3698,35 @@ export default function App() {
         : [];
     const canXoa = [...group, ...haoKemTheo];
 
+    /*
+     * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM, mà chỉ admin xoá được ảnh.
+     *
+     * Luật cho người xuất kho xoá đơn đang đi đường. Nhưng xoá đơn có ảnh là
+     * xoá luôn ảnh — việc của admin. Để người xuất kho xoá được phần dữ liệu
+     * mà ảnh nằm lại thì sinh đúng loại tệp lửng lơ không ai thấy; nên chặn
+     * từ đầu, nói rõ phải nhờ ai.
+     */
+    const idXoaDon = new Set(canXoa.map((t) => t.id));
+    const anhMatDon = anhSeMatLienKet(canXoa.map((t) => gomAnh(t)), [
+      ...transactions.filter((t) => !idXoaDon.has(t.id)).map((t) => gomAnh(t)),
+      ...slips.map((sl) => sl.signedPhotoUrls || []),
+    ]);
+    if (anhMatDon.length > 0 && !isOwner) {
+      alert(
+        `Đơn này có ${anhMatDon.length} ảnh biên bản. Xoá đơn là xoá luôn ảnh, mà chỉ admin được xoá ảnh.\n\n` +
+          `Nhờ anh Khoa xoá đơn này.`,
+      );
+      return;
+    }
+
     if (
       !window.confirm(
         `Bạn có chắc chắn muốn xóa toàn bộ ${canXoa.length} bản ghi trong đơn này không?` +
           (haoKemTheo.length > 0
             ? `\n\nTrong đó có ${haoKemTheo.length} dòng hao hụt đi kèm đơn — xoá theo luôn.`
+            : "") +
+          (anhMatDon.length > 0
+            ? `\n\nXOÁ LUÔN ${anhMatDon.length} ảnh biên bản của đơn trên Cloudinary.`
             : ""),
       )
     )
@@ -3685,7 +3741,9 @@ export default function App() {
         batch.delete(doc(db, "transactions", t.id));
       });
       await batch.commit();
-      showNotification("Đã xóa đơn đi đường thành công!");
+      const kqAnh = await xoaAnhTrenMayChu(anhMatDon);
+      showNotification(`Đã xóa đơn đi đường${chuAnhDaXoa(kqAnh)}!`);
+      baoAnhChuaXoa(kqAnh);
     } catch (err) {
       alert(
         handleFirestoreError(err, OperationType.DELETE, "transactions"),
@@ -4689,11 +4747,6 @@ export default function App() {
 
   /* ---------------- So anh: viec cua admin ---------------- */
 
-  /** Số tấm đang nằm ở mục "Chưa gắn đơn". */
-  const soAnhChuaGan = useMemo(
-    () => soAnh.filter((b) => !b.chieu).length,
-    [soAnh],
-  );
   /**
    * Tấm admin đã xoá thật trong phiên này. Phép tự ghi sổ có thể còn cầm bản
    * dữ liệu cũ (chưa kịp nhận tin đã gỡ) và ghi tấm ấy vào sổ lần nữa — trỏ
@@ -4701,6 +4754,78 @@ export default function App() {
    */
   const daXoaAnhRef = daXoaAnhRefSom;
   const [dangXoaAnh, setDangXoaAnh] = useState(false);
+
+  /**
+   * XOÁ THẬT NHỮNG TẤM ẢNH NÀY TRÊN CLOUDINARY, rồi xoá dòng sổ của chúng.
+   *
+   * Dữ liệu và ảnh đi một cụm: mọi lệnh xoá dữ liệu gọi vào đây với đúng
+   * những tấm KHÔNG còn dòng nào dùng (`anhSeMatLienKet`). Chỉ admin — máy chủ
+   * chặn bằng `requireOwner`.
+   *
+   * Chỉ gửi ảnh thuộc kho của app; ảnh cũ nhúng base64 hay ảnh mẫu không có
+   * tệp nào để xoá. Gửi 100 tấm một lượt — giới hạn của Cloudinary.
+   *
+   * KHÔNG ném lỗi: dữ liệu thường đã xoá xong khi tới bước này, nên ảnh xoá
+   * hỏng thì báo lại cho người bấm, không làm như cả lệnh hỏng. Ảnh hỏng vẫn
+   * còn dòng sổ (đã ghi trước khi xoá dữ liệu), nên vẫn hiện trong Thư viện
+   * để admin xoá lại.
+   */
+  const xoaAnhTrenMayChu = async (
+    urls: readonly string[],
+  ): Promise<{ tong: number; daXoa: number; loi: string }> => {
+    const tienTo = `https://res.cloudinary.com/${KHO_ANH}/image/upload/`;
+    const ds = [
+      ...new Set(
+        urls
+          .map((u) => String(u ?? "").trim())
+          .filter((u) => KHO_ANH && u.startsWith(tienTo) && publicIdTuUrl(u)),
+      ),
+    ];
+    let daXoa = 0;
+    let loi = "";
+    for (let i = 0; i < ds.length; i += 100) {
+      const phan = ds.slice(i, i + 100);
+      try {
+        const r = await callAiApi("/api/anh/xoa", { urls: phan });
+        const d: any = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
+        const xong: { publicId: string }[] = (d?.ketQua || []).filter(
+          (k: any) => k?.ketQua === "deleted" || k?.ketQua === "not_found",
+        );
+        if (xong.length) {
+          const batch = writeBatch(db);
+          xong.forEach((k) => {
+            const id = idSoAnh(k.publicId);
+            daXoaAnhRef.current.add(id);
+            batch.delete(doc(db, KHO_SO_ANH, id));
+          });
+          await batch.commit();
+        }
+        daXoa += xong.length;
+        if (xong.length < phan.length && !loi) {
+          loi = `${phan.length - xong.length} tấm Cloudinary không xác nhận đã xoá.`;
+        }
+      } catch (e) {
+        loi = e instanceof Error ? e.message : String(e);
+      }
+    }
+    return { tong: ds.length, daXoa, loi };
+  };
+
+  /** Báo lại khi còn ảnh chưa xoá được — dữ liệu đã xoá rồi. */
+  const baoAnhChuaXoa = (kq: { tong: number; daXoa: number; loi: string }) => {
+    if (kq.daXoa >= kq.tong) return;
+    alert(
+      `Dữ liệu đã xoá, nhưng ${kq.tong - kq.daXoa}/${kq.tong} ảnh CHƯA xoá được trên Cloudinary.\n\n` +
+        `${kq.loi}\n\n` +
+        `Những ảnh này vẫn hiện trong Thư viện ảnh (ghi "không còn gắn đơn nào"). ` +
+        `Admin mở từng tấm và bấm xoá lại.`,
+    );
+  };
+
+  /** Phần chữ "và N ảnh" gắn vào thông báo đã xoá. */
+  const chuAnhDaXoa = (kq: { daXoa: number }) =>
+    kq.daXoa > 0 ? ` và ${kq.daXoa} ảnh trên Cloudinary` : "";
 
   /**
    * XOÁ ẢNH VĨNH VIỄN — chỉ admin, và xoá là xoá thật.
@@ -4716,8 +4841,7 @@ export default function App() {
   const xoaAnhVinhVien = async (a: AnhThuVien) => {
     if (!isOwner || dangXoaAnh) return;
     const url = a.url;
-    const publicId = publicIdTuUrl(url);
-    if (!publicId) {
+    if (!publicIdTuUrl(url)) {
       alert(
         "Tấm này không nằm trên kho Cloudinary của app (ảnh cũ nhúng trong dữ liệu), nên không xoá theo đường này được.",
       );
@@ -4736,33 +4860,25 @@ export default function App() {
             ? `CẢNH BÁO: ${phieuMatDuyet.map((x) => x.code).join(", ")} sẽ KHÔNG CÒN ẢNH KÝ — ` +
               `phiếu quay về chưa duyệt và hàng trên phiếu RA KHỎI TỒN KHO ngay.\n\n`
             : "") +
-          (a.chiConTrongSo && !giaoDich.length && !phieu.length
-            ? `Tấm này không còn gắn đơn nào. Nhìn kỹ ảnh trước khi xoá: nếu kho Cloudinary dùng chung với việc khác thì đây có thể là ảnh của việc đó.\n\n`
-            : "") +
+
           `Không khôi phục lại được.`,
       )
     )
       return;
 
     setDangXoaAnh(true);
-    try {
-      const r = await callAiApi("/api/anh/xoa", { url });
-      const d: any = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
-    } catch (e) {
+    const kq = await xoaAnhTrenMayChu([url]);
+    if (kq.daXoa < 1) {
       setDangXoaAnh(false);
       alert(
-        `CHƯA XOÁ — ảnh vẫn còn nguyên.\n\n${e instanceof Error ? e.message : String(e)}`,
+        `CHƯA XOÁ — ảnh vẫn còn nguyên.\n\n${kq.loi || "Tấm này không thuộc kho ảnh của app."}`,
       );
       return;
     }
 
     try {
-      const idSo = idSoAnh(publicId);
-      daXoaAnhRef.current.add(idSo);
       const now = new Date().toISOString();
       const batch = writeBatch(db);
-      batch.delete(doc(db, KHO_SO_ANH, idSo));
       giaoDich.forEach((t) => {
         const con = gomAnh(t).filter((u) => u !== url);
         batch.update(doc(db, "transactions", t.id), {
@@ -4789,81 +4905,6 @@ export default function App() {
       );
     } finally {
       setDangXoaAnh(false);
-    }
-  };
-
-  /**
-   * TÌM LẠI ẢNH MỒ CÔI TRÊN CLOUDINARY.
-   *
-   * Những tấm mất đường nối từ trước khi có sổ ảnh vẫn nằm nguyên trên máy chủ
-   * ảnh. Liệt kê kho, tấm nào sổ và dữ liệu sống đều không biết thì ghi vào sổ
-   * với chiều rỗng — chúng hiện ở mục "Chưa gắn đơn" để admin xem rồi quyết.
-   *
-   * Mốc 01/05/2026: tệp BBGN sớm nhất của kho là tháng 5. Kho Cloudinary có
-   * thể dùng chung với việc khác, mốc này để khỏi kéo ảnh cũ của việc khác vào.
-   */
-  const MOC_ANH_SOM_NHAT = "2026-05-01";
-  const [dangTimMoCoi, setDangTimMoCoi] = useState(false);
-  const timAnhMoCoi = async () => {
-    if (!isOwner || dangTimMoCoi) return;
-    setDangTimMoCoi(true);
-    try {
-      const r = await callAiApi("/api/anh/danh-sach", {
-        tuNgay: MOC_ANH_SOM_NHAT,
-      });
-      const d: any = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
-      const tep: TepCloudinary[] = Array.isArray(d?.tep) ? d.tep : [];
-
-      // Ảnh dữ liệu sống còn trỏ tới thì vào sổ theo đường thường (có đủ
-      // ngày, đơn vị, khoá lượt giao), không vào mục mồ côi.
-      await damBaoSoAnh(transactions, slips);
-      const daBiet = [
-        ...soAnhRef.current.map((b) => ({ id: b.id })),
-        ...[...daGhiSoRef.current].map((id) => ({ id })),
-        ...[...daXoaAnhRef.current].map((id) => ({ id })),
-        ...dongSoTuDuLieu(transactions, slips, "", "", KHO_ANH).map((b) => ({
-          id: b.id,
-        })),
-      ];
-      const moi = dongMoCoiTuCloudinary(
-        tep,
-        daBiet,
-        currentUserProfile?.email || user || "",
-        new Date().toISOString(),
-      );
-
-      const CHUNK = 400;
-      for (let i = 0; i < moi.length; i += CHUNK) {
-        const batch = writeBatch(db);
-        moi.slice(i, i + CHUNK).forEach((b) => {
-          const { id, ...duLieu } = b;
-          batch.set(doc(db, KHO_SO_ANH, id), duLieu);
-        });
-        await batch.commit();
-        moi.slice(i, i + CHUNK).forEach((b) => daGhiSoRef.current.add(b.id));
-      }
-
-      if (moi.length) {
-        setGalleryFilter("CHUA_GAN");
-        setGalleryTuNgay("");
-        setGalleryDenNgay("");
-      }
-      alert(
-        `Kho Cloudinary có ${tep.length} tấm tải lên từ ${MOC_ANH_SOM_NHAT}.\n\n` +
-          (moi.length
-            ? `Tìm lại được ${moi.length} tấm mồ côi — đã đưa vào mục "Chưa gắn đơn" của Thư viện ảnh.`
-            : "Không có tấm mồ côi nào: mọi tệp đều đã có trong sổ ảnh.") +
-          (d?.conNua
-            ? "\n\nKho còn nhiều hơn 10.000 tấm nên chưa liệt kê hết — báo lại để soát tiếp."
-            : ""),
-      );
-    } catch (e) {
-      alert(
-        `Chưa tìm được.\n\n${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
-      setDangTimMoCoi(false);
     }
   };
 
@@ -5028,12 +5069,7 @@ export default function App() {
       // thứ tự hoàn thành không theo thứ tự trên lưới.
       tep.sort((a, b) => a.ten.localeCompare(b.ten));
       const zip = taoZip(tep);
-      const chieu =
-        galleryFilter === "IN"
-          ? "nhap-kho"
-          : galleryFilter === "OUT"
-            ? "xuat-kho"
-            : "chua-gan-don";
+      const chieu = galleryFilter === "IN" ? "nhap-kho" : "xuat-kho";
       const khoang =
         galleryTuNgay || galleryDenNgay
           ? `-${galleryTuNgay || "dau"}-den-${galleryDenNgay || "nay"}`
@@ -5626,16 +5662,15 @@ export default function App() {
     // Tờ biên bản thường gắn chung cho cả lượt giao: chỉ báo mất khi KHÔNG còn
     // dòng nào khác dùng nó.
     const dongXoa = transactions.find((t) => t.id === id);
-    const anhMat = anhSeMatLienKet(
-      dongXoa ? [gomAnh(dongXoa)] : [],
-      transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
-    );
+    const anhMat = anhSeMatLienKet(dongXoa ? [gomAnh(dongXoa)] : [], [
+      ...transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
+      ...slips.map((sl) => sl.signedPhotoUrls || []),
+    ]);
     if (
       !window.confirm(
         `Anh có chắc chắn muốn xóa giao dịch của sản phẩm "${productName}" này không?` +
           (anhMat.length > 0
-            ? `\n\n${anhMat.length} ảnh biên bản của dòng này KHÔNG mất: được giữ trong sổ ảnh ` +
-              `và vẫn hiện trong Thư viện ảnh. Muốn xoá ảnh thật thì admin xoá trong Thư viện ảnh.`
+            ? `\n\nXOÁ LUÔN ${anhMat.length} ảnh biên bản chỉ dòng này dùng, trên Cloudinary.`
             : ""),
       )
     )
@@ -5645,7 +5680,9 @@ export default function App() {
       // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
       if (dongXoa) await damBaoSoAnh([dongXoa]);
       await deleteDoc(doc(db, "transactions", id));
-      showNotification("Đã xóa giao dịch thành công");
+      const kqAnh = await xoaAnhTrenMayChu(anhMat);
+      showNotification(`Đã xóa giao dịch${chuAnhDaXoa(kqAnh)}`);
+      baoAnhChuaXoa(kqAnh);
     } catch (err) {
       alert(
         handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`),
@@ -8902,10 +8939,10 @@ export default function App() {
                       </Button>
 
                       <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
-                        Ảnh trên Cloudinary không bị xoá — đó là chứng từ đã ký,
-                        giữ lại còn dấu vết để tra. Chỉ bỏ liên kết trong cơ sở
-                        dữ liệu. Muốn xoá cả tồn đầu kỳ thì dùng "Dọn sạch" ở
-                        thanh bên. Không khôi phục lại được.
+                        Xoá luôn ảnh phiếu đã ký trên Cloudinary — dữ liệu và
+                        ảnh đi một cụm. Chỉ muốn nạp lại số liệu thì nạp đè tệp,
+                        không cần xoá. Muốn xoá cả tồn đầu kỳ thì dùng "Dọn
+                        sạch" ở thanh bên. Không khôi phục lại được.
                       </p>
                     </div>
                   </Card>
@@ -9735,11 +9772,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   <div className="shrink-0">
                     <h2 className="text-3xl font-black text-slate-900 tracking-tight italic font-serif uppercase">
                       THƯ VIỆN ẢNH{" "}
-                      {galleryFilter === "IN"
-                        ? "NHẬP KHO"
-                        : galleryFilter === "OUT"
-                          ? "XUẤT KHO"
-                          : "CHƯA GẮN ĐƠN"}
+                      {galleryFilter === "IN" ? "NHẬP KHO" : "XUẤT KHO"}
                     </h2>
                     <p className="text-[11px] font-black text-slate-400 mt-2 uppercase tracking-[0.18em]">
                       {galleryFilter === "IN"
@@ -9844,28 +9877,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       >
                         Xuất kho
                       </button>
-                      {/*
-                        ẢNH CHƯA GẮN ĐƠN — tệp tìm lại trên Cloudinary mà không
-                        còn đơn nào trỏ tới. Chỉ hiện khi có, để ngày thường
-                        thanh chọn vẫn gọn hai nút.
-                      */}
-                      {(soAnhChuaGan > 0 || galleryFilter === "CHUA_GAN") && (
-                        <button
-                          onClick={() => {
-                            setGalleryFilter("CHUA_GAN");
-                            setGalleryDonVi("");
-                            setGalleryBoPhan("");
-                          }}
-                          className={cn(
-                            "flex-1 md:px-6 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap",
-                            galleryFilter === "CHUA_GAN"
-                              ? "bg-white text-slate-700 shadow-xl border border-slate-100"
-                              : "text-slate-400 hover:text-slate-600",
-                          )}
-                        >
-                          Chưa gắn đơn ({formatNumber(soAnhChuaGan)})
-                        </button>
-                      )}
                     </div>
 
                     {/* Lọc theo đơn vị — chỉ chiều xuất kho mới có đối tác
@@ -9967,26 +9978,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                         </>
                       )}
                     </button>
-
-                    {/*
-                      TÌM ẢNH MỒ CÔI — chỉ admin. Tệp còn trên Cloudinary mà
-                      đường nối đã mất từ những lần xoá trước khi có sổ ảnh.
-                    */}
-                    {isOwner && (
-                      <button
-                        onClick={timAnhMoCoi}
-                        disabled={dangTimMoCoi}
-                        title="Liệt kê kho Cloudinary, đưa những tấm không còn gắn đơn nào vào mục Chưa gắn đơn (chỉ admin)"
-                        className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {dangTimMoCoi ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Search className="w-4 h-4" />
-                        )}
-                        Tìm ảnh mồ côi
-                      </button>
-                    )}
 
                     {/*
                       SOÁT ẢNH — hỏi từng tấm rồi gom theo MÃ LỖI THẬT.
