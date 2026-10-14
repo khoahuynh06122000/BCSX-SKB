@@ -30,6 +30,7 @@
 
 import type { Product, Transaction } from "../types";
 import { nhomCuaBoPhan } from "./nhomBNC";
+import { ngayCham } from "./oNgay";
 
 /** Mã kho nhận hàng của một điểm bán. */
 export interface KhoDiemBan {
@@ -206,21 +207,6 @@ export interface DungFileDieuChuyenInput {
 }
 
 const ngayCua = (iso: string): string => String(iso ?? "").slice(0, 10);
-
-/**
- * `2026-08-27` → `27.08.2026`, đúng định dạng Sheet3 yêu cầu.
- *
- * Cắt chuỗi chứ không dựng `Date`: dựng Date rồi format lại thì lệch một ngày ở
- * hai đầu biên vì múi giờ, mà ngày chứng từ lệch một ngày là sai kỳ hạch toán.
- *
- * Tên cũ `ngayDDMMYYYY` trùng với hàm cùng tên ở sapTemplate.ts mà ra định
- * dạng khác ("27082026", không chấm) — import nhầm là tệp ra sai khuôn mà không
- * báo lỗi gì. Đổi tên 14/10/2026 cho tên nói đúng kết quả.
- */
-export function ngayCham(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
-}
 
 /** Tiêu đề chứng từ: `ĐC Bia LHB 28.07`, đúng công thức trong tệp mẫu. */
 export function tieuDeChungTu(viet: string, iso: string): string {

@@ -50,6 +50,7 @@ import {
   PRICE_TABLE,
   type InvoiceUnit,
 } from "./invoice";
+import { ngayCham } from "./oNgay";
 
 /**
  * Một đợt chốt hóa đơn. Ngày dạng `yyyy-MM-dd`.
@@ -94,12 +95,6 @@ export function hangMatHang(maVatTu: string, dvt: InvoiceUnit): number {
   return (dvt === "LON" ? 1000 : 0) + (i < 0 ? 900 : i);
 }
 
-/** `2026-08-01` → `01.08.2026`. Chuỗi rỗng nếu ngày không đọc được. */
-export function ngayVietNam(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
-}
-
 /**
  * Nhãn cột "Ngày giao bia".
  *
@@ -108,8 +103,8 @@ export function ngayVietNam(iso: string): string {
  * ghi, và bảng này để dán vào file gốc.
  */
 export function nhanNgayGiao(tuNgay: string, denNgay: string): string {
-  const a = ngayVietNam(tuNgay);
-  const b = ngayVietNam(denNgay);
+  const a = ngayCham(tuNgay);
+  const b = ngayCham(denNgay);
   if (!a || !b) return a || b;
   if (a === b) return a;
   return `${a.slice(0, 5)}-${b.slice(0, 5)}`;
@@ -439,7 +434,7 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
     );
     if (that?.soHoaDon) {
       soTheoDonVi.set(k, that.soHoaDon);
-      ngayTheoDonVi.set(k, ngayVietNam(that.ngayHoaDon || d.denNgay));
+      ngayTheoDonVi.set(k, ngayCham(that.ngayHoaDon || d.denNgay));
     } else {
       soTheoDonVi.set(k, goiY);
       chuaCoSoThat += 1;
@@ -455,7 +450,7 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
       ngayGiaoBia: nhanNgayGiao(d.tuNgay, d.denNgay),
       ngayHoaDon:
         ngayTheoDonVi.get(`${g.dotIndex}|${g.maBp || g.donVi}`) ||
-        ngayVietNam(d.denNgay),
+        ngayCham(d.denNgay),
       stt: i + 1,
       donVi: g.donVi,
       maVatTu: g.maVatTu,

@@ -10,7 +10,7 @@ import {
 import type { Partner, Product, Transaction } from "../types";
 import type { HoaDonGhiNhan } from "../lib/hoaDon";
 import { invoiceUnitOf } from "../lib/invoice";
-import { ngayVietNam } from "../lib/congNo";
+import { ngayCham } from "../lib/oNgay";
 import { taoWorkbookCongNo } from "../lib/congNoExcel";
 import { XLSXDep } from "../lib/excelDep";
 import {
@@ -241,7 +241,7 @@ export default function TraCuuHoaDon({
                     key={h.id}
                     className="pl-2 pr-1 py-1 bg-white border border-amber-200 rounded-lg text-[12px] font-black font-mono text-amber-900 inline-flex items-center gap-1.5"
                   >
-                    {h.soHoaDon} · {h.donVi} · {ngayVietNam(h.ngayHoaDon)}
+                    {h.soHoaDon} · {h.donVi} · {ngayCham(h.ngayHoaDon)}
                     {/*
                       Nút xoá CHỈ hiện ở đây — tức là chỉ ở hóa đơn mồ côi, và
                       chỉ với chủ sở hữu. Hóa đơn còn dựng được dòng hàng thì

@@ -37,11 +37,11 @@ import type { Partner, Product, Transaction } from "../types";
 import {
   dungBangCongNo,
   nhanNgayGiao,
-  ngayVietNam,
   type BangCongNo,
   type DongCongNo,
   type DotChot,
 } from "./congNo";
+import { ngayCham } from "./oNgay";
 import type { HoaDonGhiNhan } from "./hoaDon";
 
 /** Một hóa đơn đã phát hành, kèm các dòng hàng hóa dựng lại được. */
@@ -447,8 +447,8 @@ export function traCuuHoaDon(input: TraCuuInput): KetQuaTraCuu {
 
 /** Tên tệp tải về: `Hoa don da xuat 01.08.2026-31.08.2026.xlsx`. */
 export function tenTepTraCuu(tuNgay: string, denNgay: string): string {
-  const a = ngayVietNam(tuNgay);
-  const b = ngayVietNam(denNgay);
+  const a = ngayCham(tuNgay);
+  const b = ngayCham(denNgay);
   if (a && b) return `Hoa don da xuat ${a}-${b}.xlsx`;
   if (a) return `Hoa don da xuat tu ${a}.xlsx`;
   if (b) return `Hoa don da xuat den ${b}.xlsx`;

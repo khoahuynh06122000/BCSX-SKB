@@ -30,7 +30,7 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import type { DongCongNo } from "../lib/congNo";
-import { ngayVn } from "../lib/soPhieu";
+import { ngayCham } from "../lib/oNgay";
 import { cn, formatNumber } from "../lib/utils";
 import ONgay from "./ONgay";
 
@@ -173,7 +173,7 @@ export default function BangChotHoaDon({
                     />
                   ) : (
                     <span className="font-mono text-slate-700">
-                      {k.ngayHoaDon ? ngayVn(k.ngayHoaDon) : "—"}
+                      {k.ngayHoaDon ? ngayCham(k.ngayHoaDon) : "—"}
                     </span>
                   )}
                 </td>

@@ -21,7 +21,6 @@ import {
   billableTransactions,
   dungBangCongNo,
   hangMatHang,
-  ngayVietNam,
   nhanNgayGiao,
   soHoaDonThu,
   tenTrenHoaDon,
@@ -29,6 +28,7 @@ import {
   oCuaDong,
   type DotChot,
 } from "../congNo";
+import { ngayCham } from "../oNgay";
 
 let pass = 0;
 let fail = 0;
@@ -55,8 +55,8 @@ function gan(ten: string, thuc: number, mong: number, saiSo = 0.5) {
 
 // ---------------------------------------------------------------- tiện ích
 
-kiemTra("ngayVietNam", ngayVietNam("2026-08-15"), "15.08.2026");
-kiemTra("ngayVietNam rong", ngayVietNam(""), "");
+kiemTra("ngayCham", ngayCham("2026-08-15"), "15.08.2026");
+kiemTra("ngayCham rong", ngayCham(""), "");
 kiemTra(
   "nhan nhieu ngay",
   nhanNgayGiao("2026-08-01", "2026-08-12"),

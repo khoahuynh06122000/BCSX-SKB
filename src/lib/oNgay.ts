@@ -79,3 +79,18 @@ export function goNgay(raw: string): string {
   return `${so.slice(0, 2)}/${so.slice(2, 4)}/${so.slice(4)}`;
 }
 
+/**
+ * `2026-08-27` (hoặc `2026-08-27T15:00:00.000Z`) → `27.08.2026` — dạng có dấu
+ * chấm mà các tệp của bộ phận dùng (công nợ, điều chuyển, sổ số phiếu).
+ *
+ * Cắt chuỗi chứ không dựng `Date`: dựng Date rồi format lại thì lệch một ngày
+ * ở hai đầu biên vì múi giờ, mà ngày chứng từ lệch một ngày là sai kỳ hạch
+ * toán. Không đọc được thì trả rỗng.
+ *
+ * Trước 15/10/2026 app có BA bản y hệt hàm này (`ngayVietNam` ở congNo.ts,
+ * `ngayVn` ở soPhieu.ts, `ngayCham` ở dieuChuyen.ts) — gộp về đây.
+ */
+export function ngayCham(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}

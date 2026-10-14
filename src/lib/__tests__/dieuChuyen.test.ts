@@ -25,11 +25,11 @@ import {
   dungFileDieuChuyen,
   KHO_DIEM_BAN,
   khungDong,
-  ngayCham,
   SO_COT_DC,
   tieuDeChungTu,
   tomTatDieuChuyen,
 } from "../dieuChuyen";
+import { ngayCham } from "../oNgay";
 import { kieuCuaCot, themKieuDep } from "../dieuChuyenKieu";
 import {
   boCalcChainDc,

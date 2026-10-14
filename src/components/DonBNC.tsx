@@ -17,7 +17,7 @@ import {
   type MaNhomBNC,
 } from "../lib/nhomBNC";
 import { taoSheetDep, XLSXDep } from "../lib/excelDep";
-import { ngayVn } from "../lib/soPhieu";
+import { ngayCham } from "../lib/oNgay";
 import mauDieuChuyenUrl from "../assets/mau-dieu-chuyen.xlsx?url";
 import { dungFileDieuChuyen, tomTatDieuChuyen } from "../lib/dieuChuyen";
 import {
@@ -218,7 +218,7 @@ export default function DonBNC({ transactions, products, partners }: Props) {
           lam1(o.litQuyDoi),
           lam1(o.haoHut),
           o.donChuaXong,
-          o.lanCuoi ? ngayVn(o.lanCuoi) : "",
+          o.lanCuoi ? ngayCham(o.lanCuoi) : "",
         ]),
         dongTong: [
           "",
@@ -759,7 +759,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                         </option>
                                         {dsNgay.map((n) => (
                                           <option key={n} value={n}>
-                                            {ngayVn(n)}
+                                            {ngayCham(n)}
                                           </option>
                                         ))}
                                       </select>
@@ -840,7 +840,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                                             className="border-t border-slate-100"
                                           >
                                             <td className="px-3.5 py-2.5 font-mono whitespace-nowrap">
-                                              {ngayVn(c.ngay)}
+                                              {ngayCham(c.ngay)}
                                             </td>
                                             <td className="px-3.5 py-2.5 text-slate-900">
                                               {c.tenHang}
@@ -925,7 +925,7 @@ Những dòng bị giữ lại KHÔNG có trong tệp. Vẫn tải tệp cho ph�
                     className="border-t border-slate-100 hover:bg-slate-50/70 transition-colors"
                   >
                     <td className="px-3.5 py-2.5 font-mono whitespace-nowrap">
-                      {ngayVn(c.ngay)}
+                      {ngayCham(c.ngay)}
                     </td>
                     {/*
                       Địa điểm trống nghĩa là ghi chú không mang điểm nhận —

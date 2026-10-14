@@ -498,12 +498,6 @@ export function tomTatSoPhieu(ds: GhiSoPhieu[]): TomTatSoPhieu {
   };
 }
 
-/** `2026-08-31` → `31.08.2026`. */
-export function ngayVn(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
-}
-
 /** `2026-08-31T09:22:00.000Z` → `31.08.2026 16:22` (giờ máy người xem). */
 export function ngayGioVn(iso: string): string {
   const t = Date.parse(String(iso ?? ""));

@@ -33,12 +33,12 @@ import {
   locSoPhieu,
   loaiHuyCua,
   ngayGioVn,
-  ngayVn,
   soPhieuHuy,
   thuTuKeTiep,
   tomTatSoPhieu,
   type GhiSoPhieu,
 } from "../soPhieu";
+import { ngayCham } from "../oNgay";
 import {
   khoaBoDem,
   laBoDemChieuNhap,
@@ -452,8 +452,8 @@ kiemTra("thong ke danh sach rong", tomTatSoPhieu([]).tongPhieu, 0);
 
 // ------------------------------------------------- hiển thị ngày
 
-kiemTra("ngay VN", ngayVn("2026-08-31"), "31.08.2026");
-kiemTra("ngay VN hong", ngayVn("hom nay"), "");
+kiemTra("ngay VN", ngayCham("2026-08-31"), "31.08.2026");
+kiemTra("ngay VN hong", ngayCham("hom nay"), "");
 dung("ngay gio VN co dinh dang", /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/.test(
   ngayGioVn("2026-08-31T09:22:00.000Z"),
 ));

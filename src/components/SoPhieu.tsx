@@ -20,13 +20,13 @@ import {
   laLoaiHuy,
   locSoPhieu,
   ngayGioVn,
-  ngayVn,
   soPhieuHuy,
   tomTatSoPhieu,
   type BoLocSoPhieu,
   type GhiSoPhieu,
   type LoaiPhieu,
 } from "../lib/soPhieu";
+import { ngayCham } from "../lib/oNgay";
 import { taoSheetDep, XLSXDep, type BangDep } from "../lib/excelDep";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -248,7 +248,7 @@ export default function SoPhieu({
       hang: ds.map((g) => [
         g.soPhieu,
         TEN_LOAI[g.loai],
-        ngayVn(g.documentDate),
+        ngayCham(g.documentDate),
         ngayGioVn(g.enteredOn),
         g.donVi || "",
         g.nguon,
@@ -299,7 +299,7 @@ export default function SoPhieu({
     if (
       !window.confirm(
         `Cấp số cho ${chuaCoSo.length} chứng từ chưa có số phiếu?\n\n` +
-          `Chứng từ từ ngày ${ngayVn(capBuTuNgay)} trở đi, cấp theo thứ tự ngày tăng dần.\n\n` +
+          `Chứng từ từ ngày ${ngayCham(capBuTuNgay)} trở đi, cấp theo thứ tự ngày tăng dần.\n\n` +
           `Số đã cấp thì KHÔNG thu hồi được — chỉ hủy bằng phiếu hủy.`,
       )
     )
@@ -696,7 +696,7 @@ export default function SoPhieu({
                         })()}
                       </td>
                       <td className="py-3.5 px-4 text-[12px] font-mono font-bold text-slate-700 whitespace-nowrap">
-                        {ngayVn(g.documentDate)}
+                        {ngayCham(g.documentDate)}
                       </td>
                       <td className="py-3.5 px-4 text-[12px] font-mono text-slate-400 whitespace-nowrap">
                         {ngayGioVn(g.enteredOn)}
