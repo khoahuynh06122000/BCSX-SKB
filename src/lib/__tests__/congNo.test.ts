@@ -19,6 +19,7 @@
 import type { Partner, Product, Transaction } from "../../types";
 import { exciseSplit } from "../invoice";
 import {
+  billableTransactions,
   dungBangCongNo,
   hangMatHang,
   ngayVietNam,
@@ -429,6 +430,25 @@ kiemTra(
     b3.dong[0].soHoaDon,
     "C26TKB#00000192",
   );
+}
+
+// ================================ dong xuat duoc len hoa don (tu sapExport)
+{
+  const mau = (id: string, o: Partial<Transaction> = {}) =>
+    ({ id, type: "OUT", status: "completed", ...o }) as Transaction;
+  const all = [
+    mau("ok1"),
+    mau("ok2"),
+    mau("dangdi", { status: "in_transit" }),
+    mau("nhap", { type: "IN" }),
+    mau("daudky", { type: "OPENING" }),
+    mau("haohut", { type: "LOSS" }),
+    mau("hong", { type: "DAMAGE" }),
+  ];
+  kiemTra("chi xuat kho da giao xong", billableTransactions(all).map((t) => t.id), ["ok1", "ok2"]);
+  // Hang dang tren duong chua giao xong: xuat hoa don truoc la xuat cho viec
+  // chua hoan thanh.
+  kiemTra("hang dang van chuyen bi loai", billableTransactions(all).some((t) => t.id === "dangdi"), false);
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

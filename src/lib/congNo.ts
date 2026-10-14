@@ -50,7 +50,6 @@ import {
   PRICE_TABLE,
   type InvoiceUnit,
 } from "./invoice";
-import { billableTransactions } from "./sapExport";
 
 /**
  * Một đợt chốt hóa đơn. Ngày dạng `yyyy-MM-dd`.
@@ -289,10 +288,25 @@ function ngayKhoa(iso: string): string {
 }
 
 /**
+ * Các dòng xuất kho được phép lên hóa đơn.
+ *
+ * Chỉ `OUT`, và bỏ hàng còn `in_transit`: hàng đang trên đường chưa giao xong,
+ * xuất hóa đơn trước là xuất cho việc chưa hoàn thành. Hao hụt và hàng hỏng
+ * (`LOSS`, `DAMAGE`) không phải bán, nên cũng không lên hóa đơn.
+ *
+ * Chuyển về đây từ `sapExport.ts` (14/10/2026) khi mảng lệnh SAP gỡ hẳn —
+ * bảng Chốt là nơi duy nhất còn dùng.
+ */
+export function billableTransactions(transactions: Transaction[]): Transaction[] {
+  return transactions.filter(
+    (t) => t.type === "OUT" && t.status !== "in_transit",
+  );
+}
+
+/**
  * Dựng toàn bộ bảng "Chốt" từ giao dịch xuất kho.
  *
- * Lấy dòng nào: dùng chung `billableTransactions()` với phần xuất hóa đơn SAP —
- * chỉ `OUT` đã giao xong. Hao hụt (`LOSS`) và hàng hỏng không phải bán nên
+ * Lấy dòng nào: `billableTransactions()` — chỉ `OUT` đã giao xong. Hao hụt (`LOSS`) và hàng hỏng không phải bán nên
  * không lên hóa đơn, còn hàng đang đi đường thì chưa giao xong nên chưa lên,
  * nhưng có bao nhiêu dòng như vậy thì báo ra chứ không im lặng bỏ.
  */
