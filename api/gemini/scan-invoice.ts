@@ -9,7 +9,7 @@
  * chu, khong lot ra trinh duyet vi khong co tien to VITE_).
  */
 import { GoogleGenAI, Type } from '@google/genai';
-import { requireUser } from '../_auth';
+import { requireUser } from '../_auth.js';
 
 export const config = {
   api: {

@@ -19,14 +19,14 @@
  * Firestore chặn riêng, cũng chỉ admin.
  */
 
-import { requireOwner } from "../_auth";
+import { requireOwner } from "../_auth.js";
 import {
   cauHinhCloudinary,
   ThieuCauHinh,
   TOI_DA_MOT_LUOT,
   xoaNhieuAnhCloudinary,
-} from "../_cloudinary";
-import { publicIdTuUrl } from "../../src/lib/soAnh";
+} from "../_cloudinary.js";
+import { publicIdTuUrl } from "../../src/lib/soAnh.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
