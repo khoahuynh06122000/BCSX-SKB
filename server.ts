@@ -4,6 +4,8 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { requireUser } from "./api/_auth";
+import xoaAnhHandler from "./api/anh/xoa";
+import danhSachAnhHandler from "./api/anh/danh-sach";
 
 dotenv.config();
 
@@ -95,6 +97,10 @@ Lưu ý:
     res.status(500).json({ error: "Failed to scan image" });
   }
 });
+
+// So anh: cung hai ham Vercel dung, de chay tai may khong lech voi that.
+app.post("/api/anh/xoa", (req, res) => xoaAnhHandler(req, res));
+app.post("/api/anh/danh-sach", (req, res) => danhSachAnhHandler(req, res));
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

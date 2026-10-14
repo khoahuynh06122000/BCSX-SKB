@@ -487,5 +487,61 @@ kiemTra(
   xuat.length,
 );
 
+// =============================== SO ANH: xoa don thi anh van con trong Thu vien
+
+{
+  const URL_X = "https://res.cloudinary.com/x/image/upload/v1/bien-ban.jpg";
+  const URL_N = "https://res.cloudinary.com/x/image/upload/v1/phieu.jpg";
+  const URL_M = "https://res.cloudinary.com/x/image/upload/v1/mo-coi.jpg";
+  const so = [
+    { id: "bien-ban", url: URL_X, publicId: "bien-ban", chieu: "XUAT" as const, ngay: "2026-10-03", partnerId: "AD0103-1901", partnerName: "BNC · 1901", nhom: "multi-1", tieuDe: "Bia Wings Dark Lager", nguon: "giao-dich" as const, vaoSoLuc: "", vaoSoBoi: "" },
+    { id: "phieu", url: URL_N, publicId: "phieu", chieu: "NHAP" as const, ngay: "2026-10-01", partnerId: "", partnerName: "", nhom: "PN-1", tieuDe: "Phiếu PN-1", nguon: "phieu" as const, vaoSoLuc: "", vaoSoBoi: "" },
+    { id: "mo-coi", url: URL_M, publicId: "mo-coi", chieu: "" as const, ngay: "2026-09-20", partnerId: "", partnerName: "", nhom: "", tieuDe: "Ảnh chưa gắn đơn", nguon: "cloudinary" as const, vaoSoLuc: "", vaoSoBoi: "" },
+  ];
+
+  // Khong con giao dich nao (da xoa toan bo) — anh van phai hien.
+  const xuat = dungAnhThuVien({ transactions: [], slips: [], loai: "OUT", tuNgay: "", denNgay: "", soAnh: so });
+  kiemTra("xoa het giao dich, anh xuat van hien", xuat.map((a) => a.url), [URL_X]);
+  kiemTra("danh dau la chi con trong so", xuat[0].chiConTrongSo, true);
+  kiemTra("van loc duoc theo don vi cu", xuat[0].donVi, "BNC · 1901");
+  kiemTra("chu phu noi ro don da xoa", /đơn đã xoá/.test(xuat[0].phu), true);
+
+  const nhap = dungAnhThuVien({ transactions: [], slips: [], loai: "IN", tuNgay: "", denNgay: "", soAnh: so });
+  kiemTra("anh nhap chi hien o chieu nhap", nhap.map((a) => a.url), [URL_N]);
+
+  const chuaGan = dungAnhThuVien({ transactions: [], slips: [], loai: "CHUA_GAN", tuNgay: "", denNgay: "", soAnh: so });
+  kiemTra("anh mo coi chi hien o muc chua gan", chuaGan.map((a) => a.url), [URL_M]);
+
+  // Don con song thi KHONG hien trung lan nua tu so.
+  const conSong = dungAnhThuVien({
+    transactions: [
+      {
+        id: "t1",
+        date: "2026-10-03T08:00:00.000Z",
+        type: "OUT",
+        productId: "p",
+        productName: "Bia Wings Dark Lager",
+        category: "Lít",
+        quantity: 1,
+        partnerId: "AD0103-1901",
+        partnerName: "BNC · 1901",
+        createdBy: "x",
+        evidencePhotoUrls: [URL_X],
+      } as never,
+    ],
+    slips: [],
+    loai: "OUT",
+    tuNgay: "",
+    denNgay: "",
+    soAnh: so,
+  });
+  kiemTra("don con song thi chi mot tam, khong trung", conSong.length, 1);
+  kiemTra("tam do la tam cua don song", conSong[0].chiConTrongSo, undefined);
+
+  // Loc ngay van ap cho anh chi con trong so.
+  const ngoaiKhoang = dungAnhThuVien({ transactions: [], slips: [], loai: "OUT", tuNgay: "2026-10-10", denNgay: "", soAnh: so });
+  kiemTra("loc ngay ap ca cho anh trong so", ngoaiKhoang.length, 0);
+}
+
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

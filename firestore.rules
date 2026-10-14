@@ -342,6 +342,32 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    /*
+     * SO ANH MINH CHUNG — anh co cho dung rieng, khong song nho giao dich.
+     *
+     * Nguyen nhan goc cua moi lan mat anh truoc day: duong dan anh CHI nam
+     * trong tai lieu giao dich / phieu, nen xoa hay ghi de tai lieu ay la ngam
+     * xoa luon anh. So nay KHONG bi xoa theo giao dich. Xem src/lib/soAnh.ts.
+     *
+     * Doc: nhu giao dich — ai xem duoc kho thi doc het, DNC chi doc chieu xuat.
+     *
+     * Tao: ai ghi duoc kho deu dua anh vao so duoc, vi so phai giu moi tam bat
+     * ke ai tai len. Nhung chi duong dan Cloudinary, va chieu rong (anh mo coi
+     * tim lai tren may chu) chi admin tao.
+     *
+     * Sua va XOA: CHI ADMIN. Xoa dong so la buoc cuoi cua xoa anh that — tep
+     * tren Cloudinary do may chu xoa sau cua requireOwner (api/_auth.ts). Hai
+     * ben phai khop: luat chan xoa so, cua may chu chan xoa tep.
+     */
+    match /anh_minh_chung/{id} {
+      allow read: if xemKho()
+        || (laDNC() && resource.data.get('chieu', '') == 'XUAT');
+      allow create: if (ghiNhapKho() || ghiXuatKho())
+        && request.resource.data.get('url', '').matches('^https://res[.]cloudinary[.]com/.+')
+        && (request.resource.data.get('chieu', '') in ['XUAT', 'NHAP'] || isOwner());
+      allow update, delete: if isOwner();
+    }
+
     match /partners/{partnerId} {
       allow read: if isViewer();
       // Them va sua don vi nhan hang la viec cua nguoi xuat kho.

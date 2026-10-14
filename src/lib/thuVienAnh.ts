@@ -27,6 +27,7 @@
 
 import type { ImportSlip, Transaction } from "../types";
 import { laBoPhanBNC, nhomCuaBoPhan, NHOM_BNC, tenNhomBNC } from "./nhomBNC";
+import type { BanGhiAnh } from "./soAnh";
 
 /** Một tấm ảnh đã chuẩn hoá để bày lên lưới, bất kể nó đến từ nguồn nào. */
 export interface AnhThuVien {
@@ -61,6 +62,11 @@ export interface AnhThuVien {
   soDongDungChung?: number;
   /** Chữ phụ gốc, giữ lại để dựng lại khi gộp trùng. */
   phuGoc: string;
+  /**
+   * Tấm này CHỈ CÒN TRONG SỔ ẢNH — đơn từng trỏ tới nó đã bị xoá, hoặc nó là
+   * tệp tìm lại từ Cloudinary. Ảnh vẫn nguyên; chỉ là không còn gắn đơn nào.
+   */
+  chiConTrongSo?: boolean;
 }
 
 /** `2026-08-05T08:00:00Z` → `2026-08-05`, để so với biên ngày người dùng chọn. */
@@ -81,7 +87,16 @@ function gomUrl(...v: (string | undefined | null)[]): string[] {
 export interface ThuVienInput {
   transactions: Transaction[];
   slips: ImportSlip[];
-  loai: "IN" | "OUT";
+  /**
+   * `CHUA_GAN` — ảnh tìm lại từ Cloudinary, chưa biết thuộc chiều nào. Chỉ
+   * đọc từ sổ ảnh.
+   */
+  loai: "IN" | "OUT" | "CHUA_GAN";
+  /**
+   * Sổ ảnh (`anh_minh_chung`). Có sổ thì ảnh của đơn đã xoá vẫn hiện — đây là
+   * thứ làm cho Thư viện không mất ảnh được nữa. Xem `soAnh.ts`.
+   */
+  soAnh?: readonly BanGhiAnh[];
   /**
    * Khoảng ngày, dạng `yyyy-MM-dd`. Để trống nghĩa là KHÔNG chặn phía đó.
    *
@@ -156,7 +171,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
         });
       });
     });
-  } else {
+  } else if (loai === "OUT") {
     transactions.forEach((t) => {
       if (t.type !== "OUT") return;
       const anh = gomUrl(t.evidencePhotoUrl, ...(t.evidencePhotoUrls || []));
@@ -174,6 +189,35 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
       });
     });
   }
+
+  /*
+   * ẢNH CHỈ CÒN TRONG SỔ.
+   *
+   * Tấm nào sổ còn giữ mà dữ liệu sống không còn trỏ tới — đơn đã xoá, phiếu
+   * đã gỡ ảnh, tệp tìm lại trên Cloudinary — vẫn phải bày ra. Trước khi có sổ,
+   * xoá đơn là tấm ảnh rơi khỏi Thư viện vĩnh viễn, dù tệp còn nguyên.
+   */
+  const chieuCan = loai === "IN" ? "NHAP" : loai === "OUT" ? "XUAT" : "";
+  const dangSong = new Set(ra.map((a) => a.url));
+  (input.soAnh ?? []).forEach((b) => {
+    if (b.chieu !== chieuCan || !b.url || dangSong.has(b.url)) return;
+    dangSong.add(b.url);
+    const phu =
+      b.nguon === "cloudinary"
+        ? "Tìm lại trên Cloudinary · chưa gắn đơn"
+        : `${b.partnerName ? `${b.partnerName} · ` : ""}đơn đã xoá — ảnh vẫn giữ`;
+    ra.push({
+      id: `so-${b.id}`,
+      url: b.url,
+      date: b.ngay,
+      tieuDe: b.tieuDe || "Ảnh minh chứng",
+      phu,
+      phuGoc: phu,
+      donVi: b.partnerName || "",
+      maDonVi: b.partnerId || "",
+      chiConTrongSo: true,
+    });
+  });
 
   const tu = input.tuNgay.trim();
   const den = input.denNgay.trim();

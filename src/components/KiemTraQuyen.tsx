@@ -150,6 +150,8 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       "slips",
       "partners",
       "diem_ban",
+      // Sổ ảnh: Thư viện ảnh đọc từ đây, nên nghẽn ở đây là "ảnh biến mất".
+      "anh_minh_chung",
     ] as const) {
       const batDau = performance.now();
       try {

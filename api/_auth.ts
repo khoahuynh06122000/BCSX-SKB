@@ -125,3 +125,83 @@ export async function requireUser(req: any, res: any): Promise<VerifiedUser | nu
 
   return user;
 }
+
+/** Email chủ sở hữu gốc — phải khớp `ownerEmail()` trong firestore.rules. */
+const EMAIL_CHU_SO_HUU = "khoa.huynh.06.12.2000@gmail.com";
+
+/**
+ * Đọc vai trò của người gọi trong `users/{uid}`, BẰNG CHÍNH TOKEN CỦA HỌ.
+ *
+ * Gọi Firestore REST với token của người dùng thì luật Firestore áp nguyên
+ * cho lượt đọc này — máy chủ không cần khoá tài khoản dịch vụ, và không thể
+ * đọc được thứ người gọi không được đọc. Hỏng gì cũng trả rỗng: không suy ra
+ * quyền từ một lần mạng hỏng.
+ */
+async function docVaiTro(uid: string, idToken: string): Promise<string> {
+  const project =
+    process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  const db =
+    process.env.VITE_FIREBASE_DATABASE_ID ||
+    process.env.FIREBASE_DATABASE_ID ||
+    "(default)";
+  if (!project || !uid) return "";
+  try {
+    const r = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}` +
+        `/databases/${encodeURIComponent(db)}/documents/users/${encodeURIComponent(uid)}`,
+      { headers: { Authorization: `Bearer ${idToken}` } },
+    );
+    if (!r.ok) return "";
+    const d: any = await r.json().catch(() => null);
+    return String(d?.fields?.role?.stringValue || "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * CỬA CHỈ DÀNH CHO ADMIN — dùng cho những việc không lấy lại được (xoá ảnh
+ * thật trên Cloudinary, liệt kê toàn bộ kho ảnh).
+ *
+ * Admin = chủ sở hữu gốc (theo email trong token Google cấp, không giả được),
+ * HOẶC người mang vai trò OWNER trong `users/{uid}` — đúng y như `isOwner()`
+ * trong firestore.rules. Hai bên phải khớp: luật chặn xoá sổ ảnh, cửa này
+ * chặn xoá tệp; lệch một bên là mở một nửa cánh cửa.
+ *
+ * KHÔNG áp danh sách `AI_ALLOWED_EMAILS` — đó là hạn mức dùng AI, không liên
+ * quan tới quyền xoá.
+ */
+export async function requireOwner(
+  req: any,
+  res: any,
+): Promise<VerifiedUser | null> {
+  const token = readBearer(req);
+  if (!token) {
+    res.status(401).json({ error: "Thiếu thông tin đăng nhập. Hãy đăng nhập lại rồi thử lại." });
+    return null;
+  }
+  let user: VerifiedUser | null;
+  try {
+    user = await verifyIdToken(token);
+  } catch (e: any) {
+    console.error("Lỗi xác minh token:", e?.message || e);
+    res.status(500).json({ error: "Máy chủ chưa cấu hình đủ để xác minh." });
+    return null;
+  }
+  if (!user) {
+    res.status(401).json({ error: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn." });
+    return null;
+  }
+  if (!user.emailVerified) {
+    res.status(403).json({ error: "Email chưa được xác minh." });
+    return null;
+  }
+
+  const laChuGoc = user.email.toLowerCase() === EMAIL_CHU_SO_HUU;
+  const laOwner = laChuGoc || (await docVaiTro(user.uid, token)) === "OWNER";
+  if (!laOwner) {
+    res.status(403).json({ error: "Chỉ admin (chủ sở hữu) mới được làm việc này." });
+    return null;
+  }
+  return user;
+}
