@@ -100,3 +100,39 @@ export function ghiDeAnh(
   if (sach.length) return dungO(sach);
   return dungO(gomAnh(cu));
 }
+
+/**
+ * NHỮNG TẤM ẢNH SẼ MẤT LIÊN KẾT nếu xoá các bản ghi `xoa`.
+ *
+ * Xoá giao dịch chỉ xoá trong Firestore; tệp ảnh vẫn nằm trên Cloudinary,
+ * nhưng đường nối duy nhất từ app tới nó là đường dẫn trong bản ghi vừa xoá.
+ * Mất đường nối là mất khỏi Thư viện ảnh — và nạp lại tệp Excel KHÔNG gắn lại
+ * được, vì tệp Excel không mang theo ảnh nào.
+ *
+ * Một tờ biên bản thường gắn vào nhiều dòng cùng lượt giao, nên chỉ đếm những
+ * tấm KHÔNG còn bản ghi nào khác (trong `conLai`) trỏ tới. Đếm cả những tấm
+ * còn được dùng thì con số cảnh báo phóng đại, người ta quen mắt rồi bỏ qua.
+ *
+ * Nhận danh sách đường dẫn thô để dùng được cho cả giao dịch (`gomAnh`) lẫn
+ * phiếu nhập (`signedPhotoUrls`).
+ */
+export function anhSeMatLienKet(
+  xoa: readonly (readonly string[])[],
+  conLai: readonly (readonly string[])[],
+): string[] {
+  const conDung = new Set<string>();
+  conLai.forEach((ds) =>
+    ds.forEach((u) => {
+      const s = String(u ?? "").trim();
+      if (s) conDung.add(s);
+    }),
+  );
+  const ra: string[] = [];
+  xoa.forEach((ds) =>
+    ds.forEach((u) => {
+      const s = String(u ?? "").trim();
+      if (s && !conDung.has(s) && !ra.includes(s)) ra.push(s);
+    }),
+  );
+  return ra;
+}

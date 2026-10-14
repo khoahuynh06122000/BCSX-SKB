@@ -56,6 +56,7 @@ const anh = (o: Partial<KetQuaMotAnh> & { ma: number }): KetQuaMotAnh => ({
   date: o.date ?? "2026-09-25T08:00:00.000Z",
   donVi: o.donVi ?? "BNC · 1901",
   ma: o.ma,
+  loi: o.loi,
 });
 
 {
@@ -154,6 +155,23 @@ eq("khong co gi de soat", nhanDinhSoatAnh(tomTatSoatAnh([])), "Không có tấm 
 {
   const bc = baoCaoSoatAnh(tomTatSoatAnh([anh({ ma: 429 })]));
   eq("khong co muc duong dan khi khong mat tam nao", bc.includes("đã mất (404)"), false);
+}
+
+// Ly do may chu ghi phai di tron vao bao cao, kem ngay va don vi.
+{
+  const t = tomTatSoatAnh([
+    anh({ ma: 404, url: "https://a/x.jpg", loi: "Resource not found - x", date: "2026-10-03T08:00:00.000Z", donVi: "ITC" }),
+    anh({ ma: 200 }),
+  ]);
+  eq("ds hong co ly do", t.dsHong, [
+    { url: "https://a/x.jpg", ma: 404, loi: "Resource not found - x", donVi: "ITC", date: "2026-10-03" },
+  ]);
+  eq("bao cao co ly do may chu", baoCaoSoatAnh(t).includes("Resource not found - x"), true);
+}
+{
+  // Khong hoi duoc (ma 0) thi ghi ro, khong in so 0 tron tron.
+  const bc = baoCaoSoatAnh(tomTatSoatAnh([anh({ ma: 0, url: "https://a/y.jpg" })]));
+  eq("ma 0 ghi la khong hoi duoc", bc.includes("không hỏi được"), true);
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

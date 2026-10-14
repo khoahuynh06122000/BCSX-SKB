@@ -35,6 +35,12 @@ export interface KetQuaMotAnh {
    * mạng đứt, hoặc trình duyệt chặn vì thiếu quyền đọc chéo tên miền.
    */
   ma: number;
+  /**
+   * Lý do Cloudinary tự ghi trong header `x-cld-error`, ví dụ
+   * `Resource not found - abc`. Cloudinary cho đọc chéo header này, nên đây là
+   * câu trả lời CỦA CHÍNH MÁY CHỦ chứ không phải app đoán.
+   */
+  loi?: string;
 }
 
 /** Nhóm nguyên nhân — mỗi nhóm cần một cách xử lý khác nhau. */
@@ -101,6 +107,8 @@ export interface TomTatSoatAnh {
   theoDonVi: DongDem[];
   /** Đường dẫn của những tấm 404, để đi tìm lại tờ biên bản. */
   dsMat: string[];
+  /** Mọi tấm hỏng kèm mã và lý do máy chủ ghi — để gửi đi đối chiếu. */
+  dsHong: { url: string; ma: number; loi: string; donVi: string; date: string }[];
 }
 
 function dem(
@@ -133,6 +141,13 @@ export function tomTatSoatAnh(ds: KetQuaMotAnh[]): TomTatSoatAnh {
     theoThang: dem(ds, (k) => String(k.date ?? "").slice(0, 7), true),
     theoDonVi: dem(ds, (k) => k.donVi),
     dsMat: hong.filter((k) => nhomCuaMa(k.ma) === "mat").map((k) => k.url),
+    dsHong: hong.map((k) => ({
+      url: k.url,
+      ma: k.ma,
+      loi: k.loi ?? "",
+      donVi: k.donVi,
+      date: String(k.date ?? "").slice(0, 10),
+    })),
   };
 }
 
@@ -184,6 +199,17 @@ export function baoCaoSoatAnh(t: TomTatSoatAnh): string {
   if (t.dsMat.length) {
     phan.push(
       ["## Đường dẫn của ảnh đã mất (404)", ...t.dsMat].join("\n"),
+    );
+  }
+  if (t.dsHong.length) {
+    phan.push(
+      [
+        "## Từng tấm hỏng — ngày · đơn vị · mã · lý do máy chủ ghi · đường dẫn",
+        ...t.dsHong.map(
+          (h) =>
+            `${h.date} · ${h.donVi} · ${h.ma || "không hỏi được"} · ${h.loi || "—"} · ${h.url}`,
+        ),
+      ].join("\n"),
     );
   }
   return phan.join("\n\n");

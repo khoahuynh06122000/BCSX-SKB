@@ -132,7 +132,12 @@ import {
 } from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
 import { anhThuNho } from "./lib/anhCloudinary";
-import { ghiDeAnh, giuAnhCu } from "./lib/anhMinhChung";
+import {
+  anhSeMatLienKet,
+  ghiDeAnh,
+  giuAnhCu,
+  gomAnh,
+} from "./lib/anhMinhChung";
 import { traLuot, xinLuot } from "./lib/hangDoiAnh";
 import {
   baoCaoSoatAnh,
@@ -1674,6 +1679,21 @@ export default function App() {
       String(h?.soHoaDon || "").trim(),
     ).length;
 
+    /*
+     * BÁO TRƯỚC SỐ ẢNH BIÊN BẢN SẼ BIẾN MẤT KHỎI THƯ VIỆN.
+     *
+     * Hộp thoại cũ báo về hóa đơn mà không nói một chữ nào về ảnh. Xoá xuất
+     * kho rồi nạp lại tệp Excel là quy trình anh Khoa đã làm nhiều lần — và
+     * mỗi lần như vậy mọi tờ biên bản đã gắn vào đơn đều rơi khỏi Thư viện, vì
+     * tệp Excel không mang theo ảnh nào để gắn lại. Tệp vẫn nằm trên
+     * Cloudinary nhưng app mất đường nối tới nó.
+     */
+    const idXoaXuat = new Set(dsXuat.map((t) => t.id));
+    const anhMatXuat = anhSeMatLienKet(
+      dsXuat.map((t) => gomAnh(t)),
+      transactions.filter((t) => !idXoaXuat.has(t.id)).map((t) => gomAnh(t)),
+    );
+
     if (
       !window.confirm(
         `Xoá ${dsXuat.length} giao dịch xuất kho` +
@@ -1685,6 +1705,13 @@ export default function App() {
               `Dòng chi tiết không được lưu — chúng dựng lại từ chính giao dịch xuất kho. ` +
               `Bản ghi hóa đơn vẫn còn (luật không cho xoá), nhưng tra cứu sẽ báo ` +
               `"không dựng lại được dòng nào" cho tới khi nạp lại đúng dữ liệu xuất kho của kỳ đó.` +
+              NGAT
+            : "") +
+          (anhMatXuat.length > 0
+            ? `CẢNH BÁO: ${anhMatXuat.length} ảnh biên bản sẽ BIẾN MẤT KHỎI THƯ VIỆN ẢNH. ` +
+              `Tệp ảnh vẫn nằm trên Cloudinary nhưng app mất đường nối tới nó, và ` +
+              `nạp lại tệp Excel KHÔNG gắn lại được ảnh — tệp Excel không mang theo ảnh nào. ` +
+              `Nên tải ảnh về (Thư viện ảnh → Tải tất cả) TRƯỚC khi xoá.` +
               NGAT
             : "") +
           `Bộ đếm số phiếu xuất cũng đặt lại, nên phiếu xuất sau khi xoá đánh lại từ đầu.\n\n` +
@@ -1766,6 +1793,16 @@ export default function App() {
 
     const conTonDau = transactions.filter((t) => t.type === "OPENING").length;
 
+    // Đếm ảnh sẽ rơi khỏi Thư viện — xem ghi chú ở nút xoá xuất kho.
+    const idXoaNhap = new Set(dsNhap.map((t) => t.id));
+    const anhMatNhap = anhSeMatLienKet(
+      [
+        ...dsNhap.map((t) => gomAnh(t)),
+        ...dsPhieu.map((p) => p.signedPhotoUrls || []),
+      ],
+      transactions.filter((t) => !idXoaNhap.has(t.id)).map((t) => gomAnh(t)),
+    );
+
     if (
       !window.confirm(
         `Xoá ${dsNhap.length} giao dịch nhập kho, ${dsPhieu.length} phiếu nhập ` +
@@ -1774,7 +1811,11 @@ export default function App() {
             ? `GIỮ NGUYÊN ${conTonDau} dòng tồn đầu kỳ.\n`
             : "") +
           `Xuất kho và đối tác cũng giữ nguyên.\n\n` +
-          `Ảnh trên Cloudinary không bị xoá, chỉ bỏ liên kết.\n\n` +
+          (anhMatNhap.length > 0
+            ? `CẢNH BÁO: ${anhMatNhap.length} ảnh phiếu đã ký sẽ BIẾN MẤT KHỎI THƯ VIỆN ẢNH. ` +
+              `Tệp vẫn nằm trên Cloudinary nhưng app mất đường nối, và nạp lại tệp ` +
+              `Excel KHÔNG gắn lại được ảnh. Nên tải ảnh về (Thư viện ảnh → Tải tất cả) TRƯỚC khi xoá.\n\n`
+            : "") +
           `Không khôi phục lại được.`,
       )
     )
@@ -4507,15 +4548,18 @@ export default function App() {
    * Ném lỗi thì trả 0 — nghĩa là CHƯA KẾT LUẬN ĐƯỢC GÌ về tấm ảnh, chỉ biết
    * là không hỏi tới nơi. Không được lẫn 0 với 404.
    */
-  const hoiMotAnh = async (url: string): Promise<number> => {
+  const hoiMotAnh = async (
+    url: string,
+  ): Promise<{ ma: number; loi: string }> => {
     await xinLuot();
     try {
       const r = await fetch(anhThuNho(url, 64), { cache: "no-store" });
       // Đọc hết thân để trả kết nối về, không thì luồng bị ngậm lại.
       await r.arrayBuffer().catch(() => undefined);
-      return r.status;
-    } catch {
-      return 0;
+      // Cloudinary tự ghi lý do lỗi ở đây và cho đọc chéo tên miền.
+      return { ma: r.status, loi: r.headers.get("x-cld-error") || "" };
+    } catch (e) {
+      return { ma: 0, loi: e instanceof Error ? e.message : String(e) };
     } finally {
       traLuot();
     }
@@ -4540,13 +4584,14 @@ export default function App() {
 
     const ra: KetQuaMotAnh[] = [];
     for (const a of ds) {
-      const ma = await hoiMotAnh(a.url);
+      const { ma, loi } = await hoiMotAnh(a.url);
       ra.push({
         id: a.id,
         url: a.url,
         date: a.date,
         donVi: a.donVi || "(không rõ)",
         ma,
+        loi,
       });
       // Đánh dấu ô xám cho đúng kết quả vừa đo, để lưới và bảng soát nói
       // cùng một chuyện.
@@ -5233,9 +5278,20 @@ export default function App() {
       alert("Chỉ anh Khoa mới có quyền xóa giao dịch ạ!");
       return;
     }
+    // Tờ biên bản thường gắn chung cho cả lượt giao: chỉ báo mất khi KHÔNG còn
+    // dòng nào khác dùng nó.
+    const dongXoa = transactions.find((t) => t.id === id);
+    const anhMat = anhSeMatLienKet(
+      dongXoa ? [gomAnh(dongXoa)] : [],
+      transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
+    );
     if (
       !window.confirm(
-        `Anh có chắc chắn muốn xóa giao dịch của sản phẩm "${productName}" này không?`,
+        `Anh có chắc chắn muốn xóa giao dịch của sản phẩm "${productName}" này không?` +
+          (anhMat.length > 0
+            ? `\n\n${anhMat.length} ảnh biên bản chỉ gắn vào dòng này sẽ BIẾN MẤT KHỎI THƯ VIỆN ẢNH ` +
+              `(tệp vẫn còn trên Cloudinary nhưng app mất đường nối tới nó).`
+            : ""),
       )
     )
       return;
@@ -9313,6 +9369,29 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       · đang xem {formatNumber(anhThuVien.length)}/
                       {formatNumber(tongAnhMoiChieu)} ảnh
                     </p>
+                    {/*
+                      ẢNH NGOÀI KHOẢNG NGÀY KHÔNG PHẢI ẢNH MẤT.
+
+                      Thư viện mặc định chỉ bày 30 ngày gần nhất. Hôm nay mở ra
+                      thì ảnh giao đầu tháng trước đã trượt khỏi khung — nhìn
+                      y như bị mất. Nói thẳng ra số tấm đang nằm ngoài, kèm một
+                      nút bỏ lọc ngày, để không ai phải đoán.
+                    */}
+                    {tongAnhMoiChieu > anhTruocLocDonVi.length &&
+                      (galleryTuNgay || galleryDenNgay) && (
+                        <button
+                          onClick={() => {
+                            setGalleryTuNgay("");
+                            setGalleryDenNgay("");
+                          }}
+                          className="mt-2 text-[11px] font-black text-primary hover:underline"
+                        >
+                          {formatNumber(
+                            tongAnhMoiChieu - anhTruocLocDonVi.length,
+                          )}{" "}
+                          tấm nằm ngoài khoảng ngày đang chọn — bấm để xem tất cả
+                        </button>
+                      )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">

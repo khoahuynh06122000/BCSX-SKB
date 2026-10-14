@@ -12,7 +12,7 @@
  * cái nào, và bản ghi thiếu hẳn trường.
  */
 
-import { ghiDeAnh, giuAnhCu, gomAnh } from "../anhMinhChung";
+import { anhSeMatLienKet, ghiDeAnh, giuAnhCu, gomAnh } from "../anhMinhChung";
 
 let pass = 0;
 let fail = 0;
@@ -116,6 +116,32 @@ eq("dinh trung tam thi gop lam mot", ghiDeAnh([A, A, B], null), {
   const lan2 = ghiDeAnh([], lan1);
   eq("bam xac nhan lan hai khong xoa anh", lan2, lan1);
 }
+
+// ======================================= anh se mat lien ket khi xoa
+
+const C = "https://res.cloudinary.com/x/image/upload/v1/c.jpg";
+eq("xoa dong co anh rieng thi mat anh do", anhSeMatLienKet([[A]], []), [A]);
+eq(
+  "anh con dong khac dung thi KHONG tinh",
+  anhSeMatLienKet([[A]], [[A]]),
+  [],
+);
+/*
+ * Mot to bien ban gan vao chin dong cung luot giao. Xoa ca chin thi mat mot
+ * tam — khong phai chin.
+ */
+eq(
+  "chin dong chung mot to thi dem mot tam",
+  anhSeMatLienKet(Array.from({ length: 9 }, () => [A]), []),
+  [A],
+);
+eq(
+  "xoa mot phan, phan con lai van giu to chung",
+  anhSeMatLienKet([[A], [B]], [[A], [C]]),
+  [B],
+);
+eq("khong xoa gi", anhSeMatLienKet([], [[A]]), []);
+eq("bo o rong", anhSeMatLienKet([["", "  "]], []), []);
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);
