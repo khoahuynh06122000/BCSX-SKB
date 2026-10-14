@@ -32,6 +32,7 @@ import type { Firestore } from "firebase/firestore";
 import { doc } from "firebase/firestore";
 // Đọc ghi qua bản đã bọc bộ đo lượt gọi — xem src/lib/firestoreDem.ts.
 import { runTransaction } from "./firestoreDem";
+import { nextSlipCode } from "./slip";
 import {
   DAU_SO,
   MA_LOAI,
@@ -59,6 +60,68 @@ export const KHO_BO_DEM = "bo_dem";
  */
 export function khoaBoDem(kyDem: string): string {
   return `sophieu-${String(kyDem ?? "").replace("|", "-")}`;
+}
+
+/**
+ * Khoá tài liệu "đơn này đã mang số nào", ví dụ `sophieu-PX-nguon-multi-1a2b`.
+ *
+ * MỘT ĐƠN XUẤT CHỈ MỘT SỐ. Phiếu nhập tự chặn được vì số chính là mã in trên
+ * giấy (khoá tài liệu trùng là bị từ chối). Phiếu xuất thì không có mã nào in
+ * sẵn: hai tab / hai người cùng bấm "Cấp số", hoặc cấp bù chạy đúng lúc lưu
+ * tay đang cấp, là một đơn mang HAI số trong sổ. Tài liệu này nằm trong bộ
+ * đếm và được đọc-ghi trong CÙNG giao dịch cấp số, nên người đến sau thấy
+ * ngay đơn đã có số.
+ *
+ * Bắt đầu bằng `sophieu-PX-` để lệnh dọn sạch chiều xuất (`laBoDemChieuXuat`)
+ * dọn luôn nó.
+ */
+export function khoaNguonXuat(nguon: string): string {
+  return `sophieu-${MA_LOAI.XUAT}-nguon-${String(nguon ?? "").replace(/[/\s]/g, "_")}`;
+}
+
+/** Khoá tài liệu giữ chỗ một mã phiếu nhập, ví dụ `sophieu-PN-giu-PN-260911-02`. */
+export function khoaGiuMaNhap(ma: string): string {
+  return `sophieu-${MA_LOAI.NHAP}-giu-${String(ma ?? "").trim()}`;
+}
+
+/**
+ * GIỮ CHỖ MÃ PHIẾU NHẬP trước khi lưu một lượt nhập tay.
+ *
+ * Mã phiếu nhập suy từ danh sách mã ĐANG CÓ TRÊN MÁY (`nextSlipCode`). Hai
+ * người cùng lưu một lượt nhập trong cùng ngày, trước khi máy này kịp nhận dữ
+ * liệu của máy kia, sẽ cùng ra `PN-…-01`: hai lô mang chung một mã, và MỘT tờ
+ * ảnh ký duyệt luôn cả hai lô — đúng chuyện mã phiếu sinh ra để chặn.
+ *
+ * Nay mã đề xuất được giữ chỗ trong một giao dịch Firestore: đã có người giữ
+ * (hoặc đã có trong sổ số phiếu) thì nhích sang mã kế tiếp. Tài liệu giữ chỗ
+ * nằm trong bộ đếm, bắt đầu bằng `sophieu-PN-` nên lệnh dọn chiều nhập dọn
+ * theo.
+ */
+export async function giuMaPhieuNhap(
+  db: Firestore,
+  dateKey: string,
+  maDeXuat: string,
+  nguoi: string,
+): Promise<string> {
+  return runTransaction(db, async (tx) => {
+    let ma = maDeXuat;
+    for (let i = 0; i < SO_LAN_DO; i++) {
+      const refGiu = doc(db, KHO_BO_DEM, khoaGiuMaNhap(ma));
+      const [giu, so] = [
+        await tx.get(refGiu),
+        await tx.get(doc(db, KHO_SO_PHIEU, ma)),
+      ];
+      if (!giu.exists() && !so.exists()) {
+        tx.set(refGiu, { ma, luc: new Date().toISOString(), nguoi });
+        return ma;
+      }
+      ma = nextSlipCode(dateKey, [ma]);
+    }
+    throw new Error(
+      `${SO_LAN_DO} mã phiếu nhập kế tiếp từ ${maDeXuat} đều đã có người dùng. ` +
+        "Tải lại trang rồi lưu lại.",
+    );
+  });
 }
 
 /**
@@ -121,8 +184,26 @@ export async function capSoPhieu(
    * nó vào sổ. Khoá tài liệu = số phiếu nên ghi trùng vẫn bị chặn ở lớp dưới.
    */
   const soCoSan = String(yc.soPhieu ?? "").trim();
+  const refNguon =
+    yc.loai === "XUAT" && String(yc.nguon ?? "").trim()
+      ? doc(db, KHO_BO_DEM, khoaNguonXuat(yc.nguon))
+      : null;
 
   return runTransaction(db, async (tx) => {
+    /*
+     * ĐƠN XUẤT ĐÃ CÓ SỐ CÒN HIỆU LỰC → TRẢ LẠI ĐÚNG SỐ ĐÓ, không cấp số thứ
+     * hai. Số đã hủy thì cấp số mới như thường (đơn được làm lại).
+     */
+    if (refNguon) {
+      const soCu = String((await tx.get(refNguon)).data()?.soPhieu ?? "");
+      if (soCu) {
+        const g = await tx.get(doc(db, KHO_SO_PHIEU, soCu));
+        if (g.exists() && g.data()?.trangThai === "hieu_luc") {
+          return { ...(g.data() as GhiSoPhieu), id: g.id };
+        }
+      }
+    }
+
     let thuTu = 0;
     let so = "";
     // Đọc bộ đếm ở CẢ HAI đường: nhánh dùng mã có sẵn cũng cần biết số hiện
@@ -177,6 +258,7 @@ export async function capSoPhieu(
     };
 
     tx.set(doc(db, KHO_SO_PHIEU, so), ghi);
+    if (refNguon) tx.set(refNguon, { nguon: yc.nguon, soPhieu: so });
     /*
      * BỘ ĐẾM CHỈ TIẾN, KHÔNG BAO GIỜ LÙI.
      *

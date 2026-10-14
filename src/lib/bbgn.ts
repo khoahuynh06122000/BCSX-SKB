@@ -87,3 +87,45 @@ export function danhKhoaBbgn(
     return `${goc}-l${lan}`;
   });
 }
+
+/**
+ * DÒNG CỦA LẦN NẠP TRƯỚC MÀ TỆP LẦN NÀY KHÔNG CÒN.
+ *
+ * Nạp lại tệp đã sửa: lần nạp chỉ dọn được dòng cũ CÙNG KHOÁ với dòng mới.
+ * Mà khoá suy từ ngày · đơn vị · mặt hàng · điểm bán, nên khi tệp sửa một
+ * trong bốn thứ đó (ô ngày 21 thành 22, đổi tên điểm bán, gán điểm bán sang
+ * đơn vị khác) thì khoá mới khác khoá cũ: dòng mới được ghi, dòng cũ NẰM LẠI.
+ * Tồn kho bị trừ hai lần, công nợ và hóa đơn cộng hai lần — không ai thấy.
+ *
+ * Hàm này tìm những dòng như vậy để HỎI người nạp (không tự xoá: tệp có thể
+ * chỉ là một phần kỳ). Phạm vi xét chặt:
+ *   · mã bắt đầu bằng `tienTo` (`bbgn-` / `tkho-`) — chỉ dòng do nạp tệp sinh;
+ *   · ngày nằm trong khoảng ngày của tệp;
+ *   · cùng đơn vị với một dòng trong tệp (nếu có danh sách đơn vị);
+ *   · KHÔNG thuộc khoá nào tệp lần này sẽ ghi.
+ */
+export function dongCuNgoaiTep<
+  T extends { id: string; date: string; partnerId?: string },
+>(
+  dongCo: T[],
+  tep: {
+    tienTo: string;
+    /** yyyy-MM-dd của mọi dòng trong tệp. */
+    ngay: string[];
+    /** Dòng cũ thuộc tệp lần này (sẽ bị ghi đè / dọn sẵn) — không tính. */
+    thuocTep: (id: string) => boolean;
+    donVi?: Set<string>;
+  },
+): T[] {
+  const ngay = tep.ngay.filter(Boolean).sort();
+  if (!ngay.length) return [];
+  const tu = ngay[0];
+  const den = ngay[ngay.length - 1];
+  return dongCo.filter((t) => {
+    if (!String(t.id ?? "").startsWith(tep.tienTo)) return false;
+    const n = String(t.date ?? "").slice(0, 10);
+    if (n < tu || n > den) return false;
+    if (tep.donVi && !tep.donVi.has(String(t.partnerId ?? ""))) return false;
+    return !tep.thuocTep(t.id);
+  });
+}

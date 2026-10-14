@@ -11,7 +11,7 @@
  * cùng ngày không đè nhau.
  */
 
-import { danhKhoaBbgn } from "../bbgn";
+import { danhKhoaBbgn, dongCuNgoaiTep } from "../bbgn";
 import { stableHash } from "../hash";
 
 let pass = 0;
@@ -81,6 +81,47 @@ const eq = (name: string, a: unknown, b: unknown) => {
   eq("danh sach rong", danhKhoaBbgn([], bam).length, 0);
 }
 
+
+// --------------------------------------------------------------------------
+// NẠP LẠI TỆP ĐÃ SỬA: dòng cũ không còn trong tệp phải được tìm ra
+// --------------------------------------------------------------------------
+{
+  const cu = [
+    { id: "bbgn-aaa-l0-0", date: "2026-08-21T08:00:00.000Z", partnerId: "BNC" },
+    { id: "bbgn-aaa-l0-0-hao-0", date: "2026-08-21T08:00:00.000Z", partnerId: "BNC" },
+    { id: "bbgn-bbb-l0-0", date: "2026-08-21T08:00:00.000Z", partnerId: "BNC" },
+    { id: "bbgn-ccc-l0-0", date: "2026-07-31T08:00:00.000Z", partnerId: "BNC" },
+    { id: "bbgn-ddd-l0-0", date: "2026-08-22T08:00:00.000Z", partnerId: "BNG" },
+    { id: "trx-1", date: "2026-08-21T08:00:00.000Z", partnerId: "BNC" },
+  ];
+  // Tệp mới: ô ngày 21 của "bbb" đã sửa thành 22 -> khoá mới "eee".
+  const moi = new Set(["bbgn-aaa-", "bbgn-eee-"]);
+  const tim = dongCuNgoaiTep(cu, {
+    tienTo: "bbgn-",
+    ngay: ["2026-08-21", "2026-08-22"],
+    thuocTep: (id) => [...moi].some((p) => id.startsWith(p)),
+    donVi: new Set(["BNC"]),
+  });
+  eq("dong cu doi ngay duoc tim ra", tim.map((t) => t.id), ["bbgn-bbb-l0-0"]);
+
+  const khongDonVi = dongCuNgoaiTep(cu, {
+    tienTo: "bbgn-",
+    ngay: ["2026-08-22", "2026-08-21"],
+    thuocTep: (id) => [...moi].some((p) => id.startsWith(p)),
+  });
+  eq(
+    "khong loc don vi thi xet ca don vi khac trong ky",
+    khongDonVi.map((t) => t.id),
+    ["bbgn-bbb-l0-0", "bbgn-ddd-l0-0"],
+  );
+  eq("dong nhap tay khong bao gio bi dung", tim.some((t) => t.id === "trx-1"), false);
+  eq("ngoai khoang ngay cua tep khong bi dung", tim.some((t) => t.id === "bbgn-ccc-l0-0"), false);
+  eq(
+    "tep rong khong tim gi",
+    dongCuNgoaiTep(cu, { tienTo: "bbgn-", ngay: [], thuocTep: () => false }),
+    [],
+  );
+}
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

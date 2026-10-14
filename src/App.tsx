@@ -100,6 +100,7 @@ import {
   getDoc,
   getDocs,
   writeBatch,
+  arrayUnion,
   batDauGuiDoLuong,
 } from "./firebase";
 import {
@@ -183,7 +184,7 @@ import {
 import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
 import { dauCuaLoai } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
-import { danhKhoaBbgn, type BbgnDraft } from "./lib/bbgn";
+import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import TraCuuHoaDon from "./components/TraCuuHoaDon";
 import SoPhieuManHinh from "./components/SoPhieu";
@@ -195,6 +196,7 @@ import {
   KHO_BO_DEM,
   KHO_SO_PHIEU,
   capSoPhieu,
+  giuMaPhieuNhap,
   laBoDemChieuNhap,
   laBoDemChieuXuat,
   huyPhieu,
@@ -202,6 +204,7 @@ import {
 
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
+import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
 
 import { dungKeHoachDoiSo } from "./lib/doiSoPhieuCu";
 import {
@@ -1988,19 +1991,69 @@ export default function App() {
    */
   const handleCreateNhapFromTkho = async (
     drafts: TkhoNhapDraft[],
-  ): Promise<{ productId: string; quantity: number; date: string }[]> => {
+  ): Promise<{ productId: string; quantity: number; date: string }[] | null> => {
     if (!drafts.length) return [];
 
     const khoa = (d: TkhoNhapDraft) =>
       "tkho-" +
       stableHash([d.dateKey, d.type, d.productId].join("|"));
 
-    const prefixes = new Set(drafts.map((d) => khoa(d)));
-    const canXoa = transactions.filter((t) =>
-      [...prefixes].some((p) => t.id === p),
-    );
+    /*
+     * Dòng cùng mã thì lệnh `set` bên dưới GHI ĐÈ thẳng — không xoá trước.
+     * Bản cũ xoá rồi ghi lại đúng mã đó: thừa một lượt xoá mỗi dòng, và luật
+     * chỉ cho admin xoá dòng nhập, nên kế toán nạp lại tệp là hỏng cả lô.
+     *
+     * Chỉ xoá dòng CŨ KHÔNG CÒN trong tệp (tệp sửa ngày) — và phải hỏi.
+     */
+    const maMoi = new Set(drafts.map((d) => khoa(d)));
+    const dongLech = dongCuNgoaiTep(transactions, {
+      tienTo: "tkho-",
+      ngay: drafts.map((d) => d.dateKey),
+      thuocTep: (id) => maMoi.has(id),
+    });
+    let canXoa: Transaction[] = [];
+    if (dongLech.length) {
+      if (!isOwner) {
+        alert(
+          `Có ${dongLech.length} dòng nhập / tồn đầu của lần nạp trước (cùng khoảng ngày) ` +
+            "KHÔNG CÒN trong tệp này — thường do tệp đã sửa ngày.\n\n" +
+            "Giữ lại thì hàng bị cộng kho HAI LẦN. Chỉ admin xoá được dòng nhập: " +
+            "báo admin nạp lại tệp này để dọn.",
+        );
+      } else if (
+        window.confirm(
+          `Có ${dongLech.length} dòng nhập / tồn đầu của lần nạp trước (cùng khoảng ngày) ` +
+            "KHÔNG CÒN trong tệp này — thường do tệp đã sửa ngày.\n\n" +
+            "Giữ lại thì hàng bị cộng kho HAI LẦN.\n\n" +
+            `OK = xoá ${dongLech.length} dòng đó rồi nạp\nCancel = giữ nguyên, chỉ nạp tệp`,
+        )
+      ) {
+        canXoa = dongLech;
+      }
+    }
 
-    // Lệnh nạp tự dọn dòng cũ trước khi ghi: giữ ảnh của chúng vào sổ trước.
+    /*
+     * HAI NGUỒN CHO CÙNG MỘT SỐ TỒN. Nút "Nạp Excel tồn kho" ghi số tổng theo
+     * mặt hàng (`dongbo-…`), tệp T Kho ghi số nhập theo ngày (`tkho-…`). Có cả
+     * hai cho cùng mặt hàng là hàng được cộng hai lần. Đường Excel tồn kho đã
+     * cảnh báo chiều ngược lại; đây là chiều này.
+     */
+    const matHangTep = new Set(drafts.map((d) => d.productId));
+    const dongBoTrung = transactions.filter(
+      (t) => t.id?.startsWith("dongbo-") && matHangTep.has(t.productId),
+    );
+    if (
+      dongBoTrung.length &&
+      !window.confirm(
+        `${new Set(dongBoTrung.map((t) => t.productId)).size} mặt hàng trong tệp này đã có số ` +
+          "tồn nạp từ nút \"Nạp Excel tồn kho\". Nạp thêm số nhập từ tệp T Kho là " +
+          "hàng bị CỘNG HAI LẦN.\n\nOK = vẫn nạp (anh sẽ tự gỡ một nguồn)\nCancel = dừng lại",
+      )
+    ) {
+      return null; // dừng cả lượt, phần xuất cũng không ghi
+    }
+
+    // Giữ ảnh của dòng sắp xoá vào sổ trước.
     await damBaoSoAnh(canXoa);
 
     const CHUNK = 400;
@@ -2173,6 +2226,48 @@ export default function App() {
       return;
     }
 
+    /*
+     * DÒNG CŨ KHÔNG CÒN TRONG TỆP (tệp sửa ngày / điểm bán / đơn vị) — xem
+     * `dongCuNgoaiTep`. Không tự xoá: tệp có thể chỉ là một phần kỳ. Hỏi một
+     * lần cho cả nhóm.
+     */
+    const tienToMoi = new Set(
+      drafts.map(
+        (d) =>
+          "bbgn-" +
+          stableHash(
+            [d.dateKey, d.partnerId, d.productId, d.outlet || ""].join("|"),
+          ) +
+          "-",
+      ),
+    );
+    const dongLech = dongCuNgoaiTep(transactions, {
+      tienTo: "bbgn-",
+      ngay: drafts.map((d) => d.dateKey),
+      thuocTep: (id) => [...tienToMoi].some((p) => id.startsWith(p)),
+      donVi: new Set(drafts.map((d) => d.partnerId)),
+    });
+    // Luật: người thường chỉ xoá được đơn còn đi đường.
+    const lechXoaDuoc = dongLech.filter(
+      (t) => isOwner || t.status === "in_transit",
+    );
+    let xoaThem: Transaction[] = [];
+    if (
+      dongLech.length &&
+      window.confirm(
+        `Có ${dongLech.length} dòng của lần nạp trước (cùng kỳ, cùng đơn vị) KHÔNG CÒN ` +
+          "trong tệp này — thường do tệp đã sửa ngày, điểm bán hoặc đơn vị.\n\n" +
+          "Giữ lại thì hàng bị trừ kho HAI LẦN và công nợ cộng hai lần.\n\n" +
+          `OK = xoá ${lechXoaDuoc.length} dòng đó rồi nạp\nCancel = giữ nguyên, chỉ nạp tệp` +
+          (lechXoaDuoc.length < dongLech.length
+            ? `\n\n${dongLech.length - lechXoaDuoc.length} dòng đã hoàn tất chỉ admin ` +
+              "xoá được — sẽ còn lại, báo admin."
+            : ""),
+      )
+    ) {
+      xoaThem = lechXoaDuoc;
+    }
+
     setLoading(true);
     try {
       // Ban sao ton theo lo de FIFO "nhin thay" phan da bi tru trong cung lan chay
@@ -2262,9 +2357,44 @@ export default function App() {
        * chinh nhung lan xuat sap ghi, truoc khi ghi.
        */
       const prefixes = new Set(drafts.map((d) => khoaGoc(d) + "-"));
-      const canXoa = transactions.filter((t) =>
-        [...prefixes].some((p) => t.id?.startsWith(p)),
-      );
+      /*
+       * Mã sắp ghi lại thì `set` đè thẳng, không xoá trước: đỡ một lượt xoá,
+       * và người thường (luật chỉ cho xoá đơn đi đường) vẫn nạp lại được tệp
+       * có đơn đã hoàn tất. Chỉ xoá dòng thừa: chuyến bớt dòng, hao hụt bỏ.
+       */
+      const seGhi = new Set<string>();
+      /*
+       * ĐƠN ĐÃ XÁC NHẬN MÀ TỆP KHÔNG ĐỔI SỐ → GIỮ NGUYÊN, không ghi lại.
+       *
+       * Bản cũ ghi đè mọi dòng: đơn đã hoàn tất (đã có ảnh, đã nhập số thực
+       * nhận, đã sinh dòng hao hụt lúc xác nhận) bị lật về "đi đường" với số
+       * của tệp, và dòng hao hụt lúc xác nhận bị xoá — nạp lại một tệp cũ là
+       * mất công xác nhận cả tháng. Số trên tệp vẫn y như lần trước thì không
+       * có gì mới để ghi.
+       */
+      const giuNguyen = new Set<string>();
+      khoaDong.forEach((k, i) => {
+        const id = `${k}-0`;
+        seGhi.add(id);
+        if ((Number(drafts[i].haoHut) || 0) > 0) seGhi.add(`${k}-hao-0`);
+        const cu = transactions.find((x) => x.id === id);
+        if (
+          quaDiDuong &&
+          cu?.status === "completed" &&
+          cu.productId === drafts[i].productId &&
+          Number(cu.originalQuantity ?? cu.quantity) === Number(drafts[i].quantity)
+        ) {
+          giuNguyen.add(id);
+          seGhi.add(`${id}-hao-0`); // hao hụt sinh lúc xác nhận
+        }
+      });
+      const canXoa = [
+        ...transactions.filter(
+          (t) =>
+            [...prefixes].some((p) => t.id?.startsWith(p)) && !seGhi.has(t.id),
+        ),
+        ...xoaThem,
+      ];
 
       /*
        * Dòng cũ nào KHÔNG trùng mã với dòng mới (tệp sửa lại, chuyến đổi cột)
@@ -2293,6 +2423,7 @@ export default function App() {
         viTri++;
         const product = products.find((p) => p.id === d.productId);
         if (!product) continue;
+        if (giuNguyen.has(`${khoaDong[viTri]}-0`)) continue;
 
         // MỘT CHUYẾN GIAO LÀ MỘT ĐƠN. Cột trong sheet chính là chuyến: cùng
         // ngày mà một điểm bán nhận hai chuyến thì sheet ghi hai cột, và đó là
@@ -2452,7 +2583,11 @@ export default function App() {
       if (quaDiDuong) {
         setActiveTab("in-transit");
         showNotification(
-          `Đã nạp ${seq} dòng thành ${soDon} đơn — đang chờ ảnh ở tab Đơn đi đường`,
+          `Đã nạp ${seq} dòng thành ${soDon} đơn — đang chờ ảnh ở tab Đơn đi đường` +
+            (giuNguyen.size
+              ? ` · giữ nguyên ${giuNguyen.size} dòng đã xác nhận, số không đổi`
+              : "") +
+            (xoaThem.length ? ` · xoá ${xoaThem.length} dòng cũ không còn trong tệp` : ""),
         );
       } else {
         showNotification(`Đã ghi ${seq} dòng thẳng vào xuất kho`);
@@ -2750,9 +2885,12 @@ export default function App() {
     }
 
     try {
-      const existing = slips.find((s) => s.code === code);
-      const merged = [...(existing?.signedPhotoUrls || []), ...urls];
-
+      /*
+       * `arrayUnion`, không ghép danh sách trên máy rồi ghi đè: hai người cùng
+       * thêm ảnh vào một phiếu thì danh sách trên máy mỗi người đều thiếu ảnh
+       * của người kia, ghi đè là ảnh của người lưu trước rơi khỏi phiếu (tệp
+       * vẫn nằm trên Cloudinary, không ai thấy). Máy chủ tự gộp thì không mất.
+       */
       await setDoc(
         doc(db, "slips", code),
         {
@@ -2760,7 +2898,7 @@ export default function App() {
           code,
           date: dateKey,
           status: "signed",
-          signedPhotoUrls: merged,
+          signedPhotoUrls: arrayUnion(...urls),
           signedAt: new Date().toISOString(),
           signedBy: currentUserProfile?.email || user || "",
           updatedAt: new Date().toISOString(),
@@ -3602,18 +3740,49 @@ export default function App() {
     address: "",
   });
 
+  /*
+   * THÊM ĐỐI TÁC KHÔNG ĐẺ BẢN TRÙNG, KHÔNG ĐÈ ĐỐI TÁC CŨ.
+   *
+   * Bản cũ: không chặn bấm hai lần (hai đối tác `p-…` cùng tên), và có mã SAP
+   * thì `setDoc` ghi đè thẳng đối tác đang mang mã đó — mất tên, địa chỉ cũ
+   * mà không ai hay. Nay: đang lưu thì bỏ qua cú bấm sau; trùng mã SAP hay
+   * trùng tên (đã chuẩn hoá) với đối tác đang có thì dừng lại và nói rõ.
+   */
+  const dangThemDoiTacRef = useRef(false);
   const handleAddPartner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerFormData.name) return;
+    if (!partnerFormData.name || dangThemDoiTacRef.current) return;
 
-    const newId =
-      partnerFormData.sapCode || `p-${Math.random().toString(36).substr(2, 6)}`;
+    const maSap = String(partnerFormData.sapCode || "").trim();
+    const trungMa = maSap
+      ? partners.find(
+          (p) => p.id === maSap || String(p.sapCode || "").trim() === maSap,
+        )
+      : undefined;
+    const trungTen = partners.find(
+      (p) => chuanTen(p.name) === chuanTen(partnerFormData.name),
+    );
+    if (trungMa || trungTen) {
+      alert(
+        `Đã có đối tác "${(trungMa || trungTen)!.name}"` +
+          (trungMa ? ` mang mã SAP ${maSap}` : " trùng tên") +
+          ". Sửa đối tác đó thay vì thêm mới — thêm nữa là hai đơn vị cho cùng " +
+          "một khách, công nợ tách làm hai.",
+      );
+      return;
+    }
+
+    const newId = maSap || `p-${Math.random().toString(36).substr(2, 6)}`;
     const newPartner: Partner = {
       id: newId,
       ...partnerFormData,
     };
 
+    dangThemDoiTacRef.current = true;
     setDoc(doc(db, "partners", newPartner.id), newPartner)
+      .finally(() => {
+        dangThemDoiTacRef.current = false;
+      })
       .then(() => {
         setShowAddPartner(false);
         setPartnerFormData({
@@ -3700,6 +3869,7 @@ export default function App() {
     )
       return;
 
+    const truocXoa = transactions;
     try {
       setLoading(true);
       // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
@@ -3712,6 +3882,7 @@ export default function App() {
       const kqAnh = await xoaAnhTrenMayChu(anhMatDon);
       showNotification(`Đã xóa đơn đi đường${chuAnhDaXoa(kqAnh)}!`);
       baoAnhChuaXoa(kqAnh);
+      await hoiHuySoPhieuMoCoi(canXoa, truocXoa);
     } catch (err) {
       alert(
         handleFirestoreError(err, OperationType.DELETE, "transactions"),
@@ -5347,12 +5518,23 @@ export default function App() {
        * duoc tao luc bam In — giao dot thu hai truoc khi in dot mot se bi cap
        * lai dung ma cu, roi mot to anh ky duyet luon ca hai dot.
        */
+      /*
+       * Mã đề xuất từ dữ liệu trên máy, rồi GIỮ CHỖ trên máy chủ: hai người
+       * cùng lưu một lúc không ra trùng mã — xem `giuMaPhieuNhap`.
+       */
+      const ngayPhieu = format(new Date(transactionDate), "yyyy-MM-dd");
       const slipCode =
         type === "IN"
-          ? nextSlipCode(format(new Date(transactionDate), "yyyy-MM-dd"), [
-              ...slips.map((s) => s.code),
-              ...transactions.map((t) => t.slipCode),
-            ])
+          ? await giuMaPhieuNhap(
+              db,
+              ngayPhieu,
+              nextSlipCode(ngayPhieu, [
+                ...slips.map((s) => s.code),
+                ...transactions.map((t) => t.slipCode),
+                ...soPhieu.map((g) => g.soPhieu),
+              ]),
+              user || "Guest",
+            )
           : undefined;
 
 
@@ -5579,6 +5761,47 @@ export default function App() {
     }
   };
 
+  /*
+   * SAU KHI XOÁ LẺ: số phiếu nào không còn dòng hàng nào phía sau thì hỏi hủy
+   * luôn. Không hủy thì Sổ số phiếu ghi "còn hiệu lực" cho một chứng từ rỗng.
+   * Hủy theo đúng đường của sổ — sinh phiếu hủy ghi âm, số gốc vẫn nằm trong
+   * sổ — chứ không xoá số. Xem `src/lib/nguonMoCoi.ts`.
+   *
+   * `truocXoa` phải là danh sách giao dịch TRƯỚC lần xoá (state lúc bấm).
+   */
+  const hoiHuySoPhieuMoCoi = async (
+    xoa: Transaction[],
+    truocXoa: Transaction[],
+  ) => {
+    const ds = soPhieuMoCoi(soPhieu, nguonMoCoi(xoa, truocXoa));
+    if (!ds.length) return;
+    if (
+      !window.confirm(
+        `Số phiếu ${ds.map((g) => g.soPhieu).join(", ")} không còn dòng hàng nào phía sau.\n\n` +
+          "OK = hủy luôn (sổ sinh phiếu hủy ghi âm, số gốc vẫn giữ trong sổ)\n" +
+          "Cancel = để nguyên, hủy sau ở mục Sổ số phiếu",
+      )
+    )
+      return;
+    const homNay = format(new Date(), "yyyy-MM-dd");
+    for (const g of ds) {
+      try {
+        await huyPhieu(db, g.soPhieu, {
+          documentDate: homNay,
+          lyDo: "Xoá chứng từ",
+          createdBy: user || "Guest",
+        });
+      } catch (e) {
+        alert(
+          `Chưa hủy được ${g.soPhieu}: ${e instanceof Error ? e.message : String(e)}\n\n` +
+            "Hủy tay ở mục Sổ số phiếu.",
+        );
+        return;
+      }
+    }
+    showNotification(`Đã hủy ${ds.length} số phiếu không còn chứng từ`);
+  };
+
   const handleDeleteTransaction = async (id: string, productName: string) => {
     if (!isOwner) {
       alert("Chỉ anh Khoa mới có quyền xóa giao dịch ạ!");
@@ -5587,27 +5810,53 @@ export default function App() {
     // Tờ biên bản thường gắn chung cho cả lượt giao: chỉ báo mất khi KHÔNG còn
     // dòng nào khác dùng nó.
     const dongXoa = transactions.find((t) => t.id === id);
-    const anhMat = anhSeMatLienKet(dongXoa ? [gomAnh(dongXoa)] : [], [
-      ...transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
-      ...slips.map((sl) => sl.signedPhotoUrls || []),
-    ]);
+    /*
+     * Dòng cuối cùng của một phiếu nhập thì xoá luôn tài liệu phiếu (cùng ảnh
+     * ký): để lại là phiếu rỗng giữ ảnh của lô không còn tồn tại.
+     */
+    const moCoi = nguonMoCoi(dongXoa ? [dongXoa] : [], transactions);
+    const phieuXoa = slips.filter((sl) => moCoi.phieuNhap.includes(sl.code));
+    const anhMat = anhSeMatLienKet(
+      [
+        ...(dongXoa ? [gomAnh(dongXoa)] : []),
+        ...phieuXoa.map((sl) => sl.signedPhotoUrls || []),
+      ],
+      [
+        ...transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
+        ...slips
+          .filter((sl) => !phieuXoa.includes(sl))
+          .map((sl) => sl.signedPhotoUrls || []),
+      ],
+    );
     if (
       !window.confirm(
         `Anh có chắc chắn muốn xóa giao dịch của sản phẩm "${productName}" này không?` +
+          (phieuXoa.length > 0
+            ? `\n\nĐây là dòng cuối của phiếu nhập ${phieuXoa.map((p) => p.code).join(", ")} — xoá luôn phiếu đó.`
+            : "") +
           (anhMat.length > 0
-            ? `\n\nXOÁ LUÔN ${anhMat.length} ảnh biên bản chỉ dòng này dùng, trên Cloudinary.`
+            ? `\n\nXOÁ LUÔN ${anhMat.length} ảnh chỉ dòng / phiếu này dùng, trên Cloudinary.`
             : ""),
       )
     )
       return;
 
+    const truocXoa = transactions;
     try {
       // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      if (dongXoa) await damBaoSoAnh([dongXoa]);
-      await deleteDoc(doc(db, "transactions", id));
+      if (dongXoa) await damBaoSoAnh([dongXoa], phieuXoa);
+      if (phieuXoa.length) {
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "transactions", id));
+        phieuXoa.forEach((sl) => batch.delete(doc(db, "slips", sl.id)));
+        await batch.commit();
+      } else {
+        await deleteDoc(doc(db, "transactions", id));
+      }
       const kqAnh = await xoaAnhTrenMayChu(anhMat);
       showNotification(`Đã xóa giao dịch${chuAnhDaXoa(kqAnh)}`);
       baoAnhChuaXoa(kqAnh);
+      if (dongXoa) await hoiHuySoPhieuMoCoi([dongXoa], truocXoa);
     } catch (err) {
       alert(
         handleFirestoreError(err, OperationType.DELETE, `transactions/${id}`),

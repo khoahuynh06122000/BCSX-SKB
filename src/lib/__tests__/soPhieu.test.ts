@@ -43,6 +43,7 @@ import {
   khoaBoDem,
   laBoDemChieuNhap,
   laBoDemChieuXuat,
+  khoaNguonXuat,
 } from "../soPhieuKho";
 
 let pass = 0;
@@ -480,6 +481,11 @@ dung("bo dem huy nhap 52 KHONG phai ben xuat", !laBoDemChieuXuat("sophieu-52-26"
 // giua ten khong duoc dinh vao.
 dung("PX nam giua ten thi khong tinh", !laBoDemChieuXuat("sophieu-PN-PX-26"));
 dung("thieu gach noi thi khong tinh", !laBoDemChieuXuat("sophieu-PX260904"));
+// Dấu "đơn này đã mang số" phải bị lệnh dọn chiều xuất dọn theo.
+dung("dau nguon xuat thuoc ben xuat", laBoDemChieuXuat(khoaNguonXuat("multi-1a2b")));
+dung("dau nguon xuat khong thuoc ben nhap", !laBoDemChieuNhap(khoaNguonXuat("multi-1a2b")));
+dung("dau nguon khong co gach cheo", !khoaNguonXuat("a/b c").includes("/"));
+dung("hai don khac nhau hai dau khac nhau", khoaNguonXuat("multi-1") !== khoaNguonXuat("multi-2"));
 dung("chuoi rong", !laBoDemChieuXuat(""));
 
 // Khoa dung phai khop voi khoa that do khoaBoDem sinh ra.

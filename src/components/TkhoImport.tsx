@@ -61,10 +61,13 @@ interface Props {
   /** Phần gán điểm bán đã lưu, ghép đè lên bảng gán sẵn trong code. */
   diemBanOverrides: DiemBanEntry[];
   onSaveDiemBan: (entries: DiemBanEntry[]) => Promise<void>;
-  /** Ghi tồn đầu kỳ + hàng nhập, trả về các lô vừa tạo cho FIFO của phần xuất. */
+  /**
+   * Ghi tồn đầu kỳ + hàng nhập, trả về các lô vừa tạo cho FIFO của phần xuất.
+   * `null` = người dùng dừng lại — không ghi tiếp phần xuất.
+   */
   onCreateNhap: (
     drafts: TkhoNhapDraft[],
-  ) => Promise<{ productId: string; quantity: number; date: string }[]>;
+  ) => Promise<{ productId: string; quantity: number; date: string }[] | null>;
   onCreate: (
     drafts: { dateKey: string; partnerId: string; partnerName: string; productId: string; productName: string; quantity: number; outlet: string; note: string; cot: number; haoHut?: number }[],
     loMoi?: { productId: string; quantity: number; date: string }[],
@@ -302,6 +305,7 @@ export default function TkhoImport({
   const taoGiaoDich = async () => {
     if (!result?.drafts.length || vuongPhanNhap) return;
     const loMoi = nhap?.drafts.length ? await onCreateNhap(nhap.drafts) : [];
+    if (loMoi === null) return;
     await onCreate(
       result.drafts.map((d) => ({
         ...d,
