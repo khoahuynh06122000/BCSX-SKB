@@ -4756,30 +4756,38 @@ export default function App() {
   const [dangXoaAnh, setDangXoaAnh] = useState(false);
 
   /**
-   * KIỂM TRA KHOÁ XOÁ ẢNH — không xoá gì.
+   * KHOÁ XOÁ ẢNH CÓ DÙNG ĐƯỢC KHÔNG — APP TỰ KIỂM, không ai phải bấm.
    *
-   * Khoá Cloudinary đặt trên Vercel, app không nhìn thấy được. Không có nút
-   * này thì lần xoá đơn thật đầu tiên chính là phép thử, và nếu khoá sai thì
-   * dữ liệu đã xoá mà ảnh còn nằm lại.
+   * Khoá Cloudinary đặt trên Vercel, app không nhìn thấy được. Không kiểm thì
+   * lần xoá đơn thật đầu tiên chính là phép thử, và nếu khoá sai thì dữ liệu
+   * đã xoá mà ảnh còn nằm lại. Nên mỗi lần admin mở app, app hỏi máy chủ một
+   * câu (lệnh `ping` của Cloudinary — không xoá gì). Đúng thì im lặng; sai thì
+   * Thư viện ảnh hiện cảnh báo nói rõ phải sửa gì.
+   *
+   * Chỉ admin: chỉ admin xoá được ảnh, và máy chủ cũng chỉ trả lời admin.
    */
-  const [dangKiemKhoa, setDangKiemKhoa] = useState(false);
+  const [khoaXoaAnh, setKhoaXoaAnh] = useState<
+    { trangThai: "chua" | "dang" | "dung" } | { trangThai: "loi"; loi: string }
+  >({ trangThai: "chua" });
   const kiemTraKhoaXoaAnh = async () => {
-    if (!isOwner || dangKiemKhoa) return;
-    setDangKiemKhoa(true);
+    setKhoaXoaAnh({ trangThai: "dang" });
     try {
       const r = await callAiApi("/api/anh/xoa", { kiemTra: true });
       const d: any = await r.json().catch(() => null);
       if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
-      alert(
-        `KHOÁ ĐÚNG — máy chủ đã nối được vào kho Cloudinary "${d?.kho}".\n\n` +
-          `Từ giờ xoá dữ liệu là app xoá luôn ảnh trên Cloudinary. Phép kiểm này không xoá gì.`,
-      );
+      setKhoaXoaAnh({ trangThai: "dung" });
     } catch (e) {
-      alert(`KHOÁ CHƯA DÙNG ĐƯỢC.\n\n${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setDangKiemKhoa(false);
+      setKhoaXoaAnh({
+        trangThai: "loi",
+        loi: e instanceof Error ? e.message : String(e),
+      });
     }
   };
+  useEffect(() => {
+    if (user && isOwner) kiemTraKhoaXoaAnh();
+    // Một lần mỗi lần đăng nhập — không cần kiểm lại theo từng thay đổi dữ liệu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isOwner]);
 
   /**
    * XOÁ THẬT NHỮNG TẤM ẢNH NÀY TRÊN CLOUDINARY, rồi xoá dòng sổ của chúng.
@@ -10005,23 +10013,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       )}
                     </button>
 
-                    {/* Kiểm tra khoá xoá ảnh — chỉ admin, không xoá gì. */}
-                    {isOwner && (
-                      <button
-                        onClick={kiemTraKhoaXoaAnh}
-                        disabled={dangKiemKhoa}
-                        title="Thử khoá Cloudinary trên máy chủ — không xoá ảnh nào (chỉ admin)"
-                        className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {dangKiemKhoa ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ShieldCheck className="w-4 h-4" />
-                        )}
-                        Kiểm tra khoá xoá ảnh
-                      </button>
-                    )}
-
                     {/*
                       SOÁT ẢNH — hỏi từng tấm rồi gom theo MÃ LỖI THẬT.
                       Nhìn từng ô xám thì chỉ biết "tấm này chưa ra"; mà ảnh
@@ -10137,6 +10128,29 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   khi lướt qua nhanh, mà biết có bao nhiêu tấm mất thì còn đi
                   tìm lại chứng từ được.
                 */}
+                {/*
+                  KHOÁ XOÁ ẢNH SAI — app tự kiểm lúc mở, chỉ hiện khi có lỗi.
+                  Ngày thường không có dòng nào ở đây.
+                */}
+                {isOwner && khoaXoaAnh.trangThai === "loi" && (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex gap-2 items-start">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-bold text-rose-800 leading-relaxed">
+                        <strong>Chưa xoá được ảnh trên Cloudinary.</strong> Xoá
+                        dữ liệu lúc này thì dữ liệu mất nhưng ảnh còn nằm lại.{" "}
+                        {khoaXoaAnh.loi}
+                      </p>
+                      <button
+                        onClick={kiemTraKhoaXoaAnh}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-[10px] font-black uppercase tracking-widest text-rose-700 hover:bg-rose-100 transition-all"
+                      >
+                        Kiểm tra lại
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {soAnhLoi > 0 && (
                   <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
                     <ImageOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
