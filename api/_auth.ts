@@ -126,6 +126,53 @@ export async function requireUser(req: any, res: any): Promise<VerifiedUser | nu
   return user;
 }
 
+/**
+ * Chỉ xác minh đăng nhập (token thật, email đã xác minh) — KHÔNG áp danh sách
+ * AI. Trả về cả token để máy chủ hỏi Firestore BẰNG QUYỀN CỦA NGƯỜI GỌI.
+ */
+export async function xacMinhDangNhap(
+  req: any,
+  res: any,
+): Promise<{ user: VerifiedUser; token: string } | null> {
+  const token = readBearer(req);
+  if (!token) {
+    res.status(401).json({ error: "Thiếu thông tin đăng nhập. Hãy đăng nhập lại rồi thử lại." });
+    return null;
+  }
+  let user: VerifiedUser | null;
+  try {
+    user = await verifyIdToken(token);
+  } catch (e: any) {
+    console.error("Lỗi xác minh token:", e?.message || e);
+    res.status(500).json({ error: "Máy chủ chưa cấu hình đủ để xác minh." });
+    return null;
+  }
+  if (!user) {
+    res.status(401).json({ error: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn." });
+    return null;
+  }
+  if (!user.emailVerified) {
+    res.status(403).json({ error: "Email chưa được xác minh." });
+    return null;
+  }
+  return { user, token };
+}
+
+/** Gốc REST của cơ sở dữ liệu app. */
+export function gocFirestore(): string {
+  const project =
+    process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  const db =
+    process.env.VITE_FIREBASE_DATABASE_ID ||
+    process.env.FIREBASE_DATABASE_ID ||
+    "(default)";
+  if (!project) throw new Error("Thiếu VITE_FIREBASE_PROJECT_ID trên máy chủ.");
+  return (
+    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}` +
+    `/databases/${encodeURIComponent(db)}/documents`
+  );
+}
+
 /** Email chủ sở hữu gốc — phải khớp `ownerEmail()` trong firestore.rules. */
 const EMAIL_CHU_SO_HUU = "khoa.huynh.06.12.2000@gmail.com";
 

@@ -205,6 +205,7 @@ import {
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
 import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
+import { anhChoConLai, daLuuAnhCho, themAnhCho } from "./lib/anhCho";
 
 import { dungKeHoachDoiSo } from "./lib/doiSoPhieuCu";
 import {
@@ -2866,17 +2867,20 @@ export default function App() {
      * Đây là bước DUYỆT SỐ LIỆU: có ảnh ký thì hàng mới vào tồn kho. Ghi hỏng
      * mà báo mơ hồ thì người dùng tưởng đã duyệt xong.
      */
-    let urls: string[];
+    let urls: string[] = [];
     try {
-      urls = [];
       for (const file of Array.from(files)) {
         // Nen truoc khi day len: anh dien thoai 4-8 MB deu ve vai tram KB,
         // van du net doc chu so viet tay ma tiet kiem dung luong Cloudinary.
         const compressed = await compressFile(file, 2000, 2000, 0.85);
-        urls.push(await uploadToCloudinary(compressed));
+        const url = await uploadToCloudinary(compressed);
+        themAnhCho([url]);
+        urls.push(url);
       }
     } catch (e: any) {
       setUploadingSlipCode(null);
+      // Tấm nào đã lên trước khi hỏng thì bỏ luôn, không để lửng lơ.
+      void boAnhCho(urls);
       alert(
         "Không tải được ảnh lên kho ảnh (Cloudinary): " +
           (e?.message || "lỗi không rõ"),
@@ -2906,10 +2910,12 @@ export default function App() {
         { merge: true },
       );
 
+      daLuuAnhCho(urls);
       showNotification(`Đã lưu ảnh phiếu ${code} — hàng đã vào tồn kho`);
     } catch (e: any) {
+      void boAnhCho(urls);
       alert(
-        `Ảnh đã lên kho ảnh nhưng CHƯA ghi được vào phiếu ${code}, nên hàng chưa vào tồn kho.\n\n` +
+        `CHƯA ghi được ảnh vào phiếu ${code}, nên hàng chưa vào tồn kho. Ảnh vừa tải đã được gỡ khỏi kho ảnh — tải lại sau.\n\n` +
           handleFirestoreError(e, OperationType.WRITE, "slips"),
       );
     } finally {
@@ -4135,6 +4141,25 @@ export default function App() {
    *
    * Nay dùng `alert`: nó chặn màn hình, buộc phải đọc.
    */
+  /*
+   * ĐÓNG KHUNG XÁC NHẬN = BỎ ẢNH VỪA TẢI. Bản cũ đóng khung mà giữ nguyên ảnh
+   * trong bộ nhớ: mở đơn KHÁC ra, ảnh của đơn trước vẫn nằm đó và được lưu
+   * nhầm sang đơn mới. Nay đóng là xoá sạch — và xoá luôn tệp trên kho ảnh.
+   */
+  const dongKhungXacNhan = () => {
+    if (
+      confirmationPhotos.length &&
+      !window.confirm(
+        `Đóng khung là bỏ ${confirmationPhotos.length} ảnh vừa tải (xoá luôn trên kho ảnh). Đóng?`,
+      )
+    )
+      return;
+    void boAnhCho(confirmationPhotos);
+    setConfirmationPhotos([]);
+    setConfirmationPhoto("");
+    setShowLossModal(false);
+  };
+
   const handleReportLoss = async () => {
     if (!selectedInTransitGroup || selectedInTransitGroup.length === 0) {
       alert(
@@ -4419,6 +4444,7 @@ export default function App() {
       setActualReceivedQtyMap({});
       setSoThucNhanText({});
       setLossReason("");
+      daLuuAnhCho(confirmationPhotos);
       setConfirmationPhotos([]);
       setConfirmationPhoto("");
     } catch (err) {
@@ -4925,6 +4951,37 @@ export default function App() {
     }
     return { tong: ds.length, daXoa, loi };
   };
+
+  /**
+   * BỎ ẢNH CHỜ — ảnh vừa tải mà không lưu (đóng khung, gỡ một tấm, lưu
+   * hỏng): xoá NGAY trên Cloudinary. Ai cũng gọi được; máy chủ chỉ xoá tấm do
+   * chính người gọi tải trong 24 giờ và chưa gắn vào dữ liệu nào. Xem
+   * src/lib/anhCho.ts.
+   *
+   * Mạng hỏng thì để nguyên trong danh sách chờ — lần mở app sau xoá nốt.
+   */
+  const boAnhCho = async (urls: readonly string[]) => {
+    const ds = [...new Set(urls.map((u) => String(u ?? "").trim()).filter(Boolean))];
+    for (let i = 0; i < ds.length; i += 20) {
+      const phan = ds.slice(i, i + 20);
+      try {
+        const r = await callAiApi("/api/anh/xoa", { urls: phan, treo: true });
+        if (!r.ok) continue;
+        // Máy chủ đã trả lời từng tấm (xoá, hoặc giữ vì có lý do) — xong việc.
+        daLuuAnhCho(phan);
+      } catch {
+        /* mất mạng: giữ trong danh sách chờ */
+      }
+    }
+  };
+
+  // Mở app: xoá nốt ảnh chờ của lần trước (đóng tab giữa chừng, mất mạng).
+  useEffect(() => {
+    if (!user || !userRole || userRole === "PENDING") return;
+    const con = anhChoConLai();
+    if (con.length) void boAnhCho(con);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userRole]);
 
   /** Báo lại khi còn ảnh chưa xoá được — dữ liệu đã xoá rồi. */
   const baoAnhChuaXoa = (kq: { tong: number; daXoa: number; loi: string }) => {
@@ -7878,7 +7935,11 @@ export default function App() {
                   selectedInTransitGroup.length > 0 && (
                     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
                       <div
-                        onClick={() => setShowLossModal(false)}
+                        onClick={() => {
+                          // Đã tải ảnh thì bấm trượt ra nền không được đóng —
+                          // đóng là bỏ ảnh. Dùng nút X / Hủy.
+                          if (!confirmationPhotos.length) dongKhungXacNhan();
+                        }}
                         className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
                       />
                       {/*
@@ -7916,10 +7977,7 @@ export default function App() {
                               </div>
                             </div>
                             <button
-                              onClick={() => {
-                                setShowLossModal(false);
-                                setConfirmationPhoto("");
-                              }}
+                              onClick={() => dongKhungXacNhan()}
                               className="p-2 hover:bg-slate-100 rounded-full transition-colors"
                             >
                               <X className="w-5 h-5 text-slate-400" />
@@ -8278,12 +8336,14 @@ export default function App() {
                                         }
                                       } catch (err) {
                                         console.error("Lỗi tải ảnh:", err);
+                                        void boAnhCho(newPhotos);
                                         alert(
                                           "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
                                         );
                                         return;
                                       }
 
+                                      themAnhCho(newPhotos);
                                       setConfirmationPhotos((prev) => [
                                         ...prev,
                                         ...newPhotos,
@@ -8328,11 +8388,13 @@ export default function App() {
                                         }
                                       } catch (err) {
                                         console.error("Lỗi tải ảnh:", err);
+                                        void boAnhCho(newPhotos);
                                         alert(
                                           "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
                                         );
                                         return;
                                       }
+                                      themAnhCho(newPhotos);
                                       setConfirmationPhotos((prev) => [
                                         ...prev,
                                         ...newPhotos,
@@ -8370,11 +8432,13 @@ export default function App() {
                                         }
                                       } catch (err) {
                                         console.error("Lỗi tải ảnh:", err);
+                                        void boAnhCho(newPhotos);
                                         alert(
                                           "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
                                         );
                                         return;
                                       }
+                                      themAnhCho(newPhotos);
                                       setConfirmationPhotos((prev) => [
                                         ...prev,
                                         ...newPhotos,
@@ -8428,6 +8492,8 @@ export default function App() {
                                           confirmationPhotos.filter(
                                             (_, i) => i !== idx,
                                           );
+                                        // Gỡ khỏi khung là bỏ hẳn: xoá luôn tệp.
+                                        void boAnhCho([confirmationPhotos[idx]]);
                                         setConfirmationPhotos(updated);
                                         if (idx === 0)
                                           setConfirmationPhoto(
@@ -8452,9 +8518,7 @@ export default function App() {
                           <Button
                             variant="outline"
                             className="flex-1"
-                            onClick={() => {
-                              setShowLossModal(false);
-                            }}
+                            onClick={() => dongKhungXacNhan()}
                           >
                             Hủy
                           </Button>

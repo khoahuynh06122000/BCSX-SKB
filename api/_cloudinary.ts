@@ -69,6 +69,37 @@ export async function kiemTraKhoaCloudinary(): Promise<string> {
   return cloud;
 }
 
+/**
+ * Thông tin một tấm ảnh: lúc tải và ngữ cảnh gắn lúc tải (uid người tải).
+ * Không có ảnh thì trả null.
+ */
+export async function thongTinAnh(
+  publicId: string,
+): Promise<{ taoLuc: string; ngucanh: Record<string, string> } | null> {
+  const { cloud, key, secret } = cauHinhCloudinary();
+  const duong = publicId.split("/").map(encodeURIComponent).join("/");
+  const r = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloud)}/resources/image/upload/${duong}`,
+    {
+      headers: {
+        Authorization:
+          "Basic " + Buffer.from(`${key}:${secret}`).toString("base64"),
+      },
+    },
+  );
+  if (r.status === 404) return null;
+  const d: any = await r.json().catch(() => null);
+  if (!r.ok) {
+    throw new Error(
+      `Cloudinary trả lỗi ${r.status}: ${d?.error?.message || "không rõ lý do"}`,
+    );
+  }
+  return {
+    taoLuc: String(d?.created_at || ""),
+    ngucanh: (d?.context?.custom as Record<string, string>) || {},
+  };
+}
+
 /** Tối đa mỗi lượt gọi — giới hạn của Cloudinary cho lệnh xoá theo danh sách. */
 export const TOI_DA_MOT_LUOT = 100;
 

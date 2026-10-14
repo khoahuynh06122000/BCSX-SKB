@@ -12,6 +12,8 @@
 
 import { NHAN_ANH_APP } from './soAnh';
 import { SUC_KHOE } from './sucKhoe';
+import { KHOA_NGUOI_TAI } from './anhCho';
+import { auth } from '../firebase';
 
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME as string;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET as string;
@@ -51,6 +53,10 @@ async function taiMotAnh(fileOrDataUri: string | Blob): Promise<string> {
     // Dán nhãn của app: kho Cloudinary dùng chung với web app khác, có nhãn
     // thì mở trang Cloudinary ra lọc được ảnh của app này. Xem `NHAN_ANH_APP`.
     if (coNhan) formData.append('tags', NHAN_ANH_APP);
+    // Ghi uid người tải vào ảnh: ảnh tải lên mà chưa kịp lưu (đóng khung,
+    // gỡ một tấm) thì chính người đó được xoá — xem src/lib/anhCho.ts.
+    const uid = auth.currentUser?.uid;
+    if (coNhan && uid) formData.append('context', `${KHOA_NGUOI_TAI}=${uid}`);
     return fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
       { method: 'POST', body: formData },
