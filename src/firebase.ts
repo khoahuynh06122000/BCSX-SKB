@@ -10,19 +10,26 @@ import {
   initializeFirestore,
   collection,
   doc,
-  getDocs,
-  getDoc,
-  getDocFromServer,
-  setDoc,
-  updateDoc,
-  deleteDoc,
+  setDoc as fsSetDoc,
   deleteField,
+  increment,
   query,
   where,
-  onSnapshot,
   orderBy,
-  writeBatch
 } from 'firebase/firestore';
+import { BO_DEM, KHO_DO_LUONG, khoaNguoi, ngayHanMuc } from './lib/doLuong';
+// Các hàm Firestore ĐÃ BỌC BỘ ĐẾM — xem src/lib/firestoreDem.ts.
+import {
+  deleteDoc,
+  getDoc,
+  getDocFromServer,
+  getDocs,
+  onSnapshot,
+  runTransaction,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from './lib/firestoreDem';
 
 // Cau hinh Firebase doc tu bien moi truong (file .env.local khi chay tai may,
 // hoac Environment Variables tren Vercel khi deploy).
@@ -78,6 +85,67 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
+/**
+ * GỬI BỘ ĐO LÊN MỖI 5 PHÚT, và khi trang bị ẩn / đóng.
+ *
+ * 5 phút chứ không phải từng lượt: mỗi lần gửi tự nó cũng là một lượt ghi.
+ * Năm người dùng cả ngày làm việc thì khoảng 500 lượt ghi — vài phần trăm hạn
+ * mức, đổi lấy việc thấy được con số thật. Lượt gửi ấy cũng được cộng vào ô
+ * "ghi" của chính nó, để bộ đo không giấu phần chi phí của mình.
+ *
+ * Gửi hỏng (mất mạng) thì trả số lại bộ đếm, lần sau gửi tiếp — không mất.
+ * Trả về hàm dừng, để gọi khi đăng xuất.
+ */
+const CHU_KY_GUI = 5 * 60 * 1000;
+
+export function batDauGuiDoLuong(email: string): () => void {
+  const khoa = khoaNguoi(email);
+  let dangGui = false;
+  const gui = async () => {
+    if (dangGui) return;
+    const so = BO_DEM.layVaXoa();
+    if (!so.doc && !so.ghi && !so.xoa) return;
+    dangGui = true;
+    const ghi = so.ghi + 1; // + chính lượt gửi này
+    try {
+      await fsSetDoc(
+        doc(db, KHO_DO_LUONG, ngayHanMuc()),
+        {
+          doc: increment(so.doc),
+          ghi: increment(ghi),
+          xoa: increment(so.xoa),
+          capNhat: new Date().toISOString(),
+          nguoi: {
+            [khoa]: {
+              doc: increment(so.doc),
+              ghi: increment(ghi),
+              xoa: increment(so.xoa),
+            },
+          },
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      BO_DEM.traLai(so);
+      console.warn('Chua gui duoc bo do luot goi:', e);
+    } finally {
+      dangGui = false;
+    }
+  };
+  const hen = setInterval(gui, CHU_KY_GUI);
+  const khiAn = () => {
+    if (document.visibilityState === 'hidden') void gui();
+  };
+  document.addEventListener('visibilitychange', khiAn);
+  window.addEventListener('pagehide', gui);
+  return () => {
+    clearInterval(hen);
+    document.removeEventListener('visibilitychange', khiAn);
+    window.removeEventListener('pagehide', gui);
+    void gui();
+  };
+}
+
 export {
   collection,
   doc,
@@ -92,6 +160,7 @@ export {
   where,
   onSnapshot,
   orderBy,
+  runTransaction,
   writeBatch,
   signInWithPopup,
   signOut,

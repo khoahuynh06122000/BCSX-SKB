@@ -108,7 +108,21 @@ import {
   getDoc,
   getDocs,
   writeBatch,
+  batDauGuiDoLuong,
 } from "./firebase";
+import {
+  BO_DEM,
+  KHO_DO_LUONG,
+  MOC_THAM_CHIEU,
+  cacNgayGanNhat,
+  duBaoCuoiNgay,
+  mucDo,
+  ngayHanMuc,
+  phutDaQua,
+  xepNguoi,
+  type LoaiGoi,
+  type NgayDoLuong,
+} from "./lib/doLuong";
 import { uploadToCloudinary } from "./lib/cloudinary";
 import {
   hashPin,
@@ -4356,7 +4370,15 @@ export default function App() {
     // Doanh thu khong con la tai lieu luu tren Firestore nen khong chiem dung
     // luong va khong ton luot doc nao nua - xem revenueData o tren.
     const partnerBytes = byteSize(partners);
-    const usedBytes = (txBytes + partnerBytes) * OVERHEAD_FACTOR;
+    // Sáu bảng còn lại — bản cũ bỏ sót nên ước tính luôn thấp hơn thực tế.
+    const khacBytes = byteSize([
+      ...slips,
+      ...soPhieu,
+      ...hoaDon,
+      ...soAnh,
+      ...diemBanOverrides,
+    ]);
+    const usedBytes = (txBytes + partnerBytes + khacBytes) * OVERHEAD_FACTOR;
     const usedPercent = (usedBytes / FREE_LIMIT_BYTES) * 100;
 
     // Kích thước trung bình mỗi bản ghi giao dịch (để quy đổi ra "còn bao nhiêu đơn").
@@ -4397,8 +4419,8 @@ export default function App() {
      * collection mỗi lần mở (không có limit/where), nên mỗi lần mở app tốn số
      * lượt đọc bằng đúng tổng số tài liệu đang có.
      *
-     * Vì sao chưa thêm limit(): tồn kho theo lô (FIFO) và tồn đầu/cuối kỳ đều
-     * duyệt TOÀN BỘ lịch sử giao dịch. Cắt bớt dữ liệu tải về sẽ làm số tồn kho
+     * Vì sao chưa thêm limit(): tồn kho và tồn đầu/cuối kỳ đều duyệt TOÀN BỘ
+     * lịch sử giao dịch. Cắt bớt dữ liệu tải về sẽ làm số tồn kho
      * sai mà không báo lỗi gì — tệ hơn hẳn việc hết hạn mức đọc. Muốn cắt được
      * thì phải chốt tồn đầu kỳ theo tháng trước, đó là một thay đổi thiết kế.
      *
@@ -4406,8 +4428,16 @@ export default function App() {
      * đỏ lên là lúc phải làm việc đó, đừng đợi app trắng dữ liệu mới biết.
      */
     const FREE_READS_PER_DAY = 50000;
+    // Mở app là đọc TRỌN tám bảng — bản cũ chỉ cộng ba.
     const docsPerAppOpen =
-      transactions.length + partners.length + slips.length;
+      transactions.length +
+      partners.length +
+      slips.length +
+      soPhieu.length +
+      hoaDon.length +
+      soAnh.length +
+      diemBanOverrides.length +
+      allUserProfiles.length;
     const opensPerDay =
       docsPerAppOpen > 0
         ? Math.floor(FREE_READS_PER_DAY / docsPerAppOpen)
@@ -4441,7 +4471,7 @@ export default function App() {
         partners: partners.length,
       },
     };
-  }, [transactions, partners, slips]);
+  }, [transactions, partners, slips, soPhieu, hoaDon, soAnh, diemBanOverrides, allUserProfiles]);
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -5812,6 +5842,99 @@ export default function App() {
   /** Ảnh theo khoá lượt giao — để gắn lại khi nạp lại tệp. */
   const anhCuaNhom = useMemo(() => anhTheoNhom(soAnh), [soAnh]);
 
+  /* ---------------- Bo do luot goi Firebase ---------------- */
+
+  /*
+   * MỌI MÁY ĐÃ ĐĂNG NHẬP ĐỀU GỬI BỘ ĐO LÊN — năm phút một lần, và khi tắt
+   * trang. Không gửi thì admin chỉ thấy lượt gọi của chính máy mình, trong
+   * khi phần lớn lượt đọc là của những người mở app ở kho. Xem `doLuong.ts`.
+   */
+  useEffect(() => {
+    if (!user || !daDuocDuyet) return;
+    return batDauGuiDoLuong(currentUserProfile?.email || user || "");
+  }, [user, daDuocDuyet, currentUserProfile?.email]);
+
+  const [doLuong, setDoLuong] = useState<NgayDoLuong[]>([]);
+  const [dangTaiDoLuong, setDangTaiDoLuong] = useState(false);
+  /**
+   * Đọc bộ đo của N ngày gần nhất — mỗi ngày một tài liệu, tức N lượt đọc.
+   *
+   * Cố ý ĐỌC THEO LẦN chứ không mở trình nghe: tài liệu hôm nay đổi mỗi lần
+   * có máy gửi số lên, nghe liên tục thì chính bộ đo lại ngốn lượt đọc. Hôm nay
+   * đọc lại mười phút một lần; bảy ngày chỉ đọc khi admin mở Cài đặt.
+   */
+  const taiDoLuong = async (soNgay: number) => {
+    setDangTaiDoLuong(true);
+    try {
+      const ds = await Promise.all(
+        cacNgayGanNhat(soNgay).map(async (ngay) => {
+          const snap = await getDoc(doc(db, KHO_DO_LUONG, ngay));
+          const d: any = snap.exists() ? snap.data() : {};
+          return {
+            ngay,
+            doc: Number(d.doc) || 0,
+            ghi: Number(d.ghi) || 0,
+            xoa: Number(d.xoa) || 0,
+            capNhat: d.capNhat,
+            nguoi: d.nguoi,
+          } as NgayDoLuong;
+        }),
+      );
+      setDoLuong((cu) => {
+        const m = new Map(cu.map((x) => [x.ngay, x]));
+        ds.forEach((x) => m.set(x.ngay, x));
+        return Array.from(m.values()).sort((a, b) => b.ngay.localeCompare(a.ngay));
+      });
+    } catch (e) {
+      console.warn("Chua doc duoc bo do luot goi:", e);
+    } finally {
+      setDangTaiDoLuong(false);
+    }
+  };
+  useEffect(() => {
+    if (!user || !isOwner) return;
+    void taiDoLuong(1);
+    const hen = setInterval(() => void taiDoLuong(1), 10 * 60 * 1000);
+    return () => clearInterval(hen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isOwner]);
+  useEffect(() => {
+    if (isOwner && activeTab === "settings") void taiDoLuong(7);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner, activeTab]);
+  // Nhịp vẽ lại 30 giây khi đang ở Cài đặt, để số "máy này từ lúc mở app" chạy.
+  const [, setNhipDoLuong] = useState(0);
+  useEffect(() => {
+    if (activeTab !== "settings") return;
+    const hen = setInterval(() => setNhipDoLuong((n) => n + 1), 30_000);
+    return () => clearInterval(hen);
+  }, [activeTab]);
+
+  /** Tình hình hôm nay theo từng loại lượt gọi. */
+  const goiHomNay = useMemo(() => {
+    const hom = doLuong.find((x) => x.ngay === ngayHanMuc());
+    const phut = phutDaQua();
+    return (["doc", "ghi", "xoa"] as LoaiGoi[]).map((loai) => {
+      const da = hom ? hom[loai] : 0;
+      const moc = MOC_THAM_CHIEU[loai];
+      const duBao = duBaoCuoiNgay(da, phut);
+      return {
+        loai,
+        ten: loai === "doc" ? "Lượt đọc" : loai === "ghi" ? "Lượt ghi" : "Lượt xoá",
+        da,
+        moc,
+        phanTram: moc ? (da / moc) * 100 : 0,
+        duBao,
+        muc: mucDo(Math.max(da, duBao * 0.9), moc),
+      };
+    });
+  }, [doLuong]);
+  /** Có loại nào đáng lo không — dùng cho dải cảnh báo đầu trang. */
+  const canhBaoGoi = useMemo(
+    () => goiHomNay.filter((g) => g.muc !== "an-toan"),
+    [goiHomNay],
+  );
+
   const isAuthorizedFull = daDuocDuyet;
   /** Ghi được ít nhất một chiều — dùng để bày nhóm menu Nhập · Xuất. */
   const canWrite = quyen.ghiNhap || quyen.ghiXuat;
@@ -6653,6 +6776,43 @@ export default function App() {
               chứ không phải thông báo đỏ toàn màn hình — số liệu đọc được vẫn
               dùng bình thường trong lúc chờ sửa phân quyền.
             */}
+            {/*
+              LƯỢT GỌI FIREBASE ĐANG CAO — chỉ admin thấy, chỉ hiện khi đáng
+              lo (đã dùng hoặc dự báo cuối ngày từ 50% mốc trở lên). Nói rõ
+              loại nào, bao nhiêu, và còn bao lâu tới lúc hạn mức đặt lại.
+            */}
+            {isOwner && canhBaoGoi.length > 0 && (
+              <div
+                className={cn(
+                  "p-3 rounded-2xl border flex gap-3",
+                  canhBaoGoi.some((g) => g.muc === "nguy")
+                    ? "border-rose-200 bg-rose-50"
+                    : "border-amber-200 bg-amber-50",
+                )}
+              >
+                <AlertTriangle
+                  className={cn(
+                    "w-5 h-5 shrink-0 mt-0.5",
+                    canhBaoGoi.some((g) => g.muc === "nguy")
+                      ? "text-rose-600"
+                      : "text-amber-600",
+                  )}
+                />
+                <div className="min-w-0 text-[12px] font-bold text-slate-700 leading-relaxed">
+                  <strong>Lượt gọi Firebase hôm nay đang cao.</strong>{" "}
+                  {canhBaoGoi
+                    .map(
+                      (g) =>
+                        `${g.ten}: ${formatNumber(g.da)} / ${formatNumber(g.moc)} (${g.phanTram.toFixed(0)}%), dự báo cuối ngày ~${formatNumber(g.duBao)}`,
+                    )
+                    .join(" · ")}
+                  . Hạn mức đặt lại lúc nửa đêm giờ Mỹ (14h–15h chiều giờ Việt Nam).
+                  Bớt bấm tải lại trang và đóng bớt tab app đang mở dư. Xem chi tiết
+                  trong Cài đặt → Lượt gọi Firebase.
+                </div>
+              </div>
+            )}
+
             {Object.keys(loiDoc).length > 0 && (
               <div className="p-3 rounded-2xl border border-rose-200 bg-rose-50 flex gap-3">
                 <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -9281,6 +9441,118 @@ export default function App() {
                       đang tải về máy, đã cộng 50% hao phí chỉ mục — số thật xem
                       tại Firebase Console. Khi chạm 80%, anh nên xuất Excel lưu
                       trữ rồi dọn bớt giao dịch cũ.
+                    </p>
+                  </div>
+                </Card>
+
+                {/*
+                  LƯỢT GỌI FIREBASE — ĐO THẬT, không ước tính. Số của mọi máy
+                  cộng lại, mỗi máy gửi lên năm phút một lần nên có thể trễ
+                  tới năm phút. Xem src/lib/doLuong.ts.
+                */}
+                <Card title="Lượt gọi Firebase · đo thật">
+                  <div className="space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] font-bold text-slate-500">
+                        Hôm nay theo ngày hạn mức{" "}
+                        <span className="font-mono text-slate-700">{ngayHanMuc()}</span>{" "}
+                        (giờ Mỹ — đặt lại lúc 14h–15h chiều giờ Việt Nam)
+                      </p>
+                      <button
+                        onClick={() => void taiDoLuong(7)}
+                        disabled={dangTaiDoLuong}
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 disabled:opacity-40 flex items-center gap-1.5"
+                      >
+                        <RefreshCw className={cn("w-3 h-3", dangTaiDoLuong && "animate-spin")} />
+                        Làm mới
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {goiHomNay.map((g) => (
+                        <div key={g.loai} className="space-y-1.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-[12px] font-black text-slate-700">{g.ten}</span>
+                            <span className="text-[12px] font-bold text-slate-500 tabular-nums">
+                              <strong className="text-slate-900">{formatNumber(g.da)}</strong> /{" "}
+                              {formatNumber(g.moc)} · dự báo cuối ngày ~{formatNumber(g.duBao)}
+                            </span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                g.muc === "nguy"
+                                  ? "bg-rose-500"
+                                  : g.muc === "chu-y"
+                                    ? "bg-amber-400"
+                                    : "bg-emerald-500",
+                              )}
+                              style={{ width: `${Math.min(100, g.phanTram)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <p className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          7 ngày gần nhất
+                        </p>
+                        <table className="w-full text-[12px]">
+                          <thead>
+                            <tr className="text-[10px] uppercase tracking-widest text-slate-400">
+                              <th className="px-3 py-1.5 text-left">Ngày</th>
+                              <th className="px-3 py-1.5 text-right">Đọc</th>
+                              <th className="px-3 py-1.5 text-right">Ghi</th>
+                              <th className="px-3 py-1.5 text-right">Xoá</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {doLuong.slice(0, 7).map((d) => (
+                              <tr key={d.ngay} className="border-t border-slate-100 font-bold text-slate-600 tabular-nums">
+                                <td className="px-3 py-1.5 font-mono">{d.ngay}</td>
+                                <td className={cn("px-3 py-1.5 text-right", mucDo(d.doc, MOC_THAM_CHIEU.doc) === "nguy" && "text-rose-600")}>
+                                  {formatNumber(d.doc)}
+                                </td>
+                                <td className="px-3 py-1.5 text-right">{formatNumber(d.ghi)}</td>
+                                <td className="px-3 py-1.5 text-right">{formatNumber(d.xoa)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <p className="px-3 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          Hôm nay ai gọi nhiều nhất
+                        </p>
+                        <div className="divide-y divide-slate-100">
+                          {xepNguoi(doLuong.find((x) => x.ngay === ngayHanMuc())?.nguoi)
+                            .slice(0, 8)
+                            .map((n) => (
+                              <div key={n.khoa} className="px-3 py-1.5 flex items-center justify-between gap-2 text-[12px] font-bold">
+                                <span className="truncate text-slate-600">{n.khoa.replace(/_gmail_com$/, "")}</span>
+                                <span className="tabular-nums text-slate-700 shrink-0">
+                                  {formatNumber(n.so.doc)} đọc · {formatNumber(n.so.ghi)} ghi
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                        <p className="px-3 py-2 border-t border-slate-100 text-[11px] font-bold text-slate-400">
+                          Máy này từ lúc mở app: {formatNumber(BO_DEM.tongPhien.doc)} đọc ·{" "}
+                          {formatNumber(BO_DEM.tongPhien.ghi)} ghi · {formatNumber(BO_DEM.tongPhien.xoa)} xoá
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] font-bold text-slate-400 leading-relaxed border-t border-slate-100 pt-4">
+                      Mốc so sánh là hạn mức miễn phí mỗi ngày của Firestore bản Standard
+                      (50.000 đọc · 20.000 ghi · 20.000 xoá). Cơ sở dữ liệu của app là bản
+                      ENTERPRISE nên hạn mức và cách tính tiền có thể khác — số chính xác
+                      xem ở Firebase Console → Usage and billing. Mỗi lần mở app tốn khoảng{" "}
+                      <strong className="text-slate-600">{formatNumber(storageForecast.docsPerAppOpen)}</strong>{" "}
+                      lượt đọc (đọc trọn các bảng).
                     </p>
                   </div>
                 </Card>

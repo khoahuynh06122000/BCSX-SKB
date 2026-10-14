@@ -28,13 +28,10 @@
  * phiếu có nút cấp bù.
  */
 
-import {
-  doc,
-  getDoc,
-  runTransaction,
-  setDoc,
-  type Firestore,
-} from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
+import { doc } from "firebase/firestore";
+// Đọc ghi qua bản đã bọc bộ đo lượt gọi — xem src/lib/firestoreDem.ts.
+import { getDoc, runTransaction, setDoc } from "./firestoreDem";
 import {
   DAU_SO,
   MA_LOAI,

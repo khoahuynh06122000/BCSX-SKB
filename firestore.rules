@@ -370,6 +370,21 @@ service cloud.firestore {
       allow update, delete: if isOwner();
     }
 
+    /*
+     * BO DO LUOT GOI FIREBASE — moi ngay (gio My) mot tai lieu.
+     *
+     * Moi may da duoc duyet tu gui so luot doc / ghi / xoa cua minh len, nam
+     * phut mot lan, bang phep cong don (increment). Chi cho dung nam truong
+     * do — khong ai ghi duoc thu gi khac vao day. Xoa: chi admin.
+     * Xem src/lib/doLuong.ts.
+     */
+    match /do_luong/{ngay} {
+      allow read: if isApproved();
+      allow create, update: if isApproved()
+        && request.resource.data.keys().hasOnly(['doc', 'ghi', 'xoa', 'capNhat', 'nguoi']);
+      allow delete: if isOwner();
+    }
+
     match /partners/{partnerId} {
       allow read: if isViewer();
       // Them va sua don vi nhan hang la viec cua nguoi xuat kho.
