@@ -131,9 +131,8 @@ import {
   danhSachBoPhanBNC,
   danhSachDonVi,
   dungAnhThuVien,
-  locTheoDonVi,
+  locTheoNhieuDonVi,
   lyDoAnhLoi,
-  tenLocDonVi,
   type AnhThuVien,
 } from "./lib/thuVienAnh";
 import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
@@ -207,6 +206,7 @@ import {
 
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
+import ChonNhieuDonVi from "./components/ChonNhieuDonVi";
 import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
 import type { DongGhiDieuChinh } from "./lib/dieuChinhCongNo";
 import { anhChoConLai, daLuuAnhCho, themAnhCho } from "./lib/anhCho";
@@ -699,7 +699,8 @@ export default function App() {
    * mất cả phút, không có gì nhúc nhích thì người dùng tưởng treo và bấm lại.
    */
   /** Đơn vị đang lọc ở thư viện ảnh chiều xuất. Rỗng là xem hết. */
-  const [galleryDonVi, setGalleryDonVi] = useState("");
+  // Chọn NHIỀU đơn vị cùng lúc (vd FV + NVT). Rỗng = tất cả.
+  const [galleryDonVi, setGalleryDonVi] = useState<string[]>([]);
   /**
    * Điểm bán của BNC đang lọc thêm, chỉ dùng khi đang lọc một phần của BNC.
    *
@@ -4906,13 +4907,17 @@ export default function App() {
 
   /** Ảnh sau khi lọc đơn vị (hoặc phần của BNC), trước khi soi tiếp điểm bán. */
   const anhTruocLocBoPhan = useMemo(
-    () => locTheoDonVi(anhTruocLocDonVi, galleryDonVi),
+    () => locTheoNhieuDonVi(anhTruocLocDonVi, galleryDonVi),
     [anhTruocLocDonVi, galleryDonVi],
   );
 
   /** Điểm bán có ảnh trong phần đang lọc; rỗng thì không bày ô chọn thứ hai. */
   const boPhanCoAnh = useMemo(
-    () => danhSachBoPhanBNC(anhTruocLocBoPhan, galleryDonVi),
+    // Ô điểm bán chỉ có nghĩa khi đang soi ĐÚNG MỘT phần của BNC.
+    () =>
+      galleryDonVi.length === 1
+        ? danhSachBoPhanBNC(anhTruocLocBoPhan, galleryDonVi[0])
+        : [],
     [anhTruocLocBoPhan, galleryDonVi],
   );
 
@@ -7532,7 +7537,9 @@ export default function App() {
                                                   dieu ay.
                                                 */
                                                 setGalleryDonVi(
-                                                  t.partnerName || "",
+                                                  t.partnerName
+                                                    ? [t.partnerName]
+                                                    : [],
                                                 );
                                                 setGalleryBoPhan("");
                                                 // Mở thư viện đúng ngày của
@@ -10459,7 +10466,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                           setGalleryFilter("IN");
                           // Chiều nhập không lọc theo đơn vị, mà để nguyên thì
                           // nó vẫn âm thầm lọc khi quay lại chiều xuất.
-                          setGalleryDonVi("");
+                          setGalleryDonVi([]);
                           setGalleryBoPhan("");
                         }}
                         className={cn(
@@ -10474,7 +10481,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       <button
                         onClick={() => {
                           setGalleryFilter("OUT");
-                          setGalleryDonVi("");
+                          setGalleryDonVi([]);
                           setGalleryBoPhan("");
                         }}
                         className={cn(
@@ -10496,43 +10503,16 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                         dòng "BNC · ..." lấn hết đơn vị khác. Chọn Nội bộ thì
                         hiện thêm ô chọn điểm bán, nên vẫn soi được từng quán. */}
                     {galleryFilter === "OUT" && (
-                      <div className="relative w-full lg:w-56 shrink-0">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <select
-                          aria-label="Lọc theo đơn vị"
-                          value={galleryDonVi}
-                          onChange={(e) => {
-                            // Đổi đơn vị thì bỏ điểm bán đang soi: điểm bán cũ
-                            // gần như luôn thuộc phần khác, để lại là lưới trống.
-                            setGalleryDonVi(e.target.value);
-                            setGalleryBoPhan("");
-                          }}
-                          className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700 disabled:opacity-50"
-                          disabled={donViCoAnh.length === 0}
-                        >
-                          <option value="">
-                            {donViCoAnh.length === 0
-                              ? "Không có đơn vị nào"
-                              : `Tất cả đơn vị (${formatNumber(donViCoAnh.length)})`}
-                          </option>
-                          {/* Đơn vị đang chọn mà khoảng ngày mới không còn ảnh
-                              thì vẫn phải bày ra, không thì ô chọn tự nhảy về
-                              "Tất cả" trong khi lưới vẫn đang lọc. */}
-                          {galleryDonVi &&
-                            !donViCoAnh.some((d) => d.gia === galleryDonVi) && (
-                              <option value={galleryDonVi}>
-                                {tenLocDonVi(galleryDonVi)} — không có ảnh trong
-                                khoảng này
-                              </option>
-                            )}
-                          {donViCoAnh.map((d) => (
-                            <option key={d.gia} value={d.gia}>
-                              {d.ten}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      </div>
+                      <ChonNhieuDonVi
+                        ds={donViCoAnh}
+                        dangChon={galleryDonVi}
+                        onDoi={(v) => {
+                          // Đổi đơn vị thì bỏ điểm bán đang soi: điểm bán cũ
+                          // gần như luôn thuộc phần khác, để lại là lưới trống.
+                          setGalleryDonVi(v);
+                          setGalleryBoPhan("");
+                        }}
+                      />
                     )}
 
                     {/* Ô THỨ HAI — điểm bán. Chỉ hiện SAU KHI đã chọn một phần

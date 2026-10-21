@@ -11,6 +11,7 @@ import {
   gopAnhTrung,
   kieuDuongDanAnh,
   locTheoDonVi,
+  locTheoNhieuDonVi,
   lyDoAnhLoi,
   tenLocDonVi,
   type AnhThuVien,
@@ -332,6 +333,24 @@ kiemTra(
   // Ten phan la chu nguoi doc, khong duoc dung lam gia tri loc: neu co don vi
   // that ten "Noi bo" thi hai thu se lan nhau.
   kiemTra("ten phan khong phai gia tri loc", locTheoDonVi(anh, "BNC · Nội bộ").length, 0);
+
+  // CHỌN NHIỀU ĐƠN VỊ: ra đúng hợp của từng đơn vị, không trùng, không sót.
+  {
+    const hai = locTheoNhieuDonVi(anh, ["FV", "BNC:NG"]);
+    kiemTra(
+      "chon hai don vi ra du anh cua ca hai",
+      hai.length,
+      locTheoDonVi(anh, "FV").length + locTheoDonVi(anh, "BNC:NG").length,
+    );
+    kiemTra(
+      "chon hai don vi khong lot don vi thu ba",
+      hai.every((a) => a.donVi === "FV" || a.maDonVi === "AD0103-NG"),
+      true,
+    );
+    kiemTra("chon trung mot don vi hai lan khong nhan doi", locTheoNhieuDonVi(anh, ["FV", "FV"]).length, locTheoDonVi(anh, "FV").length);
+    kiemTra("danh sach rong la lay het", locTheoNhieuDonVi(anh, []).length, anh.length);
+    kiemTra("danh sach chuoi trong la lay het", locTheoNhieuDonVi(anh, ["", " "]).length, anh.length);
+  }
 
   // Tong so anh cua tung muc phai bang tong so anh co don vi — phep chan bat
   // duoc loi mot bo phan roi ra ngoai moi muc.

@@ -287,15 +287,31 @@ export function danhSachDonVi(anh: AnhThuVien[]): MucDonVi[] {
   return [...phan, ...ra];
 }
 
+/** Tấm ảnh có thuộc một giá trị lọc (đơn vị, hoặc một phần của BNC) không. */
+function khopDonVi(a: AnhThuVien, d: string): boolean {
+  if (d.startsWith(TIEN_TO_PHAN)) {
+    return nhomCuaBoPhan(a.maDonVi) === d.slice(TIEN_TO_PHAN.length);
+  }
+  return a.donVi === d;
+}
+
 /** Lọc theo một đơn vị, hoặc theo một phần của BNC. Để trống là lấy hết. */
 export function locTheoDonVi(anh: AnhThuVien[], donVi: string): AnhThuVien[] {
-  const d = String(donVi ?? "").trim();
-  if (!d) return anh;
-  if (d.startsWith(TIEN_TO_PHAN)) {
-    const ma = d.slice(TIEN_TO_PHAN.length);
-    return anh.filter((a) => nhomCuaBoPhan(a.maDonVi) === ma);
-  }
-  return anh.filter((a) => a.donVi === d);
+  return locTheoNhieuDonVi(anh, [donVi]);
+}
+
+/**
+ * Lọc theo NHIỀU đơn vị cùng lúc — ảnh của FV HOẶC NVT HOẶC một phần BNC.
+ * Danh sách rỗng (hay chỉ toàn chuỗi trống) là lấy hết. Giữ nguyên thứ tự
+ * ảnh, và một tấm khớp hai giá trị vẫn chỉ hiện một lần.
+ */
+export function locTheoNhieuDonVi(
+  anh: AnhThuVien[],
+  dsDonVi: readonly string[],
+): AnhThuVien[] {
+  const ds = dsDonVi.map((d) => String(d ?? "").trim()).filter(Boolean);
+  if (!ds.length) return anh;
+  return anh.filter((a) => ds.some((d) => khopDonVi(a, d)));
 }
 
 /**
