@@ -538,6 +538,30 @@ export default function DebtExport({
   };
 
   /*
+   * BỎ CẢ LOẠT ĐƠN CHỜ ĐIỀN SỐ — kết xuất xong mới thấy số liệu sai.
+   *
+   * Chỉ bỏ đơn CHƯA CÓ SỐ hóa đơn (đúng những đơn đang nằm ở bảng chờ). Đơn
+   * quay về "Chưa xuất hóa đơn": sửa số liệu xuất kho xong, kết xuất lại là
+   * tệp mới mang số đúng. Tệp TEMPLATE đã tải về máy thì anh tự bỏ đi — app
+   * không với tới được tệp trên máy.
+   */
+  const boNhieuKetXuat = async (ds: (typeof canDien)[0][]) => {
+    const bo = ds.filter((d) => !String(d.soDaGhi || "").trim());
+    if (!bo.length) return;
+    if (
+      !window.confirm(
+        `Bỏ ${bo.length} đơn đang chờ điền số hóa đơn?\n\n` +
+          bo.map((d) => `· ${d.donVi} (${d.nhanDot})`).join("\n") +
+          `\n\nCác đơn quay về "Chưa xuất hóa đơn". Sửa số liệu xong thì ` +
+          `kết xuất TEMPLATE lại. Tệp đã tải về máy lần trước thì bỏ đi, đừng ` +
+          `mang đi phát hành.`,
+      )
+    )
+      return;
+    await onSaveHoaDon(bo.map(boDauKetXuat));
+  };
+
+  /*
    * KHÔNG lọc và KHÔNG liệt kê hóa đơn cũ ở đây nữa.
    *
    * Bảng dưới đây chỉ là đơn của đợt đang khai — thường vài chục dòng, để điền
@@ -1087,8 +1111,26 @@ export default function DebtExport({
               goiYSo={(khoa) =>
                 canDien.find((x) => x.khoa === khoa)?.soGoiY || ""
               }
+              onBo={(khoa) => {
+                const d = canDien.find((x) => x.khoa === khoa);
+                if (d) void boKetXuat(d);
+              }}
             />
             <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex gap-2 justify-end flex-wrap">
+              {khoiChoDien.length > 0 && (
+                <button
+                  onClick={() =>
+                    boNhieuKetXuat(
+                      khoiChoDien
+                        .map((k) => k.don)
+                        .filter((d): d is (typeof canDien)[0] => !!d),
+                    )
+                  }
+                  className="mr-auto px-3.5 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50"
+                >
+                  Bỏ cả {khoiChoDien.length} đơn chờ
+                </button>
+              )}
               <button
                 onClick={dienGoiY}
                 className="px-3.5 py-2.5 rounded-lg bg-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200"

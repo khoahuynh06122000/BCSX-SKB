@@ -28,7 +28,7 @@
  */
 
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import type { DongCongNo } from "../lib/congNo";
 import { ngayCham } from "../lib/oNgay";
 import { cn, formatNumber } from "../lib/utils";
@@ -59,6 +59,11 @@ interface Props {
   ) => void;
   /** Số app gợi ý, hiện mờ trong ô khi chưa điền. */
   goiYSo?: (khoa: string) => string;
+  /**
+   * Bỏ một tờ đang chờ điền số (kết xuất sai số liệu) — đưa về "chưa xuất".
+   * Không truyền thì không có cột nút.
+   */
+  onBo?: (khoa: string) => void;
   /** Chiều cao tối đa trước khi cuộn dọc. */
   cao?: string;
 }
@@ -76,6 +81,7 @@ export default function BangChotHoaDon({
   khoi,
   onSua,
   goiYSo,
+  onBo,
   cao = "max-h-[600px]",
 }: Props) {
   /*
@@ -113,6 +119,7 @@ export default function BangChotHoaDon({
             <th className={TH}>Đơn vị</th>
             <th className={cn(TH, "text-right")}>Sau thuế SKB → DNC</th>
             <th className={cn(TH, "text-right")}>Sau thuế DNC → ĐVTV</th>
+            {onBo && <th className={TH} />}
           </tr>
         </thead>
         <tbody>
@@ -196,12 +203,24 @@ export default function BangChotHoaDon({
                 <td className="px-3 py-2 text-right tabular-nums font-black text-slate-900 whitespace-nowrap">
                   {tien(cong(k.dong, (d) => d.sauThueDnc))}
                 </td>
+                {onBo && (
+                  <td className="pl-1 pr-3 py-2 w-10 text-right">
+                    <button
+                      onClick={() => onBo(k.khoa)}
+                      title="Bỏ tờ này — đưa về Chưa xuất hóa đơn"
+                      aria-label="Bỏ tờ này"
+                      className="p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                )}
               </tr>,
 
               mo && (
                 <tr key={`${k.khoa}-ct`} className="bg-slate-50/60">
                   <td />
-                  <td colSpan={6} className="px-3 pb-3">
+                  <td colSpan={onBo ? 7 : 6} className="px-3 pb-3">
                     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
                       <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[900px]">
                         <thead className="bg-slate-50">
