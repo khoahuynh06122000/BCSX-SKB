@@ -30,12 +30,9 @@ import {
   dungPhieuHuy,
   dungSoPhieu,
   laLoaiHuy,
-  locSoPhieu,
   loaiHuyCua,
-  ngayGioVn,
   soPhieuHuy,
   thuTuKeTiep,
-  tomTatSoPhieu,
   type GhiSoPhieu,
 } from "../soPhieu";
 import { ngayCham } from "../oNgay";
@@ -306,159 +303,10 @@ kiemTra(
   null,
 );
 
-// ------------------------------------------------- lọc và xếp
-
-{
-  const tatCa = locSoPhieu(so);
-  kiemTra("loc khong dieu kien giu het", tatCa.length, 5);
-  // Xếp theo SỐ giảm dần trong từng năm: 61.. rồi 60.. rồi 51..
-  kiemTra("so lon nhat dung dau", tatCa[0].soPhieu, "61260002");
-  kiemTra("so nho nhat dung cuoi", tatCa[4].soPhieu, "51260001");
-}
-
-kiemTra(
-  "loc theo loai",
-  locSoPhieu(so, { loai: "XUAT" }).map((x) => x.soPhieu),
-  ["60260002", "60260001"],
-);
-kiemTra("loc chi con hieu luc", locSoPhieu(so, { chiConHieuLuc: true }).length, 4);
-kiemTra(
-  "loc tu ngay",
-  locSoPhieu(so, { tuNgay: "2026-08-22" }).map((x) => x.soPhieu),
-  ["61260002", "60260002"],
-);
-kiemTra("loc den ngay", locSoPhieu(so, { denNgay: "2026-08-19" }).length, 2);
-kiemTra(
-  "tim theo so phieu",
-  locSoPhieu(so, { tuKhoa: "60260001" }).map((x) => x.soPhieu),
-  ["60260001"],
-);
-kiemTra("tim theo don vi", locSoPhieu(so, { tuKhoa: "bnc" }).length, 1);
-kiemTra("tim theo nguon chung tu", locSoPhieu(so, { tuKhoa: "PN-260818" }).length, 2);
-kiemTra("tim khong ra", locSoPhieu(so, { tuKhoa: "khong-co" }).length, 0);
-kiemTra("loc danh sach rong", locSoPhieu([]).length, 0);
-
-// ------------------------------------------------- thống kê
-
-{
-  const t = tomTatSoPhieu(so);
-  kiemTra("tong phieu", t.tongPhieu, 5);
-  kiemTra("so phieu nhap", t.soNhap, 2);
-  kiemTra("so phieu xuat", t.soXuat, 2);
-  kiemTra("so phieu huy", t.soHuy, 1);
-  kiemTra("so phieu da bi huy", t.daHuy, 1);
-  // 500 + 300 + 1200 + 400 − 400
-  kiemTra("tong so luong", t.soLuong, 2000);
-  kiemTra("khong dut quang", t.thieuSo, []);
-}
-
-// Đứt quãng: cấp tới 51260003 mà thiếu 51260002.
-{
-  const dut = tomTatSoPhieu([
-    g({ soPhieu: "51260001", id: "51260001" }),
-    g({ soPhieu: "51260003", id: "51260003" }),
-  ]);
-  kiemTra("bao dut quang", dut.thieuSo, ["51260002"]);
-}
-
-// Dãy hủy vốn thưa — không được báo đứt quãng ở đó.
-{
-  const thua = tomTatSoPhieu([
-    g({ soPhieu: "51260001", id: "51260001" }),
-    g({ soPhieu: "51260002", id: "51260002" }),
-    g({
-      soPhieu: "52260002",
-      id: "52260002",
-      loai: "HUY_NHAP",
-      soLuong: -300,
-    }),
-  ]);
-  kiemTra("khong bao dut quang o day huy", thua.thieuSo, []);
-}
-
-/*
- * KIEU MOI: DUT QUANG DO TRONG TUNG NGAY, KHONG DO SUOT NAM.
- *
- * Ngay 11 cap toi 03 ma thieu 02 thi dung la dut quang. Con ngay 12 chi moi
- * cap 01 thi khong thieu gi ca — do suot nam theo kieu cu se bao nham la
- * thieu PN-...-02 cua ngay 12, va bao nham thi lan sau khong ai tin nua.
- */
-{
-  const dut = tomTatSoPhieu([
-    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
-    g({ soPhieu: "PN-260911-03", id: "PN-260911-03" }),
-    g({ soPhieu: "PN-260912-01", id: "PN-260912-01" }),
-  ]);
-  kiemTra("dut quang trong ngay", dut.thieuSo, ["PN-260911-02"]);
-}
-
-// Hai ngay lien nhau, ngay nao cung du thi khong bao gi.
-{
-  const du = tomTatSoPhieu([
-    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
-    g({ soPhieu: "PN-260911-02", id: "PN-260911-02" }),
-    g({ soPhieu: "PN-260912-01", id: "PN-260912-01" }),
-    g({ soPhieu: "PX-260912-01", id: "PX-260912-01", loai: "XUAT" }),
-  ]);
-  kiemTra("du thi khong bao thieu", du.thieuSo, []);
-}
-
-// Phieu huy kieu moi dung lai dung thu tu cua phieu goc, khong tao dut quang.
-{
-  const h = tomTatSoPhieu([
-    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
-    g({ soPhieu: "PN-260911-02", id: "PN-260911-02" }),
-    g({
-      soPhieu: "PN-260911-02-HUY",
-      id: "PN-260911-02-HUY",
-      loai: "HUY_NHAP",
-      soLuong: -300,
-    }),
-  ]);
-  kiemTra("phieu huy khong tao dut quang", h.thieuSo, []);
-  kiemTra("dem dung so phieu huy", h.soHuy, 1);
-}
-
-// So kieu cu va kieu moi nam chung mot so thi dem rieng tung day.
-{
-  const tron = tomTatSoPhieu([
-    g({ soPhieu: "51260001", id: "51260001" }),
-    g({ soPhieu: "51260003", id: "51260003" }),
-    g({ soPhieu: "PN-260911-01", id: "PN-260911-01" }),
-  ]);
-  kiemTra("hai kieu dem rieng day", tron.thieuSo, ["51260002"]);
-  kiemTra("dem du ca hai kieu", tron.tongPhieu, 3);
-}
-
-// Số ngày từ biên bản tới lúc vào sổ.
-{
-  const t = tomTatSoPhieu([
-    g({
-      soPhieu: "51260001",
-      id: "51260001",
-      documentDate: "2026-08-18",
-      enteredOn: "2026-08-20T03:00:00.000Z",
-    }),
-    g({
-      soPhieu: "51260002",
-      id: "51260002",
-      documentDate: "2026-08-18",
-      enteredOn: "2026-08-22T03:00:00.000Z",
-    }),
-  ]);
-  kiemTra("ngay trung binh vao so", t.ngayTrungBinhVaoSo, 3);
-}
-
-kiemTra("thong ke danh sach rong", tomTatSoPhieu([]).tongPhieu, 0);
-
 // ------------------------------------------------- hiển thị ngày
 
 kiemTra("ngay VN", ngayCham("2026-08-31"), "31.08.2026");
 kiemTra("ngay VN hong", ngayCham("hom nay"), "");
-dung("ngay gio VN co dinh dang", /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/.test(
-  ngayGioVn("2026-08-31T09:22:00.000Z"),
-));
-kiemTra("ngay gio hong", ngayGioVn("khong phai ngay"), "");
 
 // ================================================ bo dem nao la ben xuat
 
