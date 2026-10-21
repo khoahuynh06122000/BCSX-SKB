@@ -44,15 +44,10 @@ interface Props {
 const O =
   "w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary";
 
-const homNay = () => {
-  const d = new Date();
-  const h = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${h(d.getMonth() + 1)}-${h(d.getDate())}`;
-};
-
 const trong = (): YeuCauDieuChinh => ({
   ngayGoc: "",
-  ngayGhi: homNay(),
+  // Ngày ghi không do người dùng chọn: lấy theo ĐỢT đang khai — xem `dotNhan`.
+  ngayGhi: "",
   tuDoiTac: "",
   sangDoiTac: "",
   lyDo: "",
@@ -83,8 +78,36 @@ export default function DieuChinhCongNo({
         (String(h.ngayKetXuat || "").trim() || String(h.soHoaDon || "").trim()),
     );
 
-  const loi = kiemTraDieuChinh(yc, { dot, maBpCua, daKhoa });
-  const dotNhan = yc.ngayGhi ? dotCuaNgay(dot, yc.ngayGhi) : null;
+  /*
+   * ĐIỀU CHỈNH VÀO ĐÚNG ĐỢT ĐANG KHAI ĐỂ XUẤT — không bắt chọn ngày.
+   *
+   * Anh khai đợt (vd 12.10–14.10) ở mục "Gom xuất kho thành hóa đơn", ghi
+   * điều chỉnh, rồi tải TEMPLATE: điều chỉnh nằm ngay trong tệp của đợt đó.
+   * Lấy đợt MỚI NHẤT còn chưa xuất của cả hai đơn vị; còn nhiều đợt chưa
+   * xuất thì mới hiện ô chọn. Dòng điều chỉnh mang ngày cuối đợt.
+   */
+  const dotMo = useMemo(
+    () =>
+      [...dot]
+        .sort((a, b) => a.tuNgay.localeCompare(b.tuNgay))
+        .filter(
+          (d) =>
+            ![yc.tuDoiTac, yc.sangDoiTac]
+              .filter(Boolean)
+              .some((p) => daKhoa(d, maBpCua(p))),
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dot, hoaDon, yc.tuDoiTac, yc.sangDoiTac, partners],
+  );
+  const [dotChonId, setDotChonId] = useState("");
+  const dotNhan =
+    dotMo.find((d) => d.id === dotChonId) ?? dotMo[dotMo.length - 1] ?? null;
+  const ycDay: YeuCauDieuChinh = { ...yc, ngayGhi: dotNhan?.denNgay || "" };
+  const loi = !dotNhan
+    ? dot.length === 0
+      ? "Chưa khai đợt nào — khai đợt ở mục \"Gom xuất kho thành hóa đơn\" phía trên."
+      : "Mọi đợt đang khai đã xuất TEMPLATE cho đơn vị này — khai đợt mới (Thêm đợt) rồi ghi."
+    : kiemTraDieuChinh(ycDay, { dot, maBpCua, daKhoa });
 
   /*
    * GỢI Ý TỪ ĐƠN GỐC: chọn ngày giao + đơn vị nhầm là hiện ngay những gì đã
@@ -123,7 +146,7 @@ export default function DieuChinhCongNo({
 
   const ghi = async () => {
     if (loi || !onGhi || dangGhi) return;
-    const dong = lapDongDieuChinh(yc, { bam: stableHash, tenDoiTac, ngayCham });
+    const dong = lapDongDieuChinh(ycDay, { bam: stableHash, tenDoiTac, ngayCham });
     const daCo = new Set(transactions.map((t) => t.id));
     if (dong.every((d) => daCo.has(d.id))) {
       alert("Điều chỉnh này đã ghi rồi (cùng ngày, cùng đơn vị, cùng số lượng).");
@@ -141,9 +164,7 @@ export default function DieuChinhCongNo({
         `Ghi điều chỉnh công nợ?\n\n` +
           `Đơn giao ${ngayCham(yc.ngayGoc)}\n` +
           `GIẢM: ${tenDoiTac(yc.tuDoiTac)}\nTĂNG: ${tenDoiTac(yc.sangDoiTac)}\n${tom}\n\n` +
-          (dotNhan
-            ? `Vào đợt hóa đơn ${ngayCham(dotNhan.tuNgay)} – ${ngayCham(dotNhan.denNgay)}.`
-            : `Ngày ${ngayCham(yc.ngayGhi)} chưa thuộc đợt nào — sẽ vào đợt anh khai sau.`) +
+          `Vào tệp TEMPLATE đợt ${ngayCham(dotNhan!.tuNgay)} – ${ngayCham(dotNhan!.denNgay)}.` +
           `\nTồn kho không đổi.`,
       )
     )
@@ -194,19 +215,30 @@ export default function DieuChinhCongNo({
                 </span>
                 <ONgay value={yc.ngayGoc} onChange={(v) => sua({ ngayGoc: v })} className={O} />
               </label>
-              <label className="space-y-1">
+              <div className="space-y-1">
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Ngày ghi điều chỉnh
+                  Vào tệp TEMPLATE của đợt
                 </span>
-                <ONgay value={yc.ngayGhi} onChange={(v) => sua({ ngayGhi: v })} className={O} />
-                <span className="block text-[11px] font-bold text-slate-400">
-                  {yc.ngayGhi
-                    ? dotNhan
-                      ? `Vào đợt ${ngayCham(dotNhan.tuNgay)} – ${ngayCham(dotNhan.denNgay)}`
-                      : "Chưa thuộc đợt nào — vào đợt khai sau"
-                    : ""}
-                </span>
-              </label>
+                {dotMo.length > 1 ? (
+                  <select
+                    value={dotNhan?.id || ""}
+                    onChange={(e) => setDotChonId(e.target.value)}
+                    className={O}
+                  >
+                    {dotMo.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {ngayCham(d.tuNgay)} – {ngayCham(d.denNgay)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="px-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50 text-[13px] font-black text-slate-700">
+                    {dotNhan
+                      ? `${ngayCham(dotNhan.tuNgay)} – ${ngayCham(dotNhan.denNgay)}`
+                      : "Chưa có đợt chưa xuất"}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="grid sm:grid-cols-[1fr_auto_1fr] gap-3 items-end">

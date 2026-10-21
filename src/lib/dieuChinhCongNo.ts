@@ -84,9 +84,9 @@ export function kiemTraDieuChinh(
   },
 ): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(yc.ngayGoc)) return "Chưa chọn ngày giao gốc.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(yc.ngayGhi)) return "Chưa chọn ngày ghi điều chỉnh.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(yc.ngayGhi)) return "Chưa có đợt nhận điều chỉnh.";
   if (yc.ngayGhi < yc.ngayGoc)
-    return "Ngày ghi điều chỉnh phải sau ngày giao gốc — điều chỉnh vào lượt hóa đơn KẾ TIẾP.";
+    return "Đợt nhận điều chỉnh phải sau ngày giao gốc — điều chỉnh vào lượt hóa đơn KẾ TIẾP.";
   if (!yc.tuDoiTac || !yc.sangDoiTac) return "Chưa chọn đủ hai đơn vị.";
   if (yc.tuDoiTac === yc.sangDoiTac) return "Đơn vị nhầm và đơn vị đúng đang là một.";
   if (!yc.lyDo.trim()) return "Ghi lý do điều chỉnh — sau này đối chiếu hóa đơn cần tới.";
