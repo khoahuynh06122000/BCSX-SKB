@@ -10732,15 +10732,22 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                {/*
+                  LƯỚI ẢNH GỌN (21/10/2026). Bản cũ: 4 cột thẻ to, phủ dải tối
+                  lên nửa dưới ảnh, rê chuột là phóng to — nhìn thô và nặng,
+                  chữ đè lên chính tờ biên bản. Nay thẻ nhỏ hơn, nhiều cột hơn,
+                  ảnh để trơn; ngày · mặt hàng · đơn vị nằm ở dải chữ bên dưới.
+                */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
                   {anhThuVien.length > 0 ? (
                     anhThuVien.map((t) => (
-                      <div
+                      <button
+                        type="button"
                         key={t.id}
-                        className="group relative bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all border border-slate-100 cursor-pointer"
+                        className="group text-left bg-white rounded-2xl overflow-hidden border border-slate-200/70 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-slate-300 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         onClick={() => setSelectedGalleryImage(t)}
                       >
-                        <div className="aspect-[4/5] overflow-hidden">
+                        <div className="relative aspect-[4/5] overflow-hidden bg-slate-100">
                           {/*
                             Tấm nào tải không được thì NÓI RA lý do, không để ô
                             trắng. Ô trắng trơn nhìn giống app lọc sai hoặc mất
@@ -10748,8 +10755,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                             nhúng trong tài liệu bị cắt cụt.
                           */}
                           {anhLoi.has(t.id) ? (
-                            <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center gap-2 px-3 text-center">
-                              <ImageOff className="w-7 h-7 text-slate-300" />
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-3 text-center">
+                              <ImageOff className="w-6 h-6 text-slate-300" />
                               <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-snug">
                                 Chưa tải được ảnh
                               </span>
@@ -10758,7 +10765,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                               </span>
                               {/* Phải có đường tự thử lại: lỗi tạm thì bấm một
                                   cái là ra ảnh, không cần tải lại cả trang. */}
-                              <button
+                              <span
+                                role="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   thuLaiAnh(t.id);
@@ -10766,7 +10774,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                 className="mt-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
                               >
                                 Thử lại
-                              </button>
+                              </span>
                             </div>
                           ) : (
                             /*
@@ -10778,63 +10786,38 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                               src={duongDanO(t.url)}
                               alt={t.tieuDe}
                               onError={() => ghiAnhLoi(t.id)}
-                              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                              className="w-full h-full object-cover"
                               classNameCho="w-full h-full"
                             />
                           )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
+                          {/* Ngày nằm gọn trên góc ảnh, không phủ cả tấm. */}
+                          <span
+                            className={cn(
+                              "absolute top-2 left-2 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-sm text-[10px] font-black tabular-nums shadow-sm",
+                              galleryFilter === "IN"
+                                ? "text-amber-700"
+                                : "text-rose-700",
+                            )}
+                            title={
+                              galleryFilter === "IN"
+                                ? "Ngày thực nhập"
+                                : "Ngày thực xuất"
+                            }
+                          >
+                            {formatDate(t.date)}
+                          </span>
                         </div>
 
-                        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Calendar className="w-2.5 h-2.5 text-white/70" />
-                              <span
-                                className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest",
-                                  galleryFilter === "IN"
-                                    ? "text-amber-300"
-                                    : "text-rose-300",
-                                )}
-                              >
-                                {galleryFilter === "IN"
-                                  ? "Ngày thực nhập"
-                                  : "Ngày thực xuất"}
-                                : {formatDate(t.date)}
-                              </span>
-                            </div>
-                            <h5 className="text-white font-bold text-[11px] sm:text-xs leading-tight truncate">
-                              {t.tieuDe}
-                            </h5>
-                            <div className="flex items-center gap-1.5 mt-1 border-t border-white/10 pt-2">
-                              <Users
-                                className={cn(
-                                  "w-2.5 h-2.5",
-                                  galleryFilter === "IN"
-                                    ? "text-amber-400"
-                                    : "text-rose-400",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "text-[9px] font-black uppercase tracking-tighter truncate",
-                                  galleryFilter === "IN"
-                                    ? "text-amber-200"
-                                    : "text-rose-200",
-                                )}
-                              >
-                                {t.phu}
-                              </span>
-                            </div>
-                          </div>
+                        <div className="px-3 py-2.5 space-y-1">
+                          <p className="text-[12px] font-bold text-slate-800 leading-snug line-clamp-2 min-h-[2.1em]">
+                            {t.tieuDe}
+                          </p>
+                          <p className="flex items-center gap-1 text-[10px] font-bold text-slate-400 truncate">
+                            <Users className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{t.phu}</span>
+                          </p>
                         </div>
-
-                        <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100">
-                          <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/20">
-                            <ImageIcon className="w-5 h-5" />
-                          </div>
-                        </div>
-                      </div>
+                      </button>
                     ))
                   ) : (
                     <div className="col-span-full py-16 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-2 bg-slate-50/50 rounded-3xl">
