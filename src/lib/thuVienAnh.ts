@@ -63,6 +63,11 @@ export interface AnhThuVien {
   /** Chữ phụ gốc, giữ lại để dựng lại khi gộp trùng. */
   phuGoc: string;
   /**
+   * Điểm nhận hàng ghi trong ghi chú ("Điểm nhận: Oakwood Hạ Long") — chỉ có
+   * khi khác tên đơn vị. Dùng đặt tên tệp khi tải ảnh về.
+   */
+  diemNhan?: string;
+  /**
    * Tấm này CHỈ CÒN TRONG SỔ ẢNH — tệp còn trên Cloudinary nhưng không dòng
    * dữ liệu nào trỏ tới nữa (gỡ khỏi phiếu, bị thay khi xác nhận đơn, hay lượt
    * xoá trên Cloudinary bị hỏng). Bày ra để admin thấy mà xoá nốt.
@@ -182,6 +187,7 @@ export function dungAnhThuVien(input: ThuVienInput): AnhThuVien[] {
           phuGoc: t.partnerName,
           donVi: t.partnerName || "",
           maDonVi: t.partnerId || "",
+          diemNhan: /Điểm nhận:\s*([^·]+)/.exec(t.notes || "")?.[1]?.trim() || "",
         });
       });
     });

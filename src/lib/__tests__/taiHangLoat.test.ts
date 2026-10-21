@@ -8,7 +8,8 @@ import {
   duoiTep,
   taoZip,
   tenAnToan,
-  tenTrongZip,
+  tenGocAnh,
+  tenTepTaiVe,
 } from "../taiHangLoat";
 
 let pass = 0;
@@ -57,33 +58,36 @@ eq("bo qua neo", duoiTep("https://a.b/anh.gif#top"), "gif");
 eq("khong doan ra thi coi la jpg", duoiTep("https://a.b/upload/v123/abc"), "jpg");
 eq("duong dan rong", duoiTep(""), "jpg");
 
-// ------------------------------------------------------------ ten trong zip
+// ------------------------------------------------------------ ten tep tai ve
 
 {
-  const anh = {
-    id: "tx-001",
-    date: "2026-08-21T08:00:00.000Z",
-    tieuDe: "Biên bản giao nhận",
-    url: "https://a.b/anh.png",
-  };
-  eq("ten day du", tenTrongZip(1, anh), "001-2026-08-21-Bien-ban-giao-nhan-tx-001.png");
-  eq("so thu tu du ba chu so", tenTrongZip(42, anh).slice(0, 3), "042");
-  // Thieu ngay thi van phai ra mot cai ten dung duoc, khong duoc ra "undefined".
+  const u = "https://res.cloudinary.com/x/image/upload/v1/a.jpg";
   eq(
-    "thieu ngay",
-    tenTrongZip(2, { ...anh, date: "" }),
-    "002-khong-ngay-Bien-ban-giao-nhan-tx-001.png",
+    "BNC 1901 giao 16/10",
+    tenGocAnh({ date: "2026-10-16T08:00:00.000Z", donVi: "BNC · 1901" }),
+    "16.10.26-1901-BNC",
   );
   eq(
-    "thieu tieu de",
-    tenTrongZip(3, { ...anh, tieuDe: "" }),
-    "003-2026-08-21-anh-tx-001.png",
+    "diem nhan co dau, co khoang trang",
+    tenGocAnh({ date: "2026-10-12T08:00:00.000Z", donVi: "OHL", diemNhan: "Oakwood Hạ Long" }),
+    "12.10.26-Oakwood-Ha-Long-OHL",
   );
-  // Hai anh cung ngay cung tieu de van phai khac ten, khong thi giai nen ra
-  // mat mot tam.
-  dung(
-    "cung ngay cung tieu de van khac ten",
-    tenTrongZip(1, anh) !== tenTrongZip(1, { ...anh, id: "tx-002" }),
+  eq("don vi khong diem nhan", tenGocAnh({ date: "2026-10-12", donVi: "FV" }), "12.10.26-FV");
+  eq(
+    "phieu nhap mang ma phieu",
+    tenGocAnh({ date: "2026-10-16T07:00:00.000Z", donVi: "Sản xuất", id: "slip-PN-261016-01-0", tieuDe: "Phiếu PN-261016-01" }),
+    "16.10.26-PN-261016-01-San-xuat",
+  );
+  eq("thieu ngay", tenGocAnh({ date: "", donVi: "FV" }), "khong-ngay-FV");
+  eq(
+    "trung ten thi them -2 -3, tam dau giu nguyen",
+    tenTepTaiVe([
+      { date: "2026-10-16", donVi: "BNC · 1901", url: u },
+      { date: "2026-10-16", donVi: "BNC · 1901", url: u },
+      { date: "2026-10-16", donVi: "BNC · Beer Plaza", url: u },
+      { date: "2026-10-16", donVi: "BNC · 1901", url: u },
+    ]),
+    ["16.10.26-1901-BNC.jpg", "16.10.26-1901-BNC-2.jpg", "16.10.26-Beer-Plaza-BNC.jpg", "16.10.26-1901-BNC-3.jpg"],
   );
 }
 

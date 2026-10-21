@@ -170,19 +170,56 @@ export function taoZip(tep: TepZip[]): Blob {
 }
 
 /**
- * Đặt tên cho từng ảnh trong tệp nén: số thứ tự, ngày, rồi tiêu đề.
+ * TÊN TỆP ẢNH KHI TẢI VỀ: `ngày giao-điểm nhận-đối tác` (Khoa chốt 21/10/2026).
  *
- * Có số thứ tự ở đầu để giải nén ra là đúng thứ tự đang xem trên lưới. Có `id`
- * ở cuối để hai ảnh cùng ngày cùng tiêu đề không đè lên nhau — trùng tên trong
- * ZIP thì công cụ giải nén mỗi cái xử một kiểu, có cái nuốt mất một tấm.
+ *   BNC · 1901, giao 16/10/2026          → `16.10.26-1901-BNC`
+ *   OHL, điểm nhận Oakwood Hạ Long       → `16.10.26-Oakwood-Ha-Long-OHL`
+ *   FV, không ghi điểm nhận riêng        → `16.10.26-FV`
+ *   Phiếu nhập PN-261016-01              → `16.10.26-PN-261016-01-<đơn vị>`
+ *
+ * Đơn vị dạng "BNC · 1901" tách ở dấu "·": trước là đối tác, sau là điểm nhận.
+ * Tên bỏ dấu tiếng Việt để mở được trên mọi máy (xem `tenAnToan`).
  */
-export function tenTrongZip(
-  stt: number,
-  anh: { id: string; date: string; tieuDe: string; url: string },
-): string {
-  const ngay = String(anh.date ?? "").slice(0, 10) || "khong-ngay";
-  const so = String(stt).padStart(3, "0");
-  const ten = tenAnToan(anh.tieuDe) || "anh";
-  const ma = tenAnToan(anh.id).slice(0, 24);
-  return `${so}-${ngay}-${ten}-${ma}.${duoiTep(anh.url)}`;
+export function tenGocAnh(anh: {
+  date: string;
+  donVi?: string;
+  diemNhan?: string;
+  tieuDe?: string;
+  id?: string;
+}): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(anh.date ?? ""));
+  const ngay = m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : "khong-ngay";
+  const [doiTac, ...sau] = String(anh.donVi ?? "").split("·").map((x) => x.trim());
+  // Ảnh phiếu nhập: điểm nhận là mã phiếu, không có "·" trong tên đơn vị.
+  const maPhieu = String(anh.id ?? "").startsWith("slip-")
+    ? String(anh.tieuDe ?? "").replace(/^Phiếu\s*/, "")
+    : "";
+  const diem = sau.join(" ") || String(anh.diemNhan ?? "").trim() || maPhieu;
+  return (
+    [ngay, diem, doiTac]
+      .map((x) => tenAnToan(x))
+      .filter(Boolean)
+      .join("-") || "anh"
+  );
+}
+
+/**
+ * Tên cho CẢ BỘ ảnh sẽ nén, theo đúng thứ tự đang xem. Tên trùng (một đơn
+ * nhiều tờ, hay một điểm nhận hai chuyến trong ngày) thì thêm `-2`, `-3`… —
+ * trùng tên trong ZIP là công cụ giải nén nuốt mất một tấm.
+ */
+export function tenTepTaiVe(
+  ds: { date: string; donVi?: string; diemNhan?: string; tieuDe?: string; id?: string; url: string }[],
+): string[] {
+  const goc = ds.map((a) => tenGocAnh(a));
+  const tong = new Map<string, number>();
+  goc.forEach((g) => tong.set(g, (tong.get(g) || 0) + 1));
+  const dem = new Map<string, number>();
+  return ds.map((a, i) => {
+    const g = goc[i];
+    const n = (dem.get(g) || 0) + 1;
+    dem.set(g, n);
+    const ten = (tong.get(g) || 0) > 1 && n > 1 ? `${g}-${n}` : g;
+    return `${ten}.${duoiTep(a.url)}`;
+  });
 }

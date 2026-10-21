@@ -135,7 +135,7 @@ import {
   lyDoAnhLoi,
   type AnhThuVien,
 } from "./lib/thuVienAnh";
-import { taoZip, tenTrongZip } from "./lib/taiHangLoat";
+import { taoZip, tenTepTaiVe } from "./lib/taiHangLoat";
 import { anhThuNho } from "./lib/anhCloudinary";
 import {
   anhSeMatLienKet,
@@ -5284,6 +5284,8 @@ export default function App() {
     }
 
     setTienTrinhTaiAnh({ tong: ds.length, xong: 0, hong: 0 });
+    // Tên tệp: `ngày giao-điểm nhận-đối tác` — xem `tenTepTaiVe`.
+    const tenTep = tenTepTaiVe(ds);
     const tep: { ten: string; duLieu: Uint8Array }[] = [];
     let hong = 0;
     let tongByte = 0;
@@ -5306,7 +5308,7 @@ export default function App() {
           if (tongByte > TRAN_BYTE) {
             tran = true;
           } else {
-            tep.push({ ten: tenTrongZip(k + 1, a), duLieu: du });
+            tep.push({ ten: tenTep[k], duLieu: du });
           }
         } catch {
           hong += 1;
