@@ -2253,9 +2253,8 @@ export default function App() {
       donVi: new Set(drafts.map((d) => d.partnerId)),
     });
     // Luật: người thường chỉ xoá được đơn còn đi đường.
-    const lechXoaDuoc = dongLech.filter(
-      (t) => isOwner || t.status === "in_transit",
-    );
+    // Chỉ admin xoá được dữ liệu.
+    const lechXoaDuoc = isOwner ? dongLech : [];
     let xoaThem: Transaction[] = [];
     if (
       dongLech.length &&
@@ -2265,8 +2264,8 @@ export default function App() {
           "Giữ lại thì hàng bị trừ kho HAI LẦN và công nợ cộng hai lần.\n\n" +
           `OK = xoá ${lechXoaDuoc.length} dòng đó rồi nạp\nCancel = giữ nguyên, chỉ nạp tệp` +
           (lechXoaDuoc.length < dongLech.length
-            ? `\n\n${dongLech.length - lechXoaDuoc.length} dòng đã hoàn tất chỉ admin ` +
-              "xoá được — sẽ còn lại, báo admin."
+            ? `\n\n${dongLech.length - lechXoaDuoc.length} dòng chỉ admin ` +
+              "xoá được — sẽ còn lại, báo admin nạp lại tệp này."
             : ""),
       )
     ) {
@@ -2400,6 +2399,15 @@ export default function App() {
         ),
         ...xoaThem,
       ];
+      // Người thường không xoá được dữ liệu (luật Firestore): còn dòng thừa
+      // của lần nạp trước mà không dọn thì hàng bị trừ hai lần — dừng hẳn.
+      if (!isOwner && canXoa.length) {
+        alert(
+          `Lần nạp này phải dọn ${canXoa.length} dòng thừa của lần nạp trước, mà ` +
+            "chỉ admin xoá được dữ liệu. Chưa ghi gì — nhờ admin nạp tệp này.",
+        );
+        return;
+      }
 
       /*
        * Dòng cũ nào KHÔNG trùng mã với dòng mới (tệp sửa lại, chuyến đổi cột)
@@ -3405,6 +3413,15 @@ export default function App() {
         ...(thay ? kh.lech.map((l) => l.moi).filter((d) => d.soLuong > 0) : []),
       ];
       const giuLai = new Set(ghi.map((d) => d.id));
+      // Chỉ admin xoá được dữ liệu: còn dòng phải xoá mà không phải admin thì
+      // dừng trước khi ghi gì — lô ghi lẫn lệnh xoá sẽ bị từ chối cả lô.
+      if (!isOwner && cuCanXoa.some((t) => !giuLai.has(t.id))) {
+        alert(
+          "Thay số lần này phải xoá vài dòng cũ, mà chỉ admin xoá được dữ liệu. " +
+            "Chưa ghi gì — nhờ admin nạp tệp này, hoặc chọn giữ số cũ.",
+        );
+        return;
+      }
       const now = new Date().toISOString();
       const nguoi = `Nạp Excel tồn kho (${user})`;
       const viec: ((b: ReturnType<typeof writeBatch>) => void)[] = [
@@ -3893,11 +3910,10 @@ export default function App() {
       ...transactions.filter((t) => !idXoaDon.has(t.id)).map((t) => gomAnh(t)),
       ...slips.map((sl) => sl.signedPhotoUrls || []),
     ]);
-    if (anhMatDon.length > 0 && !isOwner) {
-      alert(
-        `Đơn này có ${anhMatDon.length} ảnh biên bản. Xoá đơn là xoá luôn ảnh, mà chỉ admin được xoá ảnh.\n\n` +
-          `Nhờ anh Khoa xoá đơn này.`,
-      );
+    // XOÁ CHỈ ADMIN (21/10/2026): xoá dữ liệu là xoá luôn ảnh trên
+    // Cloudinary, và luật Firestore cũng chỉ cho admin xoá.
+    if (!isOwner) {
+      alert("Chỉ admin mới xoá được đơn. Nhờ anh Khoa xoá đơn này.");
       return;
     }
 
@@ -7819,7 +7835,7 @@ export default function App() {
                                 <CheckCircle className="w-4 h-4" />
                                 Xác nhận cả phiếu
                               </button>
-                              {daDuocDuyet && (
+                              {isOwner && (
                                 <button
                                   onClick={() =>
                                     handleDeleteInTransitGroup(group)
@@ -8011,9 +8027,9 @@ export default function App() {
                                       Xác nhận cả phiếu
                                     </button>
 
-                                    {/* Phiếu đi đường chưa vào sổ tồn kho nên
-                                        ai đã được duyệt cũng xoá được. */}
-                                    {daDuocDuyet && (
+                                    {/* Xoá đơn: chỉ admin (21/10/2026) —
+                                        xoá dữ liệu là xoá luôn ảnh. */}
+                                    {isOwner && (
                                       <button
                                         onClick={() =>
                                           handleDeleteInTransitGroup(group)

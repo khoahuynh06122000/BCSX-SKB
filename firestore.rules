@@ -255,11 +255,10 @@ service cloud.firestore {
           && laChieuXuat(request.resource.data.get('type', ''))
         );
 
-      // Xoa la viec khong lay lai duoc nen van siet: nguoi thuong chi xoa duoc
-      // phieu dang tren duong van chuyen, thu chua vao so ton kho. Don di duong
-      // la viec cua chieu xuat.
-      allow delete: if isOwner() ||
-        (ghiXuatKho() && resource.data.get('status', '') == 'in_transit');
+      // XOA: CHI ADMIN (21/10/2026, Khoa quyet). Truoc day nguoi xuat kho xoa
+      // duoc don dang di duong. Nay xoa du lieu la xoa luon anh tren Cloudinary,
+      // ma xoa anh chi admin lam duoc - nen xoa du lieu cung chi admin.
+      allow delete: if isOwner();
     }
 
     // Doanh thu: MOI NGUOI XEM, CHI KE TOAN THAO TAC.
@@ -272,7 +271,9 @@ service cloud.firestore {
     match /revenue/{recordId} {
       // Doanh thu khong phai viec cua DNC.
       allow read: if xemKho();
-      allow create, update, delete: if isAccountant();
+      allow create, update: if isAccountant();
+      // Xoa: chi admin, nhu moi bang khac.
+      allow delete: if isOwner();
     }
 
     // Lenh xuat hoa don len SAP: ai da duoc duyet cung xem duoc tien do, nhung

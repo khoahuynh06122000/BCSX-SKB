@@ -21,16 +21,32 @@
 
 export class ThieuCauHinh extends Error {}
 
+/**
+ * Kho ảnh của app. Tên kho không phải bí mật — nó nằm ngay trong mọi đường
+ * dẫn ảnh (`res.cloudinary.com/zjtjeyqd/...`). Để sẵn làm mặc định vì biến
+ * `VITE_CLOUDINARY_CLOUD_NAME` chỉ chắc chắn có lúc BUILD giao diện; hàm máy
+ * chủ chạy lúc khác và có thể không thấy nó — đúng chuyện 21/10/2026: khoá đã
+ * đặt mà app vẫn báo "chưa có khoá".
+ */
+const KHO_MAC_DINH = "zjtjeyqd";
+
 export function cauHinhCloudinary() {
   const cloud =
-    process.env.CLOUDINARY_CLOUD_NAME || process.env.VITE_CLOUDINARY_CLOUD_NAME;
-  const key = process.env.CLOUDINARY_API_KEY;
-  const secret = process.env.CLOUDINARY_API_SECRET;
-  if (!cloud || !key || !secret) {
+    process.env.CLOUDINARY_CLOUD_NAME ||
+    process.env.VITE_CLOUDINARY_CLOUD_NAME ||
+    KHO_MAC_DINH;
+  const key = String(process.env.CLOUDINARY_API_KEY || "").trim();
+  const secret = String(process.env.CLOUDINARY_API_SECRET || "").trim();
+  const thieu = [
+    !key && "CLOUDINARY_API_KEY",
+    !secret && "CLOUDINARY_API_SECRET",
+  ].filter(Boolean);
+  if (thieu.length) {
     throw new ThieuCauHinh(
-      "Máy chủ chưa có khoá Cloudinary. Vào Vercel → Settings → Environment " +
-        "Variables, thêm CLOUDINARY_API_KEY và CLOUDINARY_API_SECRET (lấy ở " +
-        "Cloudinary → Settings → API Keys), rồi Redeploy.",
+      `Máy chủ không đọc được ${thieu.join(" và ")}. Vào Vercel → Settings → ` +
+        "Environment Variables: biến phải tích môi trường Production, rồi vào " +
+        "Deployments bấm Redeploy bản mới nhất (biến thêm sau lần build chỉ có " +
+        "hiệu lực từ lần build sau).",
     );
   }
   return { cloud, key, secret };
