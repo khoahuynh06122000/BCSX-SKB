@@ -208,6 +208,7 @@ import {
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
 import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
+import type { DongGhiDieuChinh } from "./lib/dieuChinhCongNo";
 import { anhChoConLai, daLuuAnhCho, themAnhCho } from "./lib/anhCho";
 
 import {
@@ -2720,6 +2721,69 @@ export default function App() {
           e instanceof Error ? e.message : String(e)
         }\n\nBấm "Cấp số" lần nữa để chạy nốt phần còn lại.`,
       );
+    }
+  };
+
+  /**
+   * ĐIỀU CHỈNH CÔNG NỢ — ghi cả cặp âm / dương trong MỘT lô: lô hỏng thì
+   * không có nửa cặp nào nằm lại (nửa cặp là tồn kho lệch). Mã dòng suy từ
+   * nội dung nên bấm hai lần không sinh cặp thứ hai. Xem
+   * `src/lib/dieuChinhCongNo.ts`.
+   */
+  const handleGhiDieuChinh = async (
+    dong: DongGhiDieuChinh[],
+  ): Promise<boolean> => {
+    try {
+      const batch = writeBatch(db);
+      for (const d of dong) {
+        const sp = products.find((p) => p.id === d.productId);
+        const dt = donVi.find((p) => p.id === d.partnerId);
+        if (!sp || !dt) throw new Error("Không tìm thấy mặt hàng hoặc đơn vị.");
+        const t: Transaction = {
+          id: d.id,
+          date: d.date,
+          type: "OUT",
+          productId: sp.id,
+          productName: sp.name,
+          category: sp.category,
+          quantity: d.quantity,
+          partnerId: dt.id,
+          partnerName: dt.name,
+          notes: d.notes,
+          createdBy: user || "Guest",
+          referenceGroupId: d.referenceGroupId,
+          status: "completed",
+          dieuChinh: d.dieuChinh,
+        };
+        batch.set(doc(db, "transactions", d.id), t);
+      }
+      await batch.commit();
+      showNotification("Đã ghi điều chỉnh công nợ — vào lượt hóa đơn kế tiếp");
+      return true;
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
+      return false;
+    }
+  };
+
+  const handleXoaDieuChinh = async (nhom: string) => {
+    const ds = transactions.filter(
+      (t) => t.referenceGroupId === nhom && t.dieuChinh,
+    );
+    if (!ds.length) return;
+    if (
+      !window.confirm(
+        `Xoá lần điều chỉnh này (${ds.length} dòng, cả phần giảm và phần tăng)?`,
+      )
+    )
+      return;
+    try {
+      const batch = writeBatch(db);
+      ds.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
+      await batch.commit();
+      showNotification("Đã xoá lần điều chỉnh");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "transactions"));
     }
   };
 
@@ -7402,6 +7466,11 @@ export default function App() {
                                               Hao hụt · không ghi công nợ
                                             </span>
                                           )}
+                                          {t.dieuChinh && (
+                                            <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[9px] font-black uppercase tracking-tighter inline-flex items-center gap-1 align-middle">
+                                              Điều chỉnh công nợ · không rời kho
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                           {t.category}
@@ -10071,6 +10140,12 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       partners={donVi}
                       hoaDon={hoaDon}
                       onSaveHoaDon={handleSaveHoaDon}
+                      onGhiDieuChinh={
+                        quyen.doanhThu && quyen.ghiXuat
+                          ? handleGhiDieuChinh
+                          : undefined
+                      }
+                      onXoaDieuChinh={isOwner ? handleXoaDieuChinh : undefined}
                     />
 
                     {/*

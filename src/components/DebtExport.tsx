@@ -51,6 +51,8 @@ import { cn, formatNumber } from "../lib/utils";
 
 import ONgay from "./ONgay";
 import BangChotHoaDon from "./BangChotHoaDon";
+import DieuChinhCongNo from "./DieuChinhCongNo";
+import type { DongGhiDieuChinh } from "../lib/dieuChinhCongNo";
 
 /**
  * CÔNG NỢ · HÓA ĐƠN
@@ -88,6 +90,10 @@ interface Props {
   /** Hóa đơn đã phát hành, do người dùng điền lại. */
   hoaDon: HoaDonGhiNhan[];
   onSaveHoaDon: (ds: HoaDonGhiNhan[]) => Promise<void>;
+  /** Ghi một lần điều chỉnh công nợ. Không truyền = vai trò chỉ xem. */
+  onGhiDieuChinh?: (dong: DongGhiDieuChinh[]) => Promise<boolean>;
+  /** Xoá một lần điều chỉnh (cả cặp). Chỉ admin. */
+  onXoaDieuChinh?: (nhom: string) => Promise<void>;
 }
 
 /*
@@ -134,6 +140,8 @@ export default function DebtExport({
   partners,
   hoaDon,
   onSaveHoaDon,
+  onGhiDieuChinh,
+  onXoaDieuChinh,
 }: Props) {
   const [dot, setDot] = useState<DotChot[]>(docDotDaLuu);
   /*
@@ -1159,6 +1167,21 @@ export default function DebtExport({
 
       {phan === "chua" && (
       <>
+      {/*
+        ĐIỀU CHỈNH CÔNG NỢ — xuất nhầm đơn vị mà hóa đơn đã phát hành: cân
+        lại ở lượt hóa đơn kế tiếp. Dùng chung biên đợt của màn hình này để
+        chặn ghi vào đợt đã xuất. Xem `src/lib/dieuChinhCongNo.ts`.
+      */}
+      <DieuChinhCongNo
+        transactions={transactions}
+        products={products}
+        partners={partners}
+        dot={dot}
+        hoaDon={hoaDon}
+        onGhi={onGhiDieuChinh}
+        onXoa={onXoaDieuChinh}
+      />
+
       {/*
         KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
 

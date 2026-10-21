@@ -123,6 +123,17 @@ export interface Transaction {
    * Excel và tồn đầu kỳ không có mã, nên vào tồn ngay.
    */
   slipCode?: string;
+  /**
+   * Dòng ĐIỀU CHỈNH CÔNG NỢ (xuất nhầm đơn vị, hóa đơn đã phát hành) — luôn đi
+   * thành cặp âm / dương cùng `referenceGroupId`, cộng lại bằng 0 nên tồn kho
+   * không đổi. Xem `src/lib/dieuChinhCongNo.ts`.
+   */
+  dieuChinh?: {
+    ngayGoc: string;
+    lyDo: string;
+    tuDoiTac: string;
+    sangDoiTac: string;
+  };
 }
 
 export interface InventoryItem {

@@ -18,6 +18,7 @@ import { nguonCuaGiaoDich } from "./phieuHuy";
 import { laLoaiHuy, type GhiSoPhieu } from "./soPhieu";
 
 interface GiaoDich {
+  dieuChinh?: unknown;
   id: string;
   type: string;
   date: string;
@@ -28,7 +29,13 @@ interface GiaoDich {
 }
 
 /** Chiều chứng từ của một giao dịch; `null` = không thuộc tờ phiếu nào. */
-export function loaiChungTu(t: { type: string; slipCode?: string }): "NHAP" | "XUAT" | null {
+export function loaiChungTu(t: {
+  type: string;
+  slipCode?: string;
+  dieuChinh?: unknown;
+}): "NHAP" | "XUAT" | null {
+  // Điều chỉnh công nợ không phải lượt hàng rời kho — không có tờ phiếu xuất.
+  if (t.dieuChinh) return null;
   if (t.type === "IN") return t.slipCode ? "NHAP" : null;
   if (t.type === "OUT" || t.type === "LOSS") return "XUAT";
   return null;
@@ -57,7 +64,13 @@ export function bangSoPhieu(
 
 /** Số phiếu của một dòng giao dịch, rỗng nếu chưa có. */
 export function soPhieuCuaDong(
-  t: { type: string; id?: string; slipCode?: string; referenceGroupId?: string },
+  t: {
+    type: string;
+    id?: string;
+    slipCode?: string;
+    referenceGroupId?: string;
+    dieuChinh?: unknown;
+  },
   bang: Map<string, { soPhieu: string; daHuy: boolean }>,
 ): { soPhieu: string; daHuy: boolean } | null {
   const loai = loaiChungTu(t);
