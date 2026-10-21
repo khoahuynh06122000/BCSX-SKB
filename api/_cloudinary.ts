@@ -30,6 +30,20 @@ export class ThieuCauHinh extends Error {}
  */
 const KHO_MAC_DINH = "zjtjeyqd";
 
+/**
+ * Máy chủ đang chạy là bản nào, của dự án Vercel nào — để biết biến đặt ĐÚNG
+ * DỰ ÁN chưa. Chỉ nói tên miền bản build, môi trường và biến nào CÓ / KHÔNG,
+ * không bao giờ in giá trị khoá.
+ */
+function dauMayChu(): string {
+  const co = (k: string) => (String(process.env[k] || "").trim() ? "có" : "KHÔNG");
+  return (
+    `[Máy chủ: ${process.env.VERCEL_URL || "không rõ"} · môi trường ` +
+    `${process.env.VERCEL_ENV || "không rõ"} · VITE_FIREBASE_API_KEY ${co("VITE_FIREBASE_API_KEY")} · ` +
+    `CLOUDINARY_API_KEY ${co("CLOUDINARY_API_KEY")} · CLOUDINARY_API_SECRET ${co("CLOUDINARY_API_SECRET")}]`
+  );
+}
+
 export function cauHinhCloudinary() {
   const cloud =
     process.env.CLOUDINARY_CLOUD_NAME ||
@@ -46,7 +60,8 @@ export function cauHinhCloudinary() {
       `Máy chủ không đọc được ${thieu.join(" và ")}. Vào Vercel → Settings → ` +
         "Environment Variables: biến phải tích môi trường Production, rồi vào " +
         "Deployments bấm Redeploy bản mới nhất (biến thêm sau lần build chỉ có " +
-        "hiệu lực từ lần build sau).",
+        "hiệu lực từ lần build sau). " +
+        dauMayChu(),
     );
   }
   return { cloud, key, secret };
