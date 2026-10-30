@@ -131,6 +131,13 @@ service cloud.firestore {
       return isToanQuyenKho() || (isSignedIn() && role() == 'NHAP_KHO');
     }
 
+    // Phieu nhap da co anh ky tuoi chua (= hang da vao ton kho).
+    function phieuDaKy(code) {
+      return exists(/databases/$(database)/documents/slips/$(code))
+        && get(/databases/$(database)/documents/slips/$(code))
+             .data.get('signedPhotoUrls', []).size() > 0;
+    }
+
     // Ghi duoc chieu XUAT: xuat kho, hao hut, doi tac va diem ban.
     function ghiXuatKho() {
       return isToanQuyenKho() || (isSignedIn() && role() == 'XUAT_KHO');
@@ -258,7 +265,18 @@ service cloud.firestore {
       // XOA: CHI ADMIN (21/10/2026, Khoa quyet). Truoc day nguoi xuat kho xoa
       // duoc don dang di duong. Nay xoa du lieu la xoa luon anh tren Cloudinary,
       // ma xoa anh chi admin lam duoc - nen xoa du lieu cung chi admin.
-      allow delete: if isOwner();
+      //
+      // NGOAI LE DUY NHAT (30/10/2026, Khoa chot): nguoi nhap kho xoa duoc dong
+      // NHAP cua mot phieu CHUA KY - nhap sai so luong roi xoa lam lai. Phieu
+      // chua ky thi hang chua vao ton, chua co anh nao, xoa khong mat gi.
+      // Phieu da ky anh: chi admin (xoa luon anh tren Cloudinary).
+      allow delete: if isOwner()
+        || (
+          ghiNhapKho()
+          && resource.data.get('type', '') == 'IN'
+          && resource.data.get('slipCode', '') != ''
+          && !phieuDaKy(resource.data.slipCode)
+        );
     }
 
     // Doanh thu: MOI NGUOI XEM, CHI KE TOAN THAO TAC.
@@ -415,7 +433,9 @@ service cloud.firestore {
           && request.resource.data.get('signedPhotoUrls', []).size()
                >= resource.data.get('signedPhotoUrls', []).size()
         );
-      allow delete: if isOwner();
+      // Phieu chua co anh ky: nguoi nhap kho xoa duoc (xem luat transactions).
+      allow delete: if isOwner()
+        || (ghiNhapKho() && resource.data.get('signedPhotoUrls', []).size() == 0);
     }
 
     /*

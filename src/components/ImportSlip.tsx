@@ -13,6 +13,7 @@ import {
   RotateCcw,
   RotateCw,
   ZoomIn,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
@@ -67,6 +68,12 @@ interface Props {
   /** Gỡ một ảnh đã tải nhầm khỏi phiếu. Không truyền thì không hiện nút gỡ. */
   onRemoveSigned?: (code: string, url: string) => Promise<void>;
   uploadingCode: string | null;
+  /**
+   * Xoá cả phiếu (nhập sai số lượng). Không truyền thì không có nút xoá.
+   * Phiếu đã có ảnh ký chỉ hiện nút khi `xoaDuocPhieuDaKy` (admin).
+   */
+  onXoaPhieu?: (code: string) => Promise<void>;
+  xoaDuocPhieuDaKy?: boolean;
 }
 
 export default function ImportSlipPanel({
@@ -80,6 +87,8 @@ export default function ImportSlipPanel({
   onUploadSigned,
   onRemoveSigned,
   uploadingCode,
+  onXoaPhieu,
+  xoaDuocPhieuDaKy = false,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
@@ -354,6 +363,18 @@ export default function ImportSlipPanel({
                           />
                         </label>
                       </>
+                    )}
+
+                    {/* XOÁ PHIẾU NHẬP SAI. Phiếu chưa ký: người nhập kho tự
+                        xoá được. Phiếu đã ký ảnh: chỉ admin. */}
+                    {onXoaPhieu && (photos.length === 0 || xoaDuocPhieuDaKy) && (
+                      <button
+                        onClick={() => onXoaPhieu(d.code)}
+                        title="Xoá phiếu này (nhập sai) — xoá luôn các dòng hàng của phiếu"
+                        className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 transition-all flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Xoá phiếu
+                      </button>
                     )}
                   </div>
                 </div>

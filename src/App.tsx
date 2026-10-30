@@ -2978,6 +2978,93 @@ export default function App() {
    * xoá được tệp — chỉ admin xoá ảnh — nên tấm ảnh nằm lại trong sổ và hiện ở
    * Thư viện ảnh với chữ "không còn gắn đơn nào", admin xoá nốt.
    */
+  /**
+   * XOÁ CẢ MỘT PHIẾU NHẬP — nhập sai số lượng, xoá đi làm lại.
+   *
+   * Xoá các dòng hàng mang mã phiếu, tài liệu phiếu, và hủy số phiếu trong
+   * sổ (phiếu hủy ghi âm — số gốc vẫn nằm trong sổ, không nhảy số).
+   *
+   * Ai xoá được: phiếu CHƯA có ảnh ký thì người ghi được chiều nhập (hàng chưa
+   * vào tồn, chưa có ảnh, xoá không mất gì); phiếu đã ký ảnh thì chỉ admin, và
+   * ảnh trên Cloudinary bị xoá theo. Luật Firestore chặn đúng như vậy.
+   */
+  const handleXoaPhieuNhap = async (code: string) => {
+    const dong = transactions.filter(
+      (t) => t.type === "IN" && t.slipCode === code,
+    );
+    const phieu = slips.find((s) => s.code === code);
+    const daKy = (phieu?.signedPhotoUrls?.length || 0) > 0;
+    if (daKy && !isOwner) {
+      alert("Phiếu đã có ảnh ký — hàng đã vào tồn. Chỉ admin xoá được phiếu này.");
+      return;
+    }
+    const idXoa = new Set(dong.map((t) => t.id));
+    const anhMat = anhSeMatLienKet(
+      [...dong.map((t) => gomAnh(t)), phieu?.signedPhotoUrls || []],
+      [
+        ...transactions.filter((t) => !idXoa.has(t.id)).map((t) => gomAnh(t)),
+        ...slips.filter((s) => s.code !== code).map((s) => s.signedPhotoUrls || []),
+      ],
+    );
+    if (anhMat.length && !isOwner) {
+      alert(
+        `Phiếu này có ${anhMat.length} ảnh gắn kèm. Xoá phiếu là xoá luôn ảnh — chỉ admin làm được.`,
+      );
+      return;
+    }
+    const tom = dong
+      .map((t) => `· ${t.productName}: ${formatNumber(t.quantity)}`)
+      .join("\n");
+    if (
+      !window.confirm(
+        `Xoá phiếu nhập ${code}?\n\n${tom || "(không còn dòng hàng nào)"}\n\n` +
+          (daKy
+            ? `Phiếu ĐÃ KÝ — hàng sẽ rời khỏi tồn kho, và ${anhMat.length} ảnh bị xoá luôn trên Cloudinary.\n\n`
+            : "Phiếu chưa ký nên hàng chưa vào tồn — xoá xong nhập lại cho đúng.\n\n") +
+          "Số phiếu trong sổ được hủy (phiếu hủy ghi âm). Không khôi phục được.",
+      )
+    )
+      return;
+
+    const so = soPhieu.filter(
+      (g) => g.nguon === code && g.trangThai === "hieu_luc" && g.loai === "NHAP",
+    );
+    try {
+      setLoading(true);
+      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
+      await damBaoSoAnh(dong, phieu ? [phieu] : []);
+      const batch = writeBatch(db);
+      dong.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
+      if (phieu) batch.delete(doc(db, "slips", phieu.id));
+      await batch.commit();
+
+      let loiHuy = "";
+      for (const g of so) {
+        try {
+          await huyPhieu(db, g.soPhieu, {
+            documentDate: format(new Date(), "yyyy-MM-dd"),
+            lyDo: "Xoá phiếu nhập sai",
+            createdBy: user || "Guest",
+          });
+        } catch (e) {
+          loiHuy = e instanceof Error ? e.message : String(e);
+        }
+      }
+      const kqAnh = anhMat.length
+        ? await xoaAnhTrenMayChu(anhMat)
+        : { tong: 0, daXoa: 0, loi: "" };
+      showNotification(`Đã xoá phiếu ${code}${chuAnhDaXoa(kqAnh)}`);
+      baoAnhChuaXoa(kqAnh);
+      if (loiHuy) {
+        alert(`Đã xoá phiếu, nhưng chưa hủy được số phiếu trong sổ:\n\n${loiHuy}`);
+      }
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "transactions"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRemoveSignedSlipPhoto = async (code: string, url: string) => {
     const existing = slips.find((s) => s.code === code);
     if (!existing) return;
@@ -10271,6 +10358,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       isOwner ? handleRemoveSignedSlipPhoto : undefined
                     }
                     uploadingCode={uploadingSlipCode}
+                    onXoaPhieu={
+                      quyen.ghiNhap ? handleXoaPhieuNhap : undefined
+                    }
+                    xoaDuocPhieuDaKy={isOwner}
                   />
                 </Card>
               </div>
