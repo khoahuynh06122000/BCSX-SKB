@@ -7499,9 +7499,14 @@ export default function App() {
                               <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
                                 Ghi chú
                               </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-center">
-                                Thao tác
-                              </th>
+                              {/* Xoá giao dịch: chỉ admin. Báo cáo chỉ bày dòng ĐÃ
+                                  vào tồn (phiếu nhập đã ký ảnh), nên người khác
+                                  không có gì xoá được ở đây — ẩn hẳn cột. */}
+                              {isOwner && (
+                                <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-center">
+                                  Thao tác
+                                </th>
+                              )}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -7677,20 +7682,22 @@ export default function App() {
                                         )}
                                       </div>
                                     </td>
-                                    <td className="py-4 px-6 text-center">
-                                      <button
-                                        onClick={() =>
-                                          handleDeleteTransaction(
-                                            t.id,
-                                            t.productName,
-                                          )
-                                        }
-                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                        title="Xóa giao dịch"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </td>
+                                    {isOwner && (
+                                      <td className="py-4 px-6 text-center">
+                                        <button
+                                          onClick={() =>
+                                            handleDeleteTransaction(
+                                              t.id,
+                                              t.productName,
+                                            )
+                                          }
+                                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                          title="Xóa giao dịch"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </td>
+                                    )}
                                   </tr>
                                 );
                               })}
@@ -7701,7 +7708,7 @@ export default function App() {
                             ).length === 0 && (
                               <tr>
                                 <td
-                                  colSpan={7}
+                                  colSpan={isOwner ? 8 : 7}
                                   className="py-20 text-center text-slate-400 text-sm font-bold uppercase tracking-widest opacity-30"
                                 >
                                   Chưa có dữ liệu giao dịch phù hợp.
@@ -9458,7 +9465,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "settings" && (
+            {activeTab === "settings" && isOwner && (
               <div className="space-y-8 animate-in fade-in duration-500">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
                   <div className="space-y-2">
@@ -10442,13 +10449,16 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                             </div>
                           )}
                         </div>
-                        <button
-                          onClick={() => handleDeletePartner(p.id)}
-                          className="p-2 hover:bg-rose-50 rounded-lg transition-colors group/del"
-                          title="Xóa đối tác"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-300 group-hover/del:text-rose-500" />
-                        </button>
+                        {/* Xoá: chỉ admin. */}
+                        {isOwner && (
+                          <button
+                            onClick={() => handleDeletePartner(p.id)}
+                            className="p-2 hover:bg-rose-50 rounded-lg transition-colors group/del"
+                            title="Xóa đối tác"
+                          >
+                            <Trash2 className="w-4 h-4 text-gray-300 group-hover/del:text-rose-500" />
+                          </button>
+                        )}
                       </div>
                       <div className="mt-6 pt-4 border-t border-gray-50 flex items-center justify-between">
                         <div className="text-[10px] uppercase font-bold text-gray-400">
