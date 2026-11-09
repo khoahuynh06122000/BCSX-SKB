@@ -3188,12 +3188,15 @@ export default function App() {
         return;
       }
 
+      // Mã lô chỉ có ở chiều nhập; báo cáo xuất giữ nguyên các cột cũ.
+      const coMaLo = reportSubTab === "in";
       const tieuDe = [
         "Ngày",
         "Số phiếu",
         "Loại",
         "Sản phẩm",
         "Số lượng",
+        ...(coMaLo ? ["Mã lô"] : []),
         "Đối tác",
         "Ghi chú",
       ];
@@ -3206,6 +3209,7 @@ export default function App() {
         t.type,
         t.productName,
         t.quantity,
+        ...(coMaLo ? [t.batchNumber || ""] : []),
         t.partnerName,
         t.notes || "",
       ]);
@@ -3221,6 +3225,7 @@ export default function App() {
           { rong: 10, kieu: "giua" },
           { rong: 38 },
           { rong: 12, kieu: "so" },
+          ...(coMaLo ? [{ rong: 16, kieu: "giua" as const }] : []),
           { rong: 24 },
           { rong: 44 },
         ],
@@ -3231,6 +3236,7 @@ export default function App() {
           "",
           "",
           hang.reduce((s, h) => s + (Number(h[4]) || 0), 0),
+          ...(coMaLo ? [""] : []),
           "",
           "",
         ],
@@ -3638,6 +3644,8 @@ export default function App() {
      * không phải lần nào cũng tròn keg.
      */
     lossQuantity?: number;
+    /** Mã lô của dòng nhập — chỉ ghi nhận, xem `Transaction.batchNumber`. */
+    batchNumber?: string;
   }
 
   /** Một keg bia hơi giao thực tế 20,6 L nhưng biên bản ghi tròn 20 L. */
@@ -5893,6 +5901,9 @@ export default function App() {
             // Chi hang nhap tay moi can chu ky. Ton dau ky khong co luot giao
             // nhan nao de hai ben ky nen khong gan ma phieu -> vao ton ngay.
             ...(slipCode ? { slipCode } : {}),
+            ...(type === "IN" && item.batchNumber?.trim()
+              ? { batchNumber: item.batchNumber.trim() }
+              : {}),
           };
           batch.set(doc(db, "transactions", transactionId), transaction);
         }
@@ -7589,6 +7600,11 @@ export default function App() {
                                         </div>
                                         <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 mt-0.5">
                                           {t.category}
+                                          {t.type === "IN" && t.batchNumber && (
+                                            <span className="text-amber-600">
+                                              {" "}· Lô {t.batchNumber}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </td>
@@ -9147,6 +9163,7 @@ export default function App() {
                           initialRows={newTransaction.items.map((i) => ({
                             productId: i.productId,
                             quantity: i.quantity,
+                            batchNumber: i.batchNumber,
                           }))}
                           onChange={(rows) =>
                             setNewTransaction((prev) => ({

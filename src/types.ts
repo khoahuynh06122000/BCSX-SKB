@@ -124,6 +124,11 @@ export interface Transaction {
    */
   slipCode?: string;
   /**
+   * Mã lô sản xuất của dòng NHẬP — chỉ để ghi nhận và truy nguồn (in lên phiếu,
+   * hiện trong báo cáo nhập). Tồn kho KHÔNG tính theo lô. Không bắt buộc.
+   */
+  batchNumber?: string;
+  /**
    * Dòng ĐIỀU CHỈNH CÔNG NỢ (xuất nhầm đơn vị, hóa đơn đã phát hành) — luôn đi
    * thành cặp âm / dương cùng `referenceGroupId`, cộng lại bằng 0 nên tồn kho
    * không đổi. Xem `src/lib/dieuChinhCongNo.ts`.

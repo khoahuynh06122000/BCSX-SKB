@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
   FileDown,
   FileUp,
+  Layers,
   RotateCcw,
   Search,
   CheckCircle2,
@@ -19,13 +20,20 @@ import { MAU, taoSheetDep, XLSXDep } from "../lib/excelDep";
  * sẵn toàn bộ danh mục, ai nhận loại nào thì điền số vào loại đó. Dòng nào
  * để trống coi như không nhập.
  *
- * KHÔNG CÒN SỐ LÔ. Kho đã bỏ theo dõi theo lô, nên bảng này chỉ còn hai thứ
- * phải điền: chọn loại bia và gõ số lượng.
+ * MÃ LÔ (thêm lại 09/11/2026): chỉ để GHI NHẬN — in lên phiếu, hiện trong
+ * báo cáo nhập để truy nguồn một đợt sản xuất. Không bắt buộc, và tồn kho
+ * KHÔNG tính theo lô (bỏ theo dõi theo lô từ 17/09/2026, xem c9121fa).
+ *
+ * "Mã lô chung" là GIÁ TRỊ MẶC ĐỊNH tự có hiệu lực, không có nút "Áp dụng":
+ * dòng nào không điền mã lô riêng thì lấy theo nó, dòng điền riêng thì số
+ * riêng thắng. Bản cũ bắt bấm nút áp dụng và đã thành cái bẫy (xem 1ba78a4).
  */
 
 export interface BulkRow {
   productId: string;
   quantity: number;
+  /** Mã lô đã gộp mã lô chung — form cha nhận đúng thứ sẽ ghi xuống. */
+  batchNumber?: string;
 }
 
 interface Props {
@@ -51,22 +59,39 @@ export default function BulkImportGrid({
       init[p.id] = {
         productId: p.id,
         quantity: existing?.quantity || 0,
+        batchNumber: existing?.batchNumber || "",
       };
     });
     return init;
   });
 
+  const [commonBatch, setCommonBatch] = useState("");
   const [search, setSearch] = useState("");
   const [importNote, setImportNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const phatLen = (next: Record<string, BulkRow>) => {
-    onChange(Object.values(next).filter((r) => r.quantity && r.quantity > 0));
+  /** Mã lô thật sự dùng cho một dòng: số riêng thắng, không có thì lấy chung. */
+  const maLoHieuLuc = (r: BulkRow, chung: string) =>
+    (r.batchNumber || "").trim() || chung.trim();
+
+  // Gộp mã lô chung vào từng dòng ngay tại đây, để form cha không phải đoán.
+  const phatLen = (next: Record<string, BulkRow>, chung: string) => {
+    onChange(
+      Object.values(next)
+        .filter((r) => r.quantity && r.quantity > 0)
+        .map((r) => ({ ...r, batchNumber: maLoHieuLuc(r, chung) })),
+    );
   };
 
   const push = (next: Record<string, BulkRow>) => {
     setRows(next);
-    phatLen(next);
+    phatLen(next, commonBatch);
+  };
+
+  /** Sửa mã lô chung thì phát lại ngay, không chờ ai bấm gì. */
+  const doiMaLoChung = (giaTri: string) => {
+    setCommonBatch(giaTri);
+    phatLen(rows, giaTri);
   };
 
   const update = (productId: string, patch: Partial<BulkRow>) => {
@@ -76,10 +101,13 @@ export default function BulkImportGrid({
   const clearAll = () => {
     const next: Record<string, BulkRow> = {};
     products.forEach((p) => {
-      next[p.id] = { productId: p.id, quantity: 0 };
+      next[p.id] = { productId: p.id, quantity: 0, batchNumber: "" };
     });
     setImportNote("");
-    push(next);
+    setCommonBatch("");
+    // Không dùng push(): nó còn giữ mã lô chung của lượt vẽ cũ.
+    setRows(next);
+    phatLen(next, "");
   };
 
   const visibleProducts = useMemo(() => {
@@ -98,11 +126,11 @@ export default function BulkImportGrid({
 
   const downloadTemplate = () => {
     /*
-     * Tệp mẫu để bộ phận điền tay rồi nạp lại. Ô "Số lượng" bỏ trống, tô vàng
-     * để nhìn là biết chỗ nào phải điền — mẫu trắng trơn thì người nhận không
-     * biết được phép sửa cột nào.
+     * Tệp mẫu để bộ phận điền tay rồi nạp lại. Ô "Số lượng" và "Mã lô" bỏ
+     * trống, tô vàng để nhìn là biết chỗ nào phải điền — mẫu trắng trơn thì
+     * người nhận không biết được phép sửa cột nào.
      */
-    const hang = products.map((p) => [p.name, p.unit, ""]);
+    const hang = products.map((p) => [p.name, p.unit, "", ""]);
 
     /*
      * CỐ Ý KHÔNG có dòng tiêu đề phụ phía trên.
@@ -112,18 +140,20 @@ export default function BulkImportGrid({
      * lại không ra dòng nào — đẹp mà không dùng được thì tệ hơn xấu.
      */
     const ws = taoSheetDep({
-      tieuDe: ["Tên sản phẩm", "Đơn vị", "Số lượng"],
-      cot: [{ rong: 42 }, { rong: 10, kieu: "giua" }, { rong: 14, kieu: "so" }],
+      tieuDe: ["Tên sản phẩm", "Đơn vị", "Số lượng", "Mã lô"],
+      cot: [{ rong: 42 }, { rong: 10, kieu: "giua" }, { rong: 14, kieu: "so" }, { rong: 20 }],
       hang,
     });
 
     // Tô vàng hai cột cần điền để mắt bắt được ngay.
     for (let i = 0; i < hang.length; i++) {
       const r = i + 1;
-      for (const c of [2]) {
+      for (const c of [2, 3]) {
         const dc = XLSXDep.utils.encode_cell({ c, r });
         const o = ws[dc];
         if (o) o.s = { ...o.s, fill: { patternType: "solid", fgColor: { rgb: MAU.canhBao } } };
+        // Ô mã lô để dạng CHỮ: gõ "001" mà Excel hiểu là số thì mất số 0 đầu.
+        if (o && c === 3) o.z = "@";
       }
     }
 
@@ -157,6 +187,7 @@ export default function BulkImportGrid({
             .toString()
             .replace(/,/g, "."),
         );
+        const maLo = String(r["Mã lô"] ?? r["Ma lo"] ?? r["Số lô"] ?? "").trim();
         // Khớp tên không phân biệt hoa thường và khoảng trắng thừa
         const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
         const p = products.find((x) => norm(x.name) === norm(rawName));
@@ -167,7 +198,11 @@ export default function BulkImportGrid({
         }
         if (!qty || qty <= 0) return;
 
-        next[p.id] = { productId: p.id, quantity: qty };
+        next[p.id] = {
+          productId: p.id,
+          quantity: qty,
+          batchNumber: maLo || next[p.id]?.batchNumber || "",
+        };
         matched++;
       });
 
@@ -234,6 +269,28 @@ export default function BulkImportGrid({
         </div>
       )}
 
+      {/* Mã lô chung — tự có hiệu lực, không cần bấm nút nào */}
+      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <Layers className="w-4 h-4 text-amber-600" />
+            <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">
+              Mã lô chung
+            </span>
+          </div>
+          <input
+            value={commonBatch}
+            onChange={(e) => doiMaLoChung(e.target.value)}
+            placeholder="Cả phiếu cùng một lô thì điền một lần ở đây"
+            className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-all"
+          />
+        </div>
+        <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+          Tự điền cho mọi dòng chưa có mã lô riêng. Dòng nào khác lô thì gõ thẳng
+          vào ô Mã lô của dòng đó. Không bắt buộc — để trống vẫn lưu được.
+        </p>
+      </div>
+
       {/* Bảng danh mục */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -248,6 +305,9 @@ export default function BulkImportGrid({
                 </th>
                 <th className="py-3 px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[130px]">
                   Số lượng
+                </th>
+                <th className="py-3 px-3 text-[9px] font-black text-slate-400 uppercase tracking-widest w-[160px]">
+                  Mã lô
                 </th>
               </tr>
             </thead>
@@ -301,6 +361,17 @@ export default function BulkImportGrid({
                         }
                         placeholder="0"
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-right outline-none focus:border-primary transition-all"
+                      />
+                    </td>
+
+                    <td className="py-2.5 px-3">
+                      <input
+                        value={row.batchNumber || ""}
+                        onChange={(e) =>
+                          update(p.id, { batchNumber: e.target.value })
+                        }
+                        placeholder={commonBatch.trim() || "—"}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-primary transition-all"
                       />
                     </td>
 
