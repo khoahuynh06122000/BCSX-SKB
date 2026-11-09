@@ -14,6 +14,7 @@ import {
   RotateCw,
   ZoomIn,
   Trash2,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
@@ -74,6 +75,12 @@ interface Props {
    */
   onXoaPhieu?: (code: string) => Promise<void>;
   xoaDuocPhieuDaKy?: boolean;
+  /**
+   * Điền / sửa mã lô cho các dòng của một phiếu đã nhập. Nhận bảng
+   * id giao dịch → mã lô (chuỗi rỗng = bỏ mã lô). Không truyền thì không hiện
+   * nút. Mã lô chỉ để ghi nhận, không đổi số lượng hay tồn kho.
+   */
+  onLuuMaLo?: (maLoTheoDong: Record<string, string>) => Promise<void>;
 }
 
 export default function ImportSlipPanel({
@@ -89,8 +96,11 @@ export default function ImportSlipPanel({
   uploadingCode,
   onXoaPhieu,
   xoaDuocPhieuDaKy = false,
+  onLuuMaLo,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
+  /** Phiếu đang mở khung điền mã lô. */
+  const [maLoCode, setMaLoCode] = useState<string | null>(null);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
   /**
    * Đường dẫn ảnh tải không được.
@@ -259,6 +269,33 @@ export default function ImportSlipPanel({
                         {d.transactions.length} dòng hàng ·{" "}
                         {formatNumber(d.totalLiters)} lít
                       </p>
+                      {(() => {
+                        const coLo = d.transactions.filter((t) => t.batchNumber).length;
+                        const cacLo = [
+                          ...new Set(
+                            d.transactions
+                              .map((t) => t.batchNumber || "")
+                              .filter(Boolean),
+                          ),
+                        ];
+                        return (
+                          <p
+                            className={cn(
+                              "text-[10px] font-bold",
+                              coLo === d.transactions.length
+                                ? "text-slate-500"
+                                : "text-amber-600",
+                            )}
+                          >
+                            {coLo === 0
+                              ? "Chưa có mã lô"
+                              : `Lô ${cacLo.slice(0, 3).join(", ")}${cacLo.length > 3 ? "…" : ""}` +
+                                (coLo < d.transactions.length
+                                  ? ` · còn ${d.transactions.length - coLo} dòng chưa có mã lô`
+                                  : "")}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -365,6 +402,16 @@ export default function ImportSlipPanel({
                       </>
                     )}
 
+                    {canWrite && onLuuMaLo && (
+                      <button
+                        onClick={() => setMaLoCode(d.code)}
+                        title="Điền hoặc sửa mã lô cho các dòng của phiếu này"
+                        className="px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-[10px] font-black uppercase tracking-widest hover:bg-amber-50 transition-all flex items-center gap-1.5"
+                      >
+                        <Layers className="w-3.5 h-3.5" /> Mã lô
+                      </button>
+                    )}
+
                     {/* XOÁ PHIẾU NHẬP SAI. Phiếu chưa ký: người nhập kho tự
                         xoá được. Phiếu đã ký ảnh: chỉ admin. */}
                     {onXoaPhieu && (photos.length === 0 || xoaDuocPhieuDaKy) && (
@@ -453,6 +500,23 @@ export default function ImportSlipPanel({
           })
         )}
       </div>
+
+      {/* ---------- Khung điền mã lô cho phiếu đã nhập ---------- */}
+      {maLoCode && onLuuMaLo && (() => {
+        const phieu = handoverSlips.find((d) => d.code === maLoCode);
+        if (!phieu) return null;
+        return (
+          <MaLoEditor
+            key={phieu.code}
+            slip={phieu}
+            onClose={() => setMaLoCode(null)}
+            onSave={async (bang) => {
+              await onLuuMaLo(bang);
+              setMaLoCode(null);
+            }}
+          />
+        );
+      })()}
 
       {/* ---------- Cửa sổ xem & in phiếu ---------- */}
       {openSlip && (
@@ -582,6 +646,141 @@ export default function ImportSlipPanel({
           document.body,
         )}
     </div>
+  );
+}
+
+/* ========================================================================== */
+
+/**
+ * ĐIỀN MÃ LÔ CHO PHIẾU ĐÃ NHẬP.
+ *
+ * Giống bảng nhập kho: "mã lô chung" là giá trị mặc định cho mọi dòng để
+ * trống, dòng nào gõ riêng thì số riêng thắng. Chỉ ghi trường `batchNumber`
+ * của các dòng có thay đổi — số lượng, ảnh ký, trạng thái phiếu giữ nguyên.
+ */
+function MaLoEditor({
+  slip,
+  onClose,
+  onSave,
+}: {
+  slip: HandoverSlip;
+  onClose: () => void;
+  onSave: (maLoTheoDong: Record<string, string>) => Promise<void>;
+}) {
+  const [rieng, setRieng] = useState<Record<string, string>>(() =>
+    Object.fromEntries(slip.transactions.map((t) => [t.id, t.batchNumber || ""])),
+  );
+  const [chung, setChung] = useState("");
+  const [dangLuu, setDangLuu] = useState(false);
+
+  const hieuLuc = (id: string) => (rieng[id] || "").trim() || chung.trim();
+  const thayDoi = slip.transactions.filter(
+    (t) => hieuLuc(t.id) !== (t.batchNumber || ""),
+  );
+
+  const luu = async () => {
+    if (!thayDoi.length) return onClose();
+    setDangLuu(true);
+    try {
+      await onSave(Object.fromEntries(thayDoi.map((t) => [t.id, hieuLuc(t.id)])));
+    } catch {
+      // Lỗi đã được báo ở nơi lưu; giữ khung mở để người dùng thử lại.
+    } finally {
+      setDangLuu(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[250] flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      <div
+        onClick={onClose}
+        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"
+      />
+      <div className="relative z-10 w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between gap-3 p-4 border-b border-slate-100">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Mã lô · phiếu
+            </p>
+            <p className="text-sm font-black text-slate-900 font-mono">{slip.code}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-1.5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="flex items-center gap-2 shrink-0 text-[10px] font-black text-amber-800 uppercase tracking-widest">
+                <Layers className="w-4 h-4 text-amber-600" /> Mã lô chung
+              </span>
+              <input
+                value={chung}
+                onChange={(e) => setChung(e.target.value)}
+                placeholder="Cả phiếu cùng một lô thì điền một lần ở đây"
+                className="flex-1 px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-bold outline-none focus:border-amber-500 transition-all"
+              />
+            </div>
+            <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+              Tự điền cho các dòng đang để trống. Dòng nào khác lô thì gõ riêng ở
+              dòng đó. Chỉ đổi mã lô — số lượng và tồn kho giữ nguyên.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 divide-y divide-slate-100">
+            {slip.transactions.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-slate-900 truncate">
+                    {t.productName}
+                  </p>
+                  <p className="text-[10px] font-bold text-slate-400">
+                    {formatNumber(t.quantity)} · {t.category}
+                  </p>
+                </div>
+                <input
+                  value={rieng[t.id] || ""}
+                  onChange={(e) =>
+                    setRieng((cu) => ({ ...cu, [t.id]: e.target.value }))
+                  }
+                  placeholder={chung.trim() || "—"}
+                  className="w-40 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-primary transition-all"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 p-4 border-t border-slate-100">
+          <p className="text-[11px] font-bold text-slate-500">
+            {thayDoi.length
+              ? `${thayDoi.length} dòng sẽ đổi mã lô`
+              : "Chưa có thay đổi"}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest hover:border-slate-300"
+            >
+              Huỷ
+            </button>
+            <button
+              onClick={luu}
+              disabled={dangLuu || !thayDoi.length}
+              className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 disabled:opacity-40 flex items-center gap-1.5"
+            >
+              {dangLuu && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              Lưu mã lô
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

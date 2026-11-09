@@ -3065,6 +3065,33 @@ export default function App() {
     }
   };
 
+  /**
+   * ĐIỀN MÃ LÔ CHO PHIẾU ĐÃ NHẬP (kể cả phiếu đã ký).
+   *
+   * Chỉ cập nhật trường `batchNumber` — không đụng số lượng, ảnh hay trạng
+   * thái phiếu, nên tồn kho không đổi. Chuỗi rỗng = bỏ mã lô của dòng đó.
+   */
+  const handleLuuMaLo = async (maLoTheoDong: Record<string, string>) => {
+    const ids = Object.keys(maLoTheoDong);
+    if (!ids.length) return;
+    try {
+      setLoading(true);
+      const batch = writeBatch(db);
+      ids.forEach((id) =>
+        batch.update(doc(db, "transactions", id), {
+          batchNumber: maLoTheoDong[id].trim(),
+        }),
+      );
+      await batch.commit();
+      showNotification(`Đã lưu mã lô cho ${ids.length} dòng`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRemoveSignedSlipPhoto = async (code: string, url: string) => {
     const existing = slips.find((s) => s.code === code);
     if (!existing) return;
@@ -10386,6 +10413,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       quyen.ghiNhap ? handleXoaPhieuNhap : undefined
                     }
                     xoaDuocPhieuDaKy={isOwner}
+                    onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
                   />
                 </Card>
               </div>
