@@ -21,7 +21,7 @@
  * Vẫn tra cứu được theo ngày nhập kho như cũ, vì ngày nằm ngay trong mã phiếu.
  */
 
-import type { ImportSlip, Transaction } from "../types";
+import type { Transaction } from "../types";
 
 /** Mã phiếu luôn bắt đầu bằng cụm này. */
 export const SLIP_PREFIX = "PN-";
@@ -87,19 +87,11 @@ export function nextSlipCode(
   return `${prefix}-${String(maxSeq + 1).padStart(SEQ_WIDTH, "0")}`;
 }
 
-/**
- * Tập mã phiếu ĐÃ DUYỆT — tức là đã có ít nhất một ảnh tờ phiếu ký tươi.
- *
- * Duyệt suy ra từ sự tồn tại của ảnh, không lưu thêm cờ `approved` nào. Nhờ
- * vậy không bao giờ lệch hai nguồn: gỡ hết ảnh là số liệu tự quay về chờ duyệt.
+/*
+ * Tập mã phiếu ĐÃ DUYỆT (đã có ảnh ký) nay suy từ bảng ảnh chứng từ:
+ * `phieuDaCoAnhKy` ở src/anh/moHinh.ts. Gỡ hết ảnh ký thì phiếu tự quay về
+ * chờ duyệt — vẫn không lưu thêm cờ nào.
  */
-export function approvedSlipCodes(slips: ImportSlip[]): Set<string> {
-  const s = new Set<string>();
-  slips.forEach((sl) => {
-    if (sl.signedPhotoUrls?.length && sl.code) s.add(sl.code);
-  });
-  return s;
-}
 
 /**
  * Giao dịch này có nằm trong luồng in–ký hay không.

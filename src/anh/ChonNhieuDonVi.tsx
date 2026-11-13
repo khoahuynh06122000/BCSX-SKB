@@ -13,8 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Building2, Check, ChevronDown } from "lucide-react";
-import type { MucDonVi } from "../lib/thuVienAnh";
-import { tenLocDonVi } from "../lib/thuVienAnh";
+import { tenGiaTriLoc, type MucDonVi } from "./thuVien";
 import { cn, formatNumber } from "../lib/utils";
 
 interface Props {
@@ -48,7 +47,7 @@ export default function ChonNhieuDonVi({ ds, dangChon, onDoi }: Props) {
   const mat = dangChon.filter((g) => !ds.some((d) => d.gia === g));
   const tatCa: MucDonVi[] = [
     ...ds,
-    ...mat.map((g) => ({ gia: g, ten: `${tenLocDonVi(g)} — không có ảnh trong khoảng này` })),
+    ...mat.map((g) => ({ gia: g, ten: `${tenGiaTriLoc(g)} — không có ảnh trong khoảng này` })),
   ];
 
   const bat = (g: string) =>
@@ -60,7 +59,7 @@ export default function ChonNhieuDonVi({ ds, dangChon, onDoi }: Props) {
         ? "Không có đơn vị nào"
         : `Tất cả đơn vị (${formatNumber(ds.length)})`
       : dangChon.length <= 2
-        ? dangChon.map((g) => tenLocDonVi(g)).join(", ")
+        ? dangChon.map((g) => tenGiaTriLoc(g)).join(", ")
         : `${dangChon.length} đơn vị`;
 
   return (

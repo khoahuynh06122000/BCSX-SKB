@@ -131,11 +131,23 @@ service cloud.firestore {
       return isToanQuyenKho() || (isSignedIn() && role() == 'NHAP_KHO');
     }
 
-    // Phieu nhap da co anh ky tuoi chua (= hang da vao ton kho).
+    // Phieu nhap da ky chua (= da co anh ky, hang da vao ton kho). Trang thai
+    // 'signed' ghi CUNG LO voi anh ky o bang anh_chung_tu.
     function phieuDaKy(code) {
       return exists(/databases/$(database)/documents/slips/$(code))
         && get(/databases/$(database)/documents/slips/$(code))
-             .data.get('signedPhotoUrls', []).size() > 0;
+             .data.get('status', '') == 'signed';
+    }
+
+    // HE ANH CU DA BO (13/11/2026): khong ai duoc ghi duong dan anh len dong
+    // giao dich hay phieu nua. Anh chi nam o bang anh_chung_tu. Chan ca chu so
+    // huu: may nao con chay ban app cu thi ghi hong ngay, khong lang le ghi
+    // anh vao cho khong ai doc.
+    function khongCoAnhTrenDong() {
+      return !request.resource.data.keys().hasAny(['evidencePhotoUrl', 'evidencePhotoUrls']);
+    }
+    function khongCoAnhTrenPhieu() {
+      return !request.resource.data.keys().hasAny(['signedPhotoUrls']);
     }
 
     // Ghi duoc chieu XUAT: xuat kho, hao hut, doi tac va diem ban.
@@ -243,14 +255,17 @@ service cloud.firestore {
         || (laDNC() && laChieuXuat(resource.data.get('type', '')));
 
       // Ghi theo CHIEU cua chinh ban ghi do.
-      allow create: if isToanQuyenKho()
+      allow create: if khongCoAnhTrenDong() && (
+        isToanQuyenKho()
         || (ghiNhapKho() && laChieuNhap(request.resource.data.get('type', '')))
-        || (ghiXuatKho() && laChieuXuat(request.resource.data.get('type', '')));
+        || (ghiXuatKho() && laChieuXuat(request.resource.data.get('type', '')))
+      );
 
       // Sua thi xet CA HAI: loai cu va loai moi. Chi xet loai moi thi nguoi
       // nhap kho doi mot phieu xuat thanh phieu nhap la sua duoc no; chi xet
       // loai cu thi doi phieu nhap thanh phieu xuat.
-      allow update: if isToanQuyenKho()
+      allow update: if khongCoAnhTrenDong() && (
+        isToanQuyenKho()
         || (
           ghiNhapKho()
           && laChieuNhap(resource.data.get('type', ''))
@@ -260,7 +275,8 @@ service cloud.firestore {
           ghiXuatKho()
           && laChieuXuat(resource.data.get('type', ''))
           && laChieuXuat(request.resource.data.get('type', ''))
-        );
+        )
+      );
 
       // XOA: CHI ADMIN (21/10/2026, Khoa quyet). Truoc day nguoi xuat kho xoa
       // duoc don dang di duong. Nay xoa du lieu la xoa luon anh tren Cloudinary,
@@ -362,31 +378,40 @@ service cloud.firestore {
     }
 
     /*
-     * SO ANH MINH CHUNG — anh co cho dung rieng, khong song nho giao dich.
+     * ANH CHUNG TU (dung lai 13/11/2026) — nguon duy nhat cua moi anh minh chung.
      *
-     * Nguyen nhan goc cua moi lan mat anh truoc day: duong dan anh CHI nam
-     * trong tai lieu giao dich / phieu, nen xoa hay ghi de tai lieu ay la ngam
-     * xoa luon anh. So nay KHONG bi xoa theo giao dich. Xem src/lib/soAnh.ts.
+     * Moi tam anh mot tai lieu, moc vao CHUNG TU (ma phieu nhap PN-..., hoac ma
+     * chuyen giao referenceGroupId) qua truong chungTu. Dong giao dich va phieu
+     * khong giu duong dan anh nao, nen khong luot ghi nghiep vu nao lam roi anh
+     * duoc. Xem src/anh/moHinh.ts.
      *
-     * Doc: nhu giao dich — ai xem duoc kho thi doc het, DNC chi doc chieu xuat.
-     *
-     * Tao: ai ghi duoc kho deu dua anh vao so duoc, vi so phai giu moi tam bat
-     * ke ai tai len. Chi duong dan Cloudinary, chi hai chieu XUAT / NHAP.
-     *
-     * DU LIEU VA ANH DI MOT CUM: xoa du lieu thi app xoa luon tep tren
-     * Cloudinary va xoa dong so — khong co anh mo coi nao phai di tim.
-     *
-     * Sua va XOA: CHI ADMIN. Xoa dong so la buoc cuoi cua xoa anh that — tep
-     * tren Cloudinary do may chu xoa sau cua requireOwner (api/_auth.ts). Hai
-     * ben phai khop: luat chan xoa so, cua may chu chan xoa tep.
+     * Doc: ai xem duoc kho doc het; DNC chi doc anh chieu xuat.
+     * Tao: chi THEM, dung chieu cua minh, ghi dung uid cua chinh nguoi tai, chi
+     *   duong dan Cloudinary, va phai gan it nhat mot chung tu. Ghi de mot tam
+     *   da co la update — chi admin.
+     * Sua, XOA: CHI ADMIN. Xoa ban ghi la buoc cuoi cua xoa anh that — tep tren
+     *   Cloudinary do may chu xoa sau cua requireOwner (api/anh/xoa.ts).
      */
-    match /anh_minh_chung/{id} {
+    match /anh_chung_tu/{id} {
       allow read: if xemKho()
-        || (laDNC() && resource.data.get('chieu', '') == 'XUAT');
-      allow create: if (ghiNhapKho() || ghiXuatKho())
-        && request.resource.data.get('url', '').matches('^https://res[.]cloudinary[.]com/.+')
-        && request.resource.data.get('chieu', '') in ['XUAT', 'NHAP'];
+        || (laDNC() && resource.data.get('loai', '') == 'XUAT');
+      allow create: if isSignedIn()
+        && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.get('url', '').matches('^https://res[.]cloudinary[.]com/[^/]+/image/upload/.+')
+        && request.resource.data.get('chungTu', []) is list
+        && request.resource.data.get('chungTu', []).size() > 0
+        && (
+          (request.resource.data.get('loai', '') == 'NHAP' && ghiNhapKho())
+          || (request.resource.data.get('loai', '') == 'XUAT' && ghiXuatKho())
+        );
       allow update, delete: if isOwner();
+    }
+
+    // So anh doi truoc (anh_minh_chung): da chuyen het sang anh_chung_tu, giu
+    // lai lam ban doi chieu. Chi admin doc, khong ai ghi.
+    match /anh_minh_chung/{id} {
+      allow read: if isOwner();
+      allow write: if false;
     }
 
     /*
@@ -411,31 +436,29 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // Phieu nhap kho: chi luu trang thai va anh da ky, noi dung suy ra tu
-    // transactions nen khong so lech hai nguon.
+    // Phieu nhap kho: chi luu trang thai (in, ky), noi dung suy ra tu
+    // transactions nen khong so lech hai nguon. Anh ky nam o anh_chung_tu.
     //
-    // ANH KY LA THU LAM TANG TON KHO. Hang chi vao ton khi phieu co anh to giay
-    // da ky (xem src/lib/slip.ts), nen viec them/bot anh o day co suc nang bang
-    // viec sua truc tiep so ton.
-    //
-    // Nhan vien PHAI them duoc anh - do la viec cua kho. Nhung KHONG duoc BOT:
-    // go het anh la keo ca lo hang ra khoi ton kho. Giao dien chi hien nut go
-    // cho chu so huu, nhung giao dien khong phai lop bao ve - mo DevTools goi
-    // Firestore truc tiep la lam duoc. Dieu kien duoi day chan that: so anh sau
-    // khi sua khong duoc it hon truoc khi sua, tru khi la chu so huu.
+    // ANH KY LA THU LAM TANG TON KHO. Hang chi vao ton khi phieu co anh ky.
+    // Nhan vien PHAI them duoc anh (luat anh_chung_tu cho them), nhung KHONG
+    // duoc BOT: xoa anh chi admin, va phieu da ky thi chi admin ha trang thai.
     match /slips/{slipId} {
       // Phieu nhap la chuyen cua kho, DNC khong doc.
       allow read: if xemKho();
-      allow create: if ghiNhapKho();
-      allow update: if isOwner()
+      allow create: if ghiNhapKho() && khongCoAnhTrenPhieu();
+      // Phieu da ky thi chi chu so huu ha trang thai duoc (go anh ky la keo
+      // ca lo hang ra khoi ton).
+      allow update: if khongCoAnhTrenPhieu() && (
+        isOwner()
         || (
           ghiNhapKho()
-          && request.resource.data.get('signedPhotoUrls', []).size()
-               >= resource.data.get('signedPhotoUrls', []).size()
-        );
-      // Phieu chua co anh ky: nguoi nhap kho xoa duoc (xem luat transactions).
+          && !(resource.data.get('status', '') == 'signed'
+               && request.resource.data.get('status', '') != 'signed')
+        )
+      );
+      // Phieu chua ky: nguoi nhap kho xoa duoc (xem luat transactions).
       allow delete: if isOwner()
-        || (ghiNhapKho() && resource.data.get('signedPhotoUrls', []).size() == 0);
+        || (ghiNhapKho() && resource.data.get('status', '') != 'signed');
     }
 
     /*

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useRef, ReactNode } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import {
   Building2,
@@ -17,7 +17,6 @@ import {
   Download,
   LogOut,
   ChevronRight,
-  ChevronDown,
   TrendingUp,
   AlertCircle,
   Info,
@@ -27,9 +26,6 @@ import {
   Truck,
   Camera,
   Image as ImageIcon,
-  ImageOff,
-  Maximize2,
-  Minimize2,
   Layers,
   FileText,
   AlertTriangle,
@@ -70,7 +66,6 @@ import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
 import {
-  approvedSlipCodes,
   nextSlipCode,
   pendingSlipTransactions,
   pendingStockByProduct,
@@ -99,7 +94,6 @@ import {
   getDoc,
   getDocs,
   writeBatch,
-  arrayUnion,
   batDauGuiDoLuong,
 } from "./firebase";
 import {
@@ -115,7 +109,6 @@ import {
   type LoaiGoi,
   type NgayDoLuong,
 } from "./lib/doLuong";
-import { uploadToCloudinary } from "./lib/cloudinary";
 import {
   hashPin,
   verifyPin,
@@ -123,47 +116,28 @@ import {
   PIN_SESSION_KEY,
 } from "./lib/pin";
 import ImportSlipPanel from "./components/ImportSlip";
-import { compressFile } from "./lib/image";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
-import ChuyenAnhCu from "./components/ChuyenAnhCu";
 import {
-  danhSachBoPhanBNC,
-  danhSachDonVi,
-  dungAnhThuVien,
-  locTheoNhieuDonVi,
-  lyDoAnhLoi,
-  type AnhThuVien,
-} from "./lib/thuVienAnh";
-import { taoZip, tenTepTaiVe } from "./lib/taiHangLoat";
-import { anhThuNho } from "./lib/anhCloudinary";
+  chiMucTheoChungTu,
+  KHO_ANH_CHUNG_TU,
+  maChungTuCuaDong,
+  phieuDaCoAnhKy,
+  viecAnhKhiXoa,
+  type AnhChungTu,
+} from "./anh/moHinh";
 import {
-  anhSeMatLienKet,
-  ghiDeAnh,
-  giuAnhCu,
-  gomAnh,
-} from "./lib/anhMinhChung";
-import {
-  anhTheoNhom,
-  dongChuaVaoSo,
-  dongSoTuDuLieu,
-  idSoAnh,
-  KHO_SO_ANH,
-  noiDangDungAnh,
-  publicIdTuUrl,
-  type BanGhiAnh,
-} from "./lib/soAnh";
-import { traLuot, xinLuot } from "./lib/hangDoiAnh";
-import {
-  baoCaoSoatAnh,
-  nhanDinhSoatAnh,
-  nhomCuaMa,
-  tomTatSoatAnh,
-  type KetQuaMotAnh,
-  type TomTatSoatAnh,
-} from "./lib/soatAnh";
+  baoAnhChuaXoa,
+  boTepVuaTai,
+  chuAnhDaXoa,
+  ghiAnhVaoLo,
+  lamViecAnhKhiXoa,
+  taiAnhChoChungTu,
+} from "./anh/kho";
+import ThuVienAnh from "./anh/ThuVienAnh";
+import ChonAnh, { giaiPhong, taoTepCho, type TepCho } from "./anh/ChonAnh";
+import type { OAnh } from "./anh/thuVien";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
-import AnhLuoi from "./components/AnhLuoi";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
 import {
@@ -206,10 +180,8 @@ import {
 
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
-import ChonNhieuDonVi from "./components/ChonNhieuDonVi";
 import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
 import type { DongGhiDieuChinh } from "./lib/dieuChinhCongNo";
-import { anhChoConLai, daLuuAnhCho, themAnhCho } from "./lib/anhCho";
 
 import {
   laDongHaoHut,
@@ -498,75 +470,48 @@ export default function App() {
 
   const [allUserProfiles, setAllUserProfiles] = useState<UserProfile[]>([]);
   const [slips, setSlips] = useState<ImportSlip[]>([]);
-  /** Sổ ảnh minh chứng — xem `src/lib/soAnh.ts`. */
-  const [soAnh, setSoAnh] = useState<BanGhiAnh[]>([]);
   /**
-   * Ba bảng đã về lần đầu chưa.
-   *
-   * Phép ghi sổ so dữ liệu sống với sổ để biết tấm nào chưa vào sổ. Chạy khi
-   * sổ CHƯA về thì nó tưởng sổ rỗng, đi ghi lại mọi tấm — người không phải
-   * admin bị luật chặn (ghi đè là việc của admin) và cả lượt hỏng; admin thì
-   * ghi đè mất thông tin gốc của đơn đã xoá. Nên phải chờ đủ cả ba.
+   * ẢNH CHỨNG TỪ — bảng `anh_chung_tu`, nguồn duy nhất của mọi ảnh minh chứng.
+   * Ảnh gắn vào chứng từ (mã phiếu nhập / mã chuyến giao), không nằm trên dòng
+   * giao dịch nào. Xem src/anh/moHinh.ts.
    */
-  const [daTaiSoAnh, setDaTaiSoAnh] = useState({ gd: false, phieu: false, so: false });
+  const [anhChungTu, setAnhChungTu] = useState<AnhChungTu[]>([]);
+  /** Bảng ảnh đã về lần đầu chưa — chưa về thì không cho xoá dữ liệu (không biết ảnh nào đi theo). */
+  const daTaiAnhRef = useRef(false);
+  /** Ảnh theo mã chứng từ. */
+  const anhTheoChungTu = useMemo(() => chiMucTheoChungTu(anhChungTu), [anhChungTu]);
+  /** Đường dẫn ảnh của chứng từ chứa một dòng giao dịch. */
+  const anhCuaDong = useCallback(
+    (t: Transaction) => (anhTheoChungTu.get(maChungTuCuaDong(t)) || []).map((a) => a.url),
+    [anhTheoChungTu],
+  );
   /**
-   * Mã sổ đã ghi trong phiên này — chống hai lượt ghi cùng lúc (phép tự ghi
-   * sổ và một lệnh xoá) cùng đi tạo một tấm, lượt sau thành ghi đè và bị luật
-   * chặn.
+   * Lượt xoá này kéo theo những ảnh nào: ảnh của chứng từ không còn dòng /
+   * phiếu nào sống thì xoá, ảnh dùng chung thì gỡ chứng từ đã mất. Bảng ảnh
+   * chưa về thì báo và trả `null` — nơi gọi DỪNG, không xoá gì: xoá dữ liệu
+   * mà không biết ảnh nào đi theo là để lại tệp không ai thấy.
    */
-  const daGhiSoRef = useRef<Set<string>>(new Set());
-  /** Trỏ tới `daXoaAnhRef` khai ở phần việc của admin, bên dưới. */
-  const daXoaAnhRefSom = useRef<Set<string>>(new Set());
-  const soAnhRef = useRef<BanGhiAnh[]>([]);
-  soAnhRef.current = soAnh;
-  const daTaiSoAnhRef = useRef(daTaiSoAnh);
-  daTaiSoAnhRef.current = daTaiSoAnh;
-  /** Chỉ vào sổ ảnh của kho app — ảnh mẫu `demo` của Cloudinary thì không. */
-  const KHO_ANH = String(import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "");
-
-  /**
-   * GHI VÀO SỔ MỌI TẤM ẢNH CỦA NHỮNG DÒNG NÀY MÀ SỔ CHƯA CÓ.
-   *
-   * Gọi TRƯỚC mọi lệnh xoá giao dịch / xoá phiếu / gỡ ảnh. Hỏng thì NÉM LỖI để
-   * nơi gọi DỪNG lệnh xoá: xoá mà sổ chưa giữ ảnh là đúng con đường đã làm
-   * mất ảnh bao lần nay.
-   */
-  const damBaoSoAnh = async (
-    gd: readonly Transaction[],
+  const viecAnhCuaLuotXoa = (
+    dong: readonly Transaction[],
     phieu: readonly ImportSlip[] = [],
   ) => {
-    const tai = daTaiSoAnhRef.current;
-    if (!tai.so) {
-      throw new Error(
-        "Sổ ảnh chưa tải xong nên chưa giữ được ảnh của những dòng sắp xoá. " +
-          "Đợi vài giây cho trang tải hết rồi bấm lại.",
+    if (!daTaiAnhRef.current) {
+      alert(
+        "Bảng ảnh chưa tải xong nên chưa biết ảnh nào đi theo dữ liệu sắp xoá. Đợi vài giây rồi bấm lại. Chưa xoá gì.",
       );
+      return null;
     }
-    const moi = dongChuaVaoSo(
-      dongSoTuDuLieu(
-        gd,
-        phieu,
-        currentUserProfile?.email || user || "",
-        new Date().toISOString(),
-        KHO_ANH,
-      ),
-      soAnhRef.current,
-    ).filter(
-      (b) =>
-        !daGhiSoRef.current.has(b.id) && !daXoaAnhRefSom.current.has(b.id),
+    const idXoa = new Set(dong.map((t) => t.id));
+    const maXoa = new Set(phieu.map((p) => p.code));
+    const conSong = new Set<string>([
+      ...transactions.filter((t) => !idXoa.has(t.id)).map(maChungTuCuaDong),
+      ...slips.filter((p) => !maXoa.has(p.code)).map((p) => p.code),
+    ]);
+    return viecAnhKhiXoa(
+      anhChungTu,
+      [...dong.map(maChungTuCuaDong), ...phieu.map((p) => p.code)],
+      conSong,
     );
-    if (!moi.length) return;
-
-    const CHUNK = 400;
-    for (let i = 0; i < moi.length; i += CHUNK) {
-      const batch = writeBatch(db);
-      moi.slice(i, i + CHUNK).forEach((b) => {
-        const { id, ...duLieu } = b;
-        batch.set(doc(db, KHO_SO_ANH, id), duLieu);
-      });
-      await batch.commit();
-      moi.slice(i, i + CHUNK).forEach((b) => daGhiSoRef.current.add(b.id));
-    }
   };
   const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
     null,
@@ -657,128 +602,6 @@ export default function App() {
   const [reportDenNgay, setReportDenNgay] = useState("");
   const [reportPartnerSearch, setReportPartnerSearch] = useState("");
 
-  const [galleryFilter, setGalleryFilter] = useState<"IN" | "OUT">("IN");
-  /*
-   * Khoảng ngày của thư viện ảnh.
-   *
-   * Mặc định 30 ngày gần nhất chứ không phải "tất cả": ảnh cần tra gần như
-   * luôn là ảnh mới, còn tải hết vài nghìn tấm về máy điện thoại thì vừa chậm
-   * vừa tốn 4G. Muốn xem xa hơn thì kéo ngày bắt đầu lùi lại.
-   */
-  const [galleryTuNgay, setGalleryTuNgay] = useState(() =>
-    format(new Date(Date.now() - 30 * 86400000), "yyyy-MM-dd"),
-  );
-  const [galleryDenNgay, setGalleryDenNgay] = useState(() =>
-    format(new Date(), "yyyy-MM-dd"),
-  );
-  /**
-   * Giao dịch đang xem ảnh minh chứng ở chế độ toàn màn hình.
-   *
-   * Bản cũ khai là `string | null` nhưng chỗ mở modal lại truyền cả giao dịch
-   * vào, rồi modal đọc `.productName` / `.date` / `.evidencePhotoUrl` — chạy
-   * được nhưng kiểu sai nên TypeScript không còn bắt được lỗi tên trường.
-   */
-  const [selectedGalleryImage, setSelectedGalleryImage] =
-    useState<AnhThuVien | null>(null);
-  /**
-   * Chế độ xem ảnh: vừa khung, hay cỡ thật (cuộn được).
-   *
-   * Biên bản giao nhận là ảnh chụp giấy A4 dựng đứng. Bóp cả tờ vào chiều cao
-   * màn hình thì đọc được tiêu đề nhưng không đọc nổi dòng số lượng — mà dòng
-   * số lượng mới là thứ người ta mở ảnh lên để dò. Nên cho bấm vào ảnh để đổi
-   * sang cỡ thật rồi cuộn.
-   */
-  const [anhCoThat, setAnhCoThat] = useState(false);
-  useEffect(() => {
-    setAnhCoThat(false);
-  }, [selectedGalleryImage?.id]);
-  /**
-   * Tiến trình tải hàng loạt ảnh thư viện.
-   *
-   * `tong` là 0 khi không tải gì. Phải hiện được số đã xong: gói vài trăm tấm
-   * mất cả phút, không có gì nhúc nhích thì người dùng tưởng treo và bấm lại.
-   */
-  /** Đơn vị đang lọc ở thư viện ảnh chiều xuất. Rỗng là xem hết. */
-  // Chọn NHIỀU đơn vị cùng lúc (vd FV + NVT). Rỗng = tất cả.
-  const [galleryDonVi, setGalleryDonVi] = useState<string[]>([]);
-  /**
-   * Điểm bán của BNC đang lọc thêm, chỉ dùng khi đang lọc một phần của BNC.
-   *
-   * Phần Nội bộ có 17 điểm bán nên chọn phần rồi vẫn còn quá nhiều ảnh; ô thứ
-   * hai này để soi tiếp một quán. Ba phần còn lại chỉ có một bộ phận nên ô
-   * không hiện ra.
-   */
-  const [galleryBoPhan, setGalleryBoPhan] = useState("");
-  /**
-   * Những tấm trình duyệt tải không được, ghi theo khoá ảnh.
-   *
-   * Trước đây tấm nào lỗi thì ô ảnh trắng trơn, không nói gì — nhìn vào tưởng
-   * app lọc sai hoặc mất ảnh. Ghi lại để ô ảnh hiện đúng lý do, và để đếm ra
-   * một dòng cảnh báo phía trên lưới.
-   */
-  /*
-   * MỘT LẦN TẢI HỎNG CHƯA PHẢI LÀ ẢNH HỎNG.
-   *
-   * Bản trước hễ thẻ ảnh báo lỗi một lần là ô đó vĩnh viễn thành "không tải
-   * được" cho tới khi tải lại trang, và không có cách nào thử lại. Mà lỗi một
-   * lần thì đầy lý do tạm thời: máy chủ ảnh chặn bớt khi bị hỏi mấy chục tấm
-   * cùng lúc (lưới tải lười, cuộn tới đâu bắn tới đó), mạng công ty chập một
-   * nhịp, máy đang tải tệp khác. Đã gặp thật: một tấm bị ghi "ảnh không còn
-   * trên máy chủ" mà mở thẳng đường dẫn ra vẫn tải được bình thường.
-   *
-   * Nay đếm số lần hỏng. Chỉ quá `SO_LAN_THU` mới coi là hỏng thật; trước đó
-   * đổi đường dẫn một chút để trình duyệt tải lại thay vì lấy kết quả hỏng
-   * trong bộ nhớ đệm.
-   */
-  const SO_LAN_THU = 2;
-  const [lanThuAnh, setLanThuAnh] = useState<Record<string, number>>({});
-  const anhLoi = useMemo(
-    () =>
-      new Set(
-        Object.entries(lanThuAnh)
-          .filter(([, n]) => n > SO_LAN_THU)
-          .map(([id]) => id),
-      ),
-    [lanThuAnh],
-  );
-  /** Lùi dần: 0,6s rồi 1,2s — đủ để cơn chặn tạm đi qua. */
-  const ghiAnhLoi = (id: string) => {
-    const lan = lanThuAnh[id] ?? 0;
-    const cham = () =>
-      setLanThuAnh((cu) => ({ ...cu, [id]: (cu[id] ?? 0) + 1 }));
-    if (lan >= SO_LAN_THU) cham();
-    else setTimeout(cham, 600 * (lan + 1));
-  };
-  /** Người dùng tự bấm thử lại — xoá sạch số lần hỏng của tấm đó. */
-  const thuLaiAnh = (id: string) =>
-    setLanThuAnh((cu) => {
-      const moi = { ...cu };
-      delete moi[id];
-      return moi;
-    });
-  const thuLaiTatCaAnh = () => setLanThuAnh({});
-  /**
-   * ĐƯỜNG DẪN ĐỂ TẢI MỘT Ô THU NHỎ.
-   *
-   * ĐÃ BỎ MẸO `?thu=N`. Ý định của nó là làm trình duyệt đừng lấy lại kết quả
-   * hỏng trong bộ nhớ đệm, nhưng nó phản tác dụng: thêm một tham số lạ thì
-   * Cloudinary coi đây là một đường dẫn KHÁC, nên trượt bộ đệm biên và lượt
-   * thử lại đi thẳng vào máy chủ gốc — đúng chỗ đang chặn. Tức là mẹo chống
-   * đệm làm cho lượt thử lại KHÓ thành công hơn lượt đầu.
-   *
-   * Thay vào đó xin bản THU NHỎ. Lưới bốn cột trên màn hình của anh Khoa cho
-   * ô rộng chừng 245px, Windows đang phóng 150% nên cần khoảng 368px điểm ảnh
-   * thật — 400px là vừa đủ sắc mà không tải thừa.
-   *
-   * Đo thật trên một tờ biên bản: 46.967 B xuống 23.190 B, nhẹ đi một nửa.
-   * Xem `anhCloudinary.ts`.
-   */
-  const duongDanO = (url: string) => anhThuNho(url, 400);
-  const [tienTrinhTaiAnh, setTienTrinhTaiAnh] = useState({
-    tong: 0,
-    xong: 0,
-    hong: 0,
-  });
   // Danh sach so hoa don dang bung chi tiet o so chi tiet doanh thu.
   // Truoc day khai bao la Set nhung cho dung lai goi .includes()/.filter() nen
   // bam vao dong hoa don la loi ngay - gio dung mang cho khop voi cho dung.
@@ -1007,7 +830,6 @@ export default function App() {
         // Firestore tra ve rong thi de rong luon - truoc day roi ve
         // INITIAL_TRANSACTIONS nhung mang do von rong nen khong khac gi.
         setTransactions(data);
-        setDaTaiSoAnh((x) => (x.gd ? x : { ...x, gd: true }));
         ghiNhanLoiDoc("transactions", null);
       },
       (error) => {
@@ -1053,7 +875,6 @@ export default function App() {
         setSlips(
           snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as ImportSlip),
         );
-        setDaTaiSoAnh((x) => (x.phieu ? x : { ...x, phieu: true }));
         ghiNhanLoiDoc("slips", null);
       },
       (error) => {
@@ -1105,26 +926,26 @@ export default function App() {
     );
 
     /*
-     * SỔ ẢNH. DNC chỉ xem chiều xuất, luật cũng chỉ cho họ đọc dòng chiều xuất
+     * ẢNH CHỨNG TỪ. DNC chỉ xem chiều xuất, luật cũng chỉ cho họ đọc ảnh xuất
      * — truy vấn phải tự lọc đúng như vậy, không thì Firestore từ chối cả
-     * truy vấn vì nó có thể trả về dòng họ không được đọc.
+     * truy vấn.
      */
-    setDaTaiSoAnh({ gd: false, phieu: chiXemChieuXuat, so: false });
-    const unsubSoAnh = onSnapshot(
+    daTaiAnhRef.current = false;
+    const unsubAnh = onSnapshot(
       chiXemChieuXuat
-        ? query(collection(db, KHO_SO_ANH), where("chieu", "==", "XUAT"))
-        : collection(db, KHO_SO_ANH),
+        ? query(collection(db, KHO_ANH_CHUNG_TU), where("loai", "==", "XUAT"))
+        : collection(db, KHO_ANH_CHUNG_TU),
       (snapshot) => {
-        setSoAnh(
-          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as BanGhiAnh),
+        setAnhChungTu(
+          snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as AnhChungTu),
         );
-        setDaTaiSoAnh((x) => (x.so ? x : { ...x, so: true }));
-        ghiNhanLoiDoc(KHO_SO_ANH, null);
+        daTaiAnhRef.current = true;
+        ghiNhanLoiDoc(KHO_ANH_CHUNG_TU, null);
       },
       (error) => {
         ghiNhanLoiDoc(
-          KHO_SO_ANH,
-          handleFirestoreError(error, OperationType.GET, KHO_SO_ANH),
+          KHO_ANH_CHUNG_TU,
+          handleFirestoreError(error, OperationType.GET, KHO_ANH_CHUNG_TU),
         );
       },
     );
@@ -1179,7 +1000,7 @@ export default function App() {
       unsubDiemBan();
       unsubHoaDon();
       unsubSoPhieu();
-      unsubSoAnh();
+      unsubAnh();
       unsubUsers();
     };
   }, [user, userRole]);
@@ -1404,7 +1225,6 @@ export default function App() {
           printedAt: day.toISOString(),
           ...(signed
             ? {
-                signedPhotoUrls: [DEMO_SLIP_PHOTO],
                 signedAt: day.toISOString(),
                 signedBy: currentUserProfile?.email || user || "Demo",
               }
@@ -1412,6 +1232,24 @@ export default function App() {
           note: DEMO_NOTE,
           updatedAt: new Date().toISOString(),
         });
+        // Ảnh ký thử: ảnh mẫu công khai của Cloudinary, gắn vào mã phiếu thử.
+        if (signed) {
+          ghiAnhVaoLo(batch, [
+            {
+              id: `demo~${slipCode}`,
+              url: DEMO_SLIP_PHOTO,
+              publicId: `demo/${slipCode}`,
+              chungTu: [slipCode],
+              loai: "NHAP",
+              ngay: dateKey,
+              maDoiTac: "",
+              doiTac: "",
+              taiLuc: day.toISOString(),
+              taiBoi: currentUserProfile?.email || user || "Demo",
+              uid: auth.currentUser?.uid || "",
+            },
+          ]);
+        }
 
         const picked = [...products]
           .sort(() => Math.random() - 0.5)
@@ -1542,6 +1380,11 @@ export default function App() {
       const batch = writeBatch(db);
       demoTx.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
       demoSlips.forEach((s) => batch.delete(doc(db, "slips", s.id)));
+      // Ảnh ký thử là ảnh mẫu công khai, không có tệp của app — chỉ xoá bản ghi.
+      const maPhieuThu = new Set(demoSlips.map((s) => s.code));
+      anhChungTu
+        .filter((a) => a.chungTu.every((c) => maPhieuThu.has(c)))
+        .forEach((a) => batch.delete(doc(db, KHO_ANH_CHUNG_TU, a.id)));
       await batch.commit();
       showNotification("Đã xoá sạch dữ liệu thử nghiệm");
     } catch (e: any) {
@@ -1554,15 +1397,8 @@ export default function App() {
   const handleHardReset = async () => {
     if (!isOwner) return;
 
-    // Dọn sạch là xoá MỌI THỨ — kể cả ảnh chỉ còn trong sổ.
-    const anhDonSach = anhSeMatLienKet(
-      [
-        ...transactions.map((t) => gomAnh(t)),
-        ...slips.map((sl) => sl.signedPhotoUrls || []),
-        soAnh.map((b) => b.url),
-      ],
-      [],
-    );
+    // Dọn sạch là xoá MỌI THỨ — mọi tấm ảnh chứng từ đi theo.
+    const anhDonSach = anhChungTu;
     const confirmReset = window.confirm(
       `Xoá sạch ${transactions.length} giao dịch, ${slips.length} phiếu nhập kho (kèm ảnh phiếu đã ký) và ${soPhieu.length} dòng trong Sổ số phiếu?\n\n` +
         (anhDonSach.length
@@ -1584,9 +1420,8 @@ export default function App() {
        * nhập kho, và tab Phiếu nhập còn lại một đống phiếu mồ côi không còn
        * dòng hàng nào bên dưới. Sạch một nửa còn khó hiểu hơn không dọn.
        *
-       * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: ảnh trên Cloudinary xoá theo (xem
-       * `xoaAnhTrenMayChu`). Bản cũ chỉ bỏ liên kết và để tệp nằm lại — đúng
-       * loại tệp "còn mà không ai thấy" đã làm rối chuyện mất ảnh bao lần.
+       * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: mọi tấm ảnh chứng từ xoá theo, cả tệp trên
+       * Cloudinary lẫn bản ghi (xem src/anh/kho.ts).
        *
        * XOÁ CẢ SỔ SỐ PHIẾU VÀ BỘ ĐẾM.
        *
@@ -1599,9 +1434,6 @@ export default function App() {
        * không đánh lại từ 01 mà chạy tiếp con số cũ — người dùng nhìn sổ trống
        * mà số phiếu bắt đầu từ giữa chừng thì không hiểu nổi.
        */
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      await damBaoSoAnh(transactions, slips);
-
       const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
 
       const canXoa: [string, string][] = [
@@ -1639,7 +1471,7 @@ export default function App() {
        * file Excel thì dọn bằng nút "Dọn số cũ" trong tab Doanh thu.
        */
 
-      const kqAnh = await xoaAnhTrenMayChu(anhDonSach);
+      const kqAnh = await lamViecAnhKhiXoa({ xoa: anhDonSach, go: [] });
       setLoading(false);
       showNotification(
         `Đã xoá ${transactions.length} giao dịch, ${slips.length} phiếu nhập, ${soPhieu.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}`,
@@ -1728,15 +1560,12 @@ export default function App() {
      *
      * Hộp thoại cũ báo về hóa đơn mà không nói một chữ nào về ảnh. Xoá xuất
      * kho rồi nạp lại tệp Excel là quy trình anh Khoa đã làm nhiều lần — và
-     * mỗi lần như vậy mọi tờ biên bản đã gắn vào đơn đều rơi khỏi Thư viện, vì
-     * tệp Excel không mang theo ảnh nào để gắn lại. Tệp vẫn nằm trên
-     * Cloudinary nhưng app mất đường nối tới nó.
+     * dữ liệu và ảnh đi một cụm: chuyến bị xoá thì ảnh biên bản của nó xoá
+     * theo, nên phải nói trước số ảnh sẽ mất.
      */
-    const idXoaXuat = new Set(dsXuat.map((t) => t.id));
-    const anhMatXuat = anhSeMatLienKet(dsXuat.map((t) => gomAnh(t)), [
-      ...transactions.filter((t) => !idXoaXuat.has(t.id)).map((t) => gomAnh(t)),
-      ...slips.map((sl) => sl.signedPhotoUrls || []),
-    ]);
+    const viecAnhXuat = viecAnhCuaLuotXoa(dsXuat);
+    if (!viecAnhXuat) return;
+    const anhMatXuat = viecAnhXuat.xoa;
 
     if (
       !window.confirm(
@@ -1767,9 +1596,6 @@ export default function App() {
     try {
       setLoading(true);
 
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      await damBaoSoAnh(dsXuat);
-
       const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
       const canXoa: [string, string][] = [
         ...dsXuat.map((t) => ["transactions", t.id] as [string, string]),
@@ -1789,7 +1615,7 @@ export default function App() {
         await batch.commit();
       }
 
-      const kqAnh = await xoaAnhTrenMayChu(anhMatXuat);
+      const kqAnh = await lamViecAnhKhiXoa(viecAnhXuat);
       setLoading(false);
       showNotification(
         `Đã xoá ${dsXuat.length} giao dịch xuất, ${dsSo.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}.`,
@@ -1842,14 +1668,9 @@ export default function App() {
     const conTonDau = transactions.filter((t) => t.type === "OPENING").length;
 
     // Đếm ảnh sẽ rơi khỏi Thư viện — xem ghi chú ở nút xoá xuất kho.
-    const idXoaNhap = new Set(dsNhap.map((t) => t.id));
-    const anhMatNhap = anhSeMatLienKet(
-      [
-        ...dsNhap.map((t) => gomAnh(t)),
-        ...dsPhieu.map((p) => p.signedPhotoUrls || []),
-      ],
-      transactions.filter((t) => !idXoaNhap.has(t.id)).map((t) => gomAnh(t)),
-    );
+    const viecAnhNhap = viecAnhCuaLuotXoa(dsNhap, dsPhieu);
+    if (!viecAnhNhap) return;
+    const anhMatNhap = viecAnhNhap.xoa;
 
     if (
       !window.confirm(
@@ -1871,9 +1692,6 @@ export default function App() {
     try {
       setLoading(true);
 
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      await damBaoSoAnh(dsNhap, dsPhieu);
-
       const snapBoDem = await getDocs(collection(db, KHO_BO_DEM));
       const canXoa: [string, string][] = [
         ...dsNhap.map((t) => ["transactions", t.id] as [string, string]),
@@ -1894,7 +1712,7 @@ export default function App() {
         await batch.commit();
       }
 
-      const kqAnh = await xoaAnhTrenMayChu(anhMatNhap);
+      const kqAnh = await lamViecAnhKhiXoa(viecAnhNhap);
       setLoading(false);
       showNotification(
         `Đã xoá ${dsNhap.length} giao dịch nhập, ${dsPhieu.length} phiếu nhập, ${dsSo.length} dòng sổ số phiếu${chuAnhDaXoa(kqAnh)}.`,
@@ -2058,9 +1876,6 @@ export default function App() {
       return null; // dừng cả lượt, phần xuất cũng không ghi
     }
 
-    // Giữ ảnh của dòng sắp xoá vào sổ trước.
-    await damBaoSoAnh(canXoa);
-
     const CHUNK = 400;
     let batch = writeBatch(db);
     let opCount = 0;
@@ -2098,31 +1913,6 @@ export default function App() {
           d.type === "OPENING"
             ? "Tồn đầu kỳ · nạp từ file BBGN"
             : "Nhập kho · nạp từ file BBGN",
-        /*
-         * GIỮ ẢNH CỦA DÒNG CŨ.
-         *
-         * Mã dòng cố định theo nội dung nên lần nạp lại đè thẳng lên dòng của
-         * lần trước — cố ý, để không đẻ bản ghi trùng. Nhưng bản cũ ghi kèm
-         * `evidencePhotoUrls: []`, mà `batch.set` không merge, nên nạp lại
-         * một tệp đã nạp rồi là XOÁ SẠCH mọi tờ biên bản đã gắn vào sau đó.
-         *
-         * Âm thầm hoàn toàn: không báo, không hỏi, và ảnh nằm ở màn hình khác
-         * nên vài hôm sau mở Thư viện mới thấy thiếu — lúc ấy không ai còn nối
-         * được chuyện thiếu ảnh với việc đã nạp lại tệp.
-         *
-         * Tệp Excel không mang theo ảnh nào, tức lần nạp này không có gì để
-         * nói về ảnh. Không nói gì thì không được đổi gì.
-         */
-        /*
-         * Dòng cũ còn thì giữ ảnh của nó. Dòng cũ đã bị xoá (xoá toàn bộ rồi
-         * nạp lại) thì lấy ảnh từ SỔ ẢNH theo khoá của dòng — mã dòng băm theo
-         * nội dung nên nạp lại đúng tệp ra đúng mã cũ, ảnh tự gắn lại.
-         */
-        ...giuAnhCu(
-          transactions.find((x) => x.id === id) ?? {
-            evidencePhotoUrls: anhCuaNhom.get(id),
-          },
-        ),
         createdBy: user || "Guest",
         status: "completed",
       };
@@ -2410,11 +2200,11 @@ export default function App() {
       }
 
       /*
-       * Dòng cũ nào KHÔNG trùng mã với dòng mới (tệp sửa lại, chuyến đổi cột)
-       * thì bị xoá hẳn ở đây — trước khi có sổ ảnh, ảnh của nó mất theo. Giữ
-       * vào sổ trước; dòng mới cùng lượt giao sẽ tự lấy lại ảnh từ sổ.
+       * Dòng cũ không trùng mã với dòng mới (tệp sửa lại) bị xoá ở đây. Ảnh
+       * KHÔNG đi theo: ảnh gắn vào chuyến (mã lượt giao), dòng mới cùng chuyến
+       * thấy lại ngay. Chuyến đổi hẳn khoá thì ảnh cũ hiện ở Thư viện với chữ
+       * "chứng từ đã xoá" để admin xử lý — nạp tệp không bao giờ xoá ảnh.
        */
-      await damBaoSoAnh(canXoa);
 
       // Firestore gioi han 500 thao tac moi batch — chia lo de khong vuot
       const CHUNK = 400;
@@ -2507,16 +2297,6 @@ export default function App() {
           partnerId: d.partnerId,
           partnerName: d.partnerName,
           notes: noteParts.join(" · "),
-          /*
-           * Dòng cũ đã bị xoá thì lấy ảnh từ SỔ ẢNH theo khoá lượt giao. Khoá
-           * băm từ (ngày · đối tác · cột) của tệp, nên xoá toàn bộ xuất kho rồi
-           * nạp lại đúng tệp ấy, tờ biên bản tự về đúng chuyến của nó.
-           */
-          ...giuAnhCu(
-            transactions.find((x) => x.id === id) ?? {
-              evidencePhotoUrls: anhCuaNhom.get(referenceGroupId),
-            },
-          ),
           createdBy: user || "Guest",
           referenceGroupId,
           status: quaDiDuong ? "in_transit" : "completed",
@@ -2558,11 +2338,6 @@ export default function App() {
               partnerId: d.partnerId,
               partnerName: d.partnerName,
               notes: `[Hao hụt] ${noteParts.join(" · ")}`,
-              ...giuAnhCu(
-                transactions.find((x) => x.id === idHao) ?? {
-                  evidencePhotoUrls: anhCuaNhom.get(referenceGroupId),
-                },
-              ),
               createdBy: user || "Guest",
               referenceGroupId,
               /*
@@ -2858,7 +2633,6 @@ export default function App() {
   /** Danh dau phieu da duoc in (de biet phieu nao dang cho ky). */
   const handleMarkSlipPrinted = async (code: string, dateKey: string) => {
     try {
-      const existing = slips.find((s) => s.code === code);
       await setDoc(
         doc(db, "slips", code),
         {
@@ -2866,7 +2640,7 @@ export default function App() {
           code,
           date: dateKey,
           // Da co anh ky roi thi giu nguyen trang thai, in lai khong ha cap
-          status: existing?.signedPhotoUrls?.length ? "signed" : "printed",
+          status: anhTheoChungTu.get(code)?.length ? "signed" : "printed",
           printedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -2901,29 +2675,24 @@ export default function App() {
     /*
      * HAI BƯỚC, HAI NHÁNH BẮT LỖI RIÊNG.
      *
-     * Bước 1 đẩy ảnh lên Cloudinary, bước 2 ghi liên kết vào Firestore. Trước
-     * đây cả hai nằm chung một `try` và mọi lỗi đều báo "Không tải được ảnh
-     * phiếu" — kể cả khi ảnh đã lên Cloudinary thành công và chỉ có bước ghi
-     * Firestore bị từ chối quyền. Hai sự cố khác hẳn nhau, cách xử lý cũng
-     * khác hẳn, mà lại đọc ra cùng một câu.
-     *
-     * Đây là bước DUYỆT SỐ LIỆU: có ảnh ký thì hàng mới vào tồn kho. Ghi hỏng
-     * mà báo mơ hồ thì người dùng tưởng đã duyệt xong.
+     * Bước 1 tải ảnh lên Cloudinary. Bước 2 ghi CÙNG MỘT LÔ: bản ghi ảnh chứng
+     * từ (gắn mã phiếu) và trạng thái `signed` của phiếu — có ảnh ký là hàng
+     * vào tồn, nên hai thứ không được lệch nhau. Lô hỏng thì xoá ngay tệp vừa
+     * tải, không để tệp nằm lại mà không phiếu nào trỏ tới.
      */
-    let urls: string[] = [];
+    const dau = transactions.find((t) => t.slipCode === code);
+    let anhMoi: AnhChungTu[];
     try {
-      for (const file of Array.from(files)) {
-        // Nen truoc khi day len: anh dien thoai 4-8 MB deu ve vai tram KB,
-        // van du net doc chu so viet tay ma tiet kiem dung luong Cloudinary.
-        const compressed = await compressFile(file, 2000, 2000, 0.85);
-        const url = await uploadToCloudinary(compressed);
-        themAnhCho([url]);
-        urls.push(url);
-      }
+      anhMoi = await taiAnhChoChungTu(Array.from(files), {
+        chungTu: [code],
+        loai: "NHAP",
+        ngay: dateKey,
+        maDoiTac: dau?.partnerId || "",
+        doiTac: dau?.partnerName || "",
+        taiBoi: currentUserProfile?.email || user || "",
+      });
     } catch (e: any) {
       setUploadingSlipCode(null);
-      // Tấm nào đã lên trước khi hỏng thì bỏ luôn, không để lửng lơ.
-      void boAnhCho(urls);
       alert(
         "Không tải được ảnh lên kho ảnh (Cloudinary): " +
           (e?.message || "lỗi không rõ"),
@@ -2932,33 +2701,29 @@ export default function App() {
     }
 
     try {
-      /*
-       * `arrayUnion`, không ghép danh sách trên máy rồi ghi đè: hai người cùng
-       * thêm ảnh vào một phiếu thì danh sách trên máy mỗi người đều thiếu ảnh
-       * của người kia, ghi đè là ảnh của người lưu trước rơi khỏi phiếu (tệp
-       * vẫn nằm trên Cloudinary, không ai thấy). Máy chủ tự gộp thì không mất.
-       */
-      await setDoc(
+      const lo = writeBatch(db);
+      ghiAnhVaoLo(lo, anhMoi);
+      lo.set(
         doc(db, "slips", code),
         {
           id: code,
           code,
           date: dateKey,
           status: "signed",
-          signedPhotoUrls: arrayUnion(...urls),
           signedAt: new Date().toISOString(),
           signedBy: currentUserProfile?.email || user || "",
           updatedAt: new Date().toISOString(),
         },
         { merge: true },
       );
-
-      daLuuAnhCho(urls);
+      await lo.commit();
       showNotification(`Đã lưu ảnh phiếu ${code} — hàng đã vào tồn kho`);
     } catch (e: any) {
-      void boAnhCho(urls);
+      void boTepVuaTai(anhMoi);
       alert(
-        `CHƯA ghi được ảnh vào phiếu ${code}, nên hàng chưa vào tồn kho. Ảnh vừa tải đã được gỡ khỏi kho ảnh — tải lại sau.\n\n` +
+        `CHƯA ghi được ảnh vào phiếu ${code}, nên hàng chưa vào tồn kho. Ảnh vừa tải đã được gỡ khỏi kho ảnh — tải lại sau.
+
+` +
           handleFirestoreError(e, OperationType.WRITE, "slips"),
       );
     } finally {
@@ -2966,18 +2731,6 @@ export default function App() {
     }
   };
 
-  /**
-   * Go mot anh da tai nham khoi phieu.
-   *
-   * Anh ky la chung tu duyet so lieu, nen go anh la viec he trong: go het anh
-   * thi phieu quay ve chua duyet, va toan bo so luong tren phieu do RA KHOI
-   * ton kho ngay lap tuc. Chi lam khi tai nham to phieu.
-   *
-   * DỮ LIỆU VÀ ẢNH ĐI MỘT CỤM: admin gỡ thì tệp trên Cloudinary xoá theo
-   * (nếu không phiếu / dòng nào khác còn dùng). Người nhập kho gỡ thì không
-   * xoá được tệp — chỉ admin xoá ảnh — nên tấm ảnh nằm lại trong sổ và hiện ở
-   * Thư viện ảnh với chữ "không còn gắn đơn nào", admin xoá nốt.
-   */
   /**
    * XOÁ CẢ MỘT PHIẾU NHẬP — nhập sai số lượng, xoá đi làm lại.
    *
@@ -2993,20 +2746,16 @@ export default function App() {
       (t) => t.type === "IN" && t.slipCode === code,
     );
     const phieu = slips.find((s) => s.code === code);
-    const daKy = (phieu?.signedPhotoUrls?.length || 0) > 0;
+    const daKy =
+      (anhTheoChungTu.get(code)?.length || 0) > 0 || phieu?.status === "signed";
     if (daKy && !isOwner) {
       alert("Phiếu đã có ảnh ký — hàng đã vào tồn. Chỉ admin xoá được phiếu này.");
       return;
     }
-    const idXoa = new Set(dong.map((t) => t.id));
-    const anhMat = anhSeMatLienKet(
-      [...dong.map((t) => gomAnh(t)), phieu?.signedPhotoUrls || []],
-      [
-        ...transactions.filter((t) => !idXoa.has(t.id)).map((t) => gomAnh(t)),
-        ...slips.filter((s) => s.code !== code).map((s) => s.signedPhotoUrls || []),
-      ],
-    );
-    if (anhMat.length && !isOwner) {
+    const viecAnh = viecAnhCuaLuotXoa(dong, phieu ? [phieu] : []);
+    if (!viecAnh) return;
+    const anhMat = viecAnh.xoa;
+    if ((anhMat.length || viecAnh.go.length) && !isOwner) {
       alert(
         `Phiếu này có ${anhMat.length} ảnh gắn kèm. Xoá phiếu là xoá luôn ảnh — chỉ admin làm được.`,
       );
@@ -3031,8 +2780,6 @@ export default function App() {
     );
     try {
       setLoading(true);
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      await damBaoSoAnh(dong, phieu ? [phieu] : []);
       const batch = writeBatch(db);
       dong.forEach((t) => batch.delete(doc(db, "transactions", t.id)));
       if (phieu) batch.delete(doc(db, "slips", phieu.id));
@@ -3050,9 +2797,7 @@ export default function App() {
           loiHuy = e instanceof Error ? e.message : String(e);
         }
       }
-      const kqAnh = anhMat.length
-        ? await xoaAnhTrenMayChu(anhMat)
-        : { tong: 0, daXoa: 0, loi: "" };
+      const kqAnh = await lamViecAnhKhiXoa(viecAnh);
       showNotification(`Đã xoá phiếu ${code}${chuAnhDaXoa(kqAnh)}`);
       baoAnhChuaXoa(kqAnh);
       if (loiHuy) {
@@ -3092,35 +2837,33 @@ export default function App() {
     }
   };
 
-  const handleRemoveSignedSlipPhoto = async (code: string, url: string) => {
+  /**
+   * GỠ MỘT ẢNH KÝ ĐÃ TẢI NHẦM KHỎI PHIẾU — chỉ admin.
+   *
+   * Ảnh ký là chứng từ duyệt số liệu: gỡ hết ảnh thì phiếu quay về chưa duyệt
+   * và cả phiếu RA KHỎI TỒN KHO ngay. Tấm chỉ làm chứng cho phiếu này thì xoá
+   * luôn tệp trên Cloudinary (dữ liệu và ảnh đi một cụm); tấm còn làm chứng cho
+   * chứng từ khác thì chỉ gỡ khỏi phiếu này.
+   */
+  const handleRemoveSignedSlipPhoto = async (code: string, anh: AnhChungTu) => {
+    if (!isOwner) return;
     const existing = slips.find((s) => s.code === code);
-    if (!existing) return;
-
-    const remaining = (existing.signedPhotoUrls || []).filter((u) => u !== url);
-
-    // Tấm này còn ai dùng nữa không — phiếu khác, dòng giao dịch khác.
-    const anhMatGo = anhSeMatLienKet(
-      [[url]],
-      [
-        remaining,
-        ...slips.filter((sl) => sl.code !== code).map((sl) => sl.signedPhotoUrls || []),
-        ...transactions.map((t) => gomAnh(t)),
-      ],
-    );
-
+    const conLai = (anhTheoChungTu.get(code) || []).filter((a) => a.id !== anh.id);
+    const conChungTuKhac = anh.chungTu.filter((c) => c !== code);
     try {
-      // Giữ vào sổ trước: xoá tệp có hỏng thì ảnh vẫn hiện để xoá lại.
-      await damBaoSoAnh([], [existing]);
-      await updateDoc(doc(db, "slips", code), {
-        signedPhotoUrls: remaining,
-        status: remaining.length ? "signed" : existing.printedAt ? "printed" : "draft",
-        updatedAt: new Date().toISOString(),
-      });
-      const kqAnh = isOwner
-        ? await xoaAnhTrenMayChu(anhMatGo)
-        : { tong: 0, daXoa: 0, loi: "" };
+      const kqAnh = await lamViecAnhKhiXoa(
+        conChungTuKhac.length
+          ? { xoa: [], go: [{ anh, conLai: conChungTuKhac }] }
+          : { xoa: [anh], go: [] },
+      );
+      if (!conLai.length && existing) {
+        await updateDoc(doc(db, "slips", code), {
+          status: existing.printedAt ? "printed" : "draft",
+          updatedAt: new Date().toISOString(),
+        });
+      }
       showNotification(
-        (remaining.length
+        (conLai.length
           ? `Đã gỡ 1 ảnh khỏi phiếu ${code}`
           : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`) +
           (kqAnh.daXoa > 0 ? " · đã xoá tệp trên Cloudinary" : ""),
@@ -3525,8 +3268,7 @@ export default function App() {
     setLoading(true);
     try {
       const cuCanXoa = thay ? kh.lech.flatMap((l) => l.cu) : [];
-      // Quy tắc của app: mọi lệnh xoá giao dịch phải giữ ảnh vào sổ trước.
-      await damBaoSoAnh(cuCanXoa);
+      // Dòng tồn đồng bộ từ Excel không có chứng từ ảnh nào — xoá không kéo theo ảnh.
 
       const ghi = [
         ...kh.ghiMoi,
@@ -3562,7 +3304,6 @@ export default function App() {
             partnerId: DOI_TAC_DONG_BO,
             partnerName: "Đồng bộ Excel tồn kho",
             notes: `${TEN_LOAI[d.loai]} · nạp từ Excel tồn kho`,
-            evidencePhotoUrls: [],
             createdBy: nguoi,
             status: "completed",
           };
@@ -3641,16 +3382,6 @@ export default function App() {
       reader.readAsDataURL(file);
     });
 
-  // Nén ảnh rồi upload lên Cloudinary, trả về URL (thay cho việc lưu base64 vào DB).
-  const compressAndUploadPhoto = async (
-    base64: string,
-    maxWidth = 1024,
-    maxHeight = 1024,
-    quality = 0.6,
-  ): Promise<string> => {
-    const compressed = await compressImage(base64, maxWidth, maxHeight, quality);
-    return uploadToCloudinary(compressed);
-  };
 
   // Form states
   interface TransactionItem {
@@ -3726,8 +3457,6 @@ export default function App() {
     type: TransactionType;
     partnerId: string;
     notes: string;
-    evidencePhotoUrl: string;
-    evidencePhotoUrls: string[];
     date: string;
     isInTransit: boolean;
     items: TransactionItem[];
@@ -3735,8 +3464,6 @@ export default function App() {
     type: "IN",
     partnerId: partners[0]?.id || "",
     notes: "",
-    evidencePhotoUrl: "",
-    evidencePhotoUrls: [],
     date: format(new Date(), "yyyy-MM-dd"),
     isInTransit: false,
     items: [{ productId: products[0]?.id || "", quantity: 0 }],
@@ -3820,8 +3547,11 @@ export default function App() {
     return Number.isFinite(n) ? parseFloat(n.toFixed(4)) : null;
   };
   const [lossReason, setLossReason] = useState<string>("");
-  const [confirmationPhotos, setConfirmationPhotos] = useState<string[]>([]);
-  const [confirmationPhoto, setConfirmationPhoto] = useState<string>("");
+  /**
+   * Ảnh biên bản đang chọn ở khung xác nhận đơn — NẰM TRÊN MÁY, chưa lên
+   * Cloudinary. Chỉ khi bấm Xác nhận mới tải lên và ghi cùng lô (src/anh).
+   */
+  const [anhCho, setAnhCho] = useState<TepCho[]>([]);
   const [showLossModal, setShowLossModal] = useState(false);
 
   /**
@@ -4027,17 +3757,15 @@ export default function App() {
      * mà ảnh nằm lại thì sinh đúng loại tệp lửng lơ không ai thấy; nên chặn
      * từ đầu, nói rõ phải nhờ ai.
      */
-    const idXoaDon = new Set(canXoa.map((t) => t.id));
-    const anhMatDon = anhSeMatLienKet(canXoa.map((t) => gomAnh(t)), [
-      ...transactions.filter((t) => !idXoaDon.has(t.id)).map((t) => gomAnh(t)),
-      ...slips.map((sl) => sl.signedPhotoUrls || []),
-    ]);
     // XOÁ CHỈ ADMIN (21/10/2026): xoá dữ liệu là xoá luôn ảnh trên
     // Cloudinary, và luật Firestore cũng chỉ cho admin xoá.
     if (!isOwner) {
       alert("Chỉ admin mới xoá được đơn. Nhờ anh Khoa xoá đơn này.");
       return;
     }
+    const viecAnhDon = viecAnhCuaLuotXoa(canXoa);
+    if (!viecAnhDon) return;
+    const anhMatDon = viecAnhDon.xoa;
 
     if (
       !window.confirm(
@@ -4055,14 +3783,12 @@ export default function App() {
     const truocXoa = transactions;
     try {
       setLoading(true);
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      await damBaoSoAnh(canXoa);
       const batch = writeBatch(db);
       canXoa.forEach((t) => {
         batch.delete(doc(db, "transactions", t.id));
       });
       await batch.commit();
-      const kqAnh = await xoaAnhTrenMayChu(anhMatDon);
+      const kqAnh = await lamViecAnhKhiXoa(viecAnhDon);
       showNotification(`Đã xóa đơn đi đường${chuAnhDaXoa(kqAnh)}!`);
       baoAnhChuaXoa(kqAnh);
       await hoiHuySoPhieuMoCoi(canXoa, truocXoa);
@@ -4153,8 +3879,8 @@ export default function App() {
     setMatchedProductIds(new Set());
 
     setLossReason("");
-    setConfirmationPhotos([]);
-    setConfirmationPhoto("");
+    giaiPhong(anhCho);
+    setAnhCho([]);
     setShowLossModal(true);
   };
 
@@ -4319,21 +4045,18 @@ export default function App() {
    * Nay dùng `alert`: nó chặn màn hình, buộc phải đọc.
    */
   /*
-   * ĐÓNG KHUNG XÁC NHẬN = BỎ ẢNH VỪA TẢI. Bản cũ đóng khung mà giữ nguyên ảnh
-   * trong bộ nhớ: mở đơn KHÁC ra, ảnh của đơn trước vẫn nằm đó và được lưu
-   * nhầm sang đơn mới. Nay đóng là xoá sạch — và xoá luôn tệp trên kho ảnh.
+   * ĐÓNG KHUNG XÁC NHẬN = BỎ ẢNH ĐANG CHỌN. Ảnh chưa lên máy chủ (chỉ nằm
+   * trên máy) nên bỏ là xong, không có gì phải dọn. Phải bỏ hẳn: để lại thì mở
+   * đơn KHÁC ra, ảnh của đơn trước nằm đó và bị lưu nhầm sang đơn mới.
    */
   const dongKhungXacNhan = () => {
     if (
-      confirmationPhotos.length &&
-      !window.confirm(
-        `Đóng khung là bỏ ${confirmationPhotos.length} ảnh vừa tải (xoá luôn trên kho ảnh). Đóng?`,
-      )
+      anhCho.length &&
+      !window.confirm(`Đóng khung là bỏ ${anhCho.length} ảnh đang chọn (chưa lưu). Đóng?`)
     )
       return;
-    void boAnhCho(confirmationPhotos);
-    setConfirmationPhotos([]);
-    setConfirmationPhoto("");
+    giaiPhong(anhCho);
+    setAnhCho([]);
     setShowLossModal(false);
   };
 
@@ -4361,13 +4084,45 @@ export default function App() {
       return;
     }
 
+    /*
+     * ẢNH BIÊN BẢN GẮN VÀO CHUYẾN, KHÔNG THAY ẢNH CŨ.
+     *
+     * Tải ảnh đang chọn lên rồi ghi CÙNG LÔ với các dòng xác nhận: lô hỏng thì
+     * xoá ngay tệp vừa tải. Ảnh cũ của chuyến (xác nhận từng phần lần trước)
+     * giữ nguyên — bản cũ thay ảnh, làm tờ biên bản trước rời khỏi đơn.
+     */
+    const chungTuXacNhan = [...new Set(trxsToConfirm.map(maChungTuCuaDong))];
+    const daCoAnh = chungTuXacNhan.some((c) => (anhTheoChungTu.get(c) || []).length > 0);
+    if (!anhCho.length && !daCoAnh) {
+      alert("Chưa có ảnh biên bản nào. Chụp hoặc chọn ảnh tờ biên bản đã ký rồi bấm xác nhận.");
+      return;
+    }
+    let anhMoi: AnhChungTu[] = [];
     try {
       setLoading(true);
+      if (anhCho.length) {
+        anhMoi = await taiAnhChoChungTu(
+          anhCho.map((t) => t.tep),
+          {
+            chungTu: chungTuXacNhan,
+            loai: "XUAT",
+            ngay: String(scannedInvoiceDate || trxsToConfirm[0].date || "").slice(0, 10),
+            maDoiTac: trxsToConfirm[0].partnerId || "",
+            doiTac: trxsToConfirm[0].partnerName || "",
+            taiBoi: currentUserProfile?.email || user || "",
+          },
+        );
+      }
+    } catch (e: any) {
+      setLoading(false);
+      alert("Không tải được ảnh lên kho ảnh (Cloudinary): " + (e?.message || "lỗi không rõ"));
+      return;
+    }
+
+    try {
       const batch = writeBatch(db);
       const now = new Date().toISOString();
-      const photoUrls = confirmationPhotos;
-      // Đính ảnh mới là THAY ảnh cũ trên đơn — giữ ảnh cũ vào sổ trước.
-      if (photoUrls.length) await damBaoSoAnh(trxsToConfirm);
+      ghiAnhVaoLo(batch, anhMoi);
 
       // 2. Chronological sort for correct FIFO sequence during confirmation
       const sortedTrxs = [...trxsToConfirm].sort((a, b) =>
@@ -4438,14 +4193,6 @@ export default function App() {
                 `${trx.notes || ""} [Hao hụt: ${lossForThisTrx} ${p?.unit || "đv"}, Lý do: ${lossReason || "Chênh lệch"}]`.trim(),
               date: finalDate,
               updatedAt: now,
-              /*
-               * CÓ ẢNH MỚI THÌ THAY, KHÔNG CÓ THÌ GIỮ.
-               *
-               * Bản cũ ghi thẳng `photoUrls`, nên xác nhận một đơn đã có ảnh
-               * mà lần này không đính gì là xoá mất tờ biên bản cũ. Bấm xác
-               * nhận lần thứ hai cho chắc cũng xoá.
-               */
-              ...ghiDeAnh(photoUrls, trx),
             });
 
             /*
@@ -4480,12 +4227,6 @@ export default function App() {
                 partnerName: trx.partnerName,
                 notes:
                   `Hao hụt đơn đi đường — không ghi công nợ · Lý do: ${lossReason || "Chênh lệch"}`.trim(),
-                // Mã cố định nên bấm xác nhận lại cũng đè lên chính nó: phải
-                // giữ ảnh đã có, y như đường nạp lại tệp.
-                ...ghiDeAnh(
-                  photoUrls,
-                  transactions.find((x) => x.id === haoId),
-                ),
                 createdBy: user || "Guest",
                 referenceGroupId: trx.referenceGroupId,
                 status: "completed",
@@ -4498,7 +4239,6 @@ export default function App() {
               date: finalDate,
               updatedAt: now,
               // Không thêm chữ gì: cột Trạng thái đã nói là đơn đã xong.
-              ...ghiDeAnh(photoUrls, trx),
             });
           }
         }
@@ -4517,8 +4257,12 @@ export default function App() {
        */
       try {
         await batch.commit();
+        // Ảnh đã ghi cùng lô: bỏ khỏi khung để bấm lại không tải lần hai.
+        giaiPhong(anhCho);
+        setAnhCho([]);
       } catch (e: any) {
         setLoading(false);
+        void boTepVuaTai(anhMoi);
         alert(
           `LƯU HỎNG NGAY LÚC GHI.\n\n` +
             `Mã lỗi: ${e?.code || "(không có mã)"}\n` +
@@ -4621,9 +4365,6 @@ export default function App() {
       setActualReceivedQtyMap({});
       setSoThucNhanText({});
       setLossReason("");
-      daLuuAnhCho(confirmationPhotos);
-      setConfirmationPhotos([]);
-      setConfirmationPhoto("");
     } catch (err) {
       alert(handleFirestoreError(err, OperationType.WRITE, "transactions"));
     } finally {
@@ -4683,7 +4424,7 @@ export default function App() {
       ...slips,
       ...soPhieu,
       ...hoaDon,
-      ...soAnh,
+      ...anhChungTu,
       ...diemBanOverrides,
     ]);
     const usedBytes = (txBytes + partnerBytes + khacBytes) * OVERHEAD_FACTOR;
@@ -4743,7 +4484,7 @@ export default function App() {
       slips.length +
       soPhieu.length +
       hoaDon.length +
-      soAnh.length +
+      anhChungTu.length +
       diemBanOverrides.length +
       allUserProfiles.length;
     const opensPerDay =
@@ -4779,7 +4520,7 @@ export default function App() {
         partners: partners.length,
       },
     };
-  }, [transactions, partners, slips, soPhieu, hoaDon, soAnh, diemBanOverrides, allUserProfiles]);
+  }, [transactions, partners, slips, soPhieu, hoaDon, anhChungTu, diemBanOverrides, allUserProfiles]);
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -4794,7 +4535,7 @@ export default function App() {
    * DUYET SO LIEU BANG CHU KY GIAY
    *
    * Mot phieu duoc coi la DA DUYET khi da co anh to phieu ky tuoi. Trang thai
-   * nay SUY RA tu `slips`, khong luu them co nao tren tung giao dich - nho vay
+   * nay SUY RA tu bang anh chung tu (src/anh), khong luu them co nao tren tung giao dich - nho vay
    * khong bao gio lech hai nguon, va vua tai anh ky xong la ca loat giao dich
    * cua phieu do doi trang thai cung luc.
    *
@@ -4802,7 +4543,7 @@ export default function App() {
    * len bao cao, va khong xuat ban duoc (vi phep kiem du hang o handleAddTransaction
    * doc `inventory`, ma `inventory` chi tinh tu `countedTransactions`).
    */
-  const approvedSlips = useMemo(() => approvedSlipCodes(slips), [slips]);
+  const approvedSlips = useMemo(() => phieuDaCoAnhKy(anhChungTu), [anhChungTu]);
 
   /**
    * Cac giao dich duoc phep tac dong den ton kho.
@@ -5003,505 +4744,52 @@ export default function App() {
     }
   };
 
-  /*
-   * ẢNH CHO THƯ VIỆN — xem `src/lib/thuVienAnh.ts`.
-   *
-   * Phải gom từ HAI nguồn: ảnh tờ phiếu đã ký nằm ở `slips`, ảnh biên bản xuất
-   * nằm ở `transactions`. Bản trước chỉ đọc `transactions[].evidencePhotoUrl`
-   * nên tab Nhập kho luôn trống, dù người dùng đã tải ảnh phiếu lên đầy đủ.
-   */
-  const anhTruocLocDonVi = useMemo(
-    () =>
-      dungAnhThuVien({
-        transactions,
-        slips,
-        loai: galleryFilter,
-        tuNgay: galleryTuNgay,
-        denNgay: galleryDenNgay,
-        soAnh,
-      }),
-    [
-      transactions,
-      slips,
-      galleryFilter,
-      galleryTuNgay,
-      galleryDenNgay,
-      soAnh,
-    ],
-  );
-
   /**
-   * Đơn vị bày trong ô chọn: lấy từ bộ ảnh ĐANG XEM, tức là sau khi đã lọc
-   * ngày, TRƯỚC khi lọc đơn vị.
-   *
-   * Sau khi lọc ngày thì ô chọn mới đúng ý "khoảng này có những đơn vị nào".
-   * Trước khi lọc đơn vị thì chọn xong danh sách mới không co lại còn mỗi cái
-   * vừa chọn, không thì đổi sang đơn vị khác phải bỏ lọc rồi chọn lại.
+   * XOÁ VĨNH VIỄN MỘT TẤM Ở THƯ VIỆN — chỉ admin, xoá cả tệp trên Cloudinary
+   * lẫn bản ghi ảnh chứng từ. Tấm cuối cùng của một phiếu nhập thì phiếu quay
+   * về chưa ký và hàng trên phiếu RA KHỎI TỒN KHO — nói trước khi xoá.
    */
-  const donViCoAnh = useMemo(
-    () => danhSachDonVi(anhTruocLocDonVi),
-    [anhTruocLocDonVi],
-  );
-
-  /** Ảnh sau khi lọc đơn vị (hoặc phần của BNC), trước khi soi tiếp điểm bán. */
-  const anhTruocLocBoPhan = useMemo(
-    () => locTheoNhieuDonVi(anhTruocLocDonVi, galleryDonVi),
-    [anhTruocLocDonVi, galleryDonVi],
-  );
-
-  /** Điểm bán có ảnh trong phần đang lọc; rỗng thì không bày ô chọn thứ hai. */
-  const boPhanCoAnh = useMemo(
-    // Ô điểm bán chỉ có nghĩa khi đang soi ĐÚNG MỘT phần của BNC.
-    () =>
-      galleryDonVi.length === 1
-        ? danhSachBoPhanBNC(anhTruocLocBoPhan, galleryDonVi[0])
-        : [],
-    [anhTruocLocBoPhan, galleryDonVi],
-  );
-
-  const anhThuVien = useMemo(
-    () =>
-      galleryBoPhan
-        ? anhTruocLocBoPhan.filter((a) => a.donVi === galleryBoPhan)
-        : anhTruocLocBoPhan,
-    [anhTruocLocBoPhan, galleryBoPhan],
-  );
-
-  /* ---------------- So anh: viec cua admin ---------------- */
-
-  /**
-   * Tấm admin đã xoá thật trong phiên này. Phép tự ghi sổ có thể còn cầm bản
-   * dữ liệu cũ (chưa kịp nhận tin đã gỡ) và ghi tấm ấy vào sổ lần nữa — trỏ
-   * tới một tệp đã không còn. Loại thẳng ở đây.
-   */
-  const daXoaAnhRef = daXoaAnhRefSom;
-  const [dangXoaAnh, setDangXoaAnh] = useState(false);
-
-  /**
-   * KHOÁ XOÁ ẢNH CÓ DÙNG ĐƯỢC KHÔNG — APP TỰ KIỂM, không ai phải bấm.
-   *
-   * Khoá Cloudinary đặt trên Vercel, app không nhìn thấy được. Không kiểm thì
-   * lần xoá đơn thật đầu tiên chính là phép thử, và nếu khoá sai thì dữ liệu
-   * đã xoá mà ảnh còn nằm lại. Nên mỗi lần admin mở app, app hỏi máy chủ một
-   * câu (lệnh `ping` của Cloudinary — không xoá gì). Đúng thì im lặng; sai thì
-   * Thư viện ảnh hiện cảnh báo nói rõ phải sửa gì.
-   *
-   * Chỉ admin: chỉ admin xoá được ảnh, và máy chủ cũng chỉ trả lời admin.
-   */
-  const [khoaXoaAnh, setKhoaXoaAnh] = useState<
-    { trangThai: "chua" | "dang" | "dung" } | { trangThai: "loi"; loi: string }
-  >({ trangThai: "chua" });
-  const kiemTraKhoaXoaAnh = async () => {
-    setKhoaXoaAnh({ trangThai: "dang" });
-    try {
-      const r = await callAiApi("/api/anh/xoa", { kiemTra: true });
-      const d: any = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
-      setKhoaXoaAnh({ trangThai: "dung" });
-    } catch (e) {
-      setKhoaXoaAnh({
-        trangThai: "loi",
-        loi: e instanceof Error ? e.message : String(e),
-      });
-    }
-  };
-  useEffect(() => {
-    if (user && isOwner) kiemTraKhoaXoaAnh();
-    // Một lần mỗi lần đăng nhập — không cần kiểm lại theo từng thay đổi dữ liệu.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isOwner]);
-
-  /**
-   * XOÁ THẬT NHỮNG TẤM ẢNH NÀY TRÊN CLOUDINARY, rồi xoá dòng sổ của chúng.
-   *
-   * Dữ liệu và ảnh đi một cụm: mọi lệnh xoá dữ liệu gọi vào đây với đúng
-   * những tấm KHÔNG còn dòng nào dùng (`anhSeMatLienKet`). Chỉ admin — máy chủ
-   * chặn bằng `requireOwner`.
-   *
-   * Chỉ gửi ảnh thuộc kho của app; ảnh cũ nhúng base64 hay ảnh mẫu không có
-   * tệp nào để xoá. Gửi 100 tấm một lượt — giới hạn của Cloudinary.
-   *
-   * KHÔNG ném lỗi: dữ liệu thường đã xoá xong khi tới bước này, nên ảnh xoá
-   * hỏng thì báo lại cho người bấm, không làm như cả lệnh hỏng. Ảnh hỏng vẫn
-   * còn dòng sổ (đã ghi trước khi xoá dữ liệu), nên vẫn hiện trong Thư viện
-   * để admin xoá lại.
-   */
-  const xoaAnhTrenMayChu = async (
-    urls: readonly string[],
-  ): Promise<{ tong: number; daXoa: number; loi: string }> => {
-    const tienTo = `https://res.cloudinary.com/${KHO_ANH}/image/upload/`;
-    const ds = [
-      ...new Set(
-        urls
-          .map((u) => String(u ?? "").trim())
-          .filter((u) => KHO_ANH && u.startsWith(tienTo) && publicIdTuUrl(u)),
-      ),
-    ];
-    let daXoa = 0;
-    let loi = "";
-    for (let i = 0; i < ds.length; i += 100) {
-      const phan = ds.slice(i, i + 100);
-      try {
-        const r = await callAiApi("/api/anh/xoa", { urls: phan });
-        const d: any = await r.json().catch(() => null);
-        if (!r.ok) throw new Error(d?.error || `Máy chủ trả về lỗi ${r.status}.`);
-        const xong: { publicId: string }[] = (d?.ketQua || []).filter(
-          (k: any) => k?.ketQua === "deleted" || k?.ketQua === "not_found",
-        );
-        if (xong.length) {
-          const batch = writeBatch(db);
-          xong.forEach((k) => {
-            const id = idSoAnh(k.publicId);
-            daXoaAnhRef.current.add(id);
-            batch.delete(doc(db, KHO_SO_ANH, id));
-          });
-          await batch.commit();
-        }
-        daXoa += xong.length;
-        if (xong.length < phan.length && !loi) {
-          loi = `${phan.length - xong.length} tấm Cloudinary không xác nhận đã xoá.`;
-        }
-      } catch (e) {
-        loi = e instanceof Error ? e.message : String(e);
-      }
-    }
-    return { tong: ds.length, daXoa, loi };
-  };
-
-  /**
-   * BỎ ẢNH CHỜ — ảnh vừa tải mà không lưu (đóng khung, gỡ một tấm, lưu
-   * hỏng): xoá NGAY trên Cloudinary. Ai cũng gọi được; máy chủ chỉ xoá tấm do
-   * chính người gọi tải trong 24 giờ và chưa gắn vào dữ liệu nào. Xem
-   * src/lib/anhCho.ts.
-   *
-   * Mạng hỏng thì để nguyên trong danh sách chờ — lần mở app sau xoá nốt.
-   */
-  const boAnhCho = async (urls: readonly string[]) => {
-    const ds = [...new Set(urls.map((u) => String(u ?? "").trim()).filter(Boolean))];
-    for (let i = 0; i < ds.length; i += 20) {
-      const phan = ds.slice(i, i + 20);
-      try {
-        const r = await callAiApi("/api/anh/xoa", { urls: phan, treo: true });
-        if (!r.ok) continue;
-        // Máy chủ đã trả lời từng tấm (xoá, hoặc giữ vì có lý do) — xong việc.
-        daLuuAnhCho(phan);
-      } catch {
-        /* mất mạng: giữ trong danh sách chờ */
-      }
-    }
-  };
-
-  // Mở app: xoá nốt ảnh chờ của lần trước (đóng tab giữa chừng, mất mạng).
-  useEffect(() => {
-    if (!user || !userRole || userRole === "PENDING") return;
-    const con = anhChoConLai();
-    if (con.length) void boAnhCho(con);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userRole]);
-
-  /** Báo lại khi còn ảnh chưa xoá được — dữ liệu đã xoá rồi. */
-  const baoAnhChuaXoa = (kq: { tong: number; daXoa: number; loi: string }) => {
-    if (kq.daXoa >= kq.tong) return;
-    alert(
-      `Dữ liệu đã xoá, nhưng ${kq.tong - kq.daXoa}/${kq.tong} ảnh CHƯA xoá được trên Cloudinary.\n\n` +
-        `${kq.loi}\n\n` +
-        `Những ảnh này vẫn hiện trong Thư viện ảnh (ghi "không còn gắn đơn nào"). ` +
-        `Admin mở từng tấm và bấm xoá lại.`,
-    );
-  };
-
-  /** Phần chữ "và N ảnh" gắn vào thông báo đã xoá. */
-  const chuAnhDaXoa = (kq: { daXoa: number }) =>
-    kq.daXoa > 0 ? ` và ${kq.daXoa} ảnh trên Cloudinary` : "";
-
-  /**
-   * XOÁ ẢNH VĨNH VIỄN — chỉ admin, và xoá là xoá thật.
-   *
-   * Hai bước, theo thứ tự này:
-   *   1. Máy chủ xoá TỆP trên Cloudinary (`api/anh/xoa`, cửa `requireOwner`).
-   *   2. Trình duyệt gỡ đường dẫn khỏi sổ ảnh, giao dịch và phiếu.
-   *
-   * Xoá tệp trước: bước 1 hỏng thì chưa có gì thay đổi, ảnh còn nguyên. Ngược
-   * lại thì bước 2 xong mà bước 1 hỏng sẽ để lại một tệp không ai thấy — đúng
-   * cái trạng thái lửng lơ mà sổ ảnh sinh ra để xoá bỏ.
-   */
-  const xoaAnhVinhVien = async (a: AnhThuVien) => {
-    if (!isOwner || dangXoaAnh) return;
-    const url = a.url;
-    if (!publicIdTuUrl(url)) {
-      alert(
-        "Tấm này không nằm trên kho Cloudinary của app (ảnh cũ nhúng trong dữ liệu), nên không xoá theo đường này được.",
-      );
-      return;
-    }
-    const { giaoDich, phieu } = noiDangDungAnh(url, transactions, slips);
-    const phieuMatDuyet = phieu.filter(
-      (sl) => !(sl.signedPhotoUrls || []).some((u) => u.trim() !== url),
+  const xoaMotAnhThuVien = async (o: OAnh): Promise<boolean> => {
+    if (!isOwner) return false;
+    const a = o.anh;
+    const phieuMatKy = a.chungTu.filter(
+      (c) =>
+        slips.some((sl) => sl.code === c) &&
+        (anhTheoChungTu.get(c) || []).every((x) => x.id === a.id),
     );
     if (
       !window.confirm(
-        `XOÁ VĨNH VIỄN tấm ảnh này?\n\n` +
-          `Tệp sẽ bị xoá thật trên Cloudinary và gỡ khỏi ` +
-          `${giaoDich.length} dòng giao dịch, ${phieu.length} phiếu nhập.\n\n` +
-          (phieuMatDuyet.length > 0
-            ? `CẢNH BÁO: ${phieuMatDuyet.map((x) => x.code).join(", ")} sẽ KHÔNG CÒN ẢNH KÝ — ` +
-              `phiếu quay về chưa duyệt và hàng trên phiếu RA KHỎI TỒN KHO ngay.\n\n`
+        `XOÁ VĨNH VIỄN tấm ảnh này?\n\nChứng từ: ${a.chungTu.join(", ")}\n` +
+          `Tệp sẽ bị xoá thật trên Cloudinary.\n\n` +
+          (phieuMatKy.length
+            ? `CẢNH BÁO: ${phieuMatKy.join(", ")} sẽ KHÔNG CÒN ẢNH KÝ — phiếu quay về chưa duyệt và hàng trên phiếu RA KHỎI TỒN KHO ngay.\n\n`
             : "") +
-
           `Không khôi phục lại được.`,
       )
     )
-      return;
-
-    setDangXoaAnh(true);
-    const kq = await xoaAnhTrenMayChu([url]);
-    if (kq.daXoa < 1) {
-      setDangXoaAnh(false);
-      alert(
-        `CHƯA XOÁ — ảnh vẫn còn nguyên.\n\n${kq.loi || "Tấm này không thuộc kho ảnh của app."}`,
-      );
-      return;
+      return false;
+    const kq = await lamViecAnhKhiXoa({ xoa: [a], go: [] });
+    if (kq.daXoa < kq.tong || kq.loi) {
+      alert(`CHƯA XOÁ XONG — ảnh vẫn còn.\n\n${kq.loi || "Cloudinary không xác nhận đã xoá."}`);
+      return false;
     }
-
     try {
-      const now = new Date().toISOString();
-      const batch = writeBatch(db);
-      giaoDich.forEach((t) => {
-        const con = gomAnh(t).filter((u) => u !== url);
-        batch.update(doc(db, "transactions", t.id), {
-          evidencePhotoUrl: con[0] ?? null,
-          evidencePhotoUrls: con,
+      for (const code of phieuMatKy) {
+        const sl = slips.find((x) => x.code === code);
+        await updateDoc(doc(db, "slips", code), {
+          status: sl?.printedAt ? "printed" : "draft",
+          updatedAt: new Date().toISOString(),
         });
-      });
-      phieu.forEach((sl) => {
-        const con = (sl.signedPhotoUrls || []).filter((u) => u.trim() !== url);
-        batch.update(doc(db, "slips", sl.id || sl.code), {
-          signedPhotoUrls: con,
-          status: con.length ? "signed" : sl.printedAt ? "printed" : "draft",
-          updatedAt: now,
-        });
-      });
-      await batch.commit();
-      setSelectedGalleryImage(null);
-      showNotification("Đã xoá ảnh vĩnh viễn — cả tệp trên Cloudinary lẫn mọi đường dẫn tới nó");
+      }
     } catch (e) {
       alert(
-        "Tệp ĐÃ XOÁ trên Cloudinary nhưng chưa gỡ được đường dẫn khỏi dữ liệu.\n\n" +
-          "Bấm xoá lại tấm này lần nữa để gỡ nốt — máy chủ sẽ báo tệp không còn và đi tiếp.\n\n" +
-          handleFirestoreError(e, OperationType.WRITE, KHO_SO_ANH),
+        "Ảnh đã xoá nhưng chưa đổi được trạng thái phiếu.\n\n" +
+          handleFirestoreError(e, OperationType.WRITE, "slips"),
       );
-    } finally {
-      setDangXoaAnh(false);
     }
+    showNotification("Đã xoá ảnh vĩnh viễn — cả tệp trên Cloudinary lẫn bản ghi");
+    return true;
   };
-
-  /* ---------------- Soat anh ---------------- */
-
-  const [dangSoat, setDangSoat] = useState({ tong: 0, xong: 0 });
-  const [ketQuaSoat, setKetQuaSoat] = useState<TomTatSoatAnh | null>(null);
-
-  /**
-   * HỎI MỘT TẤM VÀ LẤY VỀ MÃ TRẠNG THÁI THẬT.
-   *
-   * Bản soát cũ tải thử bằng thẻ `<img>`. Thẻ ảnh chỉ biết nói "tôi tải không
-   * được" — nó không cho biết máy chủ trả về gì, mà ba chuyện khác hẳn nhau
-   * lại cho ra đúng tín hiệu ấy: ảnh đã xoá (404), bị chặn tạm (429), tài
-   * khoản từ chối (403/420). Không phân biệt được thì mọi câu chữ hiện lên
-   * đều là phỏng đoán.
-   *
-   * `fetch` đọc được `res.status`. Hỏi trên bản thu nhỏ 64px: cùng một tệp
-   * gốc nên cùng một câu trả lời, mà tốn gần như không gì.
-   *
-   * Ném lỗi thì trả 0 — nghĩa là CHƯA KẾT LUẬN ĐƯỢC GÌ về tấm ảnh, chỉ biết
-   * là không hỏi tới nơi. Không được lẫn 0 với 404.
-   */
-  const hoiMotAnh = async (
-    url: string,
-  ): Promise<{ ma: number; loi: string }> => {
-    await xinLuot();
-    try {
-      const r = await fetch(anhThuNho(url, 64), { cache: "no-store" });
-      // Đọc hết thân để trả kết nối về, không thì luồng bị ngậm lại.
-      await r.arrayBuffer().catch(() => undefined);
-      // Cloudinary tự ghi lý do lỗi ở đây và cho đọc chéo tên miền.
-      return { ma: r.status, loi: r.headers.get("x-cld-error") || "" };
-    } catch (e) {
-      return { ma: 0, loi: e instanceof Error ? e.message : String(e) };
-    } finally {
-      traLuot();
-    }
-  };
-
-  /**
-   * Soát cả khoảng ngày đang xem, KHÔNG theo đơn vị đang lọc.
-   *
-   * Câu cần trả lời là "mất theo quy luật nào" — hỏng sạch tới một mốc ngày
-   * là một chuyện, hỏng rải rác là chuyện khác hẳn. Lọc còn một đơn vị thì
-   * không thấy được quy luật nào cả.
-   */
-  const soatAnhThuVien = async () => {
-    if (dangSoat.tong > 0) return;
-    const ds = anhTruocLocDonVi;
-    if (!ds.length) {
-      showNotification("Không có ảnh nào trong khoảng đang xem", "error");
-      return;
-    }
-    setKetQuaSoat(null);
-    setDangSoat({ tong: ds.length, xong: 0 });
-
-    const ra: KetQuaMotAnh[] = [];
-    for (const a of ds) {
-      const { ma, loi } = await hoiMotAnh(a.url);
-      ra.push({
-        id: a.id,
-        url: a.url,
-        date: a.date,
-        donVi: a.donVi || "(không rõ)",
-        ma,
-        loi,
-      });
-      // Đánh dấu ô xám cho đúng kết quả vừa đo, để lưới và bảng soát nói
-      // cùng một chuyện.
-      if (nhomCuaMa(ma) !== "duoc") ghiAnhLoi(a.id);
-      setDangSoat((t) => ({ ...t, xong: t.xong + 1 }));
-    }
-
-    setKetQuaSoat(tomTatSoatAnh(ra));
-    setDangSoat({ tong: 0, xong: 0 });
-  };
-
-  /** Số tấm lỗi trong đúng bộ đang xem, không đếm những tấm đã lọc ra ngoài. */
-  const soAnhLoi = useMemo(
-    () => anhThuVien.filter((a) => anhLoi.has(a.id)).length,
-    [anhThuVien, anhLoi],
-  );
-
-  /**
-   * TẢI HÀNG LOẠT: gói mọi ảnh đang xem vào một tệp ZIP.
-   *
-   * Gói đúng những tấm đang hiện trên lưới, tức là đã lọc theo chiều nhập/xuất,
-   * theo khoảng ngày và theo từ khoá. Người dùng lọc xong nhìn thấy gì thì tải
-   * đúng ngần ấy — không phải giải thích thêm là nút này tải cái gì.
-   *
-   * Tải bốn tấm một lúc: chờ từng tấm thì vài trăm tấm mất hàng phút, mà mở
-   * hết một lúc thì Cloudinary chặn bớt và trình duyệt cũng nghẽn.
-   *
-   * Tấm nào tải hỏng thì BỎ QUA rồi đếm lại, không dừng cả mẻ. Hỏng một tấm mà
-   * mất cả tệp thì tệ hơn nhiều; báo số hỏng ở cuối để còn biết mà kiểm.
-   */
-  const taiTatCaAnhThuVien = async () => {
-    if (tienTrinhTaiAnh.tong > 0) return;
-    const ds = anhThuVien;
-    if (!ds.length) {
-      showNotification("Không có ảnh nào trong khoảng đang xem", "error");
-      return;
-    }
-    if (
-      ds.length > 300 &&
-      !window.confirm(
-        `Sắp tải ${ds.length} ảnh và gói vào một tệp ZIP. Việc này có thể mất vài phút và tốn nhiều bộ nhớ. Tiếp tục?`,
-      )
-    ) {
-      return;
-    }
-
-    setTienTrinhTaiAnh({ tong: ds.length, xong: 0, hong: 0 });
-    // Tên tệp: `ngày giao-điểm nhận-đối tác` — xem `tenTepTaiVe`.
-    const tenTep = tenTepTaiVe(ds);
-    const tep: { ten: string; duLieu: Uint8Array }[] = [];
-    let hong = 0;
-    let tongByte = 0;
-    let tran = false;
-    let ke = 0;
-
-    // Chặn ở 800 MB: quá mức này trình duyệt hay hết bộ nhớ giữa chừng, mà
-    // báo trước thì còn lọc hẹp lại được, chứ treo tab thì mất sạch.
-    const TRAN_BYTE = 800 * 1024 * 1024;
-
-    const chay = async () => {
-      while (ke < ds.length && !tran) {
-        const k = ke++;
-        const a = ds[k];
-        try {
-          const r = await fetch(a.url);
-          if (!r.ok) throw new Error(String(r.status));
-          const du = new Uint8Array(await r.arrayBuffer());
-          tongByte += du.length;
-          if (tongByte > TRAN_BYTE) {
-            tran = true;
-          } else {
-            tep.push({ ten: tenTep[k], duLieu: du });
-          }
-        } catch {
-          hong += 1;
-        }
-        setTienTrinhTaiAnh((t) => ({ ...t, xong: t.xong + 1, hong }));
-      }
-    };
-
-    try {
-      await Promise.all(
-        Array.from({ length: Math.min(4, ds.length) }, () => chay()),
-      );
-      if (tran) {
-        showNotification(
-          "Bộ ảnh quá lớn (trên 800 MB). Thu hẹp khoảng ngày rồi tải lại.",
-          "error",
-        );
-        return;
-      }
-      if (!tep.length) {
-        showNotification("Không tải được tấm nào. Kiểm tra lại mạng.", "error");
-        return;
-      }
-      // Xếp theo tên để giải nén ra đúng thứ tự đang xem: tải bốn luồng nên
-      // thứ tự hoàn thành không theo thứ tự trên lưới.
-      tep.sort((a, b) => a.ten.localeCompare(b.ten));
-      const zip = taoZip(tep);
-      const chieu = galleryFilter === "IN" ? "nhap-kho" : "xuat-kho";
-      const khoang =
-        galleryTuNgay || galleryDenNgay
-          ? `-${galleryTuNgay || "dau"}-den-${galleryDenNgay || "nay"}`
-          : "";
-      const url = URL.createObjectURL(zip);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `thu-vien-anh-${chieu}${khoang}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Thu hồi muộn một nhịp: thu ngay thì Safari huỷ luôn việc tải.
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showNotification(
-        hong
-          ? `Đã tải ${tep.length} ảnh, ${hong} tấm hỏng không lấy được`
-          : `Đã tải ${tep.length} ảnh`,
-        hong ? "error" : "success",
-      );
-    } finally {
-      setTienTrinhTaiAnh({ tong: 0, xong: 0, hong: 0 });
-    }
-  };
-
-  /**
-   * Tổng số ảnh của chiều đang xem, KHÔNG lọc ngày.
-   *
-   * Để nói được "đang xem 4 trong 120 tấm" — không có con số này thì lưới rỗng
-   * trông y hệt lúc chưa có ảnh nào, và người dùng không biết là do khoảng ngày
-   * đang hẹp.
-   */
-  const tongAnhMoiChieu = useMemo(
-    () =>
-      dungAnhThuVien({
-        transactions,
-        slips,
-        loai: galleryFilter,
-        tuNgay: "",
-        denNgay: "",
-        soAnh,
-      }).length,
-    [transactions, slips, galleryFilter, soAnh],
-  );
 
   // Derived State: Import/Export Flow Summary
   const flowSummary = useMemo(() => {
@@ -5834,13 +5122,6 @@ export default function App() {
                 validItems.length > 1
                   ? `[Món ${validItems.indexOf(item) + 1}/${validItems.length}] ${newTransaction.notes}`
                   : newTransaction.notes,
-              evidencePhotoUrl: newTransaction.evidencePhotoUrl || null,
-              evidencePhotoUrls:
-                newTransaction.evidencePhotoUrls.length > 0
-                  ? newTransaction.evidencePhotoUrls
-                  : newTransaction.evidencePhotoUrl
-                    ? [newTransaction.evidencePhotoUrl]
-                    : [],
               createdBy: user || "Guest",
               referenceGroupId: referenceGroupId,
               status: newTransaction.isInTransit ? "in_transit" : "completed",
@@ -5875,7 +5156,6 @@ export default function App() {
                 partnerId: par?.id || "",
                 partnerName: par?.name || "",
                 notes: (`Hao hụt — không ghi công nợ · ${newTransaction.notes}`).trim().replace(/ · $/, ""),
-                evidencePhotoUrls: [],
                 createdBy: user || "Guest",
                 referenceGroupId,
                 /*
@@ -5916,13 +5196,6 @@ export default function App() {
               validItems.length > 1
                 ? `[Món ${validItems.indexOf(item) + 1}/${validItems.length}] ${newTransaction.notes}`
                 : newTransaction.notes,
-            evidencePhotoUrl: newTransaction.evidencePhotoUrl || null,
-            evidencePhotoUrls:
-              newTransaction.evidencePhotoUrls.length > 0
-                ? newTransaction.evidencePhotoUrls
-                : newTransaction.evidencePhotoUrl
-                  ? [newTransaction.evidencePhotoUrl]
-                  : [],
             createdBy: user || "Guest",
             referenceGroupId: referenceGroupId,
             // Chi hang nhap tay moi can chu ky. Ton dau ky khong co luot giao
@@ -6013,8 +5286,6 @@ export default function App() {
           donVi[0]?.id ||
           "",
         notes: "",
-        evidencePhotoUrl: "",
-        evidencePhotoUrls: [],
         date: format(new Date(), "yyyy-MM-dd"),
         isInTransit: false,
         items: [
@@ -6094,18 +5365,9 @@ export default function App() {
      */
     const moCoi = nguonMoCoi(dongXoa ? [dongXoa] : [], transactions);
     const phieuXoa = slips.filter((sl) => moCoi.phieuNhap.includes(sl.code));
-    const anhMat = anhSeMatLienKet(
-      [
-        ...(dongXoa ? [gomAnh(dongXoa)] : []),
-        ...phieuXoa.map((sl) => sl.signedPhotoUrls || []),
-      ],
-      [
-        ...transactions.filter((t) => t.id !== id).map((t) => gomAnh(t)),
-        ...slips
-          .filter((sl) => !phieuXoa.includes(sl))
-          .map((sl) => sl.signedPhotoUrls || []),
-      ],
-    );
+    const viecAnh = viecAnhCuaLuotXoa(dongXoa ? [dongXoa] : [], phieuXoa);
+    if (!viecAnh) return;
+    const anhMat = viecAnh.xoa;
     if (
       !window.confirm(
         `Anh có chắc chắn muốn xóa giao dịch của sản phẩm "${productName}" này không?` +
@@ -6121,8 +5383,6 @@ export default function App() {
 
     const truocXoa = transactions;
     try {
-      // Giữ ảnh vào sổ TRƯỚC khi xoá — hỏng thì dừng, không xoá gì cả.
-      if (dongXoa) await damBaoSoAnh([dongXoa], phieuXoa);
       if (phieuXoa.length) {
         const batch = writeBatch(db);
         batch.delete(doc(db, "transactions", id));
@@ -6131,7 +5391,7 @@ export default function App() {
       } else {
         await deleteDoc(doc(db, "transactions", id));
       }
-      const kqAnh = await xoaAnhTrenMayChu(anhMat);
+      const kqAnh = await lamViecAnhKhiXoa(viecAnh);
       showNotification(`Đã xóa giao dịch${chuAnhDaXoa(kqAnh)}`);
       baoAnhChuaXoa(kqAnh);
       if (dongXoa) await hoiHuySoPhieuMoCoi([dongXoa], truocXoa);
@@ -6184,33 +5444,6 @@ export default function App() {
    */
   const quyen = useMemo(() => quyenCua(userRole), [userRole]);
 
-  /*
-   * TỰ GHI SỔ ẢNH — mọi tấm ảnh mới đều vào sổ, bất kể đi đường nào lên.
-   *
-   * Không cài phép ghi sổ vào từng chỗ tải ảnh: app có năm sáu chỗ tải ảnh,
-   * và mỗi lần ai đó thêm chỗ thứ bảy mà quên ghi sổ là mở lại đúng lỗ hổng
-   * cũ. Thay vào đó, hễ dữ liệu đổi là so với sổ và ghi phần còn thiếu. Một
-   * chỗ duy nhất, bắt được cả những đường ghi ảnh chưa ai viết ra.
-   *
-   * Chỉ người ghi được kho mới chạy (luật chỉ cho họ tạo dòng sổ), và chỉ khi
-   * cả ba bảng đã về — xem `daTaiSoAnh`.
-   */
-  const dangTuGhiSoRef = useRef(false);
-  useEffect(() => {
-    if (!user || !(quyen.ghiNhap || quyen.ghiXuat)) return;
-    if (!daTaiSoAnh.gd || !daTaiSoAnh.phieu || !daTaiSoAnh.so) return;
-    if (dangTuGhiSoRef.current) return;
-    dangTuGhiSoRef.current = true;
-    damBaoSoAnh(transactions, slips)
-      .catch((e) => console.warn("Chua ghi duoc so anh:", e))
-      .finally(() => {
-        dangTuGhiSoRef.current = false;
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, quyen, daTaiSoAnh, transactions, slips, soAnh]);
-
-  /** Ảnh theo khoá lượt giao — để gắn lại khi nạp lại tệp. */
-  const anhCuaNhom = useMemo(() => anhTheoNhom(soAnh), [soAnh]);
 
   /* ---------------- Bo do luot goi Firebase ---------------- */
 
@@ -7670,59 +6903,22 @@ export default function App() {
                                             t.partnerName,
                                           ) || "—"}
                                         </span>
-                                        {t.evidencePhotoUrl && (
-                                          <div className="flex gap-1.5">
-                                            <button
-                                              onClick={() => {
-                                                setGalleryFilter(
-                                                  t.type === "IN" ||
-                                                    t.type === "OPENING"
-                                                    ? "IN"
-                                                    : "OUT",
-                                                );
-                                                /*
-                                                  Loc thang bang O CHON DON VI,
-                                                  khong con o go chu de nham
-                                                  vao. O chon nay so khop dung
-                                                  bang ten don vi, chat hon go
-                                                  tay, va neu don vi do khong
-                                                  co anh thi chinh o chon noi ra
-                                                  dieu ay.
-                                                */
-                                                setGalleryDonVi(
-                                                  t.partnerName
-                                                    ? [t.partnerName]
-                                                    : [],
-                                                );
-                                                setGalleryBoPhan("");
-                                                // Mở thư viện đúng ngày của
-                                                // giao dịch này, không phải cả
-                                                // tháng.
-                                                try {
-                                                  const ngay = format(
-                                                    parseISO(t.date),
-                                                    "yyyy-MM-dd",
-                                                  );
-                                                  setGalleryTuNgay(ngay);
-                                                  setGalleryDenNgay(ngay);
-                                                } catch (e) {}
-                                                setActiveTab("gallery");
-                                              }}
-                                              className="w-6 h-6 bg-primary/5 text-primary rounded flex items-center justify-center hover:bg-primary hover:text-white transition-all"
-                                              title="Chuyển đến Thư viện ảnh"
+                                        {/* Ảnh biên bản của CHUYẾN chứa dòng này (bảng ảnh chứng từ). */}
+                                        {(() => {
+                                          const anhDong = anhCuaDong(t);
+                                          return anhDong.length > 0 ? (
+                                            <a
+                                              href={anhDong[0]}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="h-6 px-1.5 bg-primary/5 text-primary rounded flex items-center gap-1 hover:bg-primary hover:text-white transition-all text-[10px] font-black"
+                                              title="Mở ảnh biên bản của chuyến"
                                             >
                                               <ImageIcon className="w-3 h-3" />
-                                            </button>
-                                            <a
-                                              href={t.evidencePhotoUrl}
-                                              download={`bien-ban-${t.id}.png`}
-                                              className="w-6 h-6 bg-slate-100 text-slate-500 rounded flex items-center justify-center hover:bg-slate-900 hover:text-white transition-all"
-                                              title="Tải về"
-                                            >
-                                              <Download className="w-3 h-3" />
+                                              {anhDong.length}
                                             </a>
-                                          </div>
-                                        )}
+                                          ) : null;
+                                        })()}
                                       </div>
                                     </td>
                                     {isOwner && (
@@ -8206,9 +7402,9 @@ export default function App() {
                     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
                       <div
                         onClick={() => {
-                          // Đã tải ảnh thì bấm trượt ra nền không được đóng —
+                          // Đã chọn ảnh thì bấm trượt ra nền không được đóng —
                           // đóng là bỏ ảnh. Dùng nút X / Hủy.
-                          if (!confirmationPhotos.length) dongKhungXacNhan();
+                          if (!anhCho.length) dongKhungXacNhan();
                         }}
                         className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
                       />
@@ -8582,53 +7778,22 @@ export default function App() {
                                   multiple
                                   disabled={isScanning}
                                   onChange={async (e) => {
-                                    const files = e.target.files;
-                                    if (files && files.length > 0) {
-                                      const newPhotos: string[] = [];
-                                      // Giữ base64 ảnh đầu để AI quét (Gemini cần base64, không phải URL).
-                                      let firstScanBase64 = "";
-                                      try {
-                                        for (let i = 0; i < files.length; i++) {
-                                          const base64 =
-                                            await readFileAsDataURL(files[i]);
-                                          const compressed =
-                                            await compressImage(
-                                              base64,
-                                              1600,
-                                              1600,
-                                              0.8,
-                                            );
-                                          if (i === 0)
-                                            firstScanBase64 = compressed;
-                                          const url =
-                                            await uploadToCloudinary(compressed);
-                                          newPhotos.push(url);
-                                        }
-                                      } catch (err) {
-                                        console.error("Lỗi tải ảnh:", err);
-                                        void boAnhCho(newPhotos);
-                                        alert(
-                                          "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
-                                        );
-                                        return;
-                                      }
-
-                                      themAnhCho(newPhotos);
-                                      setConfirmationPhotos((prev) => [
-                                        ...prev,
-                                        ...newPhotos,
-                                      ]);
-                                      if (
-                                        !confirmationPhoto &&
-                                        newPhotos.length > 0
-                                      ) {
-                                        setConfirmationPhoto(newPhotos[0]);
-                                      }
-
-                                      // Quét ảnh đầu để trích xuất dữ liệu
-                                      if (firstScanBase64) {
-                                        await handleScanInvoice(firstScanBase64);
-                                      }
+                                    // Ảnh nằm trên máy tới lúc bấm Xác nhận;
+                                    // AI quét bằng bản nén của tấm đầu.
+                                    const moi = taoTepCho(e.target.files);
+                                    e.target.value = "";
+                                    if (!moi.length) return;
+                                    setAnhCho((cu) => [...cu, ...moi]);
+                                    try {
+                                      const nen = await compressImage(
+                                        await readFileAsDataURL(moi[0].tep),
+                                        1600,
+                                        1600,
+                                        0.8,
+                                      );
+                                      await handleScanInvoice(nen);
+                                    } catch (err) {
+                                      console.error("Lỗi đọc ảnh:", err);
                                     }
                                   }}
                                 />
@@ -8644,37 +7809,10 @@ export default function App() {
                                   accept="image/*"
                                   capture="environment"
                                   multiple
-                                  onChange={async (e) => {
-                                    const files = e.target.files;
-                                    if (files) {
-                                      const newPhotos: string[] = [];
-                                      try {
-                                        for (let i = 0; i < files.length; i++) {
-                                          const base64 =
-                                            await readFileAsDataURL(files[i]);
-                                          newPhotos.push(
-                                            await compressAndUploadPhoto(base64),
-                                          );
-                                        }
-                                      } catch (err) {
-                                        console.error("Lỗi tải ảnh:", err);
-                                        void boAnhCho(newPhotos);
-                                        alert(
-                                          "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
-                                        );
-                                        return;
-                                      }
-                                      themAnhCho(newPhotos);
-                                      setConfirmationPhotos((prev) => [
-                                        ...prev,
-                                        ...newPhotos,
-                                      ]);
-                                      if (
-                                        !confirmationPhoto &&
-                                        newPhotos.length > 0
-                                      )
-                                        setConfirmationPhoto(newPhotos[0]);
-                                    }
+                                  onChange={(e) => {
+                                    const moi = taoTepCho(e.target.files);
+                                    e.target.value = "";
+                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
                                   }}
                                 />
                               </label>
@@ -8688,37 +7826,10 @@ export default function App() {
                                   className="hidden"
                                   accept="image/*"
                                   multiple
-                                  onChange={async (e) => {
-                                    const files = e.target.files;
-                                    if (files) {
-                                      const newPhotos: string[] = [];
-                                      try {
-                                        for (let i = 0; i < files.length; i++) {
-                                          const base64 =
-                                            await readFileAsDataURL(files[i]);
-                                          newPhotos.push(
-                                            await compressAndUploadPhoto(base64),
-                                          );
-                                        }
-                                      } catch (err) {
-                                        console.error("Lỗi tải ảnh:", err);
-                                        void boAnhCho(newPhotos);
-                                        alert(
-                                          "Không thể tải ảnh lên. Anh kiểm tra kết nối mạng/Cloudinary nhé!",
-                                        );
-                                        return;
-                                      }
-                                      themAnhCho(newPhotos);
-                                      setConfirmationPhotos((prev) => [
-                                        ...prev,
-                                        ...newPhotos,
-                                      ]);
-                                      if (
-                                        !confirmationPhoto &&
-                                        newPhotos.length > 0
-                                      )
-                                        setConfirmationPhoto(newPhotos[0]);
-                                    }
+                                  onChange={(e) => {
+                                    const moi = taoTepCho(e.target.files);
+                                    e.target.value = "";
+                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
                                   }}
                                 />
                               </label>
@@ -8735,50 +7846,23 @@ export default function App() {
                               `object-contain` giữ nguyên tỉ lệ nên không mất
                               góc nào của tờ phiếu.
                             */}
-                            {confirmationPhotos.length > 0 && (
-                              <div className="space-y-3 mt-4">
-                                {confirmationPhotos.map((photo, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100"
-                                  >
-                                    <img
-                                      src={photo}
-                                      alt={`Ảnh minh chứng ${idx + 1}`}
-                                      className="w-full max-h-[60vh] object-contain"
-                                    />
-                                    <span className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-900/70 text-white text-[9px] font-black uppercase tracking-widest">
-                                      Ảnh {idx + 1}/{confirmationPhotos.length}
-                                    </span>
-                                    {/*
-                                      Nút xóa LUÔN HIỆN. Bản trước chỉ hiện khi
-                                      rê chuột — trên điện thoại không có rê
-                                      chuột, nên tải nhầm ảnh là không gỡ ra
-                                      được bằng cách nào cả.
-                                    */}
-                                    <button
-                                      onClick={() => {
-                                        const updated =
-                                          confirmationPhotos.filter(
-                                            (_, i) => i !== idx,
-                                          );
-                                        // Gỡ khỏi khung là bỏ hẳn: xoá luôn tệp.
-                                        void boAnhCho([confirmationPhotos[idx]]);
-                                        setConfirmationPhotos(updated);
-                                        if (idx === 0)
-                                          setConfirmationPhoto(
-                                            updated[0] || "",
-                                          );
-                                      }}
-                                      className="absolute top-2 right-2 p-2.5 bg-rose-500 text-white rounded-xl shadow-lg active:scale-90 transition-transform"
-                                      aria-label={`Xóa ảnh ${idx + 1}`}
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                            {/*
+                              Ảnh đang chọn (chưa lưu) và ảnh đã có của chuyến.
+                              Xác nhận lần hai (từng phần) thì ảnh lần trước
+                              vẫn còn — ảnh mới được THÊM vào, không thay.
+                            */}
+                            {(() => {
+                              const daCo = [
+                                ...new Set(selectedInTransitGroup.map(maChungTuCuaDong)),
+                              ].flatMap((c) => anhTheoChungTu.get(c) || []);
+                              return daCo.length > 0 ? (
+                                <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                                  Chuyến này đã có {daCo.length} ảnh biên bản —
+                                  ảnh chọn thêm sẽ được cộng vào, không thay.
+                                </p>
+                              ) : null;
+                            })()}
+                            <ChonAnh ds={anhCho} onDoi={setAnhCho} />
                           </div>
                         </div>
 
@@ -8797,12 +7881,20 @@ export default function App() {
                             onClick={handleReportLoss}
                             loading={loading}
                             disabled={
-                              loading || confirmationPhotos.length === 0
+                              loading ||
+                              (anhCho.length === 0 &&
+                                !selectedInTransitGroup.some(
+                                  (t) => (anhTheoChungTu.get(maChungTuCuaDong(t)) || []).length > 0,
+                                ))
                             }
                           >
-                            {confirmationPhotos.length === 0
-                              ? "Cần ảnh minh chứng"
-                              : `XÁC NHẬN HOÀN TẤT (${confirmationPhotos.length} ẢNH)`}
+                            {anhCho.length > 0
+                              ? `XÁC NHẬN HOÀN TẤT (+${anhCho.length} ẢNH)`
+                              : selectedInTransitGroup.some(
+                                    (t) => (anhTheoChungTu.get(maChungTuCuaDong(t)) || []).length > 0,
+                                  )
+                                ? "XÁC NHẬN HOÀN TẤT"
+                                : "Cần ảnh minh chứng"}
                           </Button>
                         </div>
                       </div>
@@ -9521,11 +8613,6 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-
-                {/* Dọn ảnh base64 còn kẹt từ bản app đầu tiên. */}
-                <Card title="Kho ảnh">
-                  <ChuyenAnhCu transactions={transactions} slips={slips} />
-                </Card>
 
                 {/* DỮ LIỆU THỬ NGHIỆM — dùng khi app chưa đưa vào vận hành */}
                 <Card title="Dữ liệu thử nghiệm">
@@ -10361,6 +9448,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     transactions={transactions}
                     products={products}
                     partners={donVi}
+                    anhCua={anhCuaDong}
                   />
                 </Card>
               </div>
@@ -10414,6 +9502,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     }
                     xoaDuocPhieuDaKy={isOwner}
                     onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
+                    anhTheoPhieu={anhTheoChungTu}
                   />
                 </Card>
               </div>
@@ -10532,609 +9621,13 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
             )}
 
             {activeTab === "gallery" && quyen.xemAnh && (
-              <div className="space-y-8">
-                {/*
-                  TIÊU ĐỀ KHÔNG ĐƯỢC BỊ BÓP.
-
-                  Hàng này có bảy ô điều khiển (tra cứu, hai ô ngày, ba ô lọc,
-                  ba nút tải) mà bẻ hàng ngang từ 768px. Khối tiêu đề không khai
-                  `shrink-0` nên flex bóp nó nhường chỗ cho đám kia, ép chữ
-                  xuống dòng từng từ một — "THƯ / VIỆN / ẢNH / XUẤT / KHO" thành
-                  một cột dọc.
-
-                  Hai chỗ sửa: tiêu đề `shrink-0` để giữ bề ngang tự nhiên, và
-                  hàng nút `flex-wrap` để xuống dòng đàng hoàng thay vì đi bóp
-                  hàng xóm. Mốc bẻ ngang dời lên `xl` (1280px) — dưới mức đó
-                  bảy ô điều khiển không bao giờ đủ chỗ nằm cùng hàng với tiêu
-                  đề.
-                */}
-                <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
-                  <div className="shrink-0">
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight italic font-serif uppercase">
-                      THƯ VIỆN ẢNH{" "}
-                      {galleryFilter === "IN" ? "NHẬP KHO" : "XUẤT KHO"}
-                    </h2>
-                    <p className="text-[11px] font-black text-slate-400 mt-2 uppercase tracking-[0.18em]">
-                      {galleryFilter === "IN"
-                        ? "Ảnh tờ phiếu nhập kho đã ký"
-                        : "Ảnh biên bản giao hàng"}{" "}
-                      · đang xem {formatNumber(anhThuVien.length)}/
-                      {formatNumber(tongAnhMoiChieu)} ảnh
-                    </p>
-                    {/*
-                      ẢNH NGOÀI KHOẢNG NGÀY KHÔNG PHẢI ẢNH MẤT.
-
-                      Thư viện mặc định chỉ bày 30 ngày gần nhất. Hôm nay mở ra
-                      thì ảnh giao đầu tháng trước đã trượt khỏi khung — nhìn
-                      y như bị mất. Nói thẳng ra số tấm đang nằm ngoài, kèm một
-                      nút bỏ lọc ngày, để không ai phải đoán.
-                    */}
-                    {tongAnhMoiChieu > anhTruocLocDonVi.length &&
-                      (galleryTuNgay || galleryDenNgay) && (
-                        <button
-                          onClick={() => {
-                            setGalleryTuNgay("");
-                            setGalleryDenNgay("");
-                          }}
-                          className="mt-2 text-[11px] font-black text-primary hover:underline"
-                        >
-                          {formatNumber(
-                            tongAnhMoiChieu - anhTruocLocDonVi.length,
-                          )}{" "}
-                          tấm nằm ngoài khoảng ngày đang chọn — bấm để xem tất cả
-                        </button>
-                      )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto xl:justify-end">
-                    {/* Khoảng ngày: từ ngày — đến ngày */}
-                    <div className="flex items-center gap-2 w-full lg:w-auto">
-                      <div className="relative flex-1 lg:w-40">
-                        <ONgay
-                          aria-label="Từ ngày"
-                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
-                          value={galleryTuNgay}
-                          max={galleryDenNgay || undefined}
-                          onChange={(v: string) => setGalleryTuNgay(v)}
-                        />
-                      </div>
-                      <span className="text-slate-300 font-black shrink-0">
-                        —
-                      </span>
-                      <div className="relative flex-1 lg:w-40">
-                        <ONgay
-                          aria-label="Đến ngày"
-                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm text-slate-700"
-                          value={galleryDenNgay}
-                          min={galleryTuNgay || undefined}
-                          onChange={(v: string) => setGalleryDenNgay(v)}
-                        />
-                      </div>
-                      {/* Bỏ chặn ngày để xem lại toàn bộ. Có nút này thì không
-                          ai phải chỉnh tay hai ô về rỗng. */}
-                      <button
-                        onClick={() => {
-                          setGalleryTuNgay("");
-                          setGalleryDenNgay("");
-                        }}
-                        className="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0"
-                      >
-                        Tất cả
-                      </button>
-                    </div>
-
-                    {/* Toggle IN/OUT */}
-                    <div className="flex bg-slate-100/50 backdrop-blur-sm p-1.5 rounded-2xl w-full md:w-auto border border-slate-200/50 shadow-inner">
-                      <button
-                        onClick={() => {
-                          setGalleryFilter("IN");
-                          // Chiều nhập không lọc theo đơn vị, mà để nguyên thì
-                          // nó vẫn âm thầm lọc khi quay lại chiều xuất.
-                          setGalleryDonVi([]);
-                          setGalleryBoPhan("");
-                        }}
-                        className={cn(
-                          "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-                          galleryFilter === "IN"
-                            ? "bg-white text-amber-600 shadow-xl shadow-amber-500/10 border border-slate-100"
-                            : "text-slate-400 hover:text-slate-600",
-                        )}
-                      >
-                        Nhập kho
-                      </button>
-                      <button
-                        onClick={() => {
-                          setGalleryFilter("OUT");
-                          setGalleryDonVi([]);
-                          setGalleryBoPhan("");
-                        }}
-                        className={cn(
-                          "flex-1 md:px-8 py-3 rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300",
-                          galleryFilter === "OUT"
-                            ? "bg-white text-rose-600 shadow-xl shadow-rose-500/10 border border-slate-100"
-                            : "text-slate-400 hover:text-slate-600",
-                        )}
-                      >
-                        Xuất kho
-                      </button>
-                    </div>
-
-                    {/* Lọc theo đơn vị — chỉ chiều xuất kho mới có đối tác
-                        nhận hàng. Dùng ô chọn chứ không dùng ô gõ: không ai
-                        nhớ khoảng ngày đó có những đơn vị nào mà gõ.
-
-                        BNC gộp thành BỐN PHẦN như màn xuất kho, không bày 20
-                        dòng "BNC · ..." lấn hết đơn vị khác. Chọn Nội bộ thì
-                        hiện thêm ô chọn điểm bán, nên vẫn soi được từng quán. */}
-                    {galleryFilter === "OUT" && (
-                      <ChonNhieuDonVi
-                        ds={donViCoAnh}
-                        dangChon={galleryDonVi}
-                        onDoi={(v) => {
-                          // Đổi đơn vị thì bỏ điểm bán đang soi: điểm bán cũ
-                          // gần như luôn thuộc phần khác, để lại là lưới trống.
-                          setGalleryDonVi(v);
-                          setGalleryBoPhan("");
-                        }}
-                      />
-                    )}
-
-                    {/* Ô THỨ HAI — điểm bán. Chỉ hiện SAU KHI đã chọn một phần
-                        của BNC, và phần đó phải có từ hai bộ phận trở lên (thực
-                        tế là Nội bộ với 17 điểm bán). Ba phần kia chỉ có một bộ
-                        phận nên ô này vô nghĩa. */}
-                    {galleryFilter === "OUT" && boPhanCoAnh.length > 0 && (
-                      <div className="relative w-full lg:w-52 shrink-0">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <select
-                          aria-label="Lọc theo điểm bán"
-                          value={galleryBoPhan}
-                          onChange={(e) => setGalleryBoPhan(e.target.value)}
-                          className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-[11px] sm:text-xs font-black focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm uppercase tracking-widest text-slate-700"
-                        >
-                          <option value="">
-                            {`Tất cả điểm bán (${formatNumber(boPhanCoAnh.length)})`}
-                          </option>
-                          {boPhanCoAnh.map((d) => (
-                            <option key={d} value={d}>
-                              {d.replace(/^BNC · /, "")}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      </div>
-                    )}
-
-                    {/* Tải hàng loạt: gói đúng những tấm đang hiện trên lưới */}
-                    <button
-                      onClick={taiTatCaAnhThuVien}
-                      disabled={
-                        tienTrinhTaiAnh.tong > 0 || anhThuVien.length === 0
-                      }
-                      title={
-                        anhThuVien.length === 0
-                          ? "Không có ảnh nào trong khoảng đang xem"
-                          : `Gói ${anhThuVien.length} ảnh đang xem vào một tệp ZIP`
-                      }
-                      className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-primary text-white text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-                    >
-                      {tienTrinhTaiAnh.tong > 0 ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Đang tải {formatNumber(tienTrinhTaiAnh.xong)}/
-                          {formatNumber(tienTrinhTaiAnh.tong)}
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-4 h-4" />
-                          Tải tất cả ({formatNumber(anhThuVien.length)})
-                        </>
-                      )}
-                    </button>
-
-                    {/*
-                      SOÁT ẢNH — hỏi từng tấm rồi gom theo MÃ LỖI THẬT.
-                      Nhìn từng ô xám thì chỉ biết "tấm này chưa ra"; mà ảnh
-                      đã xoá, bị chặn tạm và tài khoản từ chối là ba chuyện
-                      phải xử lý ba kiểu khác nhau.
-                    */}
-                    <button
-                      onClick={soatAnhThuVien}
-                      disabled={
-                        dangSoat.tong > 0 || anhTruocLocDonVi.length === 0
-                      }
-                      title={`Hỏi thử ${anhTruocLocDonVi.length} tấm trong khoảng ngày này (mọi đơn vị) và đọc mã lỗi thật của máy chủ ảnh`}
-                      className="w-full md:w-auto shrink-0 flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {dangSoat.tong > 0 ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Đang soát {formatNumber(dangSoat.xong)}/
-                          {formatNumber(dangSoat.tong)}
-                        </>
-                      ) : (
-                        <>
-                          <ImageOff className="w-4 h-4" />
-                          Soát ảnh ({formatNumber(anhTruocLocDonVi.length)})
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/*
-                  KẾT QUẢ SOÁT. Một câu nói thẳng phải làm gì ở trên, ba bảng
-                  số ở dưới để gửi cho người viết code. Có nút sao chép vì
-                  không ai gõ lại được hai chục dòng số.
-                */}
-                {ketQuaSoat && (
-                  <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex gap-2">
-                        <ImageOff className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                            Kết quả soát · {formatNumber(ketQuaSoat.tong)} tấm,
-                            hỏng {formatNumber(ketQuaSoat.hong)}
-                          </p>
-                          <p className="text-[13px] font-bold text-slate-700 mt-1 leading-relaxed">
-                            {nhanDinhSoatAnh(ketQuaSoat)}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard
-                            ?.writeText(baoCaoSoatAnh(ketQuaSoat))
-                            .then(() => showNotification("Đã sao chép báo cáo"))
-                            .catch(() =>
-                              showNotification("Không sao chép được", "error"),
-                            );
-                        }}
-                        className="shrink-0 px-3 py-2 rounded-lg bg-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 transition-all"
-                      >
-                        Sao chép
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                      {[
-                        { ten: "Theo nhóm nguyên nhân", ds: ketQuaSoat.theoNhom },
-                        { ten: "Theo tháng", ds: ketQuaSoat.theoThang },
-                        { ten: "Theo đơn vị", ds: ketQuaSoat.theoDonVi },
-                      ].map((b) => (
-                        <div
-                          key={b.ten}
-                          className="rounded-xl border border-slate-200 overflow-hidden"
-                        >
-                          <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                              {b.ten}
-                            </p>
-                          </div>
-                          <div className="max-h-56 overflow-y-auto">
-                            {b.ds.map((o) => (
-                              <div
-                                key={o.ten}
-                                className="px-3 py-1.5 flex items-center justify-between gap-2 border-t border-slate-50 text-[11px] font-bold"
-                              >
-                                <span className="truncate text-slate-600">
-                                  {o.ten}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "tabular-nums shrink-0",
-                                    o.hong === 0
-                                      ? "text-emerald-600"
-                                      : o.hong === o.tong
-                                        ? "text-rose-600"
-                                        : "text-amber-600",
-                                  )}
-                                >
-                                  {o.hong}/{o.tong}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/*
-                  Đếm số tấm lỗi trong đúng bộ đang xem. Ảnh lỗi không tự lộ ra
-                  khi lướt qua nhanh, mà biết có bao nhiêu tấm mất thì còn đi
-                  tìm lại chứng từ được.
-                */}
-                {/*
-                  KHOÁ XOÁ ẢNH SAI — app tự kiểm lúc mở, chỉ hiện khi có lỗi.
-                  Ngày thường không có dòng nào ở đây.
-                */}
-                {isOwner && khoaXoaAnh.trangThai === "loi" && (
-                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex gap-2 items-start">
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-rose-800 leading-relaxed">
-                        <strong>Chưa xoá được ảnh trên Cloudinary.</strong> Xoá
-                        dữ liệu lúc này thì dữ liệu mất nhưng ảnh còn nằm lại.{" "}
-                        {khoaXoaAnh.loi}
-                      </p>
-                      <button
-                        onClick={kiemTraKhoaXoaAnh}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-[10px] font-black uppercase tracking-widest text-rose-700 hover:bg-rose-100 transition-all"
-                      >
-                        Kiểm tra lại
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {soAnhLoi > 0 && (
-                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 flex gap-2 items-start">
-                    <ImageOff className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-amber-800 leading-relaxed">
-                        <strong>
-                          {formatNumber(soAnhLoi)}/
-                          {formatNumber(anhThuVien.length)} tấm
-                        </strong>{" "}
-                        chưa tải được sau {SO_LAN_THU + 1} lượt thử. Thường là
-                        mạng chập hoặc máy chủ ảnh chặn tạm khi bị hỏi nhiều tấm
-                        cùng lúc — bấm Thử lại trước khi kết luận là ảnh đã mất.
-                        Ảnh cũ nhúng trong hệ thống thì chạy phần{" "}
-                        <strong>Chuyển ảnh cũ</strong>; mở thẳng đường dẫn ảnh mà
-                        vẫn không ra thì mới phải tìm lại tờ biên bản.
-                      </p>
-                      <button
-                        onClick={thuLaiTatCaAnh}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 transition-all"
-                      >
-                        Thử lại tất cả
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/*
-                  LƯỚI ẢNH GỌN (21/10/2026). Bản cũ: 4 cột thẻ to, phủ dải tối
-                  lên nửa dưới ảnh, rê chuột là phóng to — nhìn thô và nặng,
-                  chữ đè lên chính tờ biên bản. Nay thẻ nhỏ hơn, nhiều cột hơn,
-                  ảnh để trơn; ngày · mặt hàng · đơn vị nằm ở dải chữ bên dưới.
-                */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
-                  {anhThuVien.length > 0 ? (
-                    anhThuVien.map((t) => (
-                      <button
-                        type="button"
-                        key={t.id}
-                        className="group text-left bg-white rounded-2xl overflow-hidden border border-slate-200/70 shadow-sm hover:shadow-lg hover:-translate-y-0.5 hover:border-slate-300 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        onClick={() => setSelectedGalleryImage(t)}
-                      >
-                        <div className="relative aspect-[4/5] overflow-hidden bg-slate-100">
-                          {/*
-                            Tấm nào tải không được thì NÓI RA lý do, không để ô
-                            trắng. Ô trắng trơn nhìn giống app lọc sai hoặc mất
-                            ảnh, mà thật ra ảnh đã không còn hoặc là ảnh cũ
-                            nhúng trong tài liệu bị cắt cụt.
-                          */}
-                          {anhLoi.has(t.id) ? (
-                            <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-3 text-center">
-                              <ImageOff className="w-6 h-6 text-slate-300" />
-                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 leading-snug">
-                                Chưa tải được ảnh
-                              </span>
-                              <span className="text-[9px] font-bold text-slate-400 leading-snug">
-                                {lyDoAnhLoi(t.url)}
-                              </span>
-                              {/* Phải có đường tự thử lại: lỗi tạm thì bấm một
-                                  cái là ra ảnh, không cần tải lại cả trang. */}
-                              <span
-                                role="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  thuLaiAnh(t.id);
-                                }}
-                                className="mt-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all"
-                              >
-                                Thử lại
-                              </span>
-                            </div>
-                          ) : (
-                            /*
-                              XIN ẢNH THEO HÀNG ĐỢI, không để 91 thẻ ảnh cùng
-                              hỏi một lúc. Xem `hangDoiAnh.ts` và `AnhLuoi`.
-                            */
-                            <AnhLuoi
-                              key={`${t.id}-${lanThuAnh[t.id] ?? 0}`}
-                              src={duongDanO(t.url)}
-                              alt={t.tieuDe}
-                              onError={() => ghiAnhLoi(t.id)}
-                              className="w-full h-full object-cover"
-                              classNameCho="w-full h-full"
-                            />
-                          )}
-                          {/* Ngày nằm gọn trên góc ảnh, không phủ cả tấm. */}
-                          <span
-                            className={cn(
-                              "absolute top-2 left-2 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-sm text-[10px] font-black tabular-nums shadow-sm",
-                              galleryFilter === "IN"
-                                ? "text-amber-700"
-                                : "text-rose-700",
-                            )}
-                            title={
-                              galleryFilter === "IN"
-                                ? "Ngày thực nhập"
-                                : "Ngày thực xuất"
-                            }
-                          >
-                            {formatDate(t.date)}
-                          </span>
-                        </div>
-
-                        <div className="px-3 py-2.5 space-y-1">
-                          <p className="text-[12px] font-bold text-slate-800 leading-snug line-clamp-2 min-h-[2.1em]">
-                            {t.tieuDe}
-                          </p>
-                          <p className="flex items-center gap-1 text-[10px] font-bold text-slate-400 truncate">
-                            <Users className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{t.phu}</span>
-                          </p>
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="col-span-full py-16 flex flex-col items-center justify-center text-center space-y-4 border-dashed border-2 bg-slate-50/50 rounded-3xl">
-                      <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-xl text-slate-300">
-                        <ImageIcon className="w-10 h-10" />
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-xl font-black text-slate-900 uppercase">
-                          Trống
-                        </h4>
-                        {/* Rỗng vì khoảng ngày hẹp KHÁC hẳn rỗng vì chưa có
-                            ảnh nào. Nói nhầm là người dùng đi tìm lỗi ở chỗ
-                            không có lỗi. */}
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                          {tongAnhMoiChieu > 0
-                            ? `Không có ảnh nào trong khoảng ngày đang chọn. Toàn bộ có ${formatNumber(tongAnhMoiChieu)} ảnh — nới ngày ra hoặc bấm "Tất cả".`
-                            : galleryFilter === "IN"
-                              ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi tải tờ phiếu đã ký lên ở tab Phiếu nhập."
-                              : "Chưa có ảnh biên bản xuất kho nào được ghi nhận."}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Fullscreen Image View Modal */}
-            {selectedGalleryImage && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-5">
-                <div
-                  onClick={() => setSelectedGalleryImage(null)}
-                  className="absolute inset-0 bg-slate-950/95 backdrop-blur-2xl"
-                />
-                {/*
-                  KHUNG XEM ẢNH — CAO ĐÚNG BẰNG CHỖ CÒN LẠI, KHÔNG HƠN.
-
-                  Bản cũ để thanh tiêu đề `absolute -top-16`, tức nó đứng NGOÀI
-                  khung, phía trên. Khung lại `max-h-[85vh]` mà không đặt chiều
-                  cao, nên tấm ảnh bên trong (`h-full` trên cha cao tự động =
-                  không ràng buộc gì) nở đúng cỡ thật của nó, tràn qua cả mép
-                  trên lẫn mép dưới màn hình. Người xem thấy đúng như anh Khoa
-                  gặp: tờ biên bản bị cắt cả đầu lẫn chân.
-
-                  Nay thanh tiêu đề nằm TRONG khung và chiếm chỗ thật của nó;
-                  vùng ảnh là `flex-1 min-h-0` nên nó nhận đúng phần cao còn
-                  thừa. `min-h-0` là chỗ dễ quên: thiếu nó thì một ô flex không
-                  chịu co nhỏ hơn nội dung, và mọi ràng buộc chiều cao ở trên
-                  thành vô nghĩa.
-                */}
-                <div className="relative w-full max-w-5xl h-full flex flex-col gap-3">
-                  <div className="shrink-0 flex items-start justify-between gap-4">
-                    <div className="flex flex-col min-w-0">
-                      <h3 className="text-white font-black text-base sm:text-xl uppercase tracking-tighter truncate">
-                        {selectedGalleryImage.tieuDe}
-                      </h3>
-                      <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1 truncate">
-                        {formatDate(selectedGalleryImage.date)} •{" "}
-                        {selectedGalleryImage.phu}
-                      </p>
-                    </div>
-                    <div className="flex gap-2 sm:gap-3 shrink-0">
-                      {!anhLoi.has(selectedGalleryImage.id) && (
-                        <button
-                          onClick={() => setAnhCoThat((v) => !v)}
-                          title={anhCoThat ? "Vừa khung" : "Cỡ thật"}
-                          className="w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
-                        >
-                          {anhCoThat ? (
-                            <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" />
-                          ) : (
-                            <Maximize2 className="w-5 h-5 sm:w-6 sm:h-6" />
-                          )}
-                        </button>
-                      )}
-                      {/*
-                        XOÁ VĨNH VIỄN — chỉ admin. Đặt ở khung xem lớn, không
-                        đặt trên ô lưới: phải nhìn rõ tấm ảnh mới được quyết
-                        xoá một chứng từ.
-                      */}
-                      {isOwner && (
-                        <button
-                          onClick={() => xoaAnhVinhVien(selectedGalleryImage)}
-                          disabled={dangXoaAnh}
-                          title="Xoá vĩnh viễn — xoá cả tệp trên Cloudinary (chỉ admin)"
-                          className="w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-rose-600 text-white rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all disabled:opacity-40"
-                        >
-                          {dangXoaAnh ? (
-                            <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-5 h-5 sm:w-6 sm:h-6" />
-                          )}
-                        </button>
-                      )}
-                      <a
-                        href={selectedGalleryImage.url}
-                        download={`BCSX-${selectedGalleryImage.id}.png`}
-                        className="w-11 h-11 sm:w-12 sm:h-12 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 transition-all"
-                      >
-                        <Download className="w-5 h-5 sm:w-6 sm:h-6" />
-                      </a>
-                      <button
-                        onClick={() => setSelectedGalleryImage(null)}
-                        className="w-11 h-11 sm:w-12 sm:h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-2xl transition-all active:scale-90"
-                      >
-                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-auto rounded-3xl flex">
-                  {anhLoi.has(selectedGalleryImage.id) ? (
-                    <div className="m-auto w-full rounded-3xl bg-slate-100 flex flex-col items-center justify-center gap-3 py-12 px-6 text-center">
-                      <ImageOff className="w-12 h-12 text-slate-300" />
-                      <p className="text-xs font-black uppercase tracking-widest text-slate-500">
-                        Không tải được ảnh
-                      </p>
-                      <p className="text-[11px] font-bold text-slate-400 max-w-sm leading-relaxed">
-                        {lyDoAnhLoi(selectedGalleryImage.url)}
-                      </p>
-                      {/*
-                        Bày nguyên đường dẫn ra: đây là thứ duy nhất nói được
-                        ảnh hỏng vì lý do gì, mà người dùng thì không mở được
-                        cơ sở dữ liệu lên xem. Có nó thì chụp lại là đủ để lần
-                        ra chỗ ghi sai.
-                      */}
-                      <code className="max-w-lg px-3 py-2 rounded-lg bg-white border border-slate-200 text-[10px] font-mono text-slate-500 break-all leading-relaxed">
-                        {selectedGalleryImage.url.slice(0, 160)}
-                        {selectedGalleryImage.url.length > 160 ? "…" : ""}
-                      </code>
-                    </div>
-                  ) : (
-                    /*
-                      Bấm thẳng vào ảnh cũng đổi được cỡ — không bắt người ta
-                      rê lên nút trên góc. Cỡ thật thì trải hết bề ngang rồi
-                      cuộn dọc; vừa khung thì `max-h-full` giữ cả tờ trong tầm
-                      mắt.
-                    */
-                    <img
-                      src={selectedGalleryImage.url}
-                      onError={() => ghiAnhLoi(selectedGalleryImage.id)}
-                      onClick={() => setAnhCoThat((v) => !v)}
-                      className={cn(
-                        "m-auto rounded-3xl shadow-2xl",
-                        anhCoThat
-                          ? "w-full h-auto cursor-zoom-out"
-                          : "max-w-full max-h-full object-contain cursor-zoom-in",
-                      )}
-                      alt="Zoomed"
-                    />
-                  )}
-                  </div>
-                </div>
-              </div>
+              <ThuVienAnh
+                anh={anhChungTu}
+                giaoDich={transactions}
+                laAdmin={isOwner}
+                onXoa={xoaMotAnhThuVien}
+                bao={showNotification}
+              />
             )}
 
             {/* Add Partner Modal */}

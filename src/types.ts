@@ -108,8 +108,6 @@ export interface Transaction {
   partnerId: string;
   partnerName: string; // Denormalized
   notes?: string;
-  evidencePhotoUrl?: string; // Ảnh biên bản
-  evidencePhotoUrls?: string[]; // Multiple evidence photos
   createdBy: string; // Người thực hiện
   referenceGroupId?: string; // To group split transactions (e.g., one export split into multiple batches)
   status?: 'completed' | 'in_transit'; // Default: completed
@@ -161,7 +159,7 @@ export interface InventoryItem {
 /**
  * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU.
  *
- * Chỉ lưu phần "vỏ" (trạng thái, ảnh đã ký, thời điểm in). Nội dung các dòng
+ * Chỉ lưu phần "vỏ" (trạng thái, thời điểm in, người ký). Nội dung các dòng
  * hàng KHÔNG lưu ở đây mà suy ra từ các `transactions` có cùng `slipCode` —
  * nhờ vậy sửa giao dịch thì phiếu tự khớp theo, không bị lệch hai nguồn.
  *
@@ -169,7 +167,9 @@ export interface InventoryItem {
  * PN-260818-02 là lượt giao thứ hai trong ngày 18/08/2026). Toàn bộ phép tính
  * quanh mã phiếu và việc duyệt nằm ở `src/lib/slip.ts`.
  *
- * `signed` (đã có ảnh ký) là điều kiện để số lượng trên phiếu VÀO TỒN KHO.
+ * Ảnh tờ phiếu đã ký nằm ở bảng ảnh chứng từ (src/anh), gắn theo mã phiếu.
+ * Có ảnh ký là điều kiện để số lượng trên phiếu VÀO TỒN KHO; `status` =
+ * `signed` đi cùng lô với ảnh để luật máy chủ biết phiếu đã ký.
  */
 export type SlipStatus = 'draft' | 'printed' | 'signed';
 
@@ -181,8 +181,6 @@ export interface ImportSlip {
   date: string;
   status: SlipStatus;
   printedAt?: string;
-  /** Ảnh phiếu giấy đã ký tươi, lưu trên Cloudinary. */
-  signedPhotoUrls?: string[];
   signedAt?: string;
   signedBy?: string;
   note?: string;

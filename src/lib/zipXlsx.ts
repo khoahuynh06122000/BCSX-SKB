@@ -21,7 +21,7 @@
  * phải giải nén.
  */
 
-import { crc32 } from "./taiHangLoat";
+import { crc32 } from "./crc32";
 
 /** Một mục trong tệp ZIP, giữ nguyên phần đã nén. */
 export interface MucZip {

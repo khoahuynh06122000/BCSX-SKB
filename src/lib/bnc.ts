@@ -159,6 +159,11 @@ export interface BangBNCInput {
   nhom?: MaNhomBNC | "";
   /** Tên bộ phận theo mã, lấy từ danh mục đơn vị. */
   tenBoPhan: Map<string, string>;
+  /**
+   * Ảnh biên bản của chuyến chứa dòng này — ảnh nằm ở bảng ảnh chứng từ
+   * (src/anh), không nằm trên dòng giao dịch. Không truyền = không có ảnh.
+   */
+  anhCua?: (t: Transaction) => string[];
 }
 
 const ngayCua = (iso: string): string => String(iso ?? "").slice(0, 10);
@@ -245,7 +250,7 @@ export function dungBangBNC(input: BangBNCInput): BangBNC {
     else d.soLuongLit += sl;
     d.litQuyDoi += lit;
     if (t.status === "in_transit") d.trangThai = "di_duong";
-    [t.evidencePhotoUrl, ...(t.evidencePhotoUrls || [])].forEach((u) => {
+    (input.anhCua?.(t) ?? []).forEach((u) => {
       const url = String(u ?? "").trim();
       if (url && !d!.anh.includes(url)) d!.anh.push(url);
     });

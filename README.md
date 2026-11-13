@@ -70,11 +70,15 @@ cột *Chờ ký*. Xem [`src/lib/slip.ts`](src/lib/slip.ts).
 cùng tệp là ghi đè lên chính nó. Dòng lệch với dữ liệu cũ thì hỏi một lần.
 Xem [`src/lib/napTonKho.ts`](src/lib/napTonKho.ts), [`src/lib/bbgn.ts`](src/lib/bbgn.ts).
 
-**Dữ liệu và ảnh đi một cụm.** Mỗi ảnh có một dòng trong sổ `anh_minh_chung`
-(khoá theo publicId của Cloudinary). Xoá dữ liệu là xoá luôn ảnh không còn ai
-dùng trên Cloudinary — chỉ admin. Kho Cloudinary dùng chung với web khác, nên app
-chỉ xoá đúng ảnh có trong dữ liệu của mình. Xem
-[`src/lib/soAnh.ts`](src/lib/soAnh.ts), [`api/anh/xoa.ts`](api/anh/xoa.ts).
+**Ảnh gắn vào chứng từ, không gắn vào dòng giao dịch.** Mỗi tấm ảnh là một
+bản ghi trong bảng `anh_chung_tu`, móc vào mã phiếu nhập (`PN-…`) hoặc mã chuyến
+giao (`referenceGroupId`). Dòng giao dịch và phiếu không giữ đường dẫn ảnh nào,
+nên nạp lại tệp, xác nhận đơn hay sửa dòng không thể làm rơi ảnh. Ảnh chỉ tải
+lên Cloudinary lúc bấm Lưu và ghi cùng lô với chứng từ. Luật máy chủ chỉ cho
+thêm ảnh; sửa, xoá chỉ admin. Xoá chứng từ thì xoá luôn ảnh của nó (dữ liệu và
+ảnh đi một cụm). Kho Cloudinary dùng chung với web khác, nên app chỉ xoá đúng
+ảnh có trong bảng của mình. Xem [`src/anh/`](src/anh/moHinh.ts),
+[`api/anh/xoa.ts`](api/anh/xoa.ts).
 
 ---
 

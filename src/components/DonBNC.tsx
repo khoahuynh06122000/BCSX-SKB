@@ -56,9 +56,11 @@ interface Props {
   products: Product[];
   /** Danh mục đơn vị đã ghép, để lấy tên bộ phận. */
   partners: Partner[];
+  /** Ảnh biên bản của chuyến chứa một dòng — lấy từ bảng ảnh chứng từ. */
+  anhCua: (t: Transaction) => string[];
 }
 
-export default function DonBNC({ transactions, products, partners }: Props) {
+export default function DonBNC({ transactions, products, partners, anhCua }: Props) {
   const [tuNgay, setTuNgay] = useState(() =>
     format(new Date(new Date().setDate(1)), "yyyy-MM-dd"),
   );
@@ -159,8 +161,9 @@ export default function DonBNC({ transactions, products, partners }: Props) {
         boPhan,
         nhom,
         tenBoPhan,
+        anhCua,
       }),
-    [transactions, products, tuNgay, denNgay, boPhan, nhom, tenBoPhan],
+    [transactions, products, tuNgay, denNgay, boPhan, nhom, tenBoPhan, anhCua],
   );
 
   const taiExcel = () => {

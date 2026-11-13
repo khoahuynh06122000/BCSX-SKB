@@ -4,9 +4,9 @@
  * Phep tinh quan trong nhat o day: hang da dien nhung chua co anh phieu ky thi
  * KHONG duoc cong vao ton kho. Sai o day thi ton kho sai ma khong bao loi gi.
  */
-import type { ImportSlip, Transaction } from "../../types";
+import type { Transaction } from "../../types";
+import { phieuDaCoAnhKy } from "../../anh/moHinh";
 import {
-  approvedSlipCodes,
   isCountedInStock,
   needsSlipApproval,
   nextSlipCode,
@@ -56,13 +56,17 @@ const tx = (over: Partial<Transaction>): Transaction => ({
   ...over,
 });
 
-const slip = (code: string, photos: string[]): ImportSlip => ({
-  id: code,
-  code,
-  date: parseSlipCode(code)?.dateKey || "2026-08-18",
-  status: photos.length ? "signed" : "printed",
-  signedPhotoUrls: photos,
-});
+/** Phiếu kèm số ảnh ký — ảnh nay nằm ở bảng ảnh chứng từ, không nằm trên phiếu. */
+const slip = (code: string, photos: string[]) => ({ code, photos });
+const approvedSlipCodes = (ds: { code: string; photos?: string[] }[]) =>
+  phieuDaCoAnhKy(
+    ds.flatMap((d) =>
+      (d.photos || []).map((url, i) => ({
+        id: `${d.code}-${i}`, url, publicId: `${d.code}-${i}`, chungTu: [d.code], loai: "NHAP" as const,
+        ngay: "", maDoiTac: "", doiTac: "", taiLuc: "", taiBoi: "", uid: "",
+      })),
+    ),
+  );
 
 console.log("\n1. Tien to ma phieu theo ngay");
 eq("ngay thuong", slipPrefixForDate("2026-08-18"), "PN-260818");
@@ -126,7 +130,7 @@ eq(
 );
 
 console.log("\n4. Phieu nao coi la da duyet");
-const slips: ImportSlip[] = [
+const slips = [
   slip("PN-260818-01", ["https://anh/1.jpg"]),
   slip("PN-260818-02", []),
   slip("PN-260817-01", ["https://anh/2.jpg", "https://anh/3.jpg"]),
@@ -139,9 +143,7 @@ eq("chi phieu co anh ky duoc duyet", [...approved].sort(), [
 eq("phieu da in nhung chua co anh -> chua duyet", approved.has("PN-260818-02"), false);
 eq(
   "phieu khong co truong anh -> chua duyet",
-  approvedSlipCodes([
-    { id: "PN-260901-01", code: "PN-260901-01", date: "2026-09-01", status: "printed" },
-  ]).size,
+  approvedSlipCodes([{ code: "PN-260901-01" }]).size,
   0,
 );
 

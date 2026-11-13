@@ -24,7 +24,8 @@ import type {
   ImportSlip as ImportSlipType,
 } from "../types";
 import { cn, formatNumber } from "../lib/utils";
-import { approvedSlipCodes, parseSlipCode } from "../lib/slip";
+import { parseSlipCode } from "../lib/slip";
+import type { AnhChungTu } from "../anh/moHinh";
 
 /**
  * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU
@@ -39,8 +40,8 @@ import { approvedSlipCodes, parseSlipCode } from "../lib/slip";
  * thủ tục lưu trữ.
  *
  * Nội dung phiếu KHÔNG lưu riêng mà tính từ các `transactions` có cùng
- * `slipCode`, nên sửa giao dịch thì phiếu tự khớp theo. Chỉ trạng thái và ảnh
- * ký được lưu trong collection `slips`.
+ * `slipCode`, nên sửa giao dịch thì phiếu tự khớp theo. Trạng thái lưu ở
+ * `slips`; ảnh ký nằm ở bảng ảnh chứng từ (src/anh), gắn theo mã phiếu.
  */
 
 interface HandoverSlip {
@@ -67,7 +68,9 @@ interface Props {
   onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
   onUploadSigned: (code: string, dateKey: string, files: FileList) => Promise<void>;
   /** Gỡ một ảnh đã tải nhầm khỏi phiếu. Không truyền thì không hiện nút gỡ. */
-  onRemoveSigned?: (code: string, url: string) => Promise<void>;
+  onRemoveSigned?: (code: string, anh: AnhChungTu) => Promise<void>;
+  /** Ảnh ký theo mã phiếu — từ bảng ảnh chứng từ. Có ảnh = đã duyệt, hàng vào tồn. */
+  anhTheoPhieu: Map<string, AnhChungTu[]>;
   uploadingCode: string | null;
   /**
    * Xoá cả phiếu (nhập sai số lượng). Không truyền thì không có nút xoá.
@@ -93,6 +96,7 @@ export default function ImportSlipPanel({
   onMarkPrinted,
   onUploadSigned,
   onRemoveSigned,
+  anhTheoPhieu,
   uploadingCode,
   onXoaPhieu,
   xoaDuocPhieuDaKy = false,
@@ -143,7 +147,10 @@ export default function ImportSlipPanel({
     return m;
   }, [slips]);
 
-  const approved = useMemo(() => approvedSlipCodes(slips), [slips]);
+  const approved = useMemo(
+    () => new Set([...anhTheoPhieu.entries()].filter(([, ds]) => ds.length).map(([c]) => c)),
+    [anhTheoPhieu],
+  );
 
   /**
    * Gộp giao dịch theo MÃ PHIẾU, không theo ngày.
@@ -231,7 +238,8 @@ export default function ImportSlipPanel({
           </p>
         ) : (
           handoverSlips.map((d) => {
-            const photos = d.meta?.signedPhotoUrls || [];
+            const anhKy = anhTheoPhieu.get(d.code) || [];
+            const photos = anhKy.map((a) => a.url);
             const printed = !!d.meta?.printedAt;
             return (
               <div key={d.code} className="space-y-0">
@@ -482,7 +490,7 @@ export default function ImportSlipPanel({
                                       : "Ảnh là chứng từ đã ký — chỉ gỡ khi tải nhầm."),
                                 )
                               ) {
-                                onRemoveSigned(d.code, url);
+                                onRemoveSigned(d.code, anhKy[i]);
                               }
                             }}
                             title="Gỡ ảnh này"

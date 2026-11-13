@@ -45,10 +45,19 @@ const ten = new Map([
 ]);
 
 let seq = 0;
-function tx(o: Partial<Transaction>): Transaction {
+/*
+ * Ảnh nay nằm ở bảng ảnh chứng từ, không nằm trên dòng. Trong phép kiểm, ảnh
+ * của từng dòng giả ghi vào `anhGia` rồi đưa vào `dungBangBNC` qua `anhCua`.
+ */
+const anhGia = new Map<string, string[]>();
+const anhCua = (t: Transaction) => anhGia.get(t.id) ?? [];
+
+function tx(o: Partial<Transaction> & { anh?: string[] }): Transaction {
   seq += 1;
+  const { anh, ...con } = o;
+  const id = con.id ?? `t${seq}`;
+  if (anh?.length) anhGia.set(id, anh);
   return {
-    id: `t${seq}`,
     date: "2026-08-21T08:00:00.000Z",
     type: "OUT",
     productId: "hoi",
@@ -58,7 +67,8 @@ function tx(o: Partial<Transaction>): Transaction {
     partnerId: "AD0103-1901",
     partnerName: "BNC · 1901",
     createdBy: "test",
-    ...o,
+    ...con,
+    id,
   } as Transaction;
 }
 
@@ -85,7 +95,7 @@ const transactions: Transaction[] = [
   tx({
     referenceGroupId: "gA",
     quantity: 103,
-    evidencePhotoUrls: ["u1"],
+    anh: ["u1"],
     notes: "Chuyến 1/2 · Điểm nhận: NH 1901",
   }),
   tx({
@@ -93,7 +103,7 @@ const transactions: Transaction[] = [
     quantity: 60,
     productId: "lon",
     category: "Lon",
-    evidencePhotoUrls: ["u1"],
+    anh: ["u1"],
   }),
   // Hao hụt của chính đơn A — KHÔNG được cộng vào sản lượng giao.
   tx({ referenceGroupId: "gA", type: "LOSS", quantity: 0.6 }),
@@ -128,6 +138,7 @@ const b = dungBangBNC({
   denNgay: "",
   boPhan: "",
   tenBoPhan: ten,
+  anhCua,
 });
 
 eq("bon don", b.tong.soDon, 4);
@@ -183,6 +194,7 @@ eq(
     denNgay: "2026-08-22",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   }).tong.soDon,
   1,
 );
@@ -195,6 +207,7 @@ eq(
     denNgay: "",
     boPhan: "AD0103-1901",
     tenBoPhan: ten,
+    anhCua,
   }).tong.soDon,
   2,
 );
@@ -207,6 +220,7 @@ eq(
     denNgay: "2026-09-30",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   }).tong.soDon,
   0,
 );
@@ -219,6 +233,7 @@ eq(
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   }).tong.litQuyDoi,
   0,
 );
@@ -235,8 +250,7 @@ eq(
       tx({
         referenceGroupId: "gX",
         quantity: 10,
-        evidencePhotoUrl: "u1",
-        evidencePhotoUrls: ["u1", "u2"],
+        anh: ["u1", "u2"],
       }),
       tx({
         referenceGroupId: "gX",
@@ -244,13 +258,13 @@ eq(
         productId: "lon",
         category: "Lon",
         // Cung to bien ban do, gan lai cho dong thu hai.
-        evidencePhotoUrls: ["u1"],
+        anh: ["u1"],
       }),
       tx({
         referenceGroupId: "gX",
         quantity: 5,
         // Dong nay co them mot tam rieng.
-        evidencePhotoUrls: ["u3"],
+        anh: ["u3"],
       }),
     ],
     products,
@@ -258,6 +272,7 @@ eq(
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   });
   const d = b2.don[0];
   eq("gom du ba tam anh khac nhau", d.anh, ["u1", "u2", "u3"]);
@@ -272,6 +287,7 @@ eq(
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   });
   eq("khong co anh thi mang rong", b3.don[0].anh, []);
   eq("coAnh = false", b3.don[0].coAnh, false);
@@ -279,14 +295,15 @@ eq(
   // Dong hao hut khong mang anh cua rieng no vao don.
   const b4 = dungBangBNC({
     transactions: [
-      tx({ referenceGroupId: "gZ", quantity: 10, evidencePhotoUrls: ["a1"] }),
-      tx({ referenceGroupId: "gZ", type: "LOSS", quantity: 1, evidencePhotoUrls: ["bo-qua"] }),
+      tx({ referenceGroupId: "gZ", quantity: 10, anh: ["a1"] }),
+      tx({ referenceGroupId: "gZ", type: "LOSS", quantity: 1, anh: ["bo-qua"] }),
     ],
     products,
     tuNgay: "",
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   });
   eq("dong hao hut khong gop anh", b4.don[0].anh, ["a1"]);
 }
@@ -355,6 +372,7 @@ eq(
     boPhan: "",
     nhom: "NG",
     tenBoPhan: ten,
+    anhCua,
   });
   eq("loc nhom NG con mot don", chiNG.tong.soDon, 1);
   eq(
@@ -370,6 +388,7 @@ eq(
     boPhan: "",
     nhom: "NB",
     tenBoPhan: ten,
+    anhCua,
   });
   eq("loc nhom NB con ba don", chiNB.tong.soDon, 3);
   eq("loc nhom rong = lay het", b.tong.soDon, 4);
@@ -383,6 +402,7 @@ eq(
     boPhan: "AD0103-1901",
     nhom: "NG",
     tenBoPhan: ten,
+    anhCua,
   });
   eq("bo phan khong thuoc nhom dang loc thi rong", lech.tong.soDon, 0);
 }
@@ -416,6 +436,7 @@ eq(
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   });
   const o = kq.theoBoPhan.find((x) => x.partnerId === "AD0103-1901")!;
 
@@ -459,6 +480,7 @@ eq(
     denNgay: "",
     boPhan: "",
     tenBoPhan: ten,
+    anhCua,
   });
   const o = kq.theoBoPhan.find((x) => x.partnerId === "AD0103-1901")!;
   eq("chi mot dong chi tiet", o.chiTiet.length, 1);
