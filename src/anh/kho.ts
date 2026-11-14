@@ -59,7 +59,8 @@ export interface ThongTinGan {
  * lại từ đầu, không có tấm nào nằm lửng.
  */
 export async function taiAnhChoChungTu(
-  tep: readonly (File | Blob)[],
+  /** Ảnh đã nén sẵn (data URI, từ `ChonAnh`) hoặc tệp vừa chọn (nén ngay ở đây). */
+  tep: readonly (string | File | Blob)[],
   tt: ThongTinGan,
 ): Promise<AnhChungTu[]> {
   if (!tt.chungTu.length) throw new Error("Ảnh phải gắn vào ít nhất một chứng từ.");
@@ -67,7 +68,7 @@ export async function taiAnhChoChungTu(
   const ra: AnhChungTu[] = [];
   try {
     for (const t of tep) {
-      const nen = await compressFile(t, 2000, 2000, 0.85);
+      const nen = typeof t === "string" ? t : await compressFile(t, 2000, 2000, 0.85);
       const { url, publicId } = await taiAnhLen(nen);
       ra.push({
         id: idTuMaTep(publicId),

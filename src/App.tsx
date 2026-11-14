@@ -135,7 +135,7 @@ import {
   taiAnhChoChungTu,
 } from "./anh/kho";
 import ThuVienAnh from "./anh/ThuVienAnh";
-import ChonAnh, { giaiPhong, taoTepCho, type TepCho } from "./anh/ChonAnh";
+import ChonAnh, { taoTepCho, type TepCho } from "./anh/ChonAnh";
 import type { OAnh } from "./anh/thuVien";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
@@ -3336,53 +3336,6 @@ export default function App() {
     }
   };
 
-  // FIFO Helper for auto-allocation
-  const compressImage = (
-    base64Str: string,
-    maxWidth = 1024,
-    maxHeight = 1024,
-    quality = 0.6,
-  ): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = base64Str;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxWidth) {
-            height *= maxWidth / width;
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width *= maxHeight / height;
-            height = maxHeight;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => resolve(base64Str); // Fallback to original
-    });
-  };
-
-  // Đọc file thành data URI base64 (giữ nguyên cách FileReader cũ, gói lại cho gọn).
-  const readFileAsDataURL = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-
   // Form states
   interface TransactionItem {
     productId: string;
@@ -3552,6 +3505,14 @@ export default function App() {
    * Cloudinary. Chỉ khi bấm Xác nhận mới tải lên và ghi cùng lô (src/anh).
    */
   const [anhCho, setAnhCho] = useState<TepCho[]>([]);
+  const baoAnhKhongDoc = (n: number) =>
+    alert(
+      `Điện thoại không cho đọc ${n} ảnh vừa chọn — ảnh đó CHƯA được thêm.
+
+` +
+        "Chụp lại hoặc chọn lại ảnh đó. Nếu chọn từ Google Photos / Drive mà vẫn lỗi, " +
+        "lưu ảnh về máy trước rồi chọn trong mục Ảnh của máy.",
+    );
   const [showLossModal, setShowLossModal] = useState(false);
 
   /**
@@ -3879,7 +3840,6 @@ export default function App() {
     setMatchedProductIds(new Set());
 
     setLossReason("");
-    giaiPhong(anhCho);
     setAnhCho([]);
     setShowLossModal(true);
   };
@@ -4055,7 +4015,6 @@ export default function App() {
       !window.confirm(`Đóng khung là bỏ ${anhCho.length} ảnh đang chọn (chưa lưu). Đóng?`)
     )
       return;
-    giaiPhong(anhCho);
     setAnhCho([]);
     setShowLossModal(false);
   };
@@ -4102,7 +4061,7 @@ export default function App() {
       setLoading(true);
       if (anhCho.length) {
         anhMoi = await taiAnhChoChungTu(
-          anhCho.map((t) => t.tep),
+          anhCho.map((t) => t.du),
           {
             chungTu: chungTuXacNhan,
             loai: "XUAT",
@@ -4258,8 +4217,7 @@ export default function App() {
       try {
         await batch.commit();
         // Ảnh đã ghi cùng lô: bỏ khỏi khung để bấm lại không tải lần hai.
-        giaiPhong(anhCho);
-        setAnhCho([]);
+            setAnhCho([]);
       } catch (e: any) {
         setLoading(false);
         void boTepVuaTai(anhMoi);
@@ -7778,20 +7736,16 @@ export default function App() {
                                   multiple
                                   disabled={isScanning}
                                   onChange={async (e) => {
-                                    // Ảnh nằm trên máy tới lúc bấm Xác nhận;
+                                    // Đọc và nén NGAY lúc chọn (xem ChonAnh.tsx);
                                     // AI quét bằng bản nén của tấm đầu.
-                                    const moi = taoTepCho(e.target.files);
-                                    e.target.value = "";
+                                    const o = e.target;
+                                    const { ds: moi, hong } = await taoTepCho(o.files);
+                                    o.value = "";
+                                    if (hong) baoAnhKhongDoc(hong);
                                     if (!moi.length) return;
                                     setAnhCho((cu) => [...cu, ...moi]);
                                     try {
-                                      const nen = await compressImage(
-                                        await readFileAsDataURL(moi[0].tep),
-                                        1600,
-                                        1600,
-                                        0.8,
-                                      );
-                                      await handleScanInvoice(nen);
+                                      await handleScanInvoice(moi[0].du);
                                     } catch (err) {
                                       console.error("Lỗi đọc ảnh:", err);
                                     }
@@ -7809,9 +7763,11 @@ export default function App() {
                                   accept="image/*"
                                   capture="environment"
                                   multiple
-                                  onChange={(e) => {
-                                    const moi = taoTepCho(e.target.files);
-                                    e.target.value = "";
+                                  onChange={async (e) => {
+                                    const o = e.target;
+                                    const { ds: moi, hong } = await taoTepCho(o.files);
+                                    o.value = "";
+                                    if (hong) baoAnhKhongDoc(hong);
                                     if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
                                   }}
                                 />
@@ -7826,9 +7782,11 @@ export default function App() {
                                   className="hidden"
                                   accept="image/*"
                                   multiple
-                                  onChange={(e) => {
-                                    const moi = taoTepCho(e.target.files);
-                                    e.target.value = "";
+                                  onChange={async (e) => {
+                                    const o = e.target;
+                                    const { ds: moi, hong } = await taoTepCho(o.files);
+                                    o.value = "";
+                                    if (hong) baoAnhKhongDoc(hong);
                                     if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
                                   }}
                                 />
