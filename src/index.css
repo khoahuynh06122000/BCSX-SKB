@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Galada&family=Manrope:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..800;1,400..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Galada&family=Manrope:wght@400;500;700&family=Sora:wght@600;700&display=swap');
 @import "tailwindcss";
 
 /* Che do toi bat bang cach them class "dark" vao the <html>. */
@@ -267,16 +267,507 @@
   -webkit-backdrop-filter: blur(20px);
 }
 
-@keyframes dn-hien-len {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: none; }
+/* ===========================================================================
+   KHUNG ĐĂNG NHẬP (HÌNH 2) — Đồng bộ mẫu PKT (Cầu Vàng + Mặt Trời + Kính mờ +
+   Nẹp góc neon + Vòng quỹ đạo + Nút viên thuốc 3 cột phát sáng) sang tông Đồng/Hổ phách SKB
+   =========================================================================== */
+
+/* Lớp lưới & 2 vòng quỹ đạo BÊN NGOÀI card, mờ dần về phía ảnh nồi đồng */
+.dn-ambient-grid {
+  background-image:
+    linear-gradient(to right, rgba(251, 191, 36, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(251, 191, 36, 0.1) 1px, transparent 1px);
+  background-size: 84px 84px;
+  mask-image: radial-gradient(88% 82% at 24% 58%, rgba(0, 0, 0, 0.72) 8%, transparent 72%);
+  -webkit-mask-image: radial-gradient(88% 82% at 24% 58%, rgba(0, 0, 0, 0.72) 8%, transparent 72%);
 }
 
-/* Máy yếu hoặc người dùng tắt hiệu ứng thì bỏ hết chuyển động, giữ nguyên
-   bố cục. Trang đăng nhập không được đánh đổi khả năng dùng lấy cái đẹp. */
+.dn-ring {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.dn-ring-1 {
+  width: 440px;
+  height: 440px;
+  top: -150px;
+  right: -130px;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.dn-ring-2 {
+  width: 300px;
+  height: 300px;
+  bottom: -110px;
+  left: -95px;
+  border: 1px solid rgba(245, 158, 11, 0.16);
+}
+
+/* Vỏ thẻ kính mờ sâu đặt bên trái dưới tiêu đề */
+.dn-card-wrap {
+  position: relative;
+}
+
+@property --dn-vien-goc {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.dn-khung-ao {
+  position: relative;
+  border-radius: 26px;
+}
+
+.dn-khung-dang-nhap {
+  position: relative;
+  border-radius: 26px;
+  background: rgba(20, 15, 12, 0.8);
+  background: color-mix(in oklab, #17110d 84%, transparent);
+  border: 1.5px solid rgba(251, 191, 36, 0.38);
+  box-shadow:
+    0 0 26px -4px rgba(245, 158, 11, 0.34),
+    0 0 0 1px rgba(254, 240, 138, 0.14),
+    0 36px 84px -22px rgba(0, 0, 0, 0.84),
+    inset 0 1px 0 rgba(255, 248, 225, 0.22);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  transition: box-shadow 300ms ease-out, border-color 300ms ease-out;
+}
+
+.dn-card-wrap:hover .dn-khung-dang-nhap {
+  border-color: rgba(253, 224, 71, 0.62);
+  box-shadow:
+    0 0 38px -2px rgba(245, 158, 11, 0.48),
+    0 0 0 1px rgba(254, 240, 138, 0.24),
+    0 36px 84px -22px rgba(0, 0, 0, 0.88),
+    inset 0 1px 0 rgba(255, 251, 235, 0.28);
+}
+
+/* Đường chạy sáng quay tròn 360° ôm theo đường cong bo góc khung đăng nhập */
+.dn-vien-chay,
+.dn-vien-toa {
+  position: absolute;
+  inset: -1px;
+  border-radius: 27px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+@supports (mask-composite: exclude) or (-webkit-mask-composite: xor) {
+  .dn-vien-chay {
+    opacity: 1;
+    padding: 2px;
+    z-index: 30;
+    background: conic-gradient(
+      from var(--dn-vien-goc),
+      transparent 0deg 235deg,
+      rgba(245, 158, 11, 0.25) 268deg,
+      rgba(253, 224, 71, 0.95) 316deg,
+      #ffffff 334deg,
+      rgba(251, 191, 36, 0.75) 348deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  .dn-vien-toa {
+    opacity: 0.72;
+    padding: 3px;
+    z-index: 15;
+    filter: blur(8px);
+    background: conic-gradient(
+      from var(--dn-vien-goc),
+      transparent 0deg 245deg,
+      rgba(245, 158, 11, 0.55) 305deg,
+      rgba(254, 240, 138, 0.95) 334deg,
+      rgba(245, 158, 11, 0.4) 352deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+
+/* Tiêu đề card dùng font Sora sắc nét */
+.dn-card-title {
+  font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+}
+
+/* Thanh thương hiệu có hai đường gạch hai bên (—— SUN WORLD BÀ NÀ HILLS ——) */
+.dn-brand-org {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.dn-brand-org::before,
+.dn-brand-org::after {
+  content: "";
+  width: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.72));
+}
+
+.dn-brand-org::after {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.72), transparent);
+}
+
+/* Sân khấu 3D/4D cho Ly Bia Tươi nổi & nghiêng theo con trỏ + thời gian */
+.dn-ly-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 760px;
+}
+
+.dn-ly-hao-quang {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 122px;
+  height: 122px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(251, 191, 36, 0.42) 0%,
+    rgba(245, 158, 11, 0.16) 46%,
+    transparent 74%
+  );
+  pointer-events: none;
+}
+
+.dn-ly-de-3d {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 86px;
+  height: 20px;
+  transform: translateX(-50%) rotateX(72deg);
+  border-radius: 9999px;
+  border: 1.5px dashed rgba(253, 224, 71, 0.42);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.35);
+  pointer-events: none;
+}
+
+.dn-ly-3d-body {
+  transform-style: preserve-3d;
+  will-change: transform;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 16px rgba(245, 158, 11, 0.36));
+  transition: filter 260ms ease-out;
+}
+
+.dn-card-wrap:hover .dn-ly-3d-body {
+  filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.62))
+    drop-shadow(0 0 24px rgba(253, 224, 71, 0.55));
+}
+
+.dn-bot-bia {
+  opacity: 0;
+}
+
+.dn-song-bia {
+  transform-origin: center;
+}
+
+.dn-giot-bot {
+  opacity: 0;
+}
+
+.dn-ly-shine {
+  opacity: 0.9;
+}
+
+/* Nút Google viên nhộng 3 cột phát sáng (chảy gradient + halo thở + vệt chéo + xoay G 360°) */
+.dn-nut-google {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 40px 1fr 24px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 52px;
+  padding: 0 12px 0 6px;
+  border-radius: 9999px;
+  background: linear-gradient(110deg, #f59e0b 0%, #fbbf24 45%, #d97706 100%);
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+  color: #1f1103;
+  box-shadow:
+    0 0 24px 0 rgba(245, 158, 11, 0.48),
+    0 10px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 251, 235, 0.8);
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 260ms ease-out,
+    filter 200ms ease-out;
+}
+
+.dn-nut-google::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 46%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.42),
+    transparent
+  );
+  transform: translateX(-160%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.dn-gicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+  transition:
+    transform 680ms cubic-bezier(0.2, 0.9, 0.3, 1.35),
+    box-shadow 260ms ease-out;
+}
+
+.dn-google-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition:
+    opacity 220ms ease-out,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dn-nut-google:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.015);
+  filter: brightness(1.06) saturate(1.06);
+  box-shadow:
+    0 0 34px 2px rgba(251, 191, 36, 0.78),
+    0 16px 32px -10px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 251, 235, 0.92);
+}
+
+.dn-nut-google:hover:not(:disabled) .dn-gicon {
+  transform: rotate(360deg) scale(1.08);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.38);
+}
+
+.dn-nut-google:hover:not(:disabled) .dn-google-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.dn-nut-google:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 80ms;
+}
+
+.dn-nut-google:focus-visible {
+  outline: 2px solid #fde68a;
+  outline-offset: 3px;
+}
+
+@keyframes dn-hien-len {
+  from { opacity: 0; translate: 0 14px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+@keyframes dn-header-vao {
+  from { opacity: 0; translate: 0 -10px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+
+@keyframes dn-tieu-de-vao {
+  from { opacity: 0; translate: 0 14px; clip-path: inset(0 0 22% 0); }
+  to   { opacity: 1; translate: 0 0; clip-path: inset(0 0 0 0); }
+}
+
+@keyframes dn-vs-rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.975); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dn-vs-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-16px); }
+}
+
+@keyframes dn-vien-chay-quay {
+  from { --dn-vien-goc: 0deg; }
+  to   { --dn-vien-goc: 360deg; }
+}
+
+@keyframes dn-de-xoay {
+  from { transform: translateX(-50%) rotateX(72deg) rotateZ(0deg); }
+  to   { transform: translateX(-50%) rotateX(72deg) rotateZ(360deg); }
+}
+
+@keyframes dn-hao-quang-bia {
+  0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(0.92); }
+  50%      { opacity: 1; transform: translate(-50%, -50%) scale(1.09); }
+}
+
+@keyframes dn-bot-len {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.7); }
+  20%  { opacity: 0.92; }
+  80%  { opacity: 0.78; }
+  100% { opacity: 0; transform: translateY(-48px) scale(1.1); }
+}
+
+@keyframes dn-song-lac {
+  0%, 100% { transform: translateX(-2px); }
+  50%      { transform: translateX(2px); }
+}
+
+@keyframes dn-giot-chay {
+  0%        { opacity: 0; transform: translateY(0); }
+  20%       { opacity: 0.9; }
+  75%       { opacity: 0.65; transform: translateY(18px); }
+  100%      { opacity: 0; transform: translateY(22px); }
+}
+
+@keyframes dn-lap-lanh {
+  0%, 100% { opacity: 0.45; transform: scale(0.88); }
+  50%      { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes dn-lg-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes dn-lg-halo {
+  0%, 100% {
+    box-shadow:
+      0 0 22px 0 rgba(245, 158, 11, 0.44),
+      0 10px 24px -8px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 251, 235, 0.8);
+  }
+  50% {
+    box-shadow:
+      0 0 32px 3px rgba(251, 191, 36, 0.68),
+      0 0 0 5px rgba(251, 191, 36, 0.14),
+      0 12px 26px -8px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 251, 235, 0.9);
+  }
+}
+
+@keyframes dn-lg-sheen {
+  0%        { transform: translateX(-160%) skewX(-18deg); }
+  45%, 100% { transform: translateX(340%) skewX(-18deg); }
+}
+
+@keyframes dn-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+/* Toàn bộ chuyển động chạy mượt trong prefers-reduced-motion: no-preference;
+   trạng thái mặc định luôn hiển thị rõ nét nếu người dùng tắt hiệu ứng. */
+@media (prefers-reduced-motion: no-preference) {
+  .dn-anim-header {
+    animation: dn-header-vao 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .dn-anim-eyebrow {
+    animation: dn-hien-len 560ms cubic-bezier(0.22, 1, 0.36, 1) 40ms both;
+  }
+  .dn-anim-tieu-de {
+    animation: dn-tieu-de-vao 720ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+  }
+  .dn-anim-khung {
+    animation: dn-vs-rise 520ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 120ms both;
+  }
+  .dn-anim-khung.dn-shake {
+    animation: dn-shake 420ms ease-in-out;
+  }
+  .dn-vien-chay,
+  .dn-vien-toa {
+    animation: dn-vien-chay-quay 4.2s linear infinite;
+  }
+  .dn-ring-1 {
+    animation: dn-vs-float 14s ease-in-out infinite;
+  }
+  .dn-ring-2 {
+    animation: dn-vs-float 18s ease-in-out infinite reverse;
+  }
+  .dn-ly-de-3d {
+    animation: dn-de-xoay 16s linear infinite;
+  }
+  .dn-ly-hao-quang {
+    animation: dn-hao-quang-bia 4s ease-in-out infinite;
+  }
+  .dn-bot-bia {
+    animation: dn-bot-len var(--d, 2.8s) ease-in var(--t, 0s) infinite;
+  }
+  .dn-song-bia {
+    animation: dn-song-lac 3.2s ease-in-out infinite;
+  }
+  .dn-giot-bot {
+    animation: dn-giot-chay 4.8s ease-in 1.2s infinite;
+  }
+  .dn-ly-shine {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: dn-lap-lanh 2.8s ease-in-out infinite;
+  }
+  .dn-nut-google {
+    animation:
+      dn-lg-flow 6s ease-in-out 1s infinite,
+      dn-lg-halo 3.2s ease-in-out 1s infinite;
+  }
+  .dn-nut-google::after {
+    animation: dn-lg-sheen 3.6s ease-in-out 1.2s infinite;
+  }
+  .dn-nut-google:hover:not(:disabled) {
+    animation: dn-lg-flow 3s ease-in-out infinite;
+  }
+  .dn-nut-google:hover:not(:disabled)::after {
+    animation: dn-lg-sheen 1.4s ease-in-out infinite;
+  }
+  .dn-anim-loi {
+    animation: dn-hien-len 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .dn-tieu-de,
-  .dn-kinh { animation: none !important; }
+  .dn-nut-google,
+  .dn-gicon,
+  .dn-google-arrow,
+  .dn-khung-dang-nhap,
+  .dn-ly-3d-body {
+    transition: none;
+  }
+  .dn-nut-google:hover:not(:disabled),
+  .dn-nut-google:hover:not(:disabled) .dn-gicon {
+    transform: none;
+  }
 }
 
 /*

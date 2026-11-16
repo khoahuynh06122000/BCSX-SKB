@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { AlertCircle, Loader2, UserPlus } from "lucide-react";
+import { type CSSProperties, useEffect, useRef } from "react";
+import { AlertCircle, ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
 
 /**
  * MÀN HÌNH ĐĂNG NHẬP
@@ -47,11 +47,20 @@ const PHONG_DAY = 1.075;
 /** Các phân hệ của hệ thống, bày ra để người mới biết mình sắp vào đâu. */
 const PHAN_HE = ["Nhập kho", "Xuất kho", "Công nợ", "Báo cáo", "Đơn BNC"];
 
-const CAC_BUOC = [
-  "Đăng nhập bằng tài khoản Google của bạn.",
-  "Tài khoản vào trạng thái CHỜ DUYỆT — chưa xem được số liệu, đây là bình thường.",
-  "Báo chủ sở hữu duyệt. Duyệt xong chỉ cần tải lại trang.",
+/** Các bọt ga vàng li ti sủi tăm bên trong thân ly bia 3D */
+const BOT_BIA: Array<{ cx: number; cy: number; r: number; t: string; d: string }> = [
+  { cx: 88, cy: 112, r: 2.1, t: "0s", d: "2.6s" },
+  { cx: 102, cy: 116, r: 1.4, t: "0.5s", d: "2.2s" },
+  { cx: 114, cy: 110, r: 2.4, t: "0.9s", d: "3.0s" },
+  { cx: 95, cy: 104, r: 1.3, t: "1.4s", d: "2.4s" },
+  { cx: 122, cy: 115, r: 1.8, t: "0.2s", d: "2.8s" },
+  { cx: 107, cy: 102, r: 1.6, t: "1.8s", d: "2.5s" },
+  { cx: 84, cy: 100, r: 1.2, t: "1.1s", d: "2.1s" },
+  { cx: 118, cy: 106, r: 2.0, t: "2.1s", d: "2.9s" },
 ];
+
+const cssVar = (vars: Record<string, string>): CSSProperties =>
+  vars as CSSProperties;
 
 export default function ManHinhDangNhap({
   onLogin,
@@ -60,18 +69,11 @@ export default function ManHinhDangNhap({
   maBuild,
 }: Props) {
   const anhRef = useRef<HTMLDivElement>(null);
+  const lyRef = useRef<HTMLDivElement>(null);
 
   /**
-   * ẢNH NỀN TỰ PHÓNG VÀ TRÔI RẤT CHẬM, cộng thêm một chút lệch theo con trỏ.
-   *
-   * Đây là cách phim tài liệu làm với ảnh tĩnh: ảnh không đứng chết nhưng cũng
-   * không có vật gì bên ngoài thêm vào. Bọt bia bay lên đã thử và bỏ — trên ảnh
-   * chụp nhiều chi tiết thì nó thành đốm trắng làm rối mắt.
-   *
-   * GỘP CẢ HAI VÀO MỘT VÒNG rAF, không dùng hoạt ảnh CSS cho phần phóng.
-   * Hoạt ảnh CSS luôn ĐÈ transform đặt bằng style, nên để CSS lo phần phóng thì
-   * phần lệch theo con trỏ không bao giờ hiện ra — đúng cái bẫy đã ghi trong
-   * `index.css` hồi còn cái lon giữa màn hình.
+   * ẢNH NỀN TỰ PHÓNG VÀ TRÔI RẤT CHẬM, cộng thêm một chút lệch theo con trỏ,
+   * đồng thời truyền chuyển động 4D mượt cho ly bia 3D trong cùng 1 vòng rAF.
    *
    * Ghi thẳng vào `style.transform` chứ không qua state React: mỗi khung hình
    * mà gọi setState là dựng lại cả cây giao diện 60 lần một giây.
@@ -98,10 +100,6 @@ export default function ManHinhDangNhap({
 
       /*
        * BA CHU KỲ LỆCH NHAU (28, 34, 41 giây) thay vì một chu kỳ chung.
-       *
-       * Dùng một chu kỳ thì cứ 28 giây ảnh về đúng chỗ cũ, và người ngồi lâu sẽ
-       * nhận ra cái vòng lặp. Ba số nguyên tố cùng nhau thì đường đi chỉ khép
-       * lại sau hơn mười tiếng — coi như không lặp.
        */
       const phong = PHONG_DAY + 0.035 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 28));
       const lechX = Math.sin((2 * Math.PI * t) / 34) * 1.4 + muot.x * -1.2;
@@ -109,6 +107,12 @@ export default function ManHinhDangNhap({
 
       if (anhRef.current) {
         anhRef.current.style.transform = `scale(${phong}) translate(${lechX}%, ${lechY}%)`;
+      }
+      if (lyRef.current) {
+        const noiY = Math.sin(t * 1.7) * 4;
+        const nghiengY = Math.sin(t * 1.05) * 8 + muot.x * 20;
+        const nghiengX = Math.cos(t * 0.85) * 4 - muot.y * 14;
+        lyRef.current.style.transform = `perspective(760px) translateY(${noiY.toFixed(2)}px) rotateX(${nghiengX.toFixed(2)}deg) rotateY(${nghiengY.toFixed(2)}deg)`;
       }
       id = requestAnimationFrame(chay);
     };
@@ -121,7 +125,7 @@ export default function ManHinhDangNhap({
   }, []);
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#1a0f05] text-white">
+    <div className="relative min-h-[100dvh] overflow-x-hidden overflow-y-auto bg-[#1a0f05] text-white">
       {/* Ảnh nhà nấu, phủ kín màn hình */}
       <div
         ref={anhRef}
@@ -172,8 +176,14 @@ export default function ManHinhDangNhap({
         }}
       />
 
+      {/* Lưới tọa độ mờ bên ngoài khung đăng nhập, phai dần để không đè ảnh nồi đồng */}
+      <div
+        aria-hidden="true"
+        className="dn-ambient-grid pointer-events-none absolute inset-0 z-[12]"
+      />
+
       {/* Thanh trên */}
-      <header className="absolute top-0 z-30 flex w-full items-center justify-between gap-4 px-[4%] py-6">
+      <header className="dn-anim-header absolute top-0 z-30 flex w-full items-center justify-between gap-4 px-[4%] py-6">
         <div className="flex shrink-0 items-center gap-2">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
@@ -213,116 +223,283 @@ export default function ManHinhDangNhap({
       </header>
 
       {/* Nội dung */}
-      <main className="relative z-20 flex h-full items-center px-[4%]">
-        <div className="w-full max-w-xl py-24">
-          <p
-            className="text-[0.7rem] font-bold uppercase tracking-[0.32em] text-[#f7c948]"
-            style={{ animation: "dn-hien-len 0.7s ease-out both" }}
-          >
+      <main className="relative z-20 flex min-h-[100dvh] items-center px-[4%]">
+        <div className="w-full max-w-xl py-24 sm:py-20">
+          <p className="dn-anim-eyebrow text-[0.7rem] font-bold uppercase tracking-[0.32em] text-[#f7c948]">
             BaNa Brew House · 1.400m
           </p>
 
-          <h1
-            className="dn-tieu-de mt-4"
-            style={{ animation: "dn-hien-len 0.9s ease-out 0.06s both" }}
-          >
+          <h1 className="dn-tieu-de dn-anim-tieu-de mt-3">
             Tinh hoa
             <br />
             Bia Bà Nà
           </h1>
 
-          <p
-            className="mt-5 max-w-md text-[0.95rem] leading-relaxed text-white/75"
-            style={{ animation: "dn-hien-len 1s ease-out 0.12s both" }}
-          >
-            Hệ thống quản trị kho bia của Sun World Ba Na Hills.
-          </p>
-
-          {authError && (
-            <div className="mt-6 flex max-w-md gap-3 rounded-2xl border border-rose-300/40 bg-rose-500/15 p-4 backdrop-blur">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-200" />
-              <p className="text-xs font-bold leading-relaxed text-rose-50">
-                {authError}
-              </p>
+          {/* KHỐI ĐĂNG NHẬP TỐI GIẢN (HÌNH 2) — Theo mẫu PKT chuyển sang tông Đồng/Hổ phách SKB */}
+          <div className="dn-card-wrap relative mt-5 max-w-[392px]">
+            {/* 2 vòng quỹ đạo trôi nổi phía sau khung đăng nhập */}
+            <div aria-hidden="true" className="pointer-events-none absolute -inset-16 overflow-visible">
+              <div className="dn-ring dn-ring-1" />
+              <div className="dn-ring dn-ring-2" />
             </div>
-          )}
 
-          <button
-            onClick={onLogin}
-            disabled={isAuthenticating}
-            className="mt-7 flex w-fit items-center gap-5 rounded-full bg-black/55 py-1.5 pl-6 pr-1.5 font-bold backdrop-blur transition-all hover:-translate-y-0.5 hover:bg-black/75 active:translate-y-0 disabled:opacity-60"
-            style={{ animation: "dn-hien-len 1.1s ease-out 0.18s both" }}
-          >
-            <span className="text-sm">
-              {isAuthenticating ? "Đang xác thực..." : "Đăng nhập bằng Google"}
-            </span>
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#f7c948] text-[#2a1a02]">
-              {isAuthenticating ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <svg className="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true">
-                  <path
-                    fill="#EA4335"
-                    d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                  />
-                  <path
-                    fill="#4285F4"
-                    d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                  />
-                </svg>
+            <div
+              className={`dn-khung-ao dn-anim-khung relative ${
+                authError ? "dn-shake" : ""
+              }`}
+            >
+              {/* Viền sáng & đường chạy sáng quay quanh toàn bộ khung đăng nhập */}
+              <div aria-hidden="true" className="dn-vien-toa" />
+              <div aria-hidden="true" className="dn-vien-chay" />
+
+              <section
+                aria-label="Đăng nhập hệ thống"
+                className="dn-khung-dang-nhap relative z-20 px-6 pb-5 pt-4 text-center sm:px-7"
+              >
+                {/* Ly Bia Tươi 3D / 4D nghiêng theo chuột & nổi theo thời gian */}
+                <div className="dn-ly-stage mx-auto mb-1.5 h-[122px] w-[190px]">
+                  <div aria-hidden="true" className="dn-ly-hao-quang" />
+                  <div aria-hidden="true" className="dn-ly-de-3d" />
+                  <div ref={lyRef} className="dn-ly-3d-body relative z-10 h-full w-full">
+                    <svg
+                      className="h-full w-full overflow-visible"
+                      viewBox="0 0 220 154"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        {/* Màu bia hổ phách khối trụ 3D */}
+                        <linearGradient id="skbBeer3D" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#92400e" />
+                          <stop offset="22%" stopColor="#f59e0b" />
+                          <stop offset="48%" stopColor="#fde047" />
+                          <stop offset="76%" stopColor="#d97706" />
+                          <stop offset="100%" stopColor="#78350f" />
+                        </linearGradient>
+                        {/* Chiều sâu đáy ly pha lê */}
+                        <linearGradient id="skbBeerDepth" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+                          <stop offset="65%" stopColor="rgba(217,119,6,0.05)" />
+                          <stop offset="100%" stopColor="rgba(69,26,3,0.58)" />
+                        </linearGradient>
+                        {/* Lớp vỏ kính thủy tinh mờ */}
+                        <linearGradient id="skbGlassShell" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="rgba(255,255,255,0.28)" />
+                          <stop offset="18%" stopColor="rgba(255,255,255,0.08)" />
+                          <stop offset="82%" stopColor="rgba(255,255,255,0.05)" />
+                          <stop offset="100%" stopColor="rgba(254,243,199,0.24)" />
+                        </linearGradient>
+                        {/* Tia phản chiếu sáng bóng bên hông ly */}
+                        <linearGradient id="skbGlassSheen" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="rgba(255,255,255,0.75)" />
+                          <stop offset="50%" stopColor="rgba(255,255,255,0.26)" />
+                          <stop offset="100%" stopColor="rgba(255,255,255,0.04)" />
+                        </linearGradient>
+                        {/* Bọt bia trắng kem bồng bềnh 3D */}
+                        <linearGradient id="skbFoam3D" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#ffffff" />
+                          <stop offset="65%" stopColor="#fef3c7" />
+                          <stop offset="100%" stopColor="#fcd34d" />
+                        </linearGradient>
+                        {/* Vùng cắt giữ bia & bọt ga nằm trọn bên trong lòng ly */}
+                        <clipPath id="skbBeerClip">
+                          <path d="M74 58 L79 124 Q106 132 133 124 L138 58 Z" />
+                        </clipPath>
+                      </defs>
+
+                      {/* Quai ly thủy tinh 3D bên phải */}
+                      <path
+                        d="M137 64 C162 64 166 76 165 92 C164 108 158 117 134 117"
+                        fill="none"
+                        stroke="rgba(254, 243, 199, 0.55)"
+                        strokeWidth="8.5"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M138 64 C161 64 164 76 163 92 C162 107 156 116 135 116"
+                        fill="none"
+                        stroke="rgba(255, 255, 255, 0.28)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
+
+                      {/* Bóng đổ nhẹ trên đĩa đế */}
+                      <ellipse cx="106" cy="138" rx="34" ry="6" fill="rgba(0,0,0,0.45)" />
+
+                      {/* Thân vỏ kính ngoài & đế thủy tinh dày */}
+                      <path
+                        d="M71 42 L77 128 Q106 138 135 128 L141 42 Z"
+                        fill="url(#skbGlassShell)"
+                        stroke="rgba(254, 243, 199, 0.52)"
+                        strokeWidth="1.4"
+                      />
+
+                      {/* Khối bia hổ phách 3D + Sóng bề mặt + Bọt ga sủi */}
+                      <g clipPath="url(#skbBeerClip)">
+                        <rect x="70" y="56" width="72" height="78" fill="url(#skbBeer3D)" />
+                        <rect x="70" y="56" width="72" height="78" fill="url(#skbBeerDepth)" />
+                        {/* Mặt sóng bia chuyển động nhẹ */}
+                        <path
+                          d="M66 60 Q86 55 106 60 T146 60 L146 134 L66 134 Z"
+                          fill="rgba(253, 224, 71, 0.24)"
+                          className="dn-song-bia"
+                        />
+                        {/* Hạt ga vàng li ti sủi lên */}
+                        {BOT_BIA.map((b) => (
+                          <circle
+                            key={`${b.cx}-${b.cy}`}
+                            cx={b.cx}
+                            cy={b.cy}
+                            r={b.r}
+                            fill="#fef9c3"
+                            className="dn-bot-bia"
+                            style={cssVar({ "--t": b.t, "--d": b.d })}
+                          />
+                        ))}
+                      </g>
+
+                      {/* 3 rãnh vát khối thủy tinh tạo cảm giác cốc vại Beer Plaza */}
+                      <path
+                        d="M86 68 L88 122 M106 69 L106 125 M126 68 L124 122"
+                        stroke="rgba(120, 53, 15, 0.26)"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                      />
+
+                      {/* Bóng sáng thủy tinh dọc mép trái & đường viền miệng ly elip 3D */}
+                      <path
+                        d="M76 54 L80 121 L86 123 L83 54 Z"
+                        fill="url(#skbGlassSheen)"
+                        opacity="0.72"
+                      />
+                      <path
+                        d="M78 127 Q106 136 134 127 L133 133 Q106 141 79 133 Z"
+                        fill="rgba(255, 248, 225, 0.34)"
+                      />
+                      <ellipse
+                        cx="106"
+                        cy="43"
+                        rx="35"
+                        ry="6.5"
+                        fill="none"
+                        stroke="rgba(254, 243, 199, 0.55)"
+                        strokeWidth="1.2"
+                      />
+
+                      {/* Vương miện bọt bia kem trắng 3D tràn nhẹ mép ly */}
+                      <path
+                        d="M69 50 C67 38 78 30 89 33 C94 23 111 21 120 29 C130 25 144 33 143 46 C145 53 138 58 131 56 C125 63 115 62 110 56 C103 61 93 60 88 55 C81 60 71 57 69 50 Z"
+                        fill="url(#skbFoam3D)"
+                        stroke="rgba(255,255,255,0.65)"
+                        strokeWidth="0.9"
+                      />
+                      {/* Mảng bọt sánh vương tràn xuống thân trước */}
+                      <path
+                        d="M84 53 C87 62 91 63 94 55 C97 67 104 68 106 56"
+                        fill="url(#skbFoam3D)"
+                      />
+                      {/* Giọt bọt bia rơi nhẹ theo thời gian */}
+                      <circle
+                        cx="123"
+                        cy="58"
+                        r="2.4"
+                        fill="#fef3c7"
+                        className="dn-giot-bot"
+                      />
+
+                      {/* Tia lấp lánh 3D bên ly */}
+                      <g className="dn-ly-shine" fill="#fef08a">
+                        <path d="M162 28 L164 33 L169 35 L164 37 L162 42 L160 37 L155 35 L160 33 Z" />
+                        <path d="M56 44 L57.5 47.5 L61 49 L57.5 50.5 L56 54 L54.5 50.5 L51 49 L54.5 47.5 Z" />
+                      </g>
+                    </svg>
+                  </div>
+                </div>
+
+              {/* Thương hiệu & tiêu đề gọn như mẫu PKT */}
+              <p className="dn-brand-org text-[10px] font-bold uppercase tracking-[0.22em] text-[#fbbf24]">
+                Sun World Bà Nà Hills
+              </p>
+              <p className="mt-1 text-[12.5px] font-medium text-white/75">
+                BaNa Brew House · Xưởng & Kho
+              </p>
+              <h2 className="dn-card-title mt-1 text-[22px] font-semibold tracking-tight text-[#fefce8]">
+                Kho Bia Nội Bộ
+              </h2>
+              <p
+                className="mx-auto mt-1.5 max-w-[295px] text-[13px] leading-relaxed text-white/70"
+                style={{ textWrap: "balance" }}
+              >
+                Nhập xuất tồn, duyệt phiếu 2 rào và truy xuất lô bia theo thời gian thực.
+              </p>
+
+              {authError && (
+                <div
+                  role="alert"
+                  className="dn-anim-loi mt-3.5 flex gap-2.5 rounded-2xl border border-rose-300/40 bg-rose-500/15 p-3 text-left"
+                >
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-200" aria-hidden="true" />
+                  <p className="text-xs font-bold leading-relaxed text-rose-50">
+                    {authError}
+                  </p>
+                </div>
               )}
-            </span>
-          </button>
 
-          {/*
-            ĐĂNG KÝ TÀI KHOẢN MỚI.
+              {/* Nút viên nhộng 3 cột phát sáng */}
+              <button
+                type="button"
+                onClick={onLogin}
+                disabled={isAuthenticating}
+                className="dn-nut-google mt-4 disabled:cursor-wait disabled:opacity-65"
+              >
+                <span className="dn-gicon">
+                  {isAuthenticating ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-[#b45309]" aria-hidden="true" />
+                  ) : (
+                    <svg className="h-[19px] w-[19px]" viewBox="0 0 48 48" aria-hidden="true">
+                      <path
+                        fill="#EA4335"
+                        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                      />
+                      <path
+                        fill="#4285F4"
+                        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                      />
+                    </svg>
+                  )}
+                </span>
+                <span className="text-center text-[14px] font-extrabold tracking-tight text-[#231303]">
+                  {isAuthenticating ? "Đang xác thực..." : "Đăng nhập bằng Google"}
+                </span>
+                <span className="dn-google-arrow" aria-hidden="true">
+                  <ArrowRight className="h-4 w-4 text-[#231303]" />
+                </span>
+              </button>
 
-            App đăng nhập bằng Google nên KHÔNG có form đăng ký riêng: lần đầu
-            bấm nút trên chính là đăng ký. Nhưng màn hình cũ không nói ra, nên
-            người mới nhìn vào tưởng app thiếu chỗ đăng ký rồi đi hỏi — đúng
-            chuyện đã xảy ra.
+              <p className="mt-3 text-[11.5px] leading-snug text-white/50">
+                Đăng nhập lần đầu tự tạo tài khoản ở trạng thái chờ chủ sở hữu duyệt.
+              </p>
+              </section>
+            </div>
 
-            Nói thành ba bước chứ không viết một câu: điều người mới cần biết
-            không phải "bấm nút nào" mà là "bấm xong rồi sao nữa" — họ sẽ dừng ở
-            màn hình chờ duyệt và cần biết đó là bình thường.
-          */}
-          <div
-            className="dn-kinh mt-9 max-w-md rounded-2xl p-5"
-            style={{ animation: "dn-hien-len 1.2s ease-out 0.24s both" }}
-          >
-            <div className="flex items-center gap-2.5">
-              <UserPlus className="h-4 w-4 text-white/70" />
-              <span className="text-[0.7rem] font-bold uppercase tracking-[0.15em] text-white/70">
-                Chưa có tài khoản?
+            {/* Huy hiệu bảo mật ngay dưới khung đăng nhập */}
+            <div className="mt-3.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] font-medium text-white/55">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-300/75" aria-hidden="true" />
+                Bảo mật cấp doanh nghiệp
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-amber-300/75" aria-hidden="true" />
+                Dữ liệu nội bộ SKB
               </span>
             </div>
-
-            <p className="mt-2.5 text-[0.8rem] leading-relaxed text-white/75">
-              Không cần đăng ký riêng và không phải đặt mật khẩu mới — bấm
-              <strong className="text-white"> Đăng nhập bằng Google</strong> ở
-              trên là tài khoản được tạo luôn.
-            </p>
-
-            <ol className="mt-4 space-y-2.5">
-              {CAC_BUOC.map((buoc, i) => (
-                <li key={buoc} className="flex gap-3">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[0.65rem] font-black text-white/90">
-                    {i + 1}
-                  </span>
-                  <span className="text-[0.78rem] leading-relaxed text-white/70">
-                    {buoc}
-                  </span>
-                </li>
-              ))}
-            </ol>
           </div>
         </div>
       </main>
