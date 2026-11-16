@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // =============================================================================
-// QUY TAC PHAN QUYEN - BiaLogistics
+// QUY TAC PHAN QUYEN - BiaLogistics (Paperless 2-Gate Brewery -> Warehouse)
 //
 // Nguyen tac cot loi: KHONG BAO GIO quyet dinh quyen dua tren tai lieu ma
 // chinh nguoi dung ghi duoc.
@@ -10,6 +10,90 @@ rules_version = '2';
 // ma tai lieu do lai cho phep chinh nguoi dung ghi -> ai cung tu phong minh
 // lam OWNER duoc. Ban nay xac dinh chu so huu bang EMAIL trong ID token do
 // Google cap, khong the gia mao.
+// =============================================================================
+//
+// =============================================================================
+// Assumed Data Model
+// =============================================================================
+//
+// Collection: users/{uid}
+// Fields:
+//   - uid: string (required on create, == auth.uid, <= 128, immutable)
+//   - email: string (required on create, == auth email, <= 254, immutable)
+//   - role: string (required, 'PENDING' on create; one of OWNER, KE_TOAN,
+//     QUAN_LY_XUONG, SAN_XUAT, NHAP_KHO, XUAT_KHO, DNC, PENDING)
+//   - name: string|null (optional, <= 200)
+//   - photoURL: string|null (optional, <= 2000)
+//   - createdAt: string|null (optional, <= 64)
+//   - updatedAt: string|null (optional, <= 64)
+//   - approvedBy: string|null (optional, <= 254)
+//   - pinHash: string|null (optional, <= 512)
+//   - pinUpdatedAt: string|null (optional, <= 64)
+//
+// Collection: slips/{slipId} (Document ID = code, e.g. PN-YYMMDD-NN)
+// Fields:
+//   - id: string (optional, == slipId, <= 64, immutable)
+//   - code: string (required on create, == slipId, <= 64, immutable)
+//   - date: string (required on create, yyyy-MM-dd, <= 32)
+//   - dateKey: string|null (optional, <= 32)
+//   - seq: number|null (optional, 0..100000)
+//   - status: string (required, in ['draft', 'printed', 'cho_ql_xuong',
+//     'cho_kho_tong', 'tra_lai', 'signed'])
+//   - printedAt, signedAt, createdAt, updatedAt, rejectedAt: string|null (<= 64)
+//   - signedBy, rejectedBy: string|null (<= 254)
+//   - createdBy, updatedBy: string|null (<= 150)
+//   - note: string|null (<= 2000)
+//   - rejectedReason: string|null (<= 2000)
+//   - creatorSig, managerSig, warehouseSig: map|null (ChuKyDienTu:
+//     { name, email, uid?, signedAt, token, note? })
+//   - FORBIDDEN: signedPhotoUrls (images live only in anh_chung_tu)
+//
+// Collection: ke_hoach_sx/{planId}
+// Fields:
+//   - id: string|null (optional, <= 128, immutable if set)
+//   - date: string (required, yyyy-MM-dd..., 8..32)
+//   - productId: string (required, 1..64)
+//   - targetQty: number (required, 0..10000000)
+//   - batchHint: string|null (optional, <= 128)
+//   - source: string (required, 0..128)
+//   - note: string|null (optional, <= 2000)
+//   - createdBy: string (required, 1..150)
+//   - createdAt: string (required, 1..64)
+//   - updatedAt: string|null (optional, <= 64)
+//   - updatedBy, uid, productName, unit, published (optional bounded fields)
+//
+// Collection: danh_gia_sx/{evalId}
+// Fields:
+//   - id: string|null (optional, <= 128, immutable if set)
+//   - date: string (required, yyyy-MM-dd..., 8..32)
+//   - shift: string (required, 1..100)
+//   - productId: string (required, 1..64)
+//   - plannedQty: number (required, 0..10000000)
+//   - actualBrewedQty: number (required, 0..10000000)
+//   - actualHandoverQty, lossQty: number|null (optional, 0..10000000)
+//   - rating: string (required, 1..100)
+//   - note: string (required, 0..2000)
+//   - createdBy: string (required, 1..150)
+//   - createdAt: string (required, 1..64)
+//   - updatedAt, updatedBy, uid, productName, unit (optional bounded fields)
+//
+// Collection: kiem_ke_bon/{invId}
+// Fields:
+//   - id: string|null (optional, <= 128, immutable if set)
+//   - month: string (required, yyyy-MM..., 6..20)
+//   - tankId: string (required, 1..64)
+//   - tankGroup: string (required, in ['FST', 'BBT'])
+//   - productId: string (required, 1..64)
+//   - batchNumber: string (required, 0..128)
+//   - liters: number (required, 0..1000000)
+//   - statusLabel: string|null (optional, <= 200)
+//   - createdBy: string (required, 1..150)
+//   - createdAt: string (required, 1..64)
+//   - updatedAt, updatedBy, uid, note, productName, tankName (optional bounded)
+//
+// Existing Collections (preserved intact):
+//   - test/connection, transactions, revenue, sap_jobs, diem_ban, hoa_don,
+//     anh_chung_tu, anh_minh_chung, do_luong, partners, so_phieu, bo_dem
 // =============================================================================
 
 service cloud.firestore {
@@ -82,19 +166,23 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     // Da duoc duyet: xem duoc it nhat mot phan du lieu.
+    // Bao gom QUAN_LY_XUONG (duyet Rao 1 & Ke hoach SX) va SAN_XUAT (lap phieu
+    // giao bia, danh gia ngay, kiem ke bon FST/BBT).
     function isApproved() {
       return isOwner() ||
         (isSignedIn() &&
-          (role() == 'KE_TOAN' || role() == 'NHAP_KHO' ||
+          (role() == 'KE_TOAN' || role() == 'QUAN_LY_XUONG' ||
+           role() == 'SAN_XUAT' || role() == 'NHAP_KHO' ||
            role() == 'XUAT_KHO' || role() == 'DNC'));
     }
 
     // -------------------------------------------------------------------------
-    // PHAN QUYEN THEO CHIEU
+    // PHAN QUYEN THEO CHIEU VA QUY TRINH 2 RAO XUONG -> KHO TONG
     //
-    // NHAP_KHO chi ghi duoc chieu nhap, XUAT_KHO chi ghi duoc chieu xuat. Ca hai
-    // VAN XEM DUOC HET: ton kho, bao cao, lich su deu tron ca hai chieu nen chan
-    // xem thi nguoi nhap kho khong tra noi mot lo hang.
+    // NHAP_KHO chi ghi duoc chieu nhap (duyet Rao 2), XUAT_KHO chi ghi duoc
+    // chieu xuat. QUAN_LY_XUONG duyet Rao 1 va lap Ke hoach SX; SAN_XUAT lap
+    // phieu giao bia, danh gia ngay, kiem ke bon. Tat ca vai tro trong kho/xuong
+    // VAN XEM DUOC HET qua xemKho().
     //
     // DNC chi XEM, va chi xem chieu xuat - vai tro duy nhat bi chan ca phan xem.
     //
@@ -120,19 +208,33 @@ service cloud.firestore {
       return isSignedIn() && role() == 'DNC';
     }
 
-    // Xem duoc du lieu KHO: ton kho, nhap kho, phieu nhap, bao cao.
-    // Moi vai tro da duyet TRU DNC.
+    // Xem duoc du lieu KHO: ton kho, nhap kho, phieu nhap, bao cao, ke hoach,
+    // danh gia, kiem ke bon. Moi vai tro da duyet TRU DNC.
     function xemKho() {
       return isApproved() && !laDNC();
     }
 
-    // Ghi duoc chieu NHAP: nhap kho, ton dau ky, phieu nhap va anh phieu da ky.
-    function ghiNhapKho() {
+    // Duyet Rao 1 (xuat xuong) va quan ly Ke hoach san xuat.
+    function duyetXuong() {
+      return isToanQuyenKho() || (isSignedIn() && role() == 'QUAN_LY_XUONG');
+    }
+
+    // Duyet Rao 2 (kho tong xac nhan nhan bia vao ton kho).
+    function duyetKhoTong() {
       return isToanQuyenKho() || (isSignedIn() && role() == 'NHAP_KHO');
     }
 
-    // Phieu nhap da ky chua (= da co anh ky, hang da vao ton kho). Trang thai
-    // 'signed' ghi CUNG LO voi anh ky o bang anh_chung_tu.
+    // Ghi duoc chieu NHAP: nhap kho, ton dau ky, phieu nhap, danh gia san
+    // xuat, kiem ke bon, va anh chung tu chieu nhap.
+    function ghiNhapKho() {
+      return isToanQuyenKho() ||
+        (isSignedIn() &&
+          (role() == 'NHAP_KHO' || role() == 'QUAN_LY_XUONG' || role() == 'SAN_XUAT'));
+    }
+
+    // Phieu nhap da ky chua (= da qua Rao 2 / co anh ky, hang da vao ton kho).
+    // Trang thai 'signed' ghi CUNG LO voi anh ky o bang anh_chung_tu (hoac
+    // duyet Rao 2 voi warehouseSig).
     function phieuDaKy(code) {
       return exists(/databases/$(database)/documents/slips/$(code))
         && get(/databases/$(database)/documents/slips/$(code))
@@ -186,6 +288,324 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // Ham kiem tra kieu va gioi han kich thuoc du lieu (chong DoS / type juggling)
+    // -------------------------------------------------------------------------
+    function reqStr(data, field, minLen, maxLen) {
+      return field in data &&
+        data[field] is string &&
+        data[field].size() >= minLen &&
+        data[field].size() <= maxLen;
+    }
+
+    function optStr(data, field, maxLen) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function reqNum(data, field, minVal, maxVal) {
+      return field in data &&
+        data[field] is number &&
+        data[field] >= minVal &&
+        data[field] <= maxVal;
+    }
+
+    function optNum(data, field, minVal, maxVal) {
+      return !(field in data) ||
+        data[field] == null ||
+        (data[field] is number && data[field] >= minVal && data[field] <= maxVal);
+    }
+
+    function optBool(data, field) {
+      return !(field in data) ||
+        data[field] == null ||
+        data[field] is bool;
+    }
+
+    // -------------------------------------------------------------------------
+    // Domain Validators
+    // -------------------------------------------------------------------------
+    function userAllowedKeys() {
+      return [
+        'uid', 'email', 'name', 'photoURL', 'role',
+        'createdAt', 'updatedAt', 'approvedBy', 'pinHash', 'pinUpdatedAt'
+      ];
+    }
+
+    function validRoles() {
+      return [
+        'OWNER', 'KE_TOAN', 'QUAN_LY_XUONG', 'SAN_XUAT',
+        'NHAP_KHO', 'XUAT_KHO', 'DNC', 'PENDING'
+      ];
+    }
+
+    function isValidUserCreate(data, uid) {
+      return data.keys().hasOnly(userAllowedKeys())
+        && reqStr(data, 'uid', 1, 128)
+        && data.uid == uid
+        && reqStr(data, 'email', 1, 254)
+        && data.email == email()
+        && reqStr(data, 'role', 1, 32)
+        && data.role == 'PENDING'
+        && optStr(data, 'name', 200)
+        && optStr(data, 'photoURL', 2000)
+        && optStr(data, 'createdAt', 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'approvedBy', 254)
+        && optStr(data, 'pinHash', 512)
+        && optStr(data, 'pinUpdatedAt', 64);
+    }
+
+    function isValidUserUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(userAllowedKeys())
+        && (!('uid' in resource.data) || data.get('uid', '') == resource.data.uid)
+        && (!('email' in resource.data) || data.get('email', '') == resource.data.email)
+        && reqStr(data, 'role', 1, 32)
+        && (
+          data.role == resource.data.get('role', '')
+          || data.role in validRoles()
+        )
+        && optStr(data, 'name', 200)
+        && optStr(data, 'photoURL', 2000)
+        && optStr(data, 'createdAt', 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'approvedBy', 254)
+        && optStr(data, 'pinHash', 512)
+        && optStr(data, 'pinUpdatedAt', 64);
+    }
+
+    // Chu ky dien tu (ChuKyDienTu) tren phieu nhap Paperless.
+    function isValidChuKy(sig) {
+      return sig is map
+        && sig.keys().hasOnly(['name', 'email', 'uid', 'signedAt', 'token', 'note'])
+        && sig.keys().hasAll(['name', 'email', 'signedAt', 'token'])
+        && sig.name is string && sig.name.size() <= 150
+        && sig.email is string && sig.email.size() <= 254
+        && (!('uid' in sig) || sig.uid == null || (sig.uid is string && sig.uid.size() <= 128))
+        && sig.signedAt is string && sig.signedAt.size() > 0 && sig.signedAt.size() <= 64
+        && sig.token is string && sig.token.size() > 0 && sig.token.size() <= 64
+        && (!('note' in sig) || sig.note == null || (sig.note is string && sig.note.size() <= 1000));
+    }
+
+    function optChuKy(data, field) {
+      return !(field in data) || data[field] == null || isValidChuKy(data[field]);
+    }
+
+    function sigUidMatchesOnCreate(field) {
+      return !(field in request.resource.data)
+        || request.resource.data[field] == null
+        || !('uid' in request.resource.data[field])
+        || request.resource.data[field].uid == null
+        || request.resource.data[field].uid == request.auth.uid;
+    }
+
+    function sigUidMatchesIfChanged(field) {
+      return !(field in request.resource.data)
+        || request.resource.data[field] == null
+        || request.resource.data[field] == resource.data.get(field, null)
+        || !('uid' in request.resource.data[field])
+        || request.resource.data[field].uid == null
+        || request.resource.data[field].uid == request.auth.uid;
+    }
+
+    function slipAllowedKeys() {
+      return [
+        'id', 'code', 'date', 'dateKey', 'seq', 'status',
+        'printedAt', 'signedAt', 'signedBy', 'note',
+        'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
+        'creatorSig', 'managerSig', 'warehouseSig',
+        'rejectedBy', 'rejectedReason', 'rejectedAt'
+      ];
+    }
+
+    function isValidSlipCommon(data, slipId) {
+      return optStr(data, 'id', 64)
+        && (!('id' in data) || data.id == null || data.id == slipId)
+        && optStr(data, 'code', 64)
+        && (!('code' in data) || data.code == null || data.code == slipId)
+        && optStr(data, 'date', 32)
+        && optStr(data, 'dateKey', 32)
+        && optNum(data, 'seq', 0, 100000)
+        && reqStr(data, 'status', 1, 32)
+        && data.status in ['draft', 'printed', 'cho_ql_xuong', 'cho_kho_tong', 'tra_lai', 'signed']
+        && optStr(data, 'printedAt', 64)
+        && optStr(data, 'signedAt', 64)
+        && optStr(data, 'signedBy', 254)
+        && optStr(data, 'note', 2000)
+        && optStr(data, 'createdAt', 64)
+        && optStr(data, 'createdBy', 150)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'updatedBy', 150)
+        && optChuKy(data, 'creatorSig')
+        && optChuKy(data, 'managerSig')
+        && optChuKy(data, 'warehouseSig')
+        && optStr(data, 'rejectedBy', 254)
+        && optStr(data, 'rejectedReason', 2000)
+        && optStr(data, 'rejectedAt', 64);
+    }
+
+    function isValidSlipCreate(data, slipId) {
+      return data.keys().hasOnly(slipAllowedKeys())
+        && reqStr(data, 'code', 1, 64)
+        && data.code == slipId
+        && reqStr(data, 'date', 1, 32)
+        && isValidSlipCommon(data, slipId)
+        && (
+          isToanQuyenKho()
+          || (
+            (duyetXuong() || data.get('managerSig', null) == null)
+            && (duyetKhoTong() || data.get('warehouseSig', null) == null)
+            && sigUidMatchesOnCreate('creatorSig')
+            && sigUidMatchesOnCreate('managerSig')
+            && sigUidMatchesOnCreate('warehouseSig')
+          )
+        );
+    }
+
+    function isValidSlipUpdate(data, slipId) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(slipAllowedKeys())
+        && isValidSlipCommon(data, slipId)
+        && (!('id' in resource.data) || data.get('id', '') == resource.data.id)
+        && (!('code' in resource.data) || data.get('code', '') == resource.data.code)
+        && (
+          isToanQuyenKho()
+          || (
+            (duyetXuong()
+              || (!(data.status in ['cho_kho_tong', 'signed']) && data.get('managerSig', null) == null)
+              || data.get('managerSig', null) == resource.data.get('managerSig', null))
+            && (duyetKhoTong()
+              || (data.status != 'signed' && data.get('warehouseSig', null) == null)
+              || data.get('warehouseSig', null) == resource.data.get('warehouseSig', null))
+            && (!(data.status in ['cho_kho_tong', 'signed'])
+              || resource.data.get('creatorSig', null) == null
+              || data.get('creatorSig', null) == resource.data.get('creatorSig', null))
+            && sigUidMatchesIfChanged('creatorSig')
+            && sigUidMatchesIfChanged('managerSig')
+            && sigUidMatchesIfChanged('warehouseSig')
+          )
+        );
+    }
+
+    function keHoachAllowedKeys() {
+      return [
+        'id', 'date', 'productId', 'targetQty', 'batchHint',
+        'source', 'note', 'createdBy', 'createdAt', 'updatedAt',
+        'updatedBy', 'uid', 'published', 'productName', 'unit'
+      ];
+    }
+
+    function isValidKeHoachSXCommon(data) {
+      return optStr(data, 'id', 128)
+        && reqStr(data, 'date', 8, 32)
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}.*')
+        && reqStr(data, 'productId', 1, 64)
+        && reqNum(data, 'targetQty', 0, 10000000)
+        && optStr(data, 'batchHint', 128)
+        && reqStr(data, 'source', 0, 128)
+        && optStr(data, 'note', 2000)
+        && reqStr(data, 'createdBy', 0, 150)
+        && reqStr(data, 'createdAt', 1, 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'updatedBy', 150)
+        && optStr(data, 'uid', 128)
+        && optBool(data, 'published')
+        && optStr(data, 'productName', 200)
+        && optStr(data, 'unit', 50);
+    }
+
+    function isValidKeHoachSXCreate(data) {
+      return data.keys().hasOnly(keHoachAllowedKeys())
+        && isValidKeHoachSXCommon(data);
+    }
+
+    function isValidKeHoachSXUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keHoachAllowedKeys())
+        && isValidKeHoachSXCommon(data)
+        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+    }
+
+    function danhGiaAllowedKeys() {
+      return [
+        'id', 'date', 'shift', 'productId', 'plannedQty',
+        'actualBrewedQty', 'actualHandoverQty', 'lossQty',
+        'rating', 'note', 'createdBy', 'createdAt',
+        'updatedAt', 'updatedBy', 'uid', 'productName', 'unit'
+      ];
+    }
+
+    function isValidDanhGiaSXCommon(data) {
+      return optStr(data, 'id', 128)
+        && reqStr(data, 'date', 8, 32)
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}.*')
+        && reqStr(data, 'shift', 1, 100)
+        && reqStr(data, 'productId', 1, 64)
+        && reqNum(data, 'plannedQty', 0, 10000000)
+        && reqNum(data, 'actualBrewedQty', 0, 10000000)
+        && optNum(data, 'actualHandoverQty', 0, 10000000)
+        && optNum(data, 'lossQty', 0, 10000000)
+        && reqStr(data, 'rating', 1, 100)
+        && reqStr(data, 'note', 0, 2000)
+        && reqStr(data, 'createdBy', 0, 150)
+        && reqStr(data, 'createdAt', 1, 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'updatedBy', 150)
+        && optStr(data, 'uid', 128)
+        && optStr(data, 'productName', 200)
+        && optStr(data, 'unit', 50);
+    }
+
+    function isValidDanhGiaSXCreate(data) {
+      return data.keys().hasOnly(danhGiaAllowedKeys())
+        && isValidDanhGiaSXCommon(data);
+    }
+
+    function isValidDanhGiaSXUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(danhGiaAllowedKeys())
+        && isValidDanhGiaSXCommon(data)
+        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+    }
+
+    function kiemKeBonAllowedKeys() {
+      return [
+        'id', 'month', 'tankId', 'tankGroup', 'productId',
+        'batchNumber', 'liters', 'statusLabel', 'createdBy', 'createdAt',
+        'updatedAt', 'updatedBy', 'uid', 'note', 'productName', 'tankName'
+      ];
+    }
+
+    function isValidKiemKeBonCommon(data) {
+      return optStr(data, 'id', 128)
+        && reqStr(data, 'month', 6, 20)
+        && data.month.matches('^\\d{4}-\\d{2}.*')
+        && reqStr(data, 'tankId', 1, 64)
+        && reqStr(data, 'tankGroup', 3, 3)
+        && data.tankGroup in ['FST', 'BBT']
+        && reqStr(data, 'productId', 1, 64)
+        && reqStr(data, 'batchNumber', 0, 128)
+        && reqNum(data, 'liters', 0, 1000000)
+        && optStr(data, 'statusLabel', 200)
+        && reqStr(data, 'createdBy', 0, 150)
+        && reqStr(data, 'createdAt', 1, 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'updatedBy', 150)
+        && optStr(data, 'uid', 128)
+        && optStr(data, 'note', 2000)
+        && optStr(data, 'productName', 200)
+        && optStr(data, 'tankName', 150);
+    }
+
+    function isValidKiemKeBonCreate(data) {
+      return data.keys().hasOnly(kiemKeBonAllowedKeys())
+        && isValidKiemKeBonCommon(data);
+    }
+
+    function isValidKiemKeBonUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeBonAllowedKeys())
+        && isValidKiemKeBonCommon(data)
+        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+    }
+
+    // -------------------------------------------------------------------------
     // Ho so nguoi dung
     // -------------------------------------------------------------------------
     match /users/{uid} {
@@ -197,8 +617,7 @@ service cloud.firestore {
       // va phai dung email cua chinh minh. Khong the tu dat vai tro cao hon.
       allow create: if isSignedIn()
         && request.auth.uid == uid
-        && request.resource.data.role == 'PENDING'
-        && request.resource.data.email == email();
+        && isValidUserCreate(request.resource.data, uid);
 
       // Chu so huu: sua duoc moi thu (vai tro, dat lai PIN...).
       // Nguoi dung thuong: CHI sua duoc dung 2 o pinHash/pinUpdatedAt cua
@@ -211,7 +630,8 @@ service cloud.firestore {
       // quyen nguoi da cap cho minh - va neu do la nguoi cuoi cung con quyen
       // thi khong ai vao lai duoc nua. Chu so huu goc thi luon vao duoc, vi
       // quyen cua ho tinh theo email chu khong theo tai lieu nay.
-      allow update: if (
+      allow update: if isValidUserUpdate(request.resource.data) && (
+        (
           isOwner()
           && !(
             resource.data.get('email', '') == ownerEmail()
@@ -224,7 +644,10 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['pinHash', 'pinUpdatedAt'])
           && request.resource.data.role == resource.data.role
-        );
+          && reqStr(request.resource.data, 'pinHash', 1, 512)
+          && reqStr(request.resource.data, 'pinUpdatedAt', 1, 64)
+        )
+      );
 
       // Cung ly do tren: khong xoa duoc ho so cua chu so huu goc.
       allow delete: if isOwner()
@@ -284,8 +707,8 @@ service cloud.firestore {
       //
       // NGOAI LE DUY NHAT (30/10/2026, Khoa chot): nguoi nhap kho xoa duoc dong
       // NHAP cua mot phieu CHUA KY - nhap sai so luong roi xoa lam lai. Phieu
-      // chua ky thi hang chua vao ton, chua co anh nao, xoa khong mat gi.
-      // Phieu da ky anh: chi admin (xoa luon anh tren Cloudinary).
+      // chua ky (draft, printed, cho_ql_xuong, cho_kho_tong, tra_lai) thi hang
+      // chua vao ton, xoa khong mat ton kho. Phieu da ky ('signed'): chi admin.
       allow delete: if isOwner()
         || (
           ghiNhapKho()
@@ -327,11 +750,11 @@ service cloud.firestore {
     }
 
     /*
-     * Bảng gán điểm bán -> đối tác, dùng khi nạp xuất kho từ file BBGN.
+     * Bang gan diem ban -> doi tac, dung khi nap xuat kho tu file BBGN.
      *
-     * Khoá tài liệu là tên điểm bán đã chuẩn hoá, nên gán lại cùng một điểm bán
-     * là ghi đè lên chính nó. Không cho xoá: xoá một dòng gán làm hàng của điểm
-     * đó âm thầm rơi khỏi lần nạp sau, mà không có gì báo.
+     * Khoa tai lieu la ten diem ban da chuan hoa, nen gan lai cung mot diem ban
+     * la ghi de len chinh no. Khong cho xoa: xoa mot dong gan lam hang cua diem
+     * do am tham roi khoi lan nap sau, ma khong co gi bao.
      */
     match /diem_ban/{key} {
       // DNC doc duoc: bang nay dich ten diem ban ra don vi, khong co no thi don
@@ -342,13 +765,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    /*
-     * So hoa don da phat hanh, do nguoi dung dien lai sau khi xuat hoa don.
-     *
-     * Khoa tai lieu suy tu bien dot va ma BP nen dien lai la ghi de len chinh
-     * no. KHONG CHO XOA: mot so hoa don da phat hanh la chung tu da len co
-     * quan thue: dien nham thi sua lai, khong xoa dau vet.
-     */
     /*
      * HOA DON DA GHI SO.
      *
@@ -364,12 +780,6 @@ service cloud.firestore {
      * Chi mo cho CHU SO HUU, khong mo cho ke toan: ke toan van tao va sua
      * duoc so hoa don (viec hang ngay), con xoa la viec hiem va nang, phai
      * dung mot nguoi chiu trach nhiem.
-     *
-     * Giao dien chi bay nut xoa o dung nhung hoa don MO COI — xem
-     * TraCuuHoaDon.tsx. Nhung luat nay khong phan biet duoc dieu do, nen no
-     * rong hon giao dien mot chut: chu so huu mo DevTools van xoa duoc mot hoa
-     * don con nguyen dong hang. Do la danh doi co y — viet luat chat hon doi
-     * hoi doc ca bang giao dich trong rule, thu Firestore khong lam duoc.
      */
     match /hoa_don/{key} {
       allow read: if isApproved();
@@ -381,9 +791,9 @@ service cloud.firestore {
      * ANH CHUNG TU (dung lai 13/11/2026) — nguon duy nhat cua moi anh minh chung.
      *
      * Moi tam anh mot tai lieu, moc vao CHUNG TU (ma phieu nhap PN-..., hoac ma
-     * chuyen giao referenceGroupId) qua truong chungTu. Dong giao dich va phieu
-     * khong giu duong dan anh nao, nen khong luot ghi nghiep vu nao lam roi anh
-     * duoc. Xem src/anh/moHinh.ts.
+     * chuyen giao referenceGroupId, hoac ma kiem ke bon) qua truong chungTu.
+     * Dong giao dich va phieu khong giu duong dan anh nao, nen khong luot ghi
+     * nghiep vu nao lam roi anh duoc. Xem src/anh/moHinh.ts.
      *
      * Doc: ai xem duoc kho doc het; DNC chi doc anh chieu xuat.
      * Tao: chi THEM, dung chieu cua minh, ghi dung uid cua chinh nguoi tai, chi
@@ -436,29 +846,116 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // Phieu nhap kho: chi luu trang thai (in, ky), noi dung suy ra tu
-    // transactions nen khong so lech hai nguon. Anh ky nam o anh_chung_tu.
+    // Phieu nhap kho — LUONG PAPERLESS 2 BUOC RAO (Xưởng -> QL Xưởng -> Kho Tổng).
     //
-    // ANH KY LA THU LAM TANG TON KHO. Hang chi vao ton khi phieu co anh ky.
-    // Nhan vien PHAI them duoc anh (luat anh_chung_tu cho them), nhung KHONG
-    // duoc BOT: xoa anh chi admin, va phieu da ky thi chi admin ha trang thai.
+    // Noi dung dong hang suy ra tu `transactions` co cung `slipCode`.
+    // Anh hien trang Keg / anh to phieu ky nam o `anh_chung_tu`.
+    //
+    // Quy trinh trang thai:
+    //   1. NV San Xuat lap phieu (`cho_ql_xuong`, hoac luong cu `draft`/`printed`).
+    //      Khong duoc tu duyet len `cho_kho_tong` hay `signed`.
+    //   2. Quan Ly Xuong duyet Rao 1 (`cho_ql_xuong`/`draft`/`printed` ->
+    //      `cho_kho_tong`), hoac tra lai (`tra_lai`). Khong duoc tu duyet Rao 2.
+    //   3. Kho Tong (`NHAP_KHO`) duyet Rao 2 (`cho_kho_tong`, hoac phieu cu
+    //      `draft`/`printed` -> `signed`), hoac tra lai (`tra_lai`). KHONG duoc
+    //      duyet Rao 1 (`cho_kho_tong`) va KHONG duoc bo qua Rao 1 tu
+    //      `cho_ql_xuong` nhay thang len `signed` (chi OWNER/KE_TOAN moi vuot rao).
+    //   4. Phieu da ky (`signed`): CHI OWNER moi ha trang thai duoc.
     match /slips/{slipId} {
-      // Phieu nhap la chuyen cua kho, DNC khong doc.
+      // Phieu nhap la chuyen cua kho va xuong, DNC khong doc.
       allow read: if xemKho();
-      allow create: if ghiNhapKho() && khongCoAnhTrenPhieu();
-      // Phieu da ky thi chi chu so huu ha trang thai duoc (go anh ky la keo
-      // ca lo hang ra khoi ton).
-      allow update: if khongCoAnhTrenPhieu() && (
-        isOwner()
-        || (
-          ghiNhapKho()
-          && !(resource.data.get('status', '') == 'signed'
-               && request.resource.data.get('status', '') != 'signed')
-        )
-      );
-      // Phieu chua ky: nguoi nhap kho xoa duoc (xem luat transactions).
+
+      allow create: if khongCoAnhTrenPhieu()
+        && isValidSlipCreate(request.resource.data, slipId)
+        && (
+          isToanQuyenKho()
+          || (duyetXuong() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong', 'cho_kho_tong'])
+          || (duyetKhoTong() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong', 'signed'])
+          || (ghiNhapKho() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong'])
+        );
+
+      allow update: if khongCoAnhTrenPhieu()
+        && isValidSlipUpdate(request.resource.data, slipId)
+        && !(resource.data.get('status', '') == 'signed'
+             && request.resource.data.get('status', '') != 'signed'
+             && !isOwner())
+        && (
+          isToanQuyenKho()
+          || (
+            duyetXuong()
+            && (
+              (
+                resource.data.get('status', '') in ['cho_ql_xuong', 'draft', 'printed', 'tra_lai']
+                && request.resource.data.get('status', '') == 'cho_kho_tong'
+              )
+              || (
+                resource.data.get('status', '') in ['cho_ql_xuong', 'draft', 'printed', 'cho_kho_tong']
+                && request.resource.data.get('status', '') == 'tra_lai'
+              )
+            )
+          )
+          || (
+            duyetKhoTong()
+            && (
+              (
+                resource.data.get('status', '') in ['cho_kho_tong', 'draft', 'printed']
+                && request.resource.data.get('status', '') in ['signed', 'tra_lai']
+              )
+              || (
+                resource.data.get('status', '') == 'signed'
+                && request.resource.data.get('status', '') == 'signed'
+              )
+            )
+          )
+          || (
+            ghiNhapKho()
+            && (
+              (
+                resource.data.get('status', '') in ['draft', 'printed', 'tra_lai', 'cho_ql_xuong']
+                && request.resource.data.get('status', '') == 'cho_ql_xuong'
+              )
+              || (
+                resource.data.get('status', '') in ['draft', 'printed']
+                && request.resource.data.get('status', '') == 'printed'
+              )
+            )
+          )
+        );
+
+      // Phieu chua ky: nguoi ghi nhap kho xoa duoc (xem luat transactions).
       allow delete: if isOwner()
         || (ghiNhapKho() && resource.data.get('status', '') != 'signed');
+    }
+
+    // -------------------------------------------------------------------------
+    // Ke hoach san xuat (Quan ly xuong / Ke toan / Owner nap -> ke thua cho
+    // NV San Xuat va Dashboard doi chieu).
+    // -------------------------------------------------------------------------
+    match /ke_hoach_sx/{planId} {
+      allow read: if xemKho();
+      allow create: if duyetXuong() && isValidKeHoachSXCreate(request.resource.data);
+      allow update: if duyetXuong() && isValidKeHoachSXUpdate(request.resource.data);
+      allow delete: if duyetXuong();
+    }
+
+    // -------------------------------------------------------------------------
+    // Danh gia san luong san xuat theo ca / ngay tai Xuong.
+    // -------------------------------------------------------------------------
+    match /danh_gia_sx/{evalId} {
+      allow read: if xemKho();
+      allow create: if ghiNhapKho() && isValidDanhGiaSXCreate(request.resource.data);
+      allow update: if ghiNhapKho() && isValidDanhGiaSXUpdate(request.resource.data);
+      allow delete: if isOwner() || duyetXuong();
+    }
+
+    // -------------------------------------------------------------------------
+    // Kiem ke thang bon len men (FST) va bon thanh pham (BBT).
+    // -------------------------------------------------------------------------
+    match /kiem_ke_bon/{invId} {
+      allow read: if xemKho();
+      allow create: if ghiNhapKho() && isValidKiemKeBonCreate(request.resource.data);
+      allow update: if ghiNhapKho() && isValidKiemKeBonUpdate(request.resource.data);
+      allow delete: if isOwner();
     }
 
     /*
@@ -467,15 +964,14 @@ service cloud.firestore {
      * Khoa tai lieu = so phieu (51260001...). Quy tac danh so o
      * src/lib/soPhieu.ts, phan cap so chong trung o src/lib/soPhieuKho.ts.
      *
-     * KHONG AI XOA DUOC, ke ca chu so huu. So chung tu da cap thi da in ra
-     * giay va da gui di; xoa mot dong la so nhay so, va so nhay so la cau hoi
-     * dau tien cua kiem toan. Huy mot phieu thi sinh PHIEU HUY ghi am, phieu
-     * goc van nam nguyen trong so.
+     * KHONG AI XOA DUOC, ke ca chu so huu (tru lenh don sach cua owner). So
+     * chung tu da cap thi da in ra giay / ghi so; xoa mot dong la nhay so, va
+     * so nhay so la cau hoi dau tien cua kiem toan. Huy mot phieu thi sinh PHIEU
+     * HUY ghi am, phieu goc van nam nguyen trong so.
      *
-     * KHONG SUA DUOC SO PHIEU, ngay ca chu so huu: doi so tren mot chung tu da
-     * in ra giay la lam sai lech chung tu. Chi cho phep DOI TRANG THAI sang
-     * da_huy (kem so phieu da huy no) - dung mot duong duy nhat de mot phieu
-     * ngung hieu luc.
+     * KHONG SUA DUOC SO PHIEU, ngay ca chu so huu: doi so tren mot chung tu la
+     * lam sai lech chung tu. Chi cho phep DOI TRANG THAI sang da_huy (kem so
+     * phieu da huy no) - dung mot duong duy nhat de mot phieu ngung hieu luc.
      *
      * Doc thi ai xem duoc kho deu doc: tra mot so phieu la viec ai trong kho
      * cung phai lam duoc. DNC khong doc - so phieu la chuyen noi bo cua kho.
@@ -499,17 +995,8 @@ service cloud.firestore {
        * Truoc day la `if false`: so chung tu khong xoa duoc gi het. Nhung co
        * hai viec that can toi no, va ca hai deu la viec cua chu so huu:
        *
-       *   1. DOI SO PHIEU NHAP KIEU CU sang dung ma phieu in ra giay. Doi so
-       *      la tao tai lieu moi roi xoa tai lieu cu, vi khoa tai lieu chinh
-       *      la so phieu.
-       *   2. DON SACH HE THONG. Truoc day lenh don chi xoa `transactions` va
-       *      `slips`, de nguyen so so phieu - don xong tab So so phieu van con
-       *      nguyen mot so day so tro vao nhung chung tu khong con ton tai.
-       *
-       * VI SAO MO CHO CHU SO HUU LA CHAP NHAN DUOC. Chu so huu von da xoa duoc
-       * moi giao dich va moi phieu nhap; giu rieng so so phieu lai khong bao ve
-       * duoc gi ma chi lam ra mot cuon so lech voi phan con lai. Moi vai tro
-       * khac van khong xoa duoc mot dong nao.
+       *   1. DOI SO PHIEU NHAP KIEU CU sang dung ma phieu in ra giay.
+       *   2. DON SACH HE THONG.
        */
       allow delete: if isOwner();
     }
@@ -518,23 +1005,17 @@ service cloud.firestore {
      * BO DEM SO PHIEU - mot tai lieu cho moi (dau so x nam), giu so ke tiep.
      *
      * Phai ghi duoc trong cung giao dich voi lan cap so, nen ai ghi duoc kho
-     * thi ghi duoc day. Khong xoa duoc: xoa bo dem la lan cap so sau bat dau
-     * lai tu 0001 va trung voi so da in ra giay.
+     * thi ghi duoc day. Xoa: chi chu so huu (phuc vu lenh don sach he thong).
      */
     match /bo_dem/{khoa} {
       allow read: if xemKho();
       allow create, update: if ghiNhapKho() || ghiXuatKho();
-      /*
-       * Xoa: CHI CHU SO HUU, va chi de phuc vu lenh don sach he thong.
-       *
-       * Don sach ma de nguyen bo dem thi phieu xuat dau tien sau do khong danh
-       * lai tu 01 ma chay tiep con so cu - nguoi dung nhin so trong ma so phieu
-       * bat dau tu giua chung thi khong hieu noi.
-       *
-       * Ngoai lenh don thi khong bao gio duoc xoa: xoa bo dem luc dang chay la
-       * lan cap so sau bat dau lai tu 01 va trung voi so da in ra giay.
-       */
       allow delete: if isOwner();
+    }
+
+    // Tu choi mac dinh moi duong dan khong duoc khai bao o tren.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

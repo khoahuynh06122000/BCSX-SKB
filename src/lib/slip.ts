@@ -21,7 +21,7 @@
  * Vẫn tra cứu được theo ngày nhập kho như cũ, vì ngày nằm ngay trong mã phiếu.
  */
 
-import type { Transaction } from "../types";
+import type { ImportSlip, Transaction } from "../types";
 
 /** Mã phiếu luôn bắt đầu bằng cụm này. */
 export const SLIP_PREFIX = "PN-";
@@ -88,10 +88,45 @@ export function nextSlipCode(
 }
 
 /*
- * Tập mã phiếu ĐÃ DUYỆT (đã có ảnh ký) nay suy từ bảng ảnh chứng từ:
- * `phieuDaCoAnhKy` ở src/anh/moHinh.ts. Gỡ hết ảnh ký thì phiếu tự quay về
- * chờ duyệt — vẫn không lưu thêm cờ nào.
+ * Tập mã phiếu ĐÃ DUYỆT:
+ *
+ * Luồng 2 bước rào Paperless mới: phiếu được tạo kèm ảnh hiện trạng ở trạng
+ * thái `cho_ql_xuong` -> `cho_kho_tong` -> `signed`. Vì phiếu đã có ảnh ngay từ
+ * lúc lập nên KHÔNG chỉ dựa vào việc có ảnh để cho vào tồn, mà phải xét thêm
+ * trạng thái duyệt trên `slips` qua `phieuDaVaoTon`.
+ *
+ * Phiếu cũ (trước khi có 2 bước rào: status `draft`/`printed`/chưa có bản ghi
+ * trong `slips`) giữ nguyên luật cũ: có ảnh ký trong `anh_chung_tu` là vào tồn.
  */
+const TRANG_THAI_CHO_DUYET = new Set([
+  "cho_ql_xuong",
+  "cho_kho_tong",
+  "tra_lai",
+]);
+
+export function phieuDaVaoTon(
+  slips: readonly ImportSlip[],
+  phieuCoAnh: ReadonlySet<string>,
+): Set<string> {
+  const slipByCode = new Map<string, ImportSlip>();
+  slips.forEach((s) => {
+    if (s?.code) slipByCode.set(s.code, s);
+  });
+
+  const out = new Set<string>();
+  phieuCoAnh.forEach((code) => {
+    const s = slipByCode.get(code);
+    if (!s || !TRANG_THAI_CHO_DUYET.has(s.status)) {
+      out.add(code);
+    }
+  });
+  slips.forEach((s) => {
+    if (s?.code && s.status === "signed" && s.warehouseSig) {
+      out.add(s.code);
+    }
+  });
+  return out;
+}
 
 /**
  * Giao dịch này có nằm trong luồng in–ký hay không.

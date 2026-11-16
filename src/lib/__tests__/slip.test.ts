@@ -13,6 +13,7 @@ import {
   parseSlipCode,
   pendingSlipTransactions,
   pendingStockByProduct,
+  phieuDaVaoTon,
   slipPrefixForDate,
   stockTransactions,
 } from "../slip";
@@ -273,6 +274,30 @@ eq(
   ],
   [],
 );
+
+console.log("\n13. Luong 2 buoc rao Paperless (cho_ql_xuong -> cho_kho_tong -> signed)");
+{
+  const coAnh = new Set([
+    "PN-261116-01",
+    "PN-261116-02",
+    "PN-261116-03",
+    "PN-261116-04",
+    "PN-260818-01",
+  ]);
+  const dsPhieu: any[] = [
+    { id: "PN-261116-01", code: "PN-261116-01", date: "2026-11-16", status: "cho_ql_xuong" },
+    { id: "PN-261116-02", code: "PN-261116-02", date: "2026-11-16", status: "cho_kho_tong" },
+    { id: "PN-261116-03", code: "PN-261116-03", date: "2026-11-16", status: "tra_lai" },
+    { id: "PN-261116-04", code: "PN-261116-04", date: "2026-11-16", status: "signed" },
+    { id: "PN-260818-01", code: "PN-260818-01", date: "2026-08-18", status: "printed" },
+  ];
+  const vaoTon = phieuDaVaoTon(dsPhieu, coAnh);
+  eq("cho_ql_xuong du co anh van CHUA vao ton", vaoTon.has("PN-261116-01"), false);
+  eq("cho_kho_tong du co anh van CHUA vao ton", vaoTon.has("PN-261116-02"), false);
+  eq("tra_lai du co anh van CHUA vao ton", vaoTon.has("PN-261116-03"), false);
+  eq("signed du 2 buoc rao + anh -> VAO TON", vaoTon.has("PN-261116-04"), true);
+  eq("phieu cu printed + anh van tuong thich vao ton", vaoTon.has("PN-260818-01"), true);
+}
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

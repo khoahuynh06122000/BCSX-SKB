@@ -24,7 +24,8 @@ import type {
   ImportSlip as ImportSlipType,
 } from "../types";
 import { cn, formatNumber } from "../lib/utils";
-import { parseSlipCode } from "../lib/slip";
+import { parseSlipCode, phieuDaVaoTon } from "../lib/slip";
+import { quyDoiHienTrang } from "../lib/loBia";
 import type { AnhChungTu } from "../anh/moHinh";
 
 /**
@@ -84,6 +85,9 @@ interface Props {
    * nút. Mã lô chỉ để ghi nhận, không đổi số lượng hay tồn kho.
    */
   onLuuMaLo?: (maLoTheoDong: Record<string, string>) => Promise<void>;
+  /** Tuỳ chọn mở sẵn tờ biểu mẫu điện tử từ bên ngoài (từ tab QL Xưởng / Kho tổng). */
+  externalOpenCode?: string | null;
+  onCloseExternal?: () => void;
 }
 
 export default function ImportSlipPanel({
@@ -101,6 +105,8 @@ export default function ImportSlipPanel({
   onXoaPhieu,
   xoaDuocPhieuDaKy = false,
   onLuuMaLo,
+  externalOpenCode,
+  onCloseExternal,
 }: Props) {
   const [openCode, setOpenCode] = useState<string | null>(null);
   /** Phiếu đang mở khung điền mã lô. */
@@ -147,9 +153,13 @@ export default function ImportSlipPanel({
     return m;
   }, [slips]);
 
-  const approved = useMemo(
+  const phieuCoAnh = useMemo(
     () => new Set([...anhTheoPhieu.entries()].filter(([, ds]) => ds.length).map(([c]) => c)),
     [anhTheoPhieu],
+  );
+  const approved = useMemo(
+    () => phieuDaVaoTon(slips, phieuCoAnh),
+    [slips, phieuCoAnh],
   );
 
   /**
@@ -200,7 +210,8 @@ export default function ImportSlipPanel({
   const pending = handoverSlips.filter((d) => !d.approved);
   const pendingLiters = pending.reduce((s, d) => s + d.totalLiters, 0);
 
-  const openSlip = handoverSlips.find((d) => d.code === openCode) || null;
+  const activeOpenCode = externalOpenCode || openCode;
+  const openSlip = handoverSlips.find((d) => d.code === activeOpenCode) || null;
 
   return (
     <div className="space-y-6">
@@ -313,23 +324,35 @@ export default function ImportSlipPanel({
                         "px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
                         d.approved
                           ? "bg-emerald-100 text-emerald-700"
-                          : printed
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-amber-100 text-amber-700",
+                          : d.meta?.status === "cho_ql_xuong"
+                            ? "bg-amber-100 text-amber-800"
+                            : d.meta?.status === "cho_kho_tong"
+                              ? "bg-sky-100 text-sky-800"
+                              : d.meta?.status === "tra_lai"
+                                ? "bg-rose-100 text-rose-800"
+                                : printed
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700",
                       )}
                     >
                       {d.approved
                         ? "Đã vào tồn"
-                        : printed
-                          ? "Đã in · chờ ký"
-                          : "Chờ in"}
+                        : d.meta?.status === "cho_ql_xuong"
+                          ? "1/2 · Chờ QL Xưởng"
+                          : d.meta?.status === "cho_kho_tong"
+                            ? "2/2 · Chờ Kho Tổng"
+                            : d.meta?.status === "tra_lai"
+                              ? "Bị trả lại"
+                              : printed
+                                ? "Đã in · chờ ký"
+                                : "Chờ in"}
                     </span>
 
                     <button
                       onClick={() => setOpenCode(d.code)}
                       className="px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-1.5"
                     >
-                      <Printer className="w-3.5 h-3.5" /> Xem &amp; in
+                      <Printer className="w-3.5 h-3.5" /> BM-SKB-01
                     </button>
 
                     {/*
@@ -526,14 +549,18 @@ export default function ImportSlipPanel({
         );
       })()}
 
-      {/* ---------- Cửa sổ xem & in phiếu ---------- */}
+      {/* ---------- Cửa sổ xem biểu mẫu điện tử BM-SKB-01 & in phiếu ---------- */}
       {openSlip && (
         <SlipPreview
           slip={openSlip}
           products={products}
           partners={partners}
+          photos={anhTheoPhieu.get(openSlip.code) || []}
           currentUserName={currentUserName}
-          onClose={() => setOpenCode(null)}
+          onClose={() => {
+            setOpenCode(null);
+            onCloseExternal?.();
+          }}
           onPrint={async () => {
             await onMarkPrinted(openSlip.code, openSlip.dateKey);
             window.print();
@@ -794,10 +821,68 @@ function MaLoEditor({
 
 /* ========================================================================== */
 
+export function BieuMauDienTuModal({
+  code,
+  transactions,
+  products,
+  partners,
+  slips,
+  anhTheoPhieu,
+  currentUserName,
+  onClose,
+  onMarkPrinted,
+}: {
+  code: string;
+  transactions: Transaction[];
+  products: Product[];
+  partners: Partner[];
+  slips: ImportSlipType[];
+  anhTheoPhieu: Map<string, AnhChungTu[]>;
+  currentUserName: string;
+  onClose: () => void;
+  onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
+}) {
+  const txs = transactions.filter((t) => t.type === "IN" && t.slipCode === code);
+  if (!txs.length) return null;
+  const parsed = parseSlipCode(code);
+  const totalQuantity = txs.reduce((s, t) => s + (t.quantity || 0), 0);
+  const totalLiters = txs.reduce((s, t) => {
+    const p = products.find((x) => x.id === t.productId);
+    return s + (t.quantity || 0) * ((p?.capacityPerUnit || 0) / 1000);
+  }, 0);
+  const dateKey = parsed?.dateKey || format(new Date(txs[0].date), "yyyy-MM-dd");
+  const meta = slips.find((s) => s.code === code);
+  const slip: HandoverSlip = {
+    code,
+    dateKey,
+    seq: parsed?.seq || 0,
+    transactions: txs,
+    totalQuantity,
+    totalLiters,
+    meta,
+    approved: meta?.status === "signed",
+  };
+  return (
+    <SlipPreview
+      slip={slip}
+      products={products}
+      partners={partners}
+      photos={anhTheoPhieu.get(code) || []}
+      currentUserName={currentUserName}
+      onClose={onClose}
+      onPrint={async () => {
+        await onMarkPrinted(code, dateKey);
+        window.print();
+      }}
+    />
+  );
+}
+
 function SlipPreview({
   slip,
   products,
   partners,
+  photos,
   currentUserName,
   onClose,
   onPrint,
@@ -805,6 +890,7 @@ function SlipPreview({
   slip: HandoverSlip;
   products: Product[];
   partners: Partner[];
+  photos: AnhChungTu[];
   currentUserName: string;
   onClose: () => void;
   onPrint: () => void;
@@ -817,6 +903,7 @@ function SlipPreview({
       name: t.productName || p?.name || "—",
       unit: p?.unit || "—",
       batch: t.batchNumber || "—",
+      kegText: quyDoiHienTrang(p, t.quantity || 0),
       partner: t.partnerName || partner?.name || "—",
       quantity: t.quantity || 0,
       liters,
@@ -825,27 +912,43 @@ function SlipPreview({
   });
 
   const totalLiters = rows.reduce((s, r) => s + r.liters, 0);
+  const creatorSig = slip.meta?.creatorSig;
+  const managerSig = slip.meta?.managerSig;
+  const warehouseSig = slip.meta?.warehouseSig;
+  const laPaperless = !!(
+    creatorSig ||
+    managerSig ||
+    warehouseSig ||
+    slip.meta?.status === "cho_ql_xuong" ||
+    slip.meta?.status === "cho_kho_tong" ||
+    slip.meta?.status === "tra_lai"
+  );
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center p-0 sm:p-6 overflow-y-auto print:p-0 print:overflow-visible print:static">
       {/* Nền mờ - ẩn khi in */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm print:hidden"
+        className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm print:hidden"
       />
 
-      <div className="relative z-10 w-full max-w-[820px] my-0 sm:my-6 print:my-0 print:max-w-none">
+      <div className="relative z-10 w-full max-w-[840px] my-0 sm:my-6 print:my-0 print:max-w-none anim-modal-enter">
         {/* Thanh công cụ - ẩn khi in */}
-        <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 text-white rounded-t-2xl print:hidden">
-          <p className="text-xs font-black uppercase tracking-widest">
-            Xem trước phiếu · {slip.code}
-          </p>
+        <div className="flex items-center justify-between gap-3 p-4 bg-[#141A23] text-white rounded-t-2xl print:hidden">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+              BM-SKB-01
+            </span>
+            <p className="text-xs font-black uppercase tracking-widest">
+              Biểu mẫu điện tử · {slip.code}
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onPrint}
               className="px-4 py-2 rounded-xl bg-white text-slate-900 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors flex items-center gap-1.5"
             >
-              <Printer className="w-3.5 h-3.5" /> In phiếu
+              <Printer className="w-3.5 h-3.5" /> Xuất PDF / In
             </button>
             <button
               onClick={onClose}
@@ -857,34 +960,33 @@ function SlipPreview({
         </div>
 
         {/*
-          TỜ PHIẾU A4 DỌC.
-          Ép nền trắng chữ đen kể cả khi app đang ở chế độ tối, vì đây là thứ
-          sẽ in ra giấy.
+          TỜ BIỂU MẪU CHUẨN PAPERLESS BÀ NÀ HILLS.
         */}
         <div
           id="slip-print-area"
-          className="bg-white text-black p-8 sm:p-12 rounded-b-2xl print:rounded-none print:p-0 shadow-2xl print:shadow-none"
+          className="bg-white text-black p-6 sm:p-10 rounded-b-2xl print:rounded-none print:p-0 shadow-2xl print:shadow-none space-y-6"
           style={{ colorScheme: "light" }}
         >
-          {/* Đầu phiếu */}
-          <div className="flex justify-between items-start gap-6 mb-6">
+          {/* Đầu phiếu chuẩn Công ty CP Dịch vụ Cáp treo Bà Nà */}
+          <div className="flex justify-between items-start gap-6 pb-4 border-b-2 border-black">
             <div className="text-[11px] leading-relaxed">
-              <p className="font-bold uppercase">Sun World Ba Na Hills</p>
-              <p>Nhà máy bia Bà Nà — SUNCRAFT Brewery</p>
-              <p>Bộ phận: Kho bia</p>
+              <p className="font-black uppercase text-[#8B1E1E]">Sun World Ba Na Hills</p>
+              <p className="font-bold">Xưởng Sản Xuất Bia — Sun KraftBeer</p>
+              <p>Số hiệu biểu mẫu: <strong className="font-mono">BM-SKB-01</strong></p>
             </div>
             <div className="text-[11px] text-right leading-relaxed">
-              <p>Mẫu số: 01-VT</p>
+              <p className="font-black uppercase">CÔNG TY CỔ PHẦN DỊCH VỤ CÁP TREO BÀ NÀ</p>
+              <p>Thôn An Sơn, Xã Bà Nà, TP. Đà Nẵng</p>
               <p>
-                Số phiếu: <span className="font-bold">{slip.code}</span>
+                Số chứng từ: <span className="font-bold font-mono">{slip.code}</span>
+                {slip.seq > 0 && ` · Lượt ${slip.seq}`}
               </p>
-              {slip.seq > 0 && <p>Lượt giao thứ {slip.seq} trong ngày</p>}
             </div>
           </div>
 
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold uppercase tracking-wide">
-              Phiếu nhập kho
+          <div className="text-center">
+            <h1 className="text-xl font-black uppercase tracking-wide">
+              Phiếu bàn giao &amp; nhập kho tổng theo lô
             </h1>
             <p className="text-[12px] mt-1">
               Ngày {format(new Date(slip.dateKey), "dd")} tháng{" "}
@@ -894,15 +996,15 @@ function SlipPreview({
           </div>
 
           {/* Bảng hàng hoá */}
-          <table className="w-full border-collapse text-[11px] mb-8">
+          <table className="w-full border-collapse text-[11px]">
             <thead>
-              <tr>
+              <tr className="bg-slate-100">
                 {[
                   "STT",
                   "Tên hàng hoá",
-                  "Đơn vị",
+                  "ĐVT",
                   "Số lô",
-                  "Nguồn nhập",
+                  "Hiện trạng",
                   "Giờ",
                   "Số lượng",
                   "Quy đổi (lít)",
@@ -922,77 +1024,114 @@ function SlipPreview({
                   <td className="border border-black px-2 py-1.5 text-center">
                     {i + 1}
                   </td>
-                  <td className="border border-black px-2 py-1.5">{r.name}</td>
+                  <td className="border border-black px-2 py-1.5 font-semibold">{r.name}</td>
                   <td className="border border-black px-2 py-1.5 text-center">
                     {r.unit}
                   </td>
-                  <td className="border border-black px-2 py-1.5 text-center">
+                  <td className="border border-black px-2 py-1.5 text-center font-mono font-bold">
                     {r.batch}
                   </td>
-                  <td className="border border-black px-2 py-1.5">
-                    {r.partner}
+                  <td className="border border-black px-2 py-1.5 text-center font-mono">
+                    {r.kegText}
                   </td>
                   <td className="border border-black px-2 py-1.5 text-center">
                     {r.time}
                   </td>
-                  <td className="border border-black px-2 py-1.5 text-right font-bold">
+                  <td className="border border-black px-2 py-1.5 text-right font-bold font-mono">
                     {formatNumber(r.quantity)}
                   </td>
-                  <td className="border border-black px-2 py-1.5 text-right">
+                  <td className="border border-black px-2 py-1.5 text-right font-mono">
                     {formatNumber(r.liters)}
                   </td>
                 </tr>
               ))}
-              {/* Chừa vài dòng trống để viết tay bổ sung nếu cần */}
-              {Array.from({ length: Math.max(0, 3) }).map((_, i) => (
-                <tr key={"blank-" + i}>
-                  {Array.from({ length: 8 }).map((__, j) => (
-                    <td
-                      key={j}
-                      className="border border-black px-2 py-1.5">
-                      &nbsp;
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              <tr>
+              <tr className="bg-slate-50">
                 <td
                   colSpan={7}
                   className="border border-black px-2 py-1.5 text-right font-bold uppercase"
                 >
                   Tổng cộng quy đổi
                 </td>
-                <td className="border border-black px-2 py-1.5 text-right font-bold">
+                <td className="border border-black px-2 py-1.5 text-right font-bold font-mono">
                   {formatNumber(totalLiters)} L
                 </td>
               </tr>
             </tbody>
           </table>
 
-          <p className="text-[11px] mb-10">
-            Tổng số dòng hàng: <strong>{rows.length}</strong>. Số liệu trên được
-            kết xuất từ hệ thống quản lý kho lúc{" "}
-            {format(new Date(), "HH:mm dd/MM/yyyy")}. Hai bên ký xác nhận số
-            lượng thực giao; ảnh tờ phiếu đã ký được lưu vào hệ thống làm căn cứ
-            ghi tăng tồn kho.
-          </p>
-
-          {/* Chân ký */}
-          <div className="grid grid-cols-4 gap-4 text-[11px] text-center">
-            {[
-              "Bên giao (Sản xuất)",
-              "Bên nhận (Thủ kho)",
-              "Kế toán",
-              "Trưởng bộ phận",
-            ].map((role, i) => (
-              <div key={role}>
-                <p className="font-bold uppercase">{role}</p>
-                <p className="italic text-[10px]">(Ký, ghi rõ họ tên)</p>
-                <div className="h-20" />
-                {i === 0 && <p>{currentUserName}</p>}
+          {/* Ảnh hiện trạng đính kèm */}
+          {photos.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold uppercase">
+                Bằng chứng ảnh chụp hiện trạng giao nhận ({photos.length} ảnh):
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {photos.map((ph, idx) => (
+                  <div key={ph.id} className="border border-slate-300 rounded-lg overflow-hidden">
+                    <img
+                      src={ph.url}
+                      alt={`Ảnh hiện trạng ${idx + 1}`}
+                      className="w-full max-h-48 object-contain bg-slate-950"
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+
+          {/* Khối chữ ký điện tử Paperless (3 ô / hàng) hoặc chân ký giấy cũ */}
+          {laPaperless ? (
+            <div className="grid grid-cols-3 gap-3 text-[11px]" style={{ breakInside: "avoid" }}>
+              {[
+                { title: "1. NGƯỜI TRÌNH (SẢN XUẤT)", sig: creatorSig },
+                { title: "2. QUẢN LÝ XƯỞNG (RÀO 1)", sig: managerSig },
+                { title: "3. KHO TỔNG NHẬN (RÀO 2)", sig: warehouseSig },
+              ].map((cell) =>
+                cell.sig ? (
+                  <div
+                    key={cell.title}
+                    className="p-3 rounded-lg border-2 border-emerald-600 bg-emerald-50/40 text-center space-y-1"
+                  >
+                    <p className="font-bold uppercase text-[10px]">{cell.title}</p>
+                    <p className="font-black text-emerald-700">✓ Đã ký điện tử</p>
+                    <p className="font-mono text-[10px] text-slate-600">
+                      {cell.sig.signedAt.slice(0, 16).replace("T", " ")}
+                    </p>
+                    <p className="font-mono text-[10px] font-bold bg-emerald-100 text-emerald-900 rounded px-1.5 py-0.5 inline-block">
+                      TOKEN: {cell.sig.token}
+                    </p>
+                    <p className="font-bold text-slate-900">{cell.sig.name}</p>
+                  </div>
+                ) : (
+                  <div
+                    key={cell.title}
+                    className="p-3 rounded-lg border border-dashed border-slate-400 text-center flex flex-col justify-center min-h-[110px]"
+                  >
+                    <p className="font-bold uppercase text-[10px] text-slate-600">
+                      {cell.title}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-2">Chưa ký điện tử</p>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-4 text-[11px] text-center pt-4">
+              {[
+                "Bên giao (Sản xuất)",
+                "Bên nhận (Thủ kho)",
+                "Kế toán",
+                "Trưởng bộ phận",
+              ].map((role, i) => (
+                <div key={role}>
+                  <p className="font-bold uppercase">{role}</p>
+                  <p className="italic text-[10px]">(Ký, ghi rõ họ tên)</p>
+                  <div className="h-20" />
+                  {i === 0 && <p>{currentUserName}</p>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

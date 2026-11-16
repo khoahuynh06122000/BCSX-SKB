@@ -120,21 +120,16 @@ export interface Quyen {
    * kiểm.
    */
   doanhThu: boolean;
-  /**
-   * Nạp tệp Excel hàng loạt (BBGN, T Kho, doanh thu).
-   *
-   * Nạp tệp là đổ hàng loạt vào sổ: sai một lần là hỏng nhiều dòng cùng lúc và
-   * phải dò ngược từng dòng để gỡ. Vì vậy trước đây chỉ kế toán và chủ sở hữu.
-   *
-   * MỞ THÊM CHO `XUAT_KHO` (16/09/2026) vì tệp BBGN là tệp của chính họ.
-   *
-   * CỜ NÀY KHÔNG CHO GHI THÊM CHIỀU NÀO. Người xuất kho vẫn chỉ ghi được chiều
-   * xuất — máy chủ chặn, không phải giao diện. Nên chỗ nào nạp tệp mà ghi ra
-   * dòng NHẬP thì phải xét thêm `ghiNhap`, nếu không người dùng bấm vào chỉ
-   * nhận lỗi quyền giữa chừng. Xem `TkhoImport.tsx` và nút nạp tồn kho ở
-   * `App.tsx`.
-   */
+  /** Nạp tệp Excel hàng loạt (BBGN, T Kho, doanh thu). */
   napFile: boolean;
+  /** Lập phiếu giao bia từ xưởng sang kho tổng, đánh giá ngày, kiểm kê FST/BBT. */
+  lapPhieuXuong: boolean;
+  /** Quản lý xưởng: duyệt Rào 1 (xuất xưởng) và nạp Kế hoạch sản xuất. */
+  duyetXuong: boolean;
+  /** Kho tổng: duyệt Rào 2 xác nhận nhận bia vào tồn kho. */
+  duyetKhoTong: boolean;
+  /** Xem Dashboard đối chiếu Kế hoạch vs Thực xuất & Truy xuất Lô. */
+  xemKeHoachDashboard: boolean;
   /** Duyệt người dùng, đổi vai trò, xoá dữ liệu. */
   quanTri: boolean;
 }
@@ -147,6 +142,10 @@ const KHONG: Quyen = {
   ghiXuat: false,
   doanhThu: false,
   napFile: false,
+  lapPhieuXuong: false,
+  duyetXuong: false,
+  duyetKhoTong: false,
+  xemKeHoachDashboard: false,
   quanTri: false,
 };
 
@@ -167,6 +166,10 @@ export function quyenCua(role: UserRole | string): Quyen {
         ghiXuat: true,
         doanhThu: true,
         napFile: true,
+        lapPhieuXuong: true,
+        duyetXuong: true,
+        duyetKhoTong: true,
+        xemKeHoachDashboard: true,
         quanTri: true,
       };
     case "KE_TOAN":
@@ -179,11 +182,37 @@ export function quyenCua(role: UserRole | string): Quyen {
         ghiXuat: true,
         doanhThu: true,
         napFile: true,
+        lapPhieuXuong: true,
+        duyetXuong: true,
+        duyetKhoTong: true,
+        xemKeHoachDashboard: true,
       };
-    // Không có `xemXuat`: xem ghi chú đầu tệp. Vẫn đọc được mọi giao dịch qua
-    // `xemKho`, chỉ là menu không bày các phân hệ chiều xuất.
+    case "QUAN_LY_XUONG":
+      return {
+        ...KHONG,
+        xemKho: true,
+        xemAnh: true,
+        ghiNhap: true,
+        lapPhieuXuong: true,
+        duyetXuong: true,
+        xemKeHoachDashboard: true,
+      };
+    case "SAN_XUAT":
+      return {
+        ...KHONG,
+        xemKho: true,
+        ghiNhap: true,
+        lapPhieuXuong: true,
+      };
+    // Kho tổng (bên nhận bia từ xưởng, duyệt Rào 2).
     case "NHAP_KHO":
-      return { ...KHONG, xemKho: true, ghiNhap: true };
+      return {
+        ...KHONG,
+        xemKho: true,
+        xemAnh: true,
+        ghiNhap: true,
+        duyetKhoTong: true,
+      };
     // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
     // viec trong kho, khong dinh toi phan tien.
     case "XUAT_KHO":
@@ -230,9 +259,19 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
     moTa: "Đăng nhập được nhưng không xem và không ghi được gì. Đây là trạng thái của tài khoản mới, và cũng là cách thu hồi quyền của một tài khoản cũ.",
   },
   {
+    ma: "SAN_XUAT",
+    ten: "Nhân viên sản xuất (Xưởng SKB)",
+    moTa: "Lập phiếu giao bia sang kho tổng (kèm mã lô và ảnh hiện trạng Keg), đánh giá sản lượng ngày và kiểm kê bồn FST/BBT hàng tháng. Không tự duyệt phiếu và không thấy phần tiền.",
+  },
+  {
+    ma: "QUAN_LY_XUONG",
+    ten: "Quản lý xưởng",
+    moTa: "Duyệt Rào 1 (xuất xưởng) cho phiếu bàn giao, lập Kế hoạch sản xuất kế thừa xuống nhân viên sản xuất, xem nhật ký nhập, kiểm kê FST/BBT và dashboard sản lượng.",
+  },
+  {
     ma: "NHAP_KHO",
-    ten: "Nhân viên nhập kho",
-    moTa: "Chỉ ghi được chiều nhập: nhập kho, tồn đầu kỳ, phiếu nhập và ảnh phiếu đã ký. Xem được tồn kho, báo cáo và sổ số phiếu. KHÔNG thấy công nợ, hóa đơn, Đơn BNC, doanh thu và nhóm Dữ liệu.",
+    ten: "Nhân viên nhập kho (Kho tổng)",
+    moTa: "Duyệt Rào 2 (xác nhận nhận đủ bia vào tồn kho tổng) và xem Sổ Nhập · Xuất · Tồn theo lô. KHÔNG thấy công nợ, hóa đơn, Đơn BNC và doanh thu.",
   },
   {
     ma: "XUAT_KHO",

@@ -39,6 +39,8 @@ const dung = (ten: string, x: boolean) => eq(ten, x, true);
 const MOI_VAI_TRO: UserRole[] = [
   "OWNER",
   "KE_TOAN",
+  "QUAN_LY_XUONG",
+  "SAN_XUAT",
   "NHAP_KHO",
   "XUAT_KHO",
   "DNC",
@@ -88,6 +90,10 @@ eq("chu so huu toan quyen", quyenCua("OWNER"), {
   ghiXuat: true,
   doanhThu: true,
   napFile: true,
+  lapPhieuXuong: true,
+  duyetXuong: true,
+  duyetKhoTong: true,
+  xemKeHoachDashboard: true,
   quanTri: true,
 });
 
@@ -99,11 +105,29 @@ eq("ke toan lam moi viec tru quan tri", quyenCua("KE_TOAN"), {
   ghiXuat: true,
   doanhThu: true,
   napFile: true,
+  lapPhieuXuong: true,
+  duyetXuong: true,
+  duyetKhoTong: true,
+  xemKeHoachDashboard: true,
   quanTri: false,
 });
 
-// HAI VAI TRO MOT CHIEU. Nguoi nhap kho khong xem chieu xuat (02/09/2026).
-eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
+eq("quan ly xuong duyet rao 1 va ke hoach, khong duyet rao 2, khong xem tien", quyenCua("QUAN_LY_XUONG"), {
+  xemXuat: false,
+  xemAnh: true,
+  xemKho: true,
+  ghiNhap: true,
+  ghiXuat: false,
+  doanhThu: false,
+  napFile: false,
+  lapPhieuXuong: true,
+  duyetXuong: true,
+  duyetKhoTong: false,
+  xemKeHoachDashboard: true,
+  quanTri: false,
+});
+
+eq("nhan vien san xuat chi lap phieu xuong, khong tu duyet", quyenCua("SAN_XUAT"), {
   xemXuat: false,
   xemAnh: false,
   xemKho: true,
@@ -111,6 +135,26 @@ eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
   ghiXuat: false,
   doanhThu: false,
   napFile: false,
+  lapPhieuXuong: true,
+  duyetXuong: false,
+  duyetKhoTong: false,
+  xemKeHoachDashboard: false,
+  quanTri: false,
+});
+
+// Kho tổng (NHAP_KHO): duyệt Rào 2 xác nhận nhận bia vào tồn, xem được ảnh hiện trạng, không xem phần tiền.
+eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
+  xemXuat: false,
+  xemAnh: true,
+  xemKho: true,
+  ghiNhap: true,
+  ghiXuat: false,
+  doanhThu: false,
+  napFile: false,
+  lapPhieuXuong: false,
+  duyetXuong: false,
+  duyetKhoTong: true,
+  xemKeHoachDashboard: false,
   quanTri: false,
 });
 eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
@@ -121,6 +165,10 @@ eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
   ghiXuat: true,
   doanhThu: false,
   napFile: true,
+  lapPhieuXuong: false,
+  duyetXuong: false,
+  duyetKhoTong: false,
+  xemKeHoachDashboard: false,
   quanTri: false,
 });
 
@@ -133,6 +181,10 @@ eq("DNC chi xem chieu xuat", quyenCua("DNC"), {
   ghiXuat: false,
   doanhThu: false,
   napFile: false,
+  lapPhieuXuong: false,
+  duyetXuong: false,
+  duyetKhoTong: false,
+  xemKeHoachDashboard: false,
   quanTri: false,
 });
 // DNC KHONG duoc ghi bat cu thu gi: ho la ben nhan hoa don, khong dung vao so.
@@ -164,7 +216,7 @@ eq(
 eq(
   "DNC khong xem duoc du lieu kho",
   MOI_VAI_TRO.filter((r) => quyenCua(r).xemKho),
-  ["OWNER", "KE_TOAN", "NHAP_KHO", "XUAT_KHO"],
+  ["OWNER", "KE_TOAN", "QUAN_LY_XUONG", "SAN_XUAT", "NHAP_KHO", "XUAT_KHO"],
 );
 /*
  * HAI CO XEM DOC LAP NHAU, va moi ben co dung mot vai tro thieu no.
@@ -247,8 +299,21 @@ eq(
 eq(
   "ai ghi duoc chieu nhap",
   MOI_VAI_TRO.filter((r) => quyenCua(r).ghiNhap),
+  ["OWNER", "KE_TOAN", "QUAN_LY_XUONG", "SAN_XUAT", "NHAP_KHO"],
+);
+eq(
+  "ai duyet rao 1 xuat xuong",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).duyetXuong),
+  ["OWNER", "KE_TOAN", "QUAN_LY_XUONG"],
+);
+eq(
+  "ai duyet rao 2 kho tong",
+  MOI_VAI_TRO.filter((r) => quyenCua(r).duyetKhoTong),
   ["OWNER", "KE_TOAN", "NHAP_KHO"],
 );
+dung("SAN_XUAT khong tu duyet duoc rao 1 hay rao 2", !quyenCua("SAN_XUAT").duyetXuong && !quyenCua("SAN_XUAT").duyetKhoTong);
+dung("QUAN_LY_XUONG khong tu duyet duoc rao 2 kho tong", !quyenCua("QUAN_LY_XUONG").duyetKhoTong);
+dung("NHAP_KHO khong duyet duoc rao 1 xuat xuong", !quyenCua("NHAP_KHO").duyetXuong);
 eq(
   "ai ghi duoc chieu xuat",
   MOI_VAI_TRO.filter((r) => quyenCua(r).ghiXuat),
@@ -334,7 +399,7 @@ dung(
 eq("xuat kho xem duoc thu vien anh", quyenCua("XUAT_KHO").xemAnh, true);
 eq("xuat kho van KHONG thay cong no / don BNC", quyenCua("XUAT_KHO").xemXuat, false);
 
-eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên nhập kho");
+eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên nhập kho (Kho tổng)");
 eq("ten vai tro la thi tra ve nguyen chuoi", tenVaiTro("ABC"), "ABC");
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

@@ -42,6 +42,10 @@ import {
   Receipt,
   Loader2,
   Calculator,
+  Factory,
+  Warehouse,
+  ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import {
   isValid,
@@ -61,6 +65,9 @@ import {
   UserRole,
   UserProfile,
   ImportSlip,
+  KeHoachSanXuat,
+  DanhGiaSanXuat,
+  KiemKeBon,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
@@ -69,8 +76,14 @@ import {
   nextSlipCode,
   pendingSlipTransactions,
   pendingStockByProduct,
+  phieuDaVaoTon,
   stockTransactions,
 } from "./lib/slip";
+import {
+  goiYLoFIFO,
+  taoTokenChuKy,
+  tinhTonTheoLo,
+} from "./lib/loBia";
 
 import {
   db,
@@ -94,6 +107,7 @@ import {
   getDoc,
   getDocs,
   writeBatch,
+  deleteField,
   batDauGuiDoLuong,
 } from "./firebase";
 import {
@@ -115,7 +129,11 @@ import {
   isValidPinFormat,
   PIN_SESSION_KEY,
 } from "./lib/pin";
-import ImportSlipPanel from "./components/ImportSlip";
+import ImportSlipPanel, { BieuMauDienTuModal } from "./components/ImportSlip";
+import XuongSanXuatPanel from "./components/XuongSanXuatPanel";
+import QuanLyXuongPanel from "./components/QuanLyXuongPanel";
+import KhoTongNxtPanel from "./components/KhoTongNxtPanel";
+import KeToanDashboardPanel from "./components/KeToanDashboardPanel";
 import BulkImportGrid from "./components/BulkImportGrid";
 import KiemTraQuyen from "./components/KiemTraQuyen";
 import {
@@ -533,6 +551,10 @@ export default function App() {
    * không có bước chuyển đổi dữ liệu nào để làm hỏng.
    */
   const [soPhieu, setSoPhieu] = useState<GhiSoPhieu[]>([]);
+  const [keHoach, setKeHoach] = useState<KeHoachSanXuat[]>([]);
+  const [danhGia, setDanhGia] = useState<DanhGiaSanXuat[]>([]);
+  const [kiemKeBon, setKiemKeBon] = useState<KiemKeBon[]>([]);
+  const [bieuMauCode, setBieuMauCode] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   /**
    * Đối tác lấy từ Firestore. Khởi tạo RỖNG, không lấy INITIAL_PARTNERS.
@@ -986,6 +1008,63 @@ export default function App() {
       );
     }
 
+    let unsubKeHoach = () => {};
+    let unsubDanhGia = () => {};
+    let unsubKiemKeBon = () => {};
+    if (!chiXemChieuXuat) {
+      unsubKeHoach = onSnapshot(
+        collection(db, "ke_hoach_sx"),
+        (snapshot) => {
+          setKeHoach(
+            snapshot.docs
+              .map((d) => ({ ...d.data(), id: d.id }) as KeHoachSanXuat)
+              .sort((a, b) => b.date.localeCompare(a.date)),
+          );
+          ghiNhanLoiDoc("ke_hoach_sx", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "ke_hoach_sx",
+            handleFirestoreError(error, OperationType.GET, "ke_hoach_sx"),
+          );
+        },
+      );
+      unsubDanhGia = onSnapshot(
+        collection(db, "danh_gia_sx"),
+        (snapshot) => {
+          setDanhGia(
+            snapshot.docs
+              .map((d) => ({ ...d.data(), id: d.id }) as DanhGiaSanXuat)
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          );
+          ghiNhanLoiDoc("danh_gia_sx", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "danh_gia_sx",
+            handleFirestoreError(error, OperationType.GET, "danh_gia_sx"),
+          );
+        },
+      );
+      unsubKiemKeBon = onSnapshot(
+        collection(db, "kiem_ke_bon"),
+        (snapshot) => {
+          setKiemKeBon(
+            snapshot.docs
+              .map((d) => ({ ...d.data(), id: d.id }) as KiemKeBon)
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          );
+          ghiNhanLoiDoc("kiem_ke_bon", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "kiem_ke_bon",
+            handleFirestoreError(error, OperationType.GET, "kiem_ke_bon"),
+          );
+        },
+      );
+    }
+
     /*
       THÔI NGHE `sap_jobs`: màn hình đọc nó đã gỡ.
 
@@ -1002,6 +1081,9 @@ export default function App() {
       unsubSoPhieu();
       unsubAnh();
       unsubUsers();
+      unsubKeHoach();
+      unsubDanhGia();
+      unsubKiemKeBon();
     };
   }, [user, userRole]);
 
@@ -4501,7 +4583,11 @@ export default function App() {
    * len bao cao, va khong xuat ban duoc (vi phep kiem du hang o handleAddTransaction
    * doc `inventory`, ma `inventory` chi tinh tu `countedTransactions`).
    */
-  const approvedSlips = useMemo(() => phieuDaCoAnhKy(anhChungTu), [anhChungTu]);
+  const phieuCoAnhKy = useMemo(() => phieuDaCoAnhKy(anhChungTu), [anhChungTu]);
+  const approvedSlips = useMemo(
+    () => phieuDaVaoTon(slips, phieuCoAnhKy),
+    [slips, phieuCoAnhKy],
+  );
 
   /**
    * Cac giao dich duoc phep tac dong den ton kho.
@@ -4564,6 +4650,11 @@ export default function App() {
     });
     return m;
   }, [countedTransactions]);
+
+  const tonTheoLo = useMemo(
+    () => tinhTonTheoLo(countedTransactions, products),
+    [countedTransactions, products],
+  );
 
   // AUTO-FILL FIFO SUGGESTION
   useEffect(() => {
@@ -5064,8 +5155,18 @@ export default function App() {
         if (!p) continue;
 
         if (type === "OUT") {
-          {
-            const transactionId = `split-${Date.now()}-${item.productId}-0`;
+          const itemQty = Number(item.quantity);
+          const fifoAllocs = item.batchNumber?.trim()
+            ? [{ batchNumber: item.batchNumber.trim(), quantity: itemQty }]
+            : goiYLoFIFO(tonTheoLo, p.id, itemQty);
+          const totalAllocated = fifoAllocs.reduce((s, a) => s + a.quantity, 0);
+          const allocations =
+            fifoAllocs.length > 0 && Math.abs(totalAllocated - itemQty) < 0.001
+              ? fifoAllocs
+              : [{ batchNumber: fifoAllocs[0]?.batchNumber || "", quantity: itemQty }];
+
+          allocations.forEach((alloc, allocIdx) => {
+            const transactionId = `split-${Date.now()}-${item.productId}-${allocIdx}`;
             const transaction: Transaction = {
               id: transactionId,
               date: transactionDate,
@@ -5073,7 +5174,7 @@ export default function App() {
               productId: p.id,
               productName: p.name,
               category: p.category,
-              quantity: Number(item.quantity),
+              quantity: alloc.quantity,
               partnerId: par?.id || "UNKNOWN",
               partnerName: par?.name || "Vô danh",
               notes:
@@ -5083,22 +5184,12 @@ export default function App() {
               createdBy: user || "Guest",
               referenceGroupId: referenceGroupId,
               status: newTransaction.isInTransit ? "in_transit" : "completed",
-              originalQuantity: Number(item.quantity),
+              originalQuantity: alloc.quantity,
+              ...(alloc.batchNumber ? { batchNumber: alloc.batchNumber } : {}),
             };
             batch.set(doc(db, "transactions", transactionId), transaction);
-          }
+          });
 
-          /*
-           * HAO HỤT — ghi thành giao dịch RIÊNG, loại `LOSS`.
-           *
-           * Vì sao không cộng thẳng vào dòng xuất: dòng xuất là số lên công nợ
-           * và lên hóa đơn. Cộng phần hao hụt vào đó là xuất hóa đơn cho phần
-           * mình không thu tiền. Tách riêng thì tồn kho giảm đúng phần đã đi
-           * ra thật, còn công nợ giữ đúng số đã thống nhất với đối tác.
-           *
-           * `LOSS` đã bị `billableTransactions()` loại khỏi hóa đơn và doanh
-           * thu, nên không phải làm gì thêm ở hai chỗ đó.
-           */
           const hao = Number(item.lossQuantity) || 0;
           if (hao > 0) {
             {
@@ -5116,23 +5207,12 @@ export default function App() {
                 notes: (`Hao hụt — không ghi công nợ · ${newTransaction.notes}`).trim().replace(/ · $/, ""),
                 createdBy: user || "Guest",
                 referenceGroupId,
-                /*
-                 * HAO HỤT MANG ĐÚNG TRẠNG THÁI CỦA DÒNG XUẤT ĐI KÈM.
-                 *
-                 * Để cứng "completed" trong khi dòng xuất là `in_transit` thì
-                 * sinh ra hai chuyện, cùng một gốc:
-                 *
-                 *   1. Báo cáo tính hao hụt của một chuyến chưa ai ký nhận.
-                 *   2. Thẻ Đơn đi đường và khung xác nhận đều tìm hao hụt theo
-                 *      `in_transit`, nên không thấy gì — đơn điền tay có hao
-                 *      hụt mà màn hình không hiện được một dòng nào.
-                 *
-                 * Đường nạp từ tệp BBGN đã sửa ở 9a3de54; đây là đúng chỗ ấy
-                 * trên đường điền tay, sót lại.
-                 */
                 status: newTransaction.isInTransit
                   ? "in_transit"
                   : "completed",
+                ...(allocations[0]?.batchNumber
+                  ? { batchNumber: allocations[0].batchNumber }
+                  : {}),
               } as Transaction);
             }
           }
@@ -5265,6 +5345,335 @@ export default function App() {
       // người dùng phải đọc rồi mới đi tiếp. Thông báo 3 giây trôi qua trong
       // lúc họ đang nhìn chỗ khác thì coi như không có.
       alert(handleFirestoreError(err, OperationType.WRITE, "transactions"));
+    }
+  };
+
+  /* ---------------- Quy trình Paperless 2 Bước Rào · Kế Hoạch · Kiểm Kê FST/BBT ---------------- */
+
+  const handleGuiPhieuXuong = async (input: {
+    date: string;
+    items: { productId: string; quantity: number; batchNumber: string }[];
+    notes: string;
+    photos: TepCho[];
+    editSlipCode?: string;
+  }): Promise<boolean> => {
+    if (!input.items.length || !input.photos.length) return false;
+    const skb =
+      donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC") ||
+      INITIAL_PARTNERS[0];
+    setLoading(true);
+    let anhMoi: AnhChungTu[] = [];
+    try {
+      const ngayPhieu = input.date.slice(0, 10);
+      const slipCode =
+        input.editSlipCode ||
+        (await giuMaPhieuNhap(
+          db,
+          ngayPhieu,
+          nextSlipCode(ngayPhieu, [
+            ...slips.map((s) => s.code),
+            ...transactions.map((t) => t.slipCode),
+            ...soPhieu.map((g) => g.soPhieu),
+          ]),
+          user || "Guest",
+        ));
+
+      const email = currentUserProfile?.email || user || "";
+      const signerName = currentUserProfile?.name || user || "Nhân viên sản xuất";
+      const nowIso = new Date().toISOString();
+      const txDate = `${ngayPhieu}T${nowIso.split("T")[1]}`;
+      const referenceGroupId = `xuong-${Date.now()}`;
+
+      anhMoi = await taiAnhChoChungTu(
+        input.photos.map((p) => p.du),
+        {
+          chungTu: [slipCode],
+          loai: "NHAP",
+          ngay: ngayPhieu,
+          maDoiTac: skb?.id || "SKB-BNC",
+          doiTac: skb?.name || "SKB-BNC",
+          taiBoi: email,
+        },
+      );
+
+      const batch = writeBatch(db);
+      if (input.editSlipCode) {
+        transactions
+          .filter((t) => t.type === "IN" && t.slipCode === input.editSlipCode)
+          .forEach((old) => batch.delete(doc(db, "transactions", old.id)));
+      }
+
+      input.items.forEach((it, idx) => {
+        const p = products.find((x) => x.id === it.productId);
+        if (!p) return;
+        const txId = `trx-${Date.now()}-${p.id}-${idx}`;
+        const tx: Transaction = {
+          id: txId,
+          date: txDate,
+          type: "IN",
+          productId: p.id,
+          productName: p.name,
+          category: p.category,
+          quantity: Number(it.quantity),
+          partnerId: skb?.id || "SKB-BNC",
+          partnerName: skb?.name || "SKB-BNC",
+          notes: input.notes || "Bàn giao từ Xưởng SKB sang Kho tổng",
+          createdBy: signerName,
+          referenceGroupId,
+          slipCode,
+          batchNumber: it.batchNumber.trim(),
+        };
+        batch.set(doc(db, "transactions", txId), tx);
+      });
+
+      ghiAnhVaoLo(batch, anhMoi);
+      batch.set(
+        doc(db, "slips", slipCode),
+        {
+          id: slipCode,
+          code: slipCode,
+          date: ngayPhieu,
+          status: "cho_ql_xuong",
+          note: input.notes || "",
+          creatorSig: {
+            name: signerName,
+            email,
+            uid: auth.currentUser?.uid || "",
+            signedAt: nowIso,
+            token: taoTokenChuKy(slipCode, "SAN_XUAT", email, nowIso),
+          },
+          managerSig: deleteField(),
+          warehouseSig: deleteField(),
+          rejectedBy: deleteField(),
+          rejectedReason: deleteField(),
+          rejectedAt: deleteField(),
+          updatedAt: nowIso,
+        },
+        { merge: true },
+      );
+
+      await batch.commit();
+
+      if (!input.editSlipCode) {
+        try {
+          await capSoPhieu(db, {
+            loai: "NHAP",
+            documentDate: ngayPhieu,
+            soPhieu: slipCode,
+            nguon: slipCode,
+            donVi: skb?.name || "SKB-BNC",
+            soDong: input.items.length,
+            soLuong: input.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
+            createdBy: signerName,
+          });
+        } catch (err) {
+          console.error("Cap so phieu xuong that bai:", err);
+        }
+      }
+
+      showNotification(`Đã gửi phiếu ${slipCode} lên Quản lý xưởng duyệt (Rào 1)`);
+      return true;
+    } catch (e: any) {
+      if (anhMoi.length) void boTepVuaTai(anhMoi);
+      alert(handleFirestoreError(e, OperationType.WRITE, "slips"));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDuyetRao1 = async (code: string) => {
+    setLoading(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const email = currentUserProfile?.email || user || "";
+      const name = currentUserProfile?.name || user || "Quản lý xưởng";
+      await updateDoc(doc(db, "slips", code), {
+        status: "cho_kho_tong",
+        managerSig: {
+          name,
+          email,
+          uid: auth.currentUser?.uid || "",
+          signedAt: nowIso,
+          token: taoTokenChuKy(code, "QUAN_LY_XUONG", email, nowIso),
+        },
+        rejectedBy: deleteField(),
+        rejectedReason: deleteField(),
+        rejectedAt: deleteField(),
+        updatedAt: nowIso,
+      });
+      showNotification(`Quản lý xưởng đã duyệt Rào 1 phiếu ${code} ➔ Chờ Kho tổng nhận`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.UPDATE, "slips"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDuyetRao2 = async (code: string) => {
+    setLoading(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const email = currentUserProfile?.email || user || "";
+      const name = currentUserProfile?.name || user || "Kho tổng";
+      await updateDoc(doc(db, "slips", code), {
+        status: "signed",
+        signedAt: nowIso,
+        signedBy: email || name,
+        warehouseSig: {
+          name,
+          email,
+          uid: auth.currentUser?.uid || "",
+          signedAt: nowIso,
+          token: taoTokenChuKy(code, "NHAP_KHO", email, nowIso),
+        },
+        updatedAt: nowIso,
+      });
+      showNotification(`Kho tổng đã ký nhận Rào 2 phiếu ${code} — hàng chính thức vào tồn`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.UPDATE, "slips"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTraLaiPhieu = async (code: string, reason: string) => {
+    setLoading(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const byName = currentUserProfile?.name || user || tenVaiTro(userRole);
+      await updateDoc(doc(db, "slips", code), {
+        status: "tra_lai",
+        rejectedBy: byName,
+        rejectedReason: reason,
+        rejectedAt: nowIso,
+        managerSig: deleteField(),
+        warehouseSig: deleteField(),
+        updatedAt: nowIso,
+      });
+      showNotification(`Đã trả lại phiếu ${code} cho Xưởng sửa lại`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.UPDATE, "slips"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLuuKeHoach = async (input: {
+    date: string;
+    productId: string;
+    targetQty: number;
+    batchHint: string;
+    note: string;
+    source: string;
+  }): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const id = `kh-${input.date}-${input.productId}-${Date.now()}`;
+      const nowIso = new Date().toISOString();
+      await setDoc(doc(db, "ke_hoach_sx", id), {
+        id,
+        date: input.date,
+        productId: input.productId,
+        targetQty: Number(input.targetQty),
+        batchHint: input.batchHint,
+        source: input.source,
+        note: input.note,
+        createdBy: currentUserProfile?.name || user || "",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      } as KeHoachSanXuat);
+      showNotification("Đã phát hành Kế hoạch sản xuất xuống Xưởng");
+      return true;
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "ke_hoach_sx"));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleXoaKeHoach = async (planId: string) => {
+    if (!window.confirm("Xoá dòng kế hoạch sản xuất này?")) return;
+    try {
+      await deleteDoc(doc(db, "ke_hoach_sx", planId));
+      showNotification("Đã xoá dòng kế hoạch");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "ke_hoach_sx"));
+    }
+  };
+
+  const handleLuuDanhGia = async (
+    dg: Omit<DanhGiaSanXuat, "id" | "createdBy" | "createdAt">,
+  ): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const id = `dg-${Date.now()}`;
+      await setDoc(doc(db, "danh_gia_sx", id), {
+        ...dg,
+        id,
+        createdBy: currentUserProfile?.name || user || "",
+        createdAt: new Date().toISOString(),
+      } as DanhGiaSanXuat);
+      showNotification("Đã lưu đánh giá sản lượng trong ngày");
+      return true;
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "danh_gia_sx"));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLuuKiemKeBon = async (input: {
+    month: string;
+    tankId: string;
+    tankGroup: "FST" | "BBT";
+    productId: string;
+    batchNumber: string;
+    liters: number;
+    statusLabel: string;
+    photos: TepCho[];
+  }): Promise<boolean> => {
+    if (!input.photos.length) return false;
+    setLoading(true);
+    let anhMoi: AnhChungTu[] = [];
+    try {
+      const id = `kk-${input.month}-${input.tankId}-${Date.now()}`;
+      anhMoi = await taiAnhChoChungTu(
+        input.photos.map((p) => p.du),
+        {
+          chungTu: [id],
+          loai: "NHAP",
+          ngay: `${input.month}-28`,
+          maDoiTac: "SKB-BNC",
+          doiTac: `Kiểm kê bồn ${input.tankId}`,
+          taiBoi: currentUserProfile?.email || user || "",
+        },
+      );
+      const batch = writeBatch(db);
+      ghiAnhVaoLo(batch, anhMoi);
+      batch.set(doc(db, "kiem_ke_bon", id), {
+        id,
+        month: input.month,
+        tankId: input.tankId,
+        tankGroup: input.tankGroup,
+        productId: input.productId,
+        batchNumber: input.batchNumber,
+        liters: Number(input.liters),
+        statusLabel: input.statusLabel,
+        createdBy: currentUserProfile?.name || user || "",
+        createdAt: new Date().toISOString(),
+      } as KiemKeBon);
+      await batch.commit();
+      showNotification(`Đã lưu kiểm kê bồn ${input.tankId} kèm ảnh minh chứng`);
+      return true;
+    } catch (e) {
+      if (anhMoi.length) void boTepVuaTai(anhMoi);
+      alert(handleFirestoreError(e, OperationType.WRITE, "kiem_ke_bon"));
+      return false;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -5512,28 +5921,60 @@ export default function App() {
     const isOwnerRole = userRole === "OWNER";
     const groups = [
       {
+        id: "paperless",
+        title: "Quy trình Xưởng & Kho",
+        items: [
+          ...(quyen.duyetXuong
+            ? [
+                {
+                  id: "ql-xuong",
+                  label: "Quản lý xưởng",
+                  icon: ClipboardList,
+                  color: "#f59e0b",
+                },
+              ]
+            : []),
+          ...(quyen.lapPhieuXuong
+            ? [
+                {
+                  id: "xuong",
+                  label: "Xưởng sản xuất",
+                  icon: Factory,
+                  color: "#fb923c",
+                },
+              ]
+            : []),
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "kho-tong",
+                  label: "Kho tổng (NXT)",
+                  icon: Warehouse,
+                  color: "#10b981",
+                },
+              ]
+            : []),
+          ...(quyen.xemKeHoachDashboard
+            ? [
+                {
+                  id: "ketoan-dashboard",
+                  label: "Dashboard Kế hoạch",
+                  icon: BarChart3,
+                  color: "#38bdf8",
+                },
+              ]
+            : []),
+        ],
+      },
+      {
         id: "operations",
         title: "Nhập · Xuất",
-        /*
-         * CHỈ NGƯỜI ĐƯỢC GHI MỚI THẤY NHÓM NÀY.
-         *
-         * Trước đây nhóm này không xét vai trò, nên người VIEWER vẫn mở được
-         * màn hình nhập kho, điền hết số lượng, số lô, rồi bấm lưu — và bị máy
-         * chủ từ chối ở bước cuối. Bắt người ta làm xong hết mới nói "không có
-         * quyền" là tệ hơn hẳn việc không cho vào từ đầu.
-         *
-         * Đây đúng là kiểu lệch giữa giao diện và luật phân quyền mà
-         * firestore.rules đã cảnh báo, chỉ khác chiều: lần này giao diện hứa
-         * rộng hơn luật cho phép.
-         */
         items: [
-          // Mỗi mục theo đúng chiều của nó: người nhập kho không thấy màn hình
-          // xuất kho và ngược lại. Đơn đi đường là việc của chiều xuất.
           ...(quyen.ghiNhap
             ? [
                 {
                   id: "import",
-                  label: "Nhập kho",
+                  label: "Nhập kho lẻ",
                   icon: PlusCircle,
                   color: "#10b981",
                 },
@@ -5567,7 +6008,6 @@ export default function App() {
         id: "reports",
         title: "Báo cáo",
         items: [
-          // Báo cáo tổng hợp trộn cả hai chiều nên là số của kho — DNC không xem.
           ...(quyen.xemKho
             ? [
                 {
@@ -5578,8 +6018,6 @@ export default function App() {
                 },
               ]
             : []),
-          // Công nợ, hóa đơn và Đơn BNC là việc của bên xuất và kế toán —
-          // người nhập hàng không xem.
           ...(quyen.xemXuat
             ? [
                 {
@@ -5588,8 +6026,6 @@ export default function App() {
                   icon: Receipt,
                   color: "#14b8a6",
                 },
-                // BNC nhận phần lớn sản lượng mà hóa đơn chỉ có một dòng, nên
-                // cần một chỗ riêng nhìn xuống từng bộ phận.
                 {
                   id: "bnc",
                   label: "Đơn BNC",
@@ -5603,18 +6039,7 @@ export default function App() {
       {
         id: "records",
         title: "Dữ liệu",
-        /*
-         * Cả nhóm đi theo cờ chiều xuất. Ba mục ở đây đều xoay quanh chiều
-         * xuất: thư viện ảnh là ảnh biên bản giao nhận, đối tác là bên mua,
-         * lịch sử là để đối chiếu đơn đã giao. Người nhập hàng không xem;
-         * nhóm hết mục thì tự ẩn luôn cả tiêu đề.
-         *
-         * DNC thì NGƯỢC LẠI — đây là nhóm chính của họ, nên đừng đem `xemKho`
-         * ra chặn ở đây.
-         */
         items: [
-          // Thư viện ảnh có cờ riêng — người xuất kho xem được mà không thấy
-          // Công nợ, Đơn BNC. Xem `xemAnh` trong quyen.ts.
           ...(quyen.xemAnh
             ? [
                 {
@@ -5640,7 +6065,6 @@ export default function App() {
       {
         id: "system",
         title: "Hệ thống",
-        // Cài đặt: CHỈ CHỦ SỞ HỮU
         items: isOwnerRole
           ? [
               {
@@ -5655,7 +6079,7 @@ export default function App() {
     ];
 
     return groups.filter((g) => g.items.length > 0);
-  }, [userRole]);
+  }, [userRole, quyen]);
 
   // Danh sách phẳng — dùng cho kiểm tra quyền vào tab và tra tên tab đang mở
   const navItems = useMemo(
@@ -6252,68 +6676,127 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Header */}
-        <header className="h-16 sm:h-[72px] bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-4 sm:px-8 sticky top-0 z-30 shrink-0">
-          <div className="flex items-center gap-3 sm:gap-4">
+        {/* Top Command Header (Craft Brewery & Paperless) */}
+        <header className="min-h-16 bg-[#141A23] text-white border-b border-amber-500/30 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5 sticky top-0 z-30 shrink-0 shadow-lg">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl hover:bg-slate-50 transition-colors"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+              title="Đóng/mở thanh điều hướng"
             >
-              <Menu className="w-5 h-5 text-slate-600" />
+              <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
-                {navItems.find((i) => i.id === activeTab)?.label}
-              </h2>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-slate-950 text-xs shadow">
+                SKB
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-400">
+                  Sun KraftBeer · Bà Nà Hills
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  PAPERLESS REALTIME
+                </span>
+                <span className="hidden sm:inline text-xs font-bold text-slate-300">
+                  · {navItems.find((i) => i.id === activeTab)?.label}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="hidden md:flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
-              <Calendar className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold text-slate-600">
-                {new Date().toLocaleDateString("vi-VN", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Nút chuyển nhanh 4 màn hình chính theo quyền */}
+            <div className="hidden xl:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-700/80">
+              {quyen.lapPhieuXuong && (
+                <button
+                  onClick={() => setActiveTab("xuong")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all",
+                    activeTab === "xuong"
+                      ? "bg-amber-400 text-slate-950 shadow"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800",
+                  )}
+                >
+                  1. Xưởng SX
+                </button>
+              )}
+              {quyen.duyetXuong && (
+                <button
+                  onClick={() => setActiveTab("ql-xuong")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5",
+                    activeTab === "ql-xuong"
+                      ? "bg-amber-400 text-slate-950 shadow"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800",
+                  )}
+                >
+                  <span>2. QL Xưởng</span>
+                  {slips.filter((s) => s.status === "cho_ql_xuong").length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">
+                      {slips.filter((s) => s.status === "cho_ql_xuong").length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {quyen.xemKho && (
+                <button
+                  onClick={() => setActiveTab("kho-tong")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5",
+                    activeTab === "kho-tong"
+                      ? "bg-amber-400 text-slate-950 shadow"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800",
+                  )}
+                >
+                  <span>3. Kho Tổng</span>
+                  {slips.filter((s) => s.status === "cho_kho_tong").length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-sky-500 text-white font-mono">
+                      {slips.filter((s) => s.status === "cho_kho_tong").length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {quyen.xemKeHoachDashboard && (
+                <button
+                  onClick={() => setActiveTab("ketoan-dashboard")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all",
+                    activeTab === "ketoan-dashboard"
+                      ? "bg-amber-400 text-slate-950 shadow"
+                      : "text-slate-300 hover:text-white hover:bg-slate-800",
+                  )}
+                >
+                  4. Kế Toán
+                </button>
+              )}
+            </div>
+
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl border border-white/10">
+              <Calendar className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] font-bold text-slate-200">
+                {new Date().toLocaleDateString("vi-VN")}
               </span>
             </div>
 
-            {/* Chuyen che do sang / toi */}
             <button
               onClick={toggleTheme}
               title={isDark ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
-              className="p-2 sm:p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-primary/40 hover:bg-slate-100 transition-all"
+              className="p-2 rounded-xl bg-white/10 border border-white/10 hover:bg-white/20 transition-all"
             >
               {isDark ? (
-                <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
+                <Sun className="w-4 h-4 text-amber-400" />
               ) : (
-                <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
+                <Moon className="w-4 h-4 text-slate-200" />
               )}
             </button>
           </div>
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-slate-50/30">
-          {/*
-            BỀ NGANG KHÁC NHAU THEO TỪNG PHÂN HỆ.
-
-            Mặc định chặn ở 1600px: trên màn hình siêu rộng thì một dòng chữ dài
-            2000px đọc rất mỏi mắt, và phần lớn màn hình trong app là chữ với
-            bảng vài cột.
-
-            CÔNG NỢ · HÓA ĐƠN từng được bỏ chặn vì Bảng Chốt khi đó bày thẳng
-            17 cột và không vừa. Nay bảng ấy gọn còn sáu cột (chi tiết bung ra
-            khi bấm), rộng chừng 860px — trải nó ra 1600px chỉ làm sáu cột nằm
-            cách nhau cả gang tay, mắt phải lần theo dòng kẻ mới ghép được số
-            với tên. Nên chặn lại như mọi phân hệ khác.
-          */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-[#F4F1EA] dark:bg-bg-main">
           <div
             key={activeTab}
-            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24"
+            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24 anim-view-enter"
           >
             {/*
               MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
@@ -8460,6 +8943,17 @@ export default function App() {
                                   </p>
                                 </div>
                               )}
+                              {activeTab === "export" && item.productId && item.quantity > 0 && (() => {
+                                const fifo = goiYLoFIFO(tonTheoLo, item.productId, item.quantity);
+                                return fifo.length > 0 ? (
+                                  <div className="sm:col-span-4 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                                    Lô xuất FIFO tự động:{" "}
+                                    <span className="font-mono font-black">
+                                      {fifo.map((f) => `${f.batchNumber} (${formatNumber(f.quantity)})`).join(" + ")}
+                                    </span>
+                                  </div>
+                                ) : null;
+                              })()}
                               <div className="sm:col-span-4">
                                 {/* Khối này nằm trong nhánh activeTab !==
                                     "import" (nhập kho dùng bảng nhập nhanh),
@@ -9391,6 +9885,78 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
+            {activeTab === "xuong" && daDuocDuyet && quyen.lapPhieuXuong && (
+              <XuongSanXuatPanel
+                products={products}
+                transactions={transactions}
+                slips={slips}
+                approvedSlips={approvedSlips}
+                anhTheoChungTu={anhTheoChungTu}
+                keHoach={keHoach}
+                danhGia={danhGia}
+                kiemKeBon={kiemKeBon}
+                currentUserName={currentUserProfile?.name || user || ""}
+                busy={loading}
+                onGuiPhieuGiao={handleGuiPhieuXuong}
+                onLuuDanhGia={handleLuuDanhGia}
+                onLuuKiemKeBon={handleLuuKiemKeBon}
+              />
+            )}
+
+            {activeTab === "ql-xuong" && daDuocDuyet && quyen.duyetXuong && (
+              <QuanLyXuongPanel
+                products={products}
+                transactions={transactions}
+                slips={slips}
+                approvedSlips={approvedSlips}
+                anhTheoChungTu={anhTheoChungTu}
+                keHoach={keHoach}
+                kiemKeBon={kiemKeBon}
+                busy={loading}
+                onDuyetRao1={handleDuyetRao1}
+                onTraLaiPhieu={handleTraLaiPhieu}
+                onMoBieuMau={(code) => setBieuMauCode(code)}
+                onLuuKeHoach={handleLuuKeHoach}
+                onXoaKeHoach={handleXoaKeHoach}
+              />
+            )}
+
+            {activeTab === "kho-tong" && daDuocDuyet && quyen.xemKho && (
+              <KhoTongNxtPanel
+                products={products}
+                transactions={transactions}
+                countedTransactions={countedTransactions}
+                slips={slips}
+                approvedSlips={approvedSlips}
+                anhTheoChungTu={anhTheoChungTu}
+                canApproveGate2={quyen.duyetKhoTong}
+                canExport={quyen.ghiXuat}
+                busy={loading}
+                onDuyetRao2={handleDuyetRao2}
+                onTraLaiPhieu={handleTraLaiPhieu}
+                onMoBieuMau={(code) => setBieuMauCode(code)}
+                onDiToiXuatKho={() => {
+                  setNewTransaction((prev) => ({ ...prev, isInTransit: true }));
+                  setActiveTab("export");
+                }}
+              />
+            )}
+
+            {activeTab === "ketoan-dashboard" &&
+              daDuocDuyet &&
+              quyen.xemKeHoachDashboard && (
+                <KeToanDashboardPanel
+                  products={products}
+                  transactions={transactions}
+                  countedTransactions={countedTransactions}
+                  slips={slips}
+                  approvedSlips={approvedSlips}
+                  anhTheoChungTu={anhTheoChungTu}
+                  keHoach={keHoach}
+                  kiemKeBon={kiemKeBon}
+                />
+              )}
+
             {activeTab === "bnc" && daDuocDuyet && quyen.xemXuat && (
               <div className="space-y-6">
                 <div className="space-y-1">
@@ -9702,6 +10268,20 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
           </div>
         </div>
       </main>
+
+      {bieuMauCode && (
+        <BieuMauDienTuModal
+          code={bieuMauCode}
+          transactions={transactions}
+          products={products}
+          partners={donVi}
+          slips={slips}
+          anhTheoPhieu={anhTheoChungTu}
+          currentUserName={currentUserProfile?.name || user || ""}
+          onClose={() => setBieuMauCode(null)}
+          onMarkPrinted={handleMarkSlipPrinted}
+        />
+      )}
     </div>
   );
 }

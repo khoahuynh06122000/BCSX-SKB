@@ -34,6 +34,8 @@ export type TransactionType = 'IN' | 'OUT' | 'OPENING' | 'LOSS' | 'DAMAGE';
 export type UserRole =
   | 'OWNER'
   | 'KE_TOAN'
+  | 'QUAN_LY_XUONG'
+  | 'SAN_XUAT'
   | 'NHAP_KHO'
   | 'XUAT_KHO'
   | 'DNC'
@@ -171,7 +173,22 @@ export interface InventoryItem {
  * Có ảnh ký là điều kiện để số lượng trên phiếu VÀO TỒN KHO; `status` =
  * `signed` đi cùng lô với ảnh để luật máy chủ biết phiếu đã ký.
  */
-export type SlipStatus = 'draft' | 'printed' | 'signed';
+export type SlipStatus =
+  | 'draft'
+  | 'printed'
+  | 'cho_ql_xuong'
+  | 'cho_kho_tong'
+  | 'tra_lai'
+  | 'signed';
+
+export interface ChuKyDienTu {
+  name: string;
+  email: string;
+  uid?: string;
+  signedAt: string;
+  token: string;
+  note?: string;
+}
 
 export interface ImportSlip {
   /** = code, dạng PN-YYMMDD-NN */
@@ -185,5 +202,55 @@ export interface ImportSlip {
   signedBy?: string;
   note?: string;
   updatedAt?: string;
+  /** Chữ ký điện tử theo luồng Paperless 2 bước rào */
+  creatorSig?: ChuKyDienTu;
+  managerSig?: ChuKyDienTu;
+  warehouseSig?: ChuKyDienTu;
+  /** Thông tin trả lại khi rào 1 hoặc rào 2 phát hiện lệch thực tế / thiếu ảnh */
+  rejectedBy?: string;
+  rejectedReason?: string;
+  rejectedAt?: string;
+}
+
+/** Kế hoạch sản xuất (Quản lý xưởng nạp -> kế thừa sang NV Sản xuất & Dashboard Kế toán). */
+export interface KeHoachSanXuat {
+  id: string;
+  date: string; // yyyy-MM-dd
+  productId: string;
+  targetQty: number;
+  batchHint?: string;
+  source: string;
+  note?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/** Đánh giá sản lượng sản xuất theo ca / ngày tại Xưởng. */
+export interface DanhGiaSanXuat {
+  id: string;
+  date: string; // yyyy-MM-dd
+  shift: string;
+  productId: string;
+  plannedQty: number;
+  actualBrewedQty: number;
+  rating: string;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** Kiểm kê lượng bia còn tồn tại bồn lên men (FST) và bồn thành phẩm (BBT) hàng tháng. */
+export interface KiemKeBon {
+  id: string;
+  month: string; // yyyy-MM
+  tankId: string;
+  tankGroup: 'FST' | 'BBT';
+  productId: string;
+  batchNumber: string;
+  liters: number;
+  statusLabel?: string;
+  createdBy: string;
+  createdAt: string;
 }
 
