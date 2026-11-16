@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hệ Thống Vận Hành Kho & Xưởng Bia Paperless — Sun KraftBeer · Bà Nà Hills</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Be Vietnam Pro"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            bana: {
+              red: '#8B1E1E',
+              gold: '#D99B26',
+              cream: '#F4F1EA',
+              obsidian: '#141A23'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #F4F1EA;
+      color: #141A23;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+
+    /* Smooth Entrance & Micro-interaction Animations */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeScaleIn {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translateX(30px) scale(0.95); }
+      to { opacity: 1; transform: translateX(0) scale(1); }
+    }
+    @keyframes softPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.55; }
+    }
+    .anim-view-enter {
+      animation: fadeSlideUp 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .anim-card-stagger {
+      animation: fadeSlideUp 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .anim-modal-enter {
+      animation: fadeScaleIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .anim-toast {
+      animation: toastSlideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .pulse-dot {
+      animation: softPulse 1.8s ease-in-out infinite;
+    }
+    .card-lift {
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+    }
+    .card-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px -8px rgba(20, 26, 35, 0.12);
+    }
+    .bar-fill {
+      transition: width 0.75s cubic-bezier(0.16, 1, 0.3, 1), height 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @media print {
+      body * { visibility: hidden; }
+      #paperless-doc, #paperless-doc * { visibility: visible; }
+      #paperless-doc {
+        position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-20 selection:bg-amber-200 selection:text-slate-900">
+
+  <!-- ======================================================================= -->
+  <!-- HEADER ĐIỀU PHỐI 4 VAI TRÒ — CRAFT BREWERY & COMMAND CENTER             -->
+  <!-- ======================================================================= -->
+  <header class="sticky top-0 z-40 bg-[#141A23]/95 backdrop-blur-md text-white border-b border-amber-500/30 shadow-xl">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 flex items-center justify-center font-black text-slate-950 shadow-lg shadow-amber-500/20 text-sm tracking-tight">
+          SKB
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-extrabold uppercase tracking-[0.18em] text-amber-400">Sun KraftBeer · Bà Nà Hills</span>
+            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              PAPERLESS REALTIME
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Vai trò tách bạch -->
+      <nav class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-700/80">
+        <button onclick="switchRole('SAN_XUAT')" id="role-btn-SAN_XUAT"
+          class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-1.5">
+          <span>👨‍🏭 1. NV Sản Xuất</span>
+          <span id="badge-sx" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">0</span>
+        </button>
+        <button onclick="switchRole('QUAN_LY_XUONG')" id="role-btn-QUAN_LY_XUONG"
+          class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-1.5">
+          <span>👨‍💼 2. Quản Lý Xưởng</span>
+          <span id="badge-qlx" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-400 text-slate-950 font-mono">0</span>
+        </button>
+        <button onclick="switchRole('KHO_TONG')" id="role-btn-KHO_TONG"
+          class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-1.5">
+          <span>🏭 3. Kho Tổng (NXT)</span>
+          <span id="badge-kho" class="px-1.5 py-0.2 rounded-full text-[10px] bg-sky-400 text-slate-950 font-mono">0</span>
+        </button>
+        <button onclick="switchRole('KE_TOAN')" id="role-btn-KE_TOAN"
+          class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-1.5">
+          <span>📊 4. Kế Toán</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- KHUNG SUB-HEADER: MÔ TẢ VAI TRÒ + SUB-TABS GỌN GÀNG -->
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 mt-5">
+    <div id="role-subbar" class="bg-white/90 backdrop-blur rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:px-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <!-- Render động theo vai trò -->
+    </div>
+  </div>
+
+  <!-- KHUNG CHÍNH -->
+  <main id="main-stage" class="max-w-6xl mx-auto px-4 sm:px-6 mt-5">
+    <!-- Render động từng view + sub-tab với animation mượt -->
+  </main>
+
+  <!-- TOAST THÔNG BÁO REALTIME -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- MODAL BIỂU MẪU ĐIỆN TỬ PAPERLESS CHUẨN BÀ NÀ HILLS (BM-SKB-01) -->
+  <div id="modal-paperless" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex items-start justify-center">
+    <div id="modal-paperless-card" class="w-full max-w-[860px] my-4 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-300 anim-modal-enter">
+      <div class="px-5 py-3.5 bg-[#141A23] text-white flex items-center justify-between print:hidden">
+        <div class="flex items-center gap-2.5">
+          <span class="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono text-[11px] font-bold">
+            BM-SKB-01 · PAPERLESS
+          </span>
+          <span id="modal-slip-title" class="text-xs font-extrabold uppercase tracking-wider">Biểu mẫu điện tử</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition">
+            🖨️ Xuất PDF
+          </button>
+          <button onclick="closePaperlessModal()" class="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-xs font-extrabold transition">
+            ✕ Đóng
+          </button>
+        </div>
+      </div>
+      <div id="paperless-doc" class="p-6 sm:p-10 text-slate-900 bg-white space-y-6"></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. DANH MỤC & CẤU HÌNH BỒN XƯỞNG BIA (FST & BBT) + ĐIỂM BÁN BNC
+    // =========================================================================
+    const PRODUCTS = [
+      { id: 'p1', name: 'Bia Golden Bridge Helles Lager', code: '10168107', category: 'Lít', unit: 'Lít', cap: 1000, kegSize: 20, color: '#D97706' },
+      { id: 'p2', name: 'Bia Wings Dark Lager', code: '10168108', category: 'Lít', unit: 'Lít', cap: 1000, kegSize: 20, color: '#334155' },
+      { id: 'p15', name: 'Bia Lunar Castle Dry hop Pale Ale', code: '10174040', category: 'Lít', unit: 'Lít', cap: 1000, kegSize: 20, color: '#059669' },
+      { id: 'p12', name: 'Bia Eclipse Plaza Dry Hop Wheat VN', code: '10191539', category: 'Lít', unit: 'Lít', cap: 1000, kegSize: 20, color: '#0284C7' },
+      { id: 'p4', name: 'Bia Golden Bridge Helles Lager lon 330ml', code: '10168110', category: 'Lon', unit: 'Lon', cap: 330, packSize: 24, color: '#EA580C' },
+    ];
+
+    const TANKS = [
+      { id: 'FST-01', name: 'Bồn Lên Men FST-01', group: 'FST', capacityLiters: 2000 },
+      { id: 'FST-02', name: 'Bồn Lên Men FST-02', group: 'FST', capacityLiters: 2000 },
+      { id: 'FST-03', name: 'Bồn Lên Men FST-03', group: 'FST', capacityLiters: 1000 },
+      { id: 'BBT-01', name: 'Bồn Thành Phẩm BBT-01', group: 'BBT', capacityLiters: 2000 },
+      { id: 'BBT-02', name: 'Bồn Thành Phẩm BBT-02', group: 'BBT', capacityLiters: 1000 },
+    ];
+
+    const DESTINATIONS = [
+      'BNC · 1901', 'BNC · Beer Plaza', 'BNC · Lễ Hội Bia', 'BNC · Kavkaz',
+      'BNC · Taiga', 'BNC · 4 Mùa', 'Đối tác · APC', 'Đối tác · BNG', 'Đối tác · FV'
+    ];
+
+    // =========================================================================
+    // 2. DỮ LIỆU ĐỘNG REALTIME (LIÊN THÔNG CẢ 4 VAI TRÒ)
+    // =========================================================================
+    let currentRole = 'SAN_XUAT';
+    let subTabs = {
+      SAN_XUAT: 'lap_phieu',
+      QUAN_LY_XUONG: 'duyet_nhat_ky',
+      KHO_TONG: 'nxt_kho',
+      KE_TOAN: 'tong_quan'
+    };
+
+    // Kế hoạch sản xuất (Quản lý xưởng tạo -> Kế thừa sang NV Sản xuất & Dashboard Kế toán)
+    let productionPlans = [
+      { id: 'KH-01', date: '2026-11-16', productId: 'p1', targetQty: 400, source: 'Quản lý xưởng nạp', batchHint: 'LO-261116-GB01', note: 'Ưu tiên cấp cuối tuần cho Beer Plaza & 1901', published: true },
+      { id: 'KH-02', date: '2026-11-16', productId: 'p2', targetQty: 200, source: 'Quản lý xưởng nạp', batchHint: 'LO-261116-WD01', note: 'Chiết đủ 10 Keg 20L', published: true },
+      { id: 'KH-03', date: '2026-11-16', productId: 'p15', targetQty: 160, source: 'Agent Mail (Dự kiến)', batchHint: 'LO-261116-LC01', note: 'Kế thừa từ lịch sản xuất tuần 46', published: true },
+      { id: 'KH-04', date: '2026-11-16', productId: 'p4', targetQty: 480, source: 'Quản lý xưởng nạp', batchHint: 'LO-261116-GBL01', note: '20 thùng 24 lon', published: true },
+    ];
+
+    // Đánh giá sản lượng sản xuất trong ngày của NV Sản xuất
+    let dailyEvaluations = [
+      {
+        id: 'DG-01',
+        date: '2026-11-16',
+        shift: 'Ca sáng (07:00 - 15:00)',
+        productId: 'p1',
+        plannedQty: 400,
+        actualBrewedQty: 400,
+        actualHandoverQty: 200,
+        lossQty: 4,
+        rating: 'Đạt tiến độ',
+        note: 'Đã chiết đủ 20 Keg, giao trước 10 Keg ca sáng (PN-261116-01), còn 10 Keg giao đợt 2.',
+        by: 'Nguyễn Văn Hùng',
+        at: '16/11/2026 11:30'
+      }
+    ];
+
+    // Kiểm kê hàng tháng tại bồn FST & BBT (Bắt buộc ảnh minh chứng)
+    let tankInventories = [
+      {
+        id: 'KK-11-01',
+        month: '2026-11',
+        tankId: 'FST-01',
+        productId: 'p1',
+        batchNumber: 'LO-261112-GB09',
+        liters: 1450,
+        statusLabel: 'Đang lên men ngày thứ 5',
+        photoUrl: '', // Sẽ điền khi khởi tạo
+        photoCaption: 'Thước đo mức bia bồn FST-01 = 1.450 Lít',
+        createdBy: 'Nguyễn Văn Hùng',
+        createdAt: '16/11/2026 17:05'
+      },
+      {
+        id: 'KK-11-02',
+        month: '2026-11',
+        tankId: 'BBT-01',
+        productId: 'p15',
+        batchNumber: 'LO-261115-LC04',
+        liters: 820,
+        statusLabel: 'Sẵn sàng chiết Keg',
+        photoUrl: '',
+        photoCaption: 'Đồng hồ & thước thủy tinh BBT-01 = 820 Lít',
+        createdBy: 'Nguyễn Văn Hùng',
+        createdAt: '16/11/2026 17:12'
+      }
+    ];
+
+    // Phiếu bàn giao Xưởng -> Kho tổng (2 bước rào + ảnh hiện trạng)
+    let slips = [];
+
+    // Tồn đầu kỳ & Các giao dịch xuất kho từ Kho tổng
+    let openingStocks = [
+      { productId: 'p1', batchNumber: 'LO-261110-GB00', qty: 120, date: '2026-11-01' },
+      { productId: 'p2', batchNumber: 'LO-261110-WD00', qty: 80, date: '2026-11-01' },
+      { productId: 'p4', batchNumber: 'LO-261110-GL00', qty: 240, date: '2026-11-01' },
+    ];
+
+    let exportOrders = [
+      { id: 'PX-261116-01', date: '2026-11-16', destination: 'BNC · Beer Plaza', productId: 'p1', batchNumber: 'LO-261110-GB00', qty: 120, loss: 3.6, by: 'Lê Quốc Bảo' },
+      { id: 'PX-261116-02', date: '2026-11-16', destination: 'BNC · 1901', productId: 'p1', batchNumber: 'LO-261115-H01', qty: 80, loss: 2.4, by: 'Lê Quốc Bảo' },
+      { id: 'PX-261116-03', date: '2026-11-16', destination: 'Đối tác · APC', productId: 'p2', batchNumber: 'LO-261110-WD00', qty: 60, loss: 0, by: 'Lê Quốc Bảo' },
+    ];
+
+    // Trạng thái Form lập phiếu của NV Sản xuất
+    let editingSlipCode = null;
+    let formQuantities = { p1: 200 };
+    let formBatches = { p1: 'LO-261116-GB01' };
+    let formDate = '2026-11-16';
+    let formCommonBatch = 'LO-261116-GB01';
+    let attachedPhotos = [];
+
+    // Trạng thái ảnh cho kiểm kê FST/BBT
+    let tankPhotoDraft = null;
+
+    // =========================================================================
+    // 3. TẠO ẢNH SVG MẪU CHÂN THỰC (KEG BIA & THƯỚC ĐO BỒN FST/BBT)
+    // =========================================================================
+    function makeKegPhotoSvg(kegCount, totalLiters, batchCode, timeLabel) {
+      const kegs = Array.from({ length: Math.min(Math.max(kegCount, 1), 15) }).map((_, i) => {
+        const col = i % 5;
+        const row = Math.floor(i / 5);
+        const x = 42 + col * 106;
+        const y = 72 + row * 82;
+        return `
+          <g transform="translate(${x}, ${y})">
+            <rect x="0" y="6" width="76" height="64" rx="8" fill="#1E293B" stroke="#94A3B8" stroke-width="2"/>
+            <rect x="10" y="0" width="56" height="10" rx="4" fill="#475569"/>
+            <rect x="0" y="28" width="76" height="16" fill="#F59E0B"/>
+            <text x="38" y="40" text-anchor="middle" fill="#0F172A" font-family="monospace" font-size="10" font-weight="bold">KEG #${String(i + 1).padStart(2, '0')}</text>
+            <text x="38" y="59" text-anchor="middle" fill="#E2E8F0" font-family="monospace" font-size="9">20 LÍT</text>
+          </g>
+        `;
+      }).join('');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 280" width="600" height="280">
+        <rect width="600" height="280" fill="#0F172A"/>
+        <rect x="16" y="12" width="568" height="44" rx="8" fill="#1E293B" stroke="#D99B26" stroke-width="1.5"/>
+        <text x="28" y="31" fill="#FBBF24" font-family="sans-serif" font-size="12" font-weight="bold">HIỆN TRẠNG GIAO BIA: ${kegCount} KEG (${totalLiters} LÍT) · LÔ ${batchCode}</text>
+        <text x="28" y="48" fill="#CBD5E1" font-family="monospace" font-size="10">Thời điểm chụp: ${timeLabel} · Xưởng SKB</text>
+        ${kegs}
+      </svg>`;
+      return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+    }
+
+    function makeTankGaugePhotoSvg(tankId, liters, maxCap, batchCode) {
+      const pct = Math.min(100, Math.max(5, Math.round((liters / maxCap) * 100)));
+      const fillHeight = Math.round((pct / 100) * 150);
+      const fillY = 195 - fillHeight;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 240" width="540" height="240">
+        <rect width="540" height="240" fill="#0F172A"/>
+        <!-- Thân bồn Inox -->
+        <rect x="46" y="35" width="110" height="170" rx="22" fill="#334155" stroke="#94A3B8" stroke-width="3"/>
+        <!-- Ống thủy tinh đo mức bia -->
+        <rect x="180" y="45" width="22" height="150" rx="6" fill="#1E293B" stroke="#E2E8F0" stroke-width="2"/>
+        <rect x="182" y="${fillY}" width="18" height="${fillHeight}" rx="4" fill="#F59E0B"/>
+        <line x1="172" y1="${fillY}" x2="212" y2="${fillY}" stroke="#EF4444" stroke-width="2" stroke-dasharray="3,2"/>
+        <text x="101" y="122" text-anchor="middle" fill="#F8FAFC" font-family="monospace" font-size="16" font-weight="bold">${tankId}</text>
+        <text x="101" y="142" text-anchor="middle" fill="#FBBF24" font-family="monospace" font-size="12">${pct}% ĐẦY</text>
+        <!-- Thông số chụp -->
+        <rect x="235" y="40" width="275" height="160" rx="12" fill="#1E293B" stroke="#475569" stroke-width="1.5"/>
+        <text x="255" y="70" fill="#38BDF8" font-family="sans-serif" font-size="12" font-weight="bold">MINH CHỨNG KIỂM KÊ BỒN ${tankId}</text>
+        <text x="255" y="102" fill="#F8FAFC" font-family="monospace" font-size="18" font-weight="bold">MỨC ĐO: ${liters.toLocaleString('vi-VN')} LÍT</text>
+        <text x="255" y="128" fill="#CBD5E1" font-family="monospace" font-size="12">Dung tích bồn: ${maxCap.toLocaleString('vi-VN')} L</text>
+        <text x="255" y="152" fill="#FBBF24" font-family="monospace" font-size="12">Mã lô đang chứa: ${batchCode}</text>
+        <text x="255" y="182" fill="#34D399" font-family="monospace" font-size="11">✓ Ảnh đóng dấu kiểm kê tháng 11/2026</text>
+      </svg>`;
+      return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+    }
+
+    function generateToken(code, role, email, time) {
+      const str = `${code}|${role}|${email}|${time}`;
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      const hex = (h >>> 0).toString(16).toUpperCase().padStart(8, '0');
+      return `${hex.slice(0, 4)}-${hex.slice(4, 8)}`;
+    }
+
+    function formatKegText(p, qty) {
+      if (!qty || qty <= 0) return '—';
+      if (p.category === 'Lít') {
+        const k = qty / (p.kegSize || 20);
+        return Math.abs(k - Math.round(k)) < 0.001 ? `${Math.round(k)} Keg` : `${k.toFixed(1)} Keg`;
+      }
+      const pk = qty / (p.packSize || 24);
+      return Math.abs(pk - Math.round(pk)) < 0.001 ? `${Math.round(pk)} Thùng` : `${pk.toFixed(1)} Thùng`;
+    }
+
+    function getProduct(id) {
+      return PRODUCTS.find(p => p.id === id) || PRODUCTS[0];
+    }
+
+    // Khởi tạo dữ liệu mẫu ban đầu
+    function seedInitialData() {
+      tankInventories[0].photoUrl = makeTankGaugePhotoSvg('FST-01', 1450, 2000, 'LO-261112-GB09');
+      tankInventories[1].photoUrl = makeTankGaugePhotoSvg('BBT-01', 820, 1000, 'LO-261115-LC04');
+
+      slips = [
+        {
+          code: 'PN-261116-01',
+          dateKey: '2026-11-16',
+          seq: 1,
+          status: 'signed', // Qua đủ 2 rào -> Đã cộng vào NXT Kho tổng
+          items: [
+            { productId: 'p1', productName: 'Bia Golden Bridge Helles Lager', unit: 'Lít', category: 'Lít', quantity: 200, liters: 200, kegText: '10 Keg', batchNumber: 'LO-261115-H01' },
+            { productId: 'p2', productName: 'Bia Wings Dark Lager', unit: 'Lít', category: 'Lít', quantity: 100, liters: 100, kegText: '5 Keg', batchNumber: 'LO-261115-D01' }
+          ],
+          photos: [{ id: 's1-p', caption: '15 Keg (300L) bàn giao đợt 1', url: makeKegPhotoSvg(15, 300, 'LO-261115-H01', '16/11 08:15') }],
+          signatures: {
+            creator: { name: 'Nguyễn Văn Hùng', email: 'hung.nv@sunworld.vn', signedAt: '16/11/2026 08:16', token: '8F3A-9C12' },
+            manager: { name: 'Trần Minh Đức', email: 'duc.tm@sunworld.vn', signedAt: '16/11/2026 08:25', token: '4B7E-19A0' },
+            warehouse: { name: 'Lê Quốc Bảo', email: 'bao.lq@sunworld.vn', signedAt: '16/11/2026 08:42', token: 'C20D-77F4' }
+          }
+        },
+        {
+          code: 'PN-261116-02',
+          dateKey: '2026-11-16',
+          seq: 2,
+          status: 'cho_kho_tong', // QL Xưởng đã ký Rào 1 -> Chờ Kho tổng Rào 2
+          items: [
+            { productId: 'p15', productName: 'Bia Lunar Castle Dry hop Pale Ale', unit: 'Lít', category: 'Lít', quantity: 160, liters: 160, kegText: '8 Keg', batchNumber: 'LO-261116-LC01' }
+          ],
+          photos: [{ id: 's2-p', caption: '8 Keg (160L) Lunar Castle Pale Ale', url: makeKegPhotoSvg(8, 160, 'LO-261116-LC01', '16/11 10:05') }],
+          signatures: {
+            creator: { name: 'Nguyễn Văn Hùng', email: 'hung.nv@sunworld.vn', signedAt: '16/11/2026 10:06', token: '51E9-30C4' },
+            manager: { name: 'Trần Minh Đức', email: 'duc.tm@sunworld.vn', signedAt: '16/11/2026 10:15', token: '9A2F-68D1' },
+            warehouse: null
+          }
+        },
+        {
+          code: 'PN-261116-03',
+          dateKey: '2026-11-16',
+          seq: 3,
+          status: 'cho_ql_xuong', // Chờ QL Xưởng Rào 1
+          items: [
+            { productId: 'p4', productName: 'Bia Golden Bridge Helles Lager lon 330ml', unit: 'Lon', category: 'Lon', quantity: 480, liters: 158.4, kegText: '20 Thùng', batchNumber: 'LO-261116-GBL01' }
+          ],
+          photos: [{ id: 's3-p', caption: '20 Thùng lon Golden Bridge 330ml', url: makeKegPhotoSvg(10, 158.4, 'LO-261116-GBL01', '16/11 13:20') }],
+          signatures: {
+            creator: { name: 'Nguyễn Văn Hùng', email: 'hung.nv@sunworld.vn', signedAt: '16/11/2026 13:22', token: '2D88-A410' },
+            manager: null,
+            warehouse: null
+          }
+        }
+      ];
+
+      attachedPhotos = [
+        { id: 'init-ph', caption: 'Ảnh hiện trạng 10 Keg (200 Lít) · Lô LO-261116-GB01', url: makeKegPhotoSvg(10, 200, 'LO-261116-GB01', '16/11 14:30') }
+      ];
+    }
+
+    // =========================================================================
+    // 4. TÍNH TOÁN NHẬP - XUẤT - TỒN & ĐỐI CHIẾU KẾ HOẠCH REALTIME
+    // =========================================================================
+    function computeWarehouseNXT() {
+      const byProduct = {};
+      PRODUCTS.forEach(p => {
+        byProduct[p.id] = { product: p, opening: 0, imported: 0, pendingImport: 0, exported: 0, loss: 0, closing: 0 };
+      });
+
+      const byLot = new Map(); // key: productId|batchNumber
+      const ensureLot = (productId, batchNumber) => {
+        const key = `${productId}|${batchNumber}`;
+        if (!byLot.has(key)) {
+          byLot.set(key, { product: getProduct(productId), batchNumber, opening: 0, imported: 0, exported: 0, loss: 0, closing: 0, slipCode: 'Tồn đầu kỳ' });
+        }
+        return byLot.get(key);
+      };
+
+      openingStocks.forEach(o => {
+        if (byProduct[o.productId]) byProduct[o.productId].opening += o.qty;
+        const lot = ensureLot(o.productId, o.batchNumber);
+        lot.opening += o.qty;
+      });
+
+      slips.forEach(s => {
+        if (s.status === 'signed') {
+          s.items.forEach(i => {
+            if (byProduct[i.productId]) byProduct[i.productId].imported += i.quantity;
+            const lot = ensureLot(i.productId, i.batchNumber);
+            lot.imported += i.quantity;
+            lot.slipCode = s.code;
+          });
+        } else if (s.status === 'cho_ql_xuong' || s.status === 'cho_kho_tong') {
+          s.items.forEach(i => {
+            if (byProduct[i.productId]) byProduct[i.productId].pendingImport += i.quantity;
+          });
+        }
+      });
+
+      exportOrders.forEach(ex => {
+        if (byProduct[ex.productId]) {
+          byProduct[ex.productId].exported += ex.qty;
+          byProduct[ex.productId].loss += ex.loss;
+        }
+        const lot = ensureLot(ex.productId, ex.batchNumber);
+        lot.exported += ex.qty;
+        lot.loss += ex.loss;
+      });
+
+      Object.values(byProduct).forEach(r => {
+        r.closing = r.opening + r.imported - r.exported - r.loss;
+      });
+      byLot.forEach(l => {
+        l.closing = l.opening + l.imported - l.exported - l.loss;
+      });
+
+      return { byProduct: Object.values(byProduct), byLot: Array.from(byLot.values()) };
+    }
+
+    // Tổng hợp Tiến độ Kế hoạch sản xuất vs Thực xuất xưởng vs Thực xuất Kho tổng
+    function computePlanProgress() {
+      return productionPlans.map(plan => {
+        const p = getProduct(plan.productId);
+        // Tổng xưởng đã giao (gồm cả chờ duyệt & đã duyệt, trừ bị trả lại)
+        let sentFromBrewery = 0;
+        let receivedByWarehouse = 0;
+        slips.forEach(s => {
+          if (s.status === 'tra_lai') return;
+          s.items.forEach(i => {
+            if (i.productId === plan.productId) {
+              sentFromBrewery += i.quantity;
+              if (s.status === 'signed') receivedByWarehouse += i.quantity;
+            }
+          });
+        });
+        const soldOut = exportOrders
+          .filter(e => e.productId === plan.productId)
+          .reduce((sum, e) => sum + e.qty, 0);
+
+        const pctBrewery = plan.targetQty > 0 ? Math.round((sentFromBrewery / plan.targetQty) * 100) : 0;
+        const pctReceived = plan.targetQty > 0 ? Math.round((receivedByWarehouse / plan.targetQty) * 100) : 0;
+        const variance = receivedByWarehouse - plan.targetQty;
+
+        return { plan, product: p, sentFromBrewery, receivedByWarehouse, soldOut, pctBrewery, pctReceived, variance };
+      });
+    }
+
+    function showToast(msg, type = 'success') {
+      const box = document.getElementById('toast-container');
+      const id = 't-' + Date.now();
+      const colors = {
+        success: 'bg-slate-900 text-white border-emerald-500/60',
+        warn: 'bg-amber-950 text-amber-100 border-amber-400/60',
+        error: 'bg-rose-950 text-rose-100 border-rose-500/60'
+      }[type];
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = `pointer-events-auto px-4 py-3 rounded-2xl border shadow-2xl text-xs font-bold flex items-center gap-2.5 anim-toast ${colors}`;
+      div.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span><span>${msg}</span>`;
+      box.appendChild(div);
+      setTimeout(() => {
+        div.style.opacity = '0';
+        div.style.transform = 'translateX(20px)';
+        div.style.transition = 'all 0.25s ease';
+        setTimeout(() => div.remove(), 260);
+      }, 3400);
+    }
+
+    // =========================================================================
+    // 5. CHUYỂN VAI TRÒ & SUB-TABS
+    // =========================================================================
+    function switchRole(role) {
+      currentRole = role;
+      renderAll();
+    }
+
+    function switchSubTab(tab) {
+      subTabs[currentRole] = tab;
+      renderMainStage();
+      renderSubBar();
+    }
+
+    function renderHeaderBadges() {
+      const cSx = slips.filter(s => s.status === 'tra_lai').length;
+      const cQlx = slips.filter(s => s.status === 'cho_ql_xuong').length;
+      const cKho = slips.filter(s => s.status === 'cho_kho_tong').length;
+
+      const bSx = document.getElementById('badge-sx');
+      bSx.textContent = cSx;
+      bSx.classList.toggle('hidden', cSx === 0);
+      document.getElementById('badge-qlx').textContent = cQlx;
+      document.getElementById('badge-kho').textContent = cKho;
+
+      ['SAN_XUAT', 'QUAN_LY_XUONG', 'KHO_TONG', 'KE_TOAN'].forEach(r => {
+        const btn = document.getElementById('role-btn-' + r);
+        btn.className = r === currentRole
+          ? 'px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md scale-[1.02]'
+          : 'px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-800';
+      });
+    }
+
+    function renderSubBar() {
+      const config = {
+        SAN_XUAT: {
+          title: '👨‍🏭 Nhân viên Sản xuất (Xưởng chiết SKB)',
+          desc: 'Kế thừa kế hoạch từ Quản lý xưởng ➔ Lập phiếu giao bia, đánh giá sản lượng ngày & kiểm kê bồn FST/BBT.',
+          tabs: [
+            { id: 'lap_phieu', label: '1. Lập phiếu giao bia' },
+            { id: 'danh_gia_ngay', label: '2. Đánh giá sản lượng ngày' },
+            { id: 'kiem_ke_bon', label: '3. Kiểm kê tháng (FST & BBT)' }
+          ]
+        },
+        QUAN_LY_XUONG: {
+          title: '👨‍💼 Quản lý Xưởng (Phê duyệt Rào 1 & Kế hoạch)',
+          desc: 'Kiểm tra nhật ký nhập, duyệt xuất xưởng (có ảnh hiện trạng) và nạp Kế hoạch sản xuất kế thừa xuống xưởng.',
+          tabs: [
+            { id: 'duyet_nhat_ky', label: '1. Duyệt phiếu & Nhật ký nhập' },
+            { id: 'ke_hoach_sx', label: '2. Kế hoạch sản xuất (Kế thừa)' },
+            { id: 'xem_kiem_ke', label: '3. Dữ liệu kiểm kê FST/BBT' }
+          ]
+        },
+        KHO_TONG: {
+          title: '🏭 Kho Tổng Bà Nà (Nhận bia Rào 2 & Nhập-Xuất-Tồn)',
+          desc: 'Xác nhận nhận bia từ xưởng, quản lý sổ Nhập · Xuất · Tồn và xuất bia theo lô đi 18 nhà hàng / đối tác.',
+          tabs: [
+            { id: 'nxt_kho', label: '1. Sổ Nhập · Xuất · Tồn & Tồn theo Lô' },
+            { id: 'nhan_bia', label: `2. Chờ nhận từ xưởng (${slips.filter(s => s.status === 'cho_kho_tong').length})` },
+            { id: 'xuat_bia', label: '3. Xuất kho theo Lô (FIFO)' }
+          ]
+        },
+        KE_TOAN: {
+          title: '📊 Kế Toán Điều Hành (Dashboard Kế hoạch vs Thực xuất)',
+          desc: 'Giám sát realtime tỷ lệ hoàn thành Kế hoạch sản xuất, sản lượng thực xuất, hao hụt & tồn kho toàn chuỗi.',
+          tabs: [
+            { id: 'tong_quan', label: '1. Dashboard Kế hoạch vs Thực xuất' },
+            { id: 'truy_xuat_lo', label: '2. Truy xuất Lô & Kiểm kê FST/BBT' }
+          ]
+        }
+      }[currentRole];
+
+      const activeTab = subTabs[currentRole];
+      document.getElementById('role-subbar').innerHTML = `
+        <div>
+          <p class="text-xs font-extrabold text-slate-900">${config.title}</p>
+          <p class="text-[11px] text-slate-500 mt-0.5">${config.desc}</p>
+        </div>
+        <div class="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+          ${config.tabs.map(t => `
+            <button onclick="switchSubTab('${t.id}')"
+              class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all duration-200 ${
+                activeTab === t.id
+                  ? 'bg-[#141A23] text-amber-300 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+              }">
+              ${t.label}
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 6. VIEW 1: NHÂN VIÊN SẢN XUẤT (3 SUB-TABS GỌN GÀNG)
+    // =========================================================================
+    function renderSanXuatView() {
+      const tab = subTabs.SAN_XUAT;
+      if (tab === 'lap_phieu') return renderSxLapPhieu();
+      if (tab === 'danh_gia_ngay') return renderSxDanhGiaNgay();
+      return renderSxKiemKeBon();
+    }
+
+    function renderSxLapPhieu() {
+      const returned = slips.filter(s => s.status === 'tra_lai');
+      const progressList = computePlanProgress();
+      const nextCode = editingSlipCode || `PN-261116-${String(slips.length + 1).padStart(2, '0')}`;
+
+      const activeItems = getActiveFormItems();
+      const hasQty = activeItems.length > 0;
+      const hasAllBatches = hasQty && activeItems.every(i => !!i.batchNumber);
+      const hasPhoto = attachedPhotos.length > 0;
+      const canSubmit = hasQty && hasAllBatches && hasPhoto;
+
+      return `
+        <div class="space-y-5 anim-view-enter">
+          ${returned.length ? `
+            <div class="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="text-xs">
+                <p class="font-extrabold text-rose-900">⚠️ Có ${returned.length} phiếu bị trả lại cần sửa:</p>
+                ${returned.map(r => `<p class="text-rose-700 mt-0.5">• <strong>${r.code}</strong> (${r.rejectedBy}): "${r.rejectedReason}"</p>`).join('')}
+              </div>
+              <button onclick="loadSlipToEdit('${returned[0].code}')" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shrink-0 transition">
+                Sửa phiếu ${returned[0].code}
+              </button>
+            </div>
+          ` : ''}
+
+          <!-- Thanh kế thừa Kế hoạch sản xuất từ Quản lý xưởng -->
+          <div class="bg-white rounded-2xl border border-amber-300/80 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 bg-gradient-to-r from-[#141A23] to-slate-800 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 pulse-dot"></span>
+                <span class="text-xs font-extrabold">Kế Hoạch Sản Xuất Hôm Nay (Kế thừa từ Quản Lý Xưởng)</span>
+              </div>
+              <button onclick="prefillFromPlan()" class="px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[11px] font-extrabold transition">
+                ⚡ Điền số còn thiếu theo Kế hoạch
+              </button>
+            </div>
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              ${progressList.map(({ plan, product, sentFromBrewery, pctBrewery }) => {
+                const remain = Math.max(0, plan.targetQty - sentFromBrewery);
+                return `
+                  <div class="p-3 rounded-xl bg-[#FAF7F2] border border-amber-200/80 card-lift">
+                    <p class="text-[11px] font-extrabold text-slate-900 truncate">${product.name}</p>
+                    <div class="flex items-baseline justify-between mt-1.5 font-mono">
+                      <span class="text-xs font-black text-amber-800">${sentFromBrewery} / ${plan.targetQty} ${product.unit}</span>
+                      <span class="text-[10px] font-bold ${pctBrewery >= 100 ? 'text-emerald-700' : 'text-slate-500'}">${pctBrewery}%</span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full bg-slate-200 mt-1.5 overflow-hidden">
+                      <div class="h-full rounded-full bar-fill ${pctBrewery >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}" style="width: ${Math.min(100, pctBrewery)}%"></div>
+                    </div>
+                    <p class="text-[10px] font-mono text-slate-500 mt-1.5">
+                      ${remain > 0 ? `Cần giao thêm: <strong>${remain} ${product.unit}</strong>` : '✓ Đã giao đủ kế hoạch'}
+                    </p>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Form Lập Phiếu Giao Bia -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                  ${editingSlipCode ? 'CHỈNH SỬA PHIẾU BỊ TRẢ LẠI' : 'XƯỞNG CHIẾT BIA ➔ KHO TỔNG'}
+                </span>
+                <h2 class="text-base font-extrabold mt-0.5">
+                  ${editingSlipCode ? `Sửa & Trình Lại Phiếu ${editingSlipCode}` : 'Lập Phiếu Bàn Giao Bia Theo Lô (Paperless)'}
+                </h2>
+              </div>
+              <span class="font-mono text-sm font-black px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                ${nextCode}
+              </span>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <!-- 3 Đèn kiểm soát cửa vào -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div class="px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${hasQty ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-800'}">
+                  <span>${hasQty ? '✅' : '⛔'}</span>
+                  <span>1. Số lượng & Quy đổi Keg</span>
+                </div>
+                <div class="px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${hasAllBatches ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-800'}">
+                  <span>${hasAllBatches ? '✅' : '⛔'}</span>
+                  <span>2. Đủ 100% Mã lô sản xuất</span>
+                </div>
+                <div class="px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-2 ${hasPhoto ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-800'}">
+                  <span>${hasPhoto ? '✅' : '⛔'}</span>
+                  <span>3. Có ảnh hiện trạng Keg (${attachedPhotos.length})</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                <div class="sm:col-span-4">
+                  <label class="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-1">Ngày bàn giao</label>
+                  <input type="date" value="${formDate}" onchange="formDate=this.value; renderMainStage();"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 font-mono text-sm font-bold bg-slate-50 outline-none focus:border-amber-600" />
+                </div>
+                <div class="sm:col-span-8">
+                  <label class="block text-[11px] font-extrabold uppercase tracking-wider text-amber-800 mb-1">Mã lô chung cho phiếu *</label>
+                  <input type="text" value="${formCommonBatch}" oninput="formCommonBatch=this.value; renderMainStage();"
+                    placeholder="VD: LO-261116-GB01"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-amber-300 bg-amber-50/40 font-mono text-sm font-bold outline-none focus:border-amber-600" />
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 overflow-hidden">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead class="bg-slate-100 border-b border-slate-200 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th class="py-2.5 px-3.5">Mặt hàng bia</th>
+                      <th class="py-2.5 px-2 text-center w-14">ĐVT</th>
+                      <th class="py-2.5 px-2 text-right w-28">Số lượng giao</th>
+                      <th class="py-2.5 px-2 text-center w-28">Hiện trạng</th>
+                      <th class="py-2.5 px-3.5 w-44">Mã lô *</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${PRODUCTS.map(p => {
+                      const qty = Number(formQuantities[p.id] || 0);
+                      const batch = (formBatches[p.id] ?? '').trim() || formCommonBatch.trim();
+                      const missingB = qty > 0 && !batch;
+                      return `
+                        <tr class="${qty > 0 ? 'bg-amber-50/40' : 'hover:bg-slate-50'} transition-colors">
+                          <td class="py-2.5 px-3.5">
+                            <span class="font-bold text-slate-900">${p.name}</span>
+                            <span class="block text-[10px] font-mono text-slate-400">SAP: ${p.code}</span>
+                          </td>
+                          <td class="py-2.5 px-2 text-center font-bold text-slate-500">${p.unit}</td>
+                          <td class="py-2.5 px-2 text-right">
+                            <input type="number" min="0" step="20" value="${qty > 0 ? qty : ''}" placeholder="0"
+                              onchange="formQuantities['${p.id}']=Number(this.value)||0; renderMainStage();"
+                              class="w-24 px-2.5 py-1.5 rounded-lg border ${qty > 0 ? 'border-amber-500 font-extrabold bg-white' : 'border-slate-200 bg-slate-50'} text-right font-mono tabular-nums outline-none" />
+                          </td>
+                          <td class="py-2.5 px-2 text-center">
+                            <span class="px-2 py-1 rounded-lg font-mono text-[11px] font-bold ${qty > 0 ? 'bg-[#141A23] text-amber-300' : 'text-slate-300'}">
+                              ${formatKegText(p, qty)}
+                            </span>
+                          </td>
+                          <td class="py-2.5 px-3.5">
+                            <input type="text" value="${formBatches[p.id] || ''}" placeholder="${formCommonBatch || 'Bắt buộc *'}"
+                              onchange="formBatches['${p.id}']=this.value; renderMainStage();"
+                              class="w-full px-2.5 py-1.5 rounded-lg border font-mono text-xs font-bold outline-none ${missingB ? 'border-rose-400 bg-rose-50' : 'border-slate-200 bg-white'}" />
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Ảnh hiện trạng giao bia -->
+              <div class="p-4 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <p class="text-xs font-extrabold text-slate-900">📸 Ảnh chụp hiện trạng giao bia (Bắt buộc đủ số Keg)</p>
+                    <p class="text-[11px] text-slate-500">Không có ảnh hiện trạng sẽ không thể gửi phiếu sang Quản lý xưởng.</p>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <label class="px-3.5 py-2 rounded-xl bg-[#141A23] text-white text-xs font-extrabold cursor-pointer hover:bg-slate-800 transition">
+                      + Chọn / Chụp ảnh
+                      <input type="file" accept="image/*" multiple class="hidden" onchange="handleRealPhotoUpload(event)" />
+                    </label>
+                    <button type="button" onclick="addSimulatedKegPhoto()"
+                      class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition shadow-sm">
+                      🍺 Chụp mẫu 10 Keg
+                    </button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  ${attachedPhotos.length === 0 ? `
+                    <div class="col-span-2 py-4 text-center text-xs font-bold text-rose-600 bg-rose-50 rounded-xl border border-rose-200">
+                      ⚠️ Chưa có ảnh chụp hiện trạng. Hệ thống đang khoá nút Gửi!
+                    </div>
+                  ` : attachedPhotos.map(ph => `
+                    <div class="rounded-xl overflow-hidden border border-slate-300 bg-slate-950">
+                      <img src="${ph.url}" class="w-full h-32 object-contain" />
+                      <div class="px-3 py-1.5 bg-slate-900 text-white text-[11px] font-bold flex justify-between items-center">
+                        <span class="truncate">${ph.caption}</span>
+                        <button type="button" onclick="attachedPhotos=attachedPhotos.filter(x=>x.id!=='${ph.id}'); renderMainStage();" class="text-rose-400 hover:text-rose-300 ml-2">Xoá</button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100">
+                <span class="text-xs font-bold ${canSubmit ? 'text-emerald-700' : 'text-rose-600'}">
+                  ${canSubmit ? '✓ Đã đủ Số lượng + Mã lô + Ảnh hiện trạng. Sẵn sàng ký trình!' : '🔒 Cần đủ Số lượng, Mã lô và Ảnh hiện trạng để gửi.'}
+                </span>
+                <div class="flex items-center gap-2">
+                  ${editingSlipCode ? `<button onclick="cancelEditSlip()" class="px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-bold">Huỷ sửa</button>` : ''}
+                  <button onclick="submitSlip()" ${canSubmit ? '' : 'disabled'}
+                    class="px-6 py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition-all ${
+                      canSubmit ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-600/25 cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }">
+                    ✍️ Ký Điện Tử & Gửi Quản Lý Xưởng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSxDanhGiaNgay() {
+      const progress = computePlanProgress();
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">ĐÁNH GIÁ CUỐI CA / CUỐI NGÀY</span>
+                <h2 class="text-base font-extrabold">Báo Cáo & Đánh Giá Sản Lượng Sản Xuất Trong Ngày</h2>
+              </div>
+              <span class="font-mono text-xs text-slate-300">Ngày 16/11/2026</span>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Loại bia sản xuất</label>
+                  <select id="eval-product" onchange="updateEvalPlanHint()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+                    ${PRODUCTS.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Ca sản xuất</label>
+                  <select id="eval-shift" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+                    <option>Ca sáng (07:00 - 15:00)</option>
+                    <option>Ca chiều (15:00 - 23:00)</option>
+                    <option>Cả ngày (Tổng hợp)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Thực chiết tại xưởng (Lít/Lon)</label>
+                  <input id="eval-actual" type="number" value="400" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-sm font-bold" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Đánh giá đạt / không đạt</label>
+                  <select id="eval-rating" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-emerald-50 text-emerald-900">
+                    <option value="Đạt tiến độ">✅ Đạt kế hoạch ngày</option>
+                    <option value="Vượt kế hoạch">🚀 Vượt kế hoạch</option>
+                    <option value="Chậm / Thiếu sản lượng">⚠️ Chậm / Hụt sản lượng</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                <div class="sm:col-span-9">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Ghi chú kỹ thuật / Nguyên nhân chênh lệch mẻ chiết</label>
+                  <input id="eval-note" type="text" placeholder="VD: Áp suất lọc ổn định, đã giao 10 Keg, còn 10 Keg chờ lạnh sâu..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold" />
+                </div>
+                <div class="sm:col-span-3">
+                  <button onclick="saveDailyEval()" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition shadow">
+                    + Lưu Đánh Giá Ngày
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bảng đối chiếu Kế hoạch vs Thực giao & Nhật ký đánh giá -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100">
+              <h3 class="text-sm font-extrabold text-slate-900">Nhật Ký Đánh Giá Sản Xuất Trong Ngày (So với Kế hoạch)</h3>
+            </div>
+            <div class="divide-y divide-slate-100">
+              ${dailyEvaluations.map(ev => {
+                const p = getProduct(ev.productId);
+                const planMatch = progress.find(x => x.plan.productId === ev.productId);
+                return `
+                  <div class="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/80 transition">
+                    <div class="space-y-1">
+                      <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${ev.rating.includes('Chậm') ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">${ev.rating}</span>
+                        <span class="text-xs font-bold text-slate-500">${ev.shift} · ${ev.at}</span>
+                      </div>
+                      <p class="text-sm font-extrabold text-slate-900">${p.name}</p>
+                      <p class="text-xs text-slate-600">${ev.note}</p>
+                    </div>
+                    <div class="flex items-center gap-4 font-mono shrink-0">
+                      <div class="text-right">
+                        <span class="text-[10px] text-slate-400 block">KẾ HOẠCH</span>
+                        <span class="text-sm font-bold text-slate-700">${ev.plannedQty} ${p.unit}</span>
+                      </div>
+                      <div class="text-right">
+                        <span class="text-[10px] text-slate-400 block">THỰC CHIẾT</span>
+                        <span class="text-sm font-black text-amber-700">${ev.actualBrewedQty} ${p.unit}</span>
+                      </div>
+                      <div class="text-right">
+                        <span class="text-[10px] text-slate-400 block">ĐÃ GIAO KHO</span>
+                        <span class="text-sm font-black text-emerald-700">${planMatch ? planMatch.sentFromBrewery : ev.actualHandoverQty} ${p.unit}</span>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSxKiemKeBon() {
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <!-- Form kiểm kê bồn FST & BBT hàng tháng (Bắt buộc ảnh minh chứng) -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-sky-400">KIỂM KÊ TỒN BỒN HÀNG THÁNG · BẮT BUỘC ẢNH MINH CHỨNG</span>
+                <h2 class="text-base font-extrabold">Kiểm Kê Lượng Bia Còn Tồn Tại Bồn FST & BBT</h2>
+              </div>
+              <span class="px-3 py-1 rounded-xl bg-sky-500/20 text-sky-300 font-mono text-xs font-bold border border-sky-500/30">Kỳ: 11/2026</span>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                <div class="sm:col-span-3">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Chọn Bồn (FST / BBT) *</label>
+                  <select id="kk-tank" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-extrabold bg-slate-50">
+                    ${TANKS.map(t => `<option value="${t.id}">${t.name} (Max ${t.capacityLiters}L)</option>`).join('')}
+                  </select>
+                </div>
+                <div class="sm:col-span-4">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Loại bia đang chứa *</label>
+                  <select id="kk-product" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+                    ${PRODUCTS.filter(p => p.category === 'Lít').map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="sm:col-span-3">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Mã lô đang ủ/chứa *</label>
+                  <input id="kk-batch" type="text" value="LO-261114-FST02" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-bold" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Số Lít đo được *</label>
+                  <input id="kk-liters" type="number" value="1120" class="w-full px-3 py-2.5 rounded-xl border border-amber-400 font-mono text-sm font-black text-right" />
+                </div>
+              </div>
+
+              <!-- Khung ảnh minh chứng thước đo bồn (Bắt buộc) -->
+              <div class="p-4 rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="space-y-1">
+                  <p class="text-xs font-extrabold text-slate-900">📸 Ảnh chụp thước đo mức bia / đồng hồ bồn FST-BBT (Bắt buộc)</p>
+                  <p class="text-[11px] text-slate-500">Chụp rõ vạch thước thủy tinh hoặc màn hình áp suất/thể tích của bồn.</p>
+                  <div class="flex gap-2 pt-1">
+                    <label class="px-3 py-1.5 rounded-lg bg-[#141A23] text-white text-xs font-bold cursor-pointer hover:bg-slate-800">
+                      + Tải ảnh thật
+                      <input type="file" accept="image/*" class="hidden" onchange="handleTankPhotoUpload(event)" />
+                    </label>
+                    <button type="button" onclick="simulateTankPhoto()" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold">
+                      📷 Chụp mẫu thước đo bồn
+                    </button>
+                  </div>
+                </div>
+                <div class="w-full sm:w-56 shrink-0">
+                  ${tankPhotoDraft ? `
+                    <div class="rounded-xl overflow-hidden border border-sky-400 bg-slate-950 relative">
+                      <img src="${tankPhotoDraft}" class="w-full h-24 object-contain" />
+                      <button onclick="tankPhotoDraft=null; renderMainStage();" class="absolute top-1 right-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">Xoá</button>
+                    </div>
+                  ` : `
+                    <div class="h-24 rounded-xl border border-rose-200 bg-rose-50 flex items-center justify-center text-[11px] font-bold text-rose-600 text-center px-2">
+                      Chưa có ảnh bồn<br/>(Không lưu được)
+                    </div>
+                  `}
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <button onclick="saveTankInventory()" ${tankPhotoDraft ? '' : 'disabled'}
+                  class="px-6 py-3 rounded-xl font-extrabold text-xs uppercase tracking-wider transition ${
+                    tankPhotoDraft ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-lg shadow-sky-600/25 cursor-pointer' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }">
+                  ✓ Lưu Kiểm Kê Bồn FST/BBT
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bảng trực quan các bồn FST & BBT đã kiểm kê -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${tankInventories.map(kk => {
+              const tank = TANKS.find(t => t.id === kk.tankId) || TANKS[0];
+              const p = getProduct(kk.productId);
+              const pct = Math.round((kk.liters / tank.capacityLiters) * 100);
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm card-lift flex gap-4 items-center">
+                  <img src="${kk.photoUrl}" class="w-32 h-24 rounded-xl object-cover bg-slate-950 border border-slate-300 shrink-0" />
+                  <div class="flex-1 min-w-0 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                      <span class="px-2 py-0.5 rounded-md font-mono text-[11px] font-black ${tank.group === 'FST' ? 'bg-indigo-100 text-indigo-800' : 'bg-sky-100 text-sky-800'}">
+                        ${tank.id} (${tank.group})
+                      </span>
+                      <span class="text-[11px] font-mono font-bold text-slate-400">${kk.createdAt}</span>
+                    </div>
+                    <p class="text-xs font-extrabold text-slate-900 truncate">${p.name}</p>
+                    <p class="font-mono text-[11px] text-amber-800 font-bold">Lô: ${kk.batchNumber}</p>
+                    <div class="flex items-center justify-between text-xs font-mono">
+                      <span class="font-black text-slate-900">${kk.liters.toLocaleString('vi-VN')} / ${tank.capacityLiters.toLocaleString('vi-VN')} L</span>
+                      <span class="font-bold text-emerald-700">${pct}%</span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div class="h-full bg-sky-500 rounded-full bar-fill" style="width: ${pct}%"></div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 7. VIEW 2: QUẢN LÝ XƯỞNG (DUYỆT RÀO 1 + NHẬT KÝ + KẾ HOẠCH SẢN XUẤT)
+    // =========================================================================
+    function renderQuanLyXuongView() {
+      const tab = subTabs.QUAN_LY_XUONG;
+      if (tab === 'ke_hoach_sx') return renderQlxKeHoach();
+      if (tab === 'xem_kiem_ke') return renderQlxXemKiemKe();
+      return renderQlxDuyetVaNhatKy();
+    }
+
+    function renderQlxDuyetVaNhatKy() {
+      const pending = slips.filter(s => s.status === 'cho_ql_xuong');
+      let sumApproved = 0, sumPending = 0;
+      slips.forEach(s => {
+        const l = s.items.reduce((a, i) => a + i.liters, 0);
+        if (s.status === 'signed') sumApproved += l;
+        else if (s.status !== 'tra_lai') sumPending += l;
+      });
+
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <!-- Khối Duyệt Rào 1 -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">RÀO KIỂM SOÁT SỐ 1 · QUẢN LÝ XƯỞNG</span>
+                <h2 class="text-base font-extrabold">Phiếu Bàn Giao Chờ Duyệt Xuất Xưởng</h2>
+              </div>
+              <span class="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-mono text-xs font-black">${pending.length} phiếu chờ</span>
+            </div>
+
+            <div class="p-6 space-y-4">
+              ${pending.length === 0 ? `
+                <div class="py-8 text-center text-xs font-bold text-slate-400">
+                  ✓ Tuyệt vời! Không có phiếu nào tồn đọng chờ Quản lý xưởng duyệt.
+                </div>
+              ` : pending.map(s => renderApprovalCard(s, 'QLX')).join('')}
+            </div>
+          </div>
+
+          <!-- Bảng Nhật Ký Nhập / Bàn Giao -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 class="text-sm font-extrabold text-slate-900">Nhật Ký Xuất Xưởng & Tình Trạng Duyệt 2 Bước</h3>
+                <p class="text-xs text-slate-500">Quản lý xưởng rà soát toàn bộ lô bia giao sang Kho tổng</p>
+              </div>
+              <div class="flex gap-2 font-mono text-xs font-bold">
+                <span class="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">Đã vào tồn: ${sumApproved.toLocaleString('vi-VN')} L</span>
+                <span class="px-3 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">Đang chờ duyệt: ${sumPending.toLocaleString('vi-VN')} L</span>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <tr>
+                    <th class="py-3 px-4">Số phiếu / Giờ lập</th>
+                    <th class="py-3 px-3">Mặt hàng & Mã lô</th>
+                    <th class="py-3 px-3 text-right">Số lượng (Keg)</th>
+                    <th class="py-3 px-3 text-center">Ảnh hiện trạng</th>
+                    <th class="py-3 px-3">Trạng thái</th>
+                    <th class="py-3 px-4 text-right">Biểu mẫu</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${slips.map(s => {
+                    const st = {
+                      cho_ql_xuong: '<span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 font-bold text-[11px]">1/2 · Chờ QL Xưởng</span>',
+                      cho_kho_tong: '<span class="px-2.5 py-1 rounded-full bg-sky-100 text-sky-900 font-bold text-[11px]">2/2 · Chờ Kho Tổng</span>',
+                      tra_lai: '<span class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-bold text-[11px]">Bị trả lại</span>',
+                      signed: '<span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[11px]">✓ Đã vào tồn kho</span>'
+                    }[s.status];
+                    return `
+                      <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="py-3 px-4 font-mono">
+                          <span class="font-black text-slate-900 block">${s.code}</span>
+                          <span class="text-[11px] text-slate-400">${s.signatures.creator.signedAt}</span>
+                        </td>
+                        <td class="py-3 px-3">
+                          ${s.items.map(i => `
+                            <div class="mb-1 last:mb-0">
+                              <span class="font-bold text-slate-900">${i.productName}</span>
+                              <span class="ml-1.5 font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">${i.batchNumber}</span>
+                            </div>
+                          `).join('')}
+                        </td>
+                        <td class="py-3 px-3 text-right font-mono tabular-nums">
+                          ${s.items.map(i => `<div><strong>${i.quantity} ${i.unit}</strong> <span class="text-slate-500">(${i.kegText})</span></div>`).join('')}
+                        </td>
+                        <td class="py-3 px-3 text-center">
+                          <button onclick="openPaperlessModal('${s.code}')" class="text-xs font-extrabold text-indigo-700 hover:underline">📸 ${s.photos.length} ảnh</button>
+                        </td>
+                        <td class="py-3 px-3">${st}</td>
+                        <td class="py-3 px-4 text-right">
+                          <button onclick="openPaperlessModal('${s.code}')" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800">BM-SKB-01</button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQlxKeHoach() {
+      const progress = computePlanProgress();
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">KẾ HOẠCH SẢN XUẤT ➔ KẾ THỪA XUỐNG NV SẢN XUẤT</span>
+                <h2 class="text-base font-extrabold">Nạp & Phát Hành Kế Hoạch Sản Xuất</h2>
+              </div>
+              <button onclick="simulateAgentMailSync()" class="px-3.5 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 text-xs font-extrabold transition">
+                🤖 Mô phỏng: Agent bóc Kế hoạch từ Mail anh Khoa
+              </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end p-4 rounded-2xl bg-[#FAF7F2] border border-amber-200">
+                <div class="sm:col-span-4">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Mặt hàng bia</label>
+                  <select id="plan-product" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white">
+                    ${PRODUCTS.map(p => `<option value="${p.id}">${p.name} (${p.unit})</option>`).join('')}
+                  </select>
+                </div>
+                <div class="sm:col-span-3">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Sản lượng kế hoạch *</label>
+                  <input id="plan-qty" type="number" value="240" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-sm font-black bg-white" />
+                </div>
+                <div class="sm:col-span-3">
+                  <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Ghi chú / Mẻ dự kiến</label>
+                  <input id="plan-note" type="text" placeholder="VD: Bổ sung cho lễ hội cuối tuần" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white" />
+                </div>
+                <div class="sm:col-span-2">
+                  <button onclick="addProductionPlan()" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition shadow">
+                    + Phát hành
+                  </button>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 overflow-hidden">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
+                    <tr>
+                      <th class="py-3 px-4">Mặt hàng bia</th>
+                      <th class="py-3 px-3">Nguồn kế hoạch</th>
+                      <th class="py-3 px-3 text-right">Kế hoạch</th>
+                      <th class="py-3 px-3 text-right">Xưởng đã giao</th>
+                      <th class="py-3 px-4">Tiến độ kế thừa</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${progress.map(({ plan, product, sentFromBrewery, pctBrewery }) => `
+                      <tr class="hover:bg-slate-50">
+                        <td class="py-3 px-4">
+                          <p class="font-bold text-slate-900">${product.name}</p>
+                          <p class="text-[11px] text-slate-500">${plan.note}</p>
+                        </td>
+                        <td class="py-3 px-3">
+                          <span class="px-2 py-0.5 rounded text-[10px] font-bold ${plan.source.includes('Agent') ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700'}">
+                            ${plan.source}
+                          </span>
+                        </td>
+                        <td class="py-3 px-3 text-right font-mono font-black text-slate-900 tabular-nums">${plan.targetQty} ${product.unit}</td>
+                        <td class="py-3 px-3 text-right font-mono font-bold text-amber-700 tabular-nums">${sentFromBrewery} ${product.unit}</td>
+                        <td class="py-3 px-4 w-48">
+                          <div class="flex items-center gap-2">
+                            <div class="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                              <div class="h-full rounded-full bar-fill ${pctBrewery >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}" style="width:${Math.min(100, pctBrewery)}%"></div>
+                            </div>
+                            <span class="font-mono text-[11px] font-bold w-10 text-right">${pctBrewery}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQlxXemKiemKe() {
+      return `
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden anim-view-enter">
+          <div class="px-6 py-4 bg-[#141A23] text-white">
+            <h2 class="text-base font-extrabold">Giám Sát Kiểm Kê Bồn FST & BBT Hàng Tháng (Từ NV Sản Xuất)</h2>
+          </div>
+          <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${tankInventories.map(kk => {
+              const t = TANKS.find(x => x.id === kk.tankId) || TANKS[0];
+              const p = getProduct(kk.productId);
+              return `
+                <div class="p-4 rounded-2xl border border-slate-200 flex gap-4 items-center card-lift">
+                  <img src="${kk.photoUrl}" class="w-36 h-24 rounded-xl object-cover bg-slate-950 border border-slate-300" />
+                  <div class="space-y-1 text-xs">
+                    <span class="px-2 py-0.5 rounded bg-sky-100 text-sky-900 font-mono font-black">${kk.tankId}</span>
+                    <p class="font-extrabold text-slate-900">${p.name}</p>
+                    <p class="font-mono font-bold text-amber-700">Lô: ${kk.batchNumber}</p>
+                    <p class="font-mono font-black text-emerald-700 text-sm">${kk.liters.toLocaleString('vi-VN')} Lít (Max ${t.capacityLiters}L)</p>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 8. VIEW 3: KHO TỔNG (NHẬP - XUẤT - TỒN, NHẬN BIA RÀO 2, XUẤT LÔ FIFO)
+    // =========================================================================
+    function renderKhoTongView() {
+      const tab = subTabs.KHO_TONG;
+      if (tab === 'nhan_bia') return renderKhoNhanBia();
+      if (tab === 'xuat_bia') return renderKhoXuatBia();
+      return renderKhoNXT();
+    }
+
+    function renderKhoNXT() {
+      const { byProduct, byLot } = computeWarehouseNXT();
+      const totalClosingLiters = byProduct.reduce((s, r) => s + r.closing * (r.product.cap / 1000), 0);
+      const totalImportedLiters = byProduct.reduce((s, r) => s + r.imported * (r.product.cap / 1000), 0);
+      const totalExportedLiters = byProduct.reduce((s, r) => s + r.exported * (r.product.cap / 1000), 0);
+
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <!-- KPI NXT Tổng quan -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Tồn Đầu Kỳ</span>
+              <p class="text-xl font-black font-mono text-slate-900 mt-1 tabular-nums">${byProduct.reduce((s, r) => s + r.opening * (r.product.cap / 1000), 0).toFixed(1)} L</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-white border border-emerald-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Nhập Đã Duyệt (2 Rào)</span>
+              <p class="text-xl font-black font-mono text-emerald-700 mt-1 tabular-nums">+${totalImportedLiters.toFixed(1)} L</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">Xuất Bán & Điều Chuyển</span>
+              <p class="text-xl font-black font-mono text-amber-700 mt-1 tabular-nums">-${totalExportedLiters.toFixed(1)} L</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-[#141A23] text-white shadow-md card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400">Tồn Cuối Kỳ Kho Tổng</span>
+              <p class="text-xl font-black font-mono text-emerald-400 mt-1 tabular-nums">${totalClosingLiters.toFixed(1)} L</p>
+            </div>
+          </div>
+
+          <!-- Bảng Nhập - Xuất - Tồn theo Mặt Hàng -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 class="text-sm font-extrabold text-slate-900">Bảng Nhập · Xuất · Tồn Kho Tổng (Kỳ 11/2026)</h2>
+                <p class="text-xs text-slate-500">Số liệu cập nhật realtime ngay khi Kho tổng ký nhận Rào 2 hoặc xuất hàng đi nhà hàng/đối tác</p>
+              </div>
+              <button onclick="switchSubTab('xuat_bia')" class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition">
+                + Xuất Kho Theo Lô
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <tr>
+                    <th class="py-3 px-4">Mặt hàng bia</th>
+                    <th class="py-3 px-2 text-center">ĐVT</th>
+                    <th class="py-3 px-3 text-right">Đầu kỳ</th>
+                    <th class="py-3 px-3 text-right text-emerald-700">Nhập kho</th>
+                    <th class="py-3 px-3 text-right text-amber-700">Chờ duyệt</th>
+                    <th class="py-3 px-3 text-right text-sky-700">Xuất bán</th>
+                    <th class="py-3 px-3 text-right text-rose-600">Hao hụt</th>
+                    <th class="py-3 px-4 text-right">Tồn cuối kỳ</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono tabular-nums">
+                  ${byProduct.map(r => `
+                    <tr class="hover:bg-slate-50">
+                      <td class="py-3 px-4 font-sans font-bold text-slate-900">${r.product.name}</td>
+                      <td class="py-3 px-2 text-center font-sans text-slate-500">${r.product.unit}</td>
+                      <td class="py-3 px-3 text-right text-slate-600">${r.opening}</td>
+                      <td class="py-3 px-3 text-right font-bold text-emerald-700">+${r.imported}</td>
+                      <td class="py-3 px-3 text-right text-amber-600">${r.pendingImport > 0 ? r.pendingImport : '—'}</td>
+                      <td class="py-3 px-3 text-right font-bold text-sky-700">-${r.exported}</td>
+                      <td class="py-3 px-3 text-right text-rose-600">${r.loss > 0 ? `-${r.loss.toFixed(1)}` : '—'}</td>
+                      <td class="py-3 px-4 text-right font-black text-slate-900 text-sm">${r.closing.toFixed(1)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bảng Tồn Chi Tiết Từng Lô Bia (FIFO) -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100">
+              <h3 class="text-sm font-extrabold text-slate-900">Chi Tiết Tồn Kho Tổng Theo Từng Mã Lô (Truy Xuất Nguồn Gốc)</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <tr>
+                    <th class="py-3 px-4">Mã lô sản xuất</th>
+                    <th class="py-3 px-3">Mặt hàng</th>
+                    <th class="py-3 px-3 text-right">Tổng vào lô</th>
+                    <th class="py-3 px-3 text-right">Đã xuất + hao hụt</th>
+                    <th class="py-3 px-4 text-right">Còn tồn lại tại kho</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-mono tabular-nums">
+                  ${byLot.map(l => `
+                    <tr class="hover:bg-slate-50">
+                      <td class="py-3 px-4">
+                        <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-black">${l.batchNumber}</span>
+                        <span class="block text-[10px] text-slate-400 mt-0.5">${l.slipCode}</span>
+                      </td>
+                      <td class="py-3 px-3 font-sans font-bold text-slate-900">${l.product.name}</td>
+                      <td class="py-3 px-3 text-right text-slate-700">${l.opening + l.imported} ${l.product.unit}</td>
+                      <td class="py-3 px-3 text-right text-amber-700">-${(l.exported + l.loss).toFixed(1)}</td>
+                      <td class="py-3 px-4 text-right font-black text-emerald-700 text-sm">${l.closing.toFixed(1)} ${l.product.unit}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKhoNhanBia() {
+      const pending = slips.filter(s => s.status === 'cho_kho_tong');
+      return `
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden anim-view-enter">
+          <div class="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-widest text-sky-400">RÀO KIỂM SOÁT SỐ 2 · KHO TỔNG NHẬN BIA</span>
+              <h2 class="text-base font-extrabold">Phiếu Đã Qua Quản Lý Xưởng ➔ Chờ Kho Tổng Ký Nhận</h2>
+            </div>
+            <span class="px-3 py-1 rounded-full bg-sky-400 text-slate-950 font-mono text-xs font-black">${pending.length} chuyến</span>
+          </div>
+          <div class="p-6 space-y-4">
+            ${pending.length === 0 ? `
+              <p class="py-10 text-center text-xs font-bold text-slate-400">Không có chuyến nào đang chờ Kho tổng ký nhận.</p>
+            ` : pending.map(s => renderApprovalCard(s, 'KHO')).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKhoXuatBia() {
+      const { byLot } = computeWarehouseNXT();
+      const availableLots = byLot.filter(l => l.closing > 0);
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white">
+              <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">XUẤT KHO GẮN MÃ LÔ (TRUY XUẤT REALTIME)</span>
+              <h2 class="text-base font-extrabold">Xuất Bia Từ Kho Tổng Đi Điểm Bán / Đối Tác</h2>
+            </div>
+            <div class="p-6 grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+              <div class="sm:col-span-4">
+                <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Chọn Lô đang còn tồn trong kho (FIFO)</label>
+                <select id="exp-lot" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+                  ${availableLots.map(l => `<option value="${l.product.id}|${l.batchNumber}">[${l.batchNumber}] ${l.product.name} — Còn ${l.closing.toFixed(0)} ${l.product.unit}</option>`).join('')}
+                </select>
+              </div>
+              <div class="sm:col-span-3">
+                <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Nơi nhận (18 Nhà hàng BNC / Đối tác)</label>
+                <select id="exp-dest" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50">
+                  ${DESTINATIONS.map(d => `<option value="${d}">${d}</option>`).join('')}
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-extrabold text-slate-600 mb-1">Số lượng xuất</label>
+                <input id="exp-qty" type="number" value="40" class="w-full px-3 py-2.5 rounded-xl border border-amber-400 font-mono text-sm font-black" />
+              </div>
+              <div class="sm:col-span-3">
+                <button onclick="submitExportOrder()" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold transition shadow">
+                  🚚 Xuất Kho & Trừ Lô Realtime
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100">
+              <h3 class="text-sm font-extrabold text-slate-900">Lịch Sử Các Phiếu Xuất Kho Theo Lô</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
+                  <tr>
+                    <th class="py-3 px-4">Số phiếu xuất</th>
+                    <th class="py-3 px-3">Đơn vị / Nhà hàng nhận</th>
+                    <th class="py-3 px-3">Mặt hàng & Mã lô</th>
+                    <th class="py-3 px-4 text-right">Số lượng xuất</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${exportOrders.map(e => {
+                    const p = getProduct(e.productId);
+                    return `
+                      <tr class="hover:bg-slate-50">
+                        <td class="py-3 px-4 font-mono font-bold text-slate-900">${e.id}</td>
+                        <td class="py-3 px-3 font-bold text-sky-900">${e.destination}</td>
+                        <td class="py-3 px-3">
+                          <span class="font-semibold text-slate-800">${p.name}</span>
+                          <span class="ml-1.5 px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-mono text-[11px] font-bold">${e.batchNumber}</span>
+                        </td>
+                        <td class="py-3 px-4 text-right font-mono font-black text-slate-900">${e.qty} ${p.unit}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 9. VIEW 4: DASHBOARD KẾ TOÁN (KẾ HOẠCH VS THỰC XUẤT + TRUY XUẤT LÔ)
+    // =========================================================================
+    function renderKeToanView() {
+      const tab = subTabs.KE_TOAN;
+      if (tab === 'truy_xuat_lo') return renderKtTruyXuatLo();
+      return renderKtDashboard();
+    }
+
+    function renderKtDashboard() {
+      const progress = computePlanProgress();
+      const { byProduct } = computeWarehouseNXT();
+
+      // Quy đổi sang Lít để cộng tổng toàn cục
+      const totalPlanL = progress.reduce((s, x) => s + x.plan.targetQty * (x.product.cap / 1000), 0);
+      const totalSentL = progress.reduce((s, x) => s + x.sentFromBrewery * (x.product.cap / 1000), 0);
+      const totalRecL = progress.reduce((s, x) => s + x.receivedByWarehouse * (x.product.cap / 1000), 0);
+      const totalSoldL = byProduct.reduce((s, r) => s + r.exported * (r.product.cap / 1000), 0);
+      const totalClosingL = byProduct.reduce((s, r) => s + r.closing * (r.product.cap / 1000), 0);
+      const totalTankL = tankInventories.reduce((s, k) => s + k.liters, 0);
+      const planRate = totalPlanL > 0 ? Math.round((totalRecL / totalPlanL) * 100) : 0;
+
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <!-- 4 KPI Kế Toán & Vận Hành -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-5 rounded-3xl bg-[#141A23] text-white shadow-lg card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-400">KẾ HOẠCH SẢN XUẤT</span>
+              <p class="text-2xl font-black font-mono mt-1 tabular-nums">${totalPlanL.toFixed(0)} <span class="text-sm font-bold text-slate-400">Lít</span></p>
+              <p class="text-[11px] text-slate-300 mt-1">Đã giao từ xưởng: <strong>${totalSentL.toFixed(0)} L</strong></p>
+            </div>
+            <div class="p-5 rounded-3xl bg-white border border-emerald-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">THỰC NHẬP KHO TỔNG (2 RÀO)</span>
+              <p class="text-2xl font-black font-mono text-emerald-700 mt-1 tabular-nums">${totalRecL.toFixed(0)} <span class="text-sm font-bold">Lít</span></p>
+              <p class="text-[11px] text-slate-500 mt-1">Đạt <strong class="text-emerald-700">${planRate}%</strong> kế hoạch ngày</p>
+            </div>
+            <div class="p-5 rounded-3xl bg-white border border-sky-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-widest text-sky-700">THỰC XUẤT BÁN & NỘI BỘ</span>
+              <p class="text-2xl font-black font-mono text-sky-700 mt-1 tabular-nums">${totalSoldL.toFixed(0)} <span class="text-sm font-bold">Lít</span></p>
+              <p class="text-[11px] text-slate-500 mt-1">${exportOrders.length} chuyến đi BNC & Đối tác</p>
+            </div>
+            <div class="p-5 rounded-3xl bg-white border border-amber-200 shadow-sm card-lift">
+              <span class="text-[10px] font-extrabold uppercase tracking-widest text-amber-700">TỒN KHO + BỒN FST/BBT</span>
+              <p class="text-2xl font-black font-mono text-slate-900 mt-1 tabular-nums">${(totalClosingL + totalTankL).toFixed(0)} <span class="text-sm font-bold text-slate-400">Lít</span></p>
+              <p class="text-[11px] text-slate-500 mt-1">Kho: <strong>${totalClosingL.toFixed(0)}L</strong> · Bồn: <strong>${totalTankL}L</strong></p>
+            </div>
+          </div>
+
+          <!-- Biểu đồ ngang đối chiếu Kế hoạch vs Thực giao xưởng vs Kho nhận vs Thực xuất bán -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 class="text-base font-extrabold text-slate-900">Đối Chiếu Kế Hoạch Sản Xuất & Thực Xuất Theo Mặt Hàng</h2>
+                <p class="text-xs text-slate-500">Giúp Kế toán kiểm soát chênh lệch (Variance) giữa Kế hoạch duyệt, Xưởng giao và Kho xuất bán</p>
+              </div>
+              <div class="flex flex-wrap gap-3 text-[11px] font-bold">
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-800 inline-block"></span>Kế hoạch</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500 inline-block"></span>Xưởng đã giao</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span>Kho đã nhận (2 rào)</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-sky-500 inline-block"></span>Đã xuất bán</span>
+              </div>
+            </div>
+
+            <div class="p-6 space-y-5">
+              ${progress.map(({ plan, product, sentFromBrewery, receivedByWarehouse, soldOut, variance }) => {
+                const maxVal = Math.max(plan.targetQty, sentFromBrewery, soldOut, 1);
+                const wPlan = Math.round((plan.targetQty / maxVal) * 100);
+                const wSent = Math.round((sentFromBrewery / maxVal) * 100);
+                const wRec = Math.round((receivedByWarehouse / maxVal) * 100);
+                const wSold = Math.round((soldOut / maxVal) * 100);
+                return `
+                  <div class="p-4 rounded-2xl bg-[#FAF7F2] border border-slate-200/80 space-y-2.5">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span class="text-sm font-extrabold text-slate-900">${product.name}</span>
+                        <span class="ml-2 font-mono text-[11px] text-slate-500">SAP: ${product.code}</span>
+                      </div>
+                      <span class="font-mono text-xs font-extrabold px-2.5 py-1 rounded-lg ${
+                        variance >= 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
+                      }">
+                        Chênh lệch nhập kho vs KH: ${variance >= 0 ? '+' : ''}${variance} ${product.unit}
+                      </span>
+                    </div>
+
+                    <div class="space-y-1.5 text-[11px] font-mono">
+                      <div class="flex items-center gap-2">
+                        <span class="w-28 text-slate-500 font-sans font-bold">Kế hoạch:</span>
+                        <div class="flex-1 h-2.5 bg-white rounded-full overflow-hidden border border-slate-200">
+                          <div class="h-full bg-slate-800 rounded-full bar-fill" style="width:${wPlan}%"></div>
+                        </div>
+                        <span class="w-20 text-right font-bold tabular-nums">${plan.targetQty} ${product.unit}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="w-28 text-amber-800 font-sans font-bold">Xưởng giao:</span>
+                        <div class="flex-1 h-2.5 bg-white rounded-full overflow-hidden border border-slate-200">
+                          <div class="h-full bg-amber-500 rounded-full bar-fill" style="width:${wSent}%"></div>
+                        </div>
+                        <span class="w-20 text-right font-bold text-amber-800 tabular-nums">${sentFromBrewery} ${product.unit}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="w-28 text-emerald-800 font-sans font-bold">Kho nhận (2 rào):</span>
+                        <div class="flex-1 h-2.5 bg-white rounded-full overflow-hidden border border-slate-200">
+                          <div class="h-full bg-emerald-500 rounded-full bar-fill" style="width:${wRec}%"></div>
+                        </div>
+                        <span class="w-20 text-right font-bold text-emerald-800 tabular-nums">${receivedByWarehouse} ${product.unit}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="w-28 text-sky-800 font-sans font-bold">Thực xuất bán:</span>
+                        <div class="flex-1 h-2.5 bg-white rounded-full overflow-hidden border border-slate-200">
+                          <div class="h-full bg-sky-500 rounded-full bar-fill" style="width:${wSold}%"></div>
+                        </div>
+                        <span class="w-20 text-right font-bold text-sky-800 tabular-nums">${soldOut} ${product.unit}</span>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKtTruyXuatLo() {
+      const { byLot } = computeWarehouseNXT();
+      return `
+        <div class="space-y-6 anim-view-enter">
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-[#141A23] text-white">
+              <span class="text-[10px] font-bold uppercase tracking-widest text-amber-400">BATCH TRACEABILITY · TRUY XUẤT REALTIME</span>
+              <h2 class="text-base font-extrabold">Truy Xuất Hành Trình Từng Lô Bia (Từ Xưởng ➔ Kho Tổng ➔ Nhà Hàng / Đối Tác)</h2>
+            </div>
+            <div class="p-6 space-y-4">
+              ${byLot.map(l => {
+                const outs = exportOrders.filter(e => e.batchNumber === l.batchNumber && e.productId === l.product.id);
+                return `
+                  <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-3 card-lift">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                      <div class="flex items-center gap-2.5">
+                        <span class="px-2.5 py-1 rounded-lg bg-[#141A23] text-amber-300 font-mono text-xs font-black">${l.batchNumber}</span>
+                        <span class="text-sm font-extrabold text-slate-900">${l.product.name}</span>
+                      </div>
+                      <div class="font-mono text-xs font-bold flex gap-3">
+                        <span class="text-slate-600">Vào kho: <strong>${l.opening + l.imported} ${l.product.unit}</strong></span>
+                        <span class="text-emerald-700">Còn lại: <strong>${l.closing.toFixed(1)} ${l.product.unit}</strong></span>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      ${outs.length === 0 ? `<span class="text-xs text-slate-400 italic">Lô này chưa xuất đi đâu (đang nguyên tại Kho tổng).</span>` : outs.map(o => `
+                        <span class="px-3 py-1.5 rounded-xl bg-white border border-sky-200 text-xs font-bold text-slate-800 shadow-sm">
+                          🚚 ${o.destination}: <strong class="font-mono text-sky-700">${o.qty} ${l.product.unit}</strong> (${o.id})
+                        </span>
+                      `).join('')}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Kiểm kê bồn FST & BBT kèm ảnh minh chứng cho Kế toán kiểm tra -->
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100">
+              <h3 class="text-sm font-extrabold text-slate-900">Báo Cáo Kiểm Kê Tồn Bồn FST & BBT Hàng Tháng (Có Ảnh Minh Chứng)</h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              ${tankInventories.map(kk => {
+                const p = getProduct(kk.productId);
+                return `
+                  <div class="p-3.5 rounded-2xl border border-slate-200 flex gap-3.5 items-center">
+                    <img src="${kk.photoUrl}" class="w-28 h-20 rounded-xl object-cover bg-slate-950 border border-slate-300" />
+                    <div class="text-xs space-y-1">
+                      <span class="font-mono font-black text-sky-800">${kk.tankId}</span> · <span class="font-mono text-amber-800 font-bold">${kk.batchNumber}</span>
+                      <p class="font-bold text-slate-900">${p.name}</p>
+                      <p class="font-mono font-black text-emerald-700">${kk.liters.toLocaleString('vi-VN')} Lít · <span class="font-normal text-slate-400">${kk.createdAt}</span></p>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 10. THẺ DUYỆT PHIẾU CHUNG CHO RÀO 1 & RÀO 2 + BIỂU MẪU BM-SKB-01
+    // =========================================================================
+    function renderApprovalCard(s, mode) {
+      const isQlx = mode === 'QLX';
+      return `
+        <div class="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-[#FAF7F2]/70 grid grid-cols-1 md:grid-cols-12 gap-4 items-center card-lift">
+          <div class="md:col-span-7 space-y-2.5">
+            <div class="flex items-center gap-2.5">
+              <span class="font-mono text-sm font-black px-2.5 py-0.5 rounded-lg bg-[#141A23] text-amber-300">${s.code}</span>
+              <span class="text-xs font-bold text-slate-500">Người lập: ${s.signatures.creator.name} (${s.signatures.creator.signedAt})</span>
+            </div>
+            <div class="space-y-1.5">
+              ${s.items.map(i => `
+                <div class="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-extrabold text-slate-900">${i.productName}</span>
+                    <span class="ml-2 font-mono font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900">Lô: ${i.batchNumber}</span>
+                  </div>
+                  <span class="font-mono font-black text-slate-900">${i.quantity} ${i.unit} <span class="text-indigo-700">(${i.kegText})</span></span>
+                </div>
+              `).join('')}
+            </div>
+            <div class="pt-1 flex flex-wrap gap-2">
+              ${isQlx ? `
+                <button onclick="approveStep1('${s.code}')" class="px-4 py-2 rounded-xl bg-[#141A23] hover:bg-slate-800 text-amber-300 text-xs font-extrabold transition shadow">
+                  ✓ Duyệt Xuất Xưởng (Rào 1)
+                </button>
+                <button onclick="rejectSlip('${s.code}', 'Quản lý xưởng')" class="px-3.5 py-2 rounded-xl border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 text-xs font-extrabold">
+                  ↩ Trả lại
+                </button>
+              ` : `
+                <button onclick="approveStep2('${s.code}')" class="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold transition shadow">
+                  ✓ Nhận Đủ Vào Kho Tổng (Rào 2)
+                </button>
+                <button onclick="rejectSlip('${s.code}', 'Kho tổng')" class="px-3.5 py-2 rounded-xl border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 text-xs font-extrabold">
+                  ↩ Trả lại (Lệch thực tế)
+                </button>
+              `}
+              <button onclick="openPaperlessModal('${s.code}')" class="px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100">
+                📄 BM-SKB-01
+              </button>
+            </div>
+          </div>
+          <div class="md:col-span-5">
+            ${s.photos.map(ph => `
+              <div onclick="openPaperlessModal('${s.code}')" class="cursor-pointer rounded-xl overflow-hidden border border-slate-300 bg-slate-950 group">
+                <img src="${ph.url}" class="w-full h-32 object-contain group-hover:scale-[1.02] transition-transform duration-300" />
+                <p class="px-2.5 py-1 bg-slate-900 text-white text-[10px] font-bold truncate">📸 ${ph.caption}</p>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 11. CÁC HÀM THAO TÁC (ACTIONS)
+    // =========================================================================
+    function getActiveFormItems() {
+      return PRODUCTS
+        .filter(p => (Number(formQuantities[p.id]) || 0) > 0)
+        .map(p => {
+          const quantity = Number(formQuantities[p.id]) || 0;
+          const batchNumber = (formBatches[p.id] || '').trim() || formCommonBatch.trim();
+          return {
+            productId: p.id,
+            productName: p.name,
+            unit: p.unit,
+            category: p.category,
+            quantity,
+            liters: (quantity * p.cap) / 1000,
+            kegText: formatKegText(p, quantity),
+            batchNumber
+          };
+        });
+    }
+
+    function prefillFromPlan() {
+      const progress = computePlanProgress();
+      formQuantities = {};
+      formBatches = {};
+      progress.forEach(({ plan, sentFromBrewery }) => {
+        const remain = Math.max(0, plan.targetQty - sentFromBrewery);
+        if (remain > 0) {
+          formQuantities[plan.productId] = remain;
+          formBatches[plan.productId] = plan.batchHint;
+        }
+      });
+      if (!attachedPhotos.length) addSimulatedKegPhoto();
+      showToast('Đã kế thừa phần sản lượng còn thiếu từ Kế hoạch sản xuất!');
+      renderMainStage();
+    }
+
+    function addSimulatedKegPhoto() {
+      const items = getActiveFormItems();
+      const totalL = items.reduce((s, i) => s + i.liters, 0) || 200;
+      const kegs = items.filter(i => i.category === 'Lít').reduce((s, i) => s + Math.round(i.quantity / 20), 0) || 10;
+      const batch = items[0]?.batchNumber || formCommonBatch || 'LO-261116-GB01';
+      attachedPhotos.push({
+        id: 'ph-' + Date.now(),
+        caption: `Hiện trạng ${kegs} Keg (${totalL.toFixed(0)}L) · ${batch}`,
+        url: makeKegPhotoSvg(kegs, totalL.toFixed(0), batch, '16/11 14:30')
+      });
+      renderMainStage();
+    }
+
+    function handleRealPhotoUpload(e) {
+      Array.from(e.target.files || []).forEach(f => {
+        const rd = new FileReader();
+        rd.onload = ev => {
+          attachedPhotos.push({ id: 'real-' + Date.now(), caption: f.name, url: ev.target.result });
+          renderMainStage();
+        };
+        rd.readAsDataURL(f);
+      });
+      e.target.value = '';
+    }
+
+    function submitSlip() {
+      const items = getActiveFormItems();
+      if (!items.length || items.some(i => !i.batchNumber) || !attachedPhotos.length) return;
+      const timeStr = '16/11/2026 ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const code = editingSlipCode || `PN-261116-${String(slips.length + 1).padStart(2, '0')}`;
+      const token = generateToken(code, 'SAN_XUAT', 'hung.nv@sunworld.vn', timeStr);
+
+      const newSlip = {
+        code,
+        dateKey: formDate,
+        seq: slips.length + 1,
+        status: 'cho_ql_xuong',
+        items,
+        photos: [...attachedPhotos],
+        rejectedBy: null,
+        rejectedReason: null,
+        signatures: {
+          creator: { name: 'Nguyễn Văn Hùng', email: 'hung.nv@sunworld.vn', signedAt: timeStr, token },
+          manager: null,
+          warehouse: null
+        }
+      };
+
+      if (editingSlipCode) {
+        slips = slips.map(s => s.code === editingSlipCode ? newSlip : s);
+        editingSlipCode = null;
+        showToast(`Đã trình lại phiếu ${code} lên Quản lý xưởng!`);
+      } else {
+        slips.unshift(newSlip);
+        showToast(`Đã lập phiếu ${code} & gửi Quản lý xưởng (Rào 1)!`);
+      }
+
+      formQuantities = {};
+      formBatches = {};
+      attachedPhotos = [];
+      subTabs.QUAN_LY_XUONG = 'duyet_nhat_ky';
+      switchRole('QUAN_LY_XUONG');
+    }
+
+    function approveStep1(code) {
+      const timeStr = '16/11/2026 ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const token = generateToken(code, 'QUAN_LY_XUONG', 'duc.tm@sunworld.vn', timeStr);
+      slips = slips.map(s => s.code !== code ? s : {
+        ...s,
+        status: 'cho_kho_tong',
+        signatures: { ...s.signatures, manager: { name: 'Trần Minh Đức', email: 'duc.tm@sunworld.vn', signedAt: timeStr, token } }
+      });
+      showToast(`Quản lý xưởng đã duyệt Bước 1 (${code}) ➔ Chuyển Kho tổng!`);
+      renderAll();
+    }
+
+    function approveStep2(code) {
+      const timeStr = '16/11/2026 ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const token = generateToken(code, 'KHO_TONG', 'bao.lq@sunworld.vn', timeStr);
+      slips = slips.map(s => s.code !== code ? s : {
+        ...s,
+        status: 'signed',
+        signatures: { ...s.signatures, warehouse: { name: 'Lê Quốc Bảo', email: 'bao.lq@sunworld.vn', signedAt: timeStr, token } }
+      });
+      showToast(`Kho tổng đã ký nhận ${code} ➔ Đã cộng vào Nhập-Xuất-Tồn!`);
+      renderAll();
+    }
+
+    function rejectSlip(code, byLabel) {
+      const reason = window.prompt(`Lý do trả lại phiếu ${code}:`, 'Thực tế đếm thiếu 1 Keg so với số ghi trên phiếu');
+      if (!reason || !reason.trim()) return;
+      slips = slips.map(s => s.code !== code ? s : {
+        ...s,
+        status: 'tra_lai',
+        rejectedBy: byLabel,
+        rejectedReason: reason.trim(),
+        signatures: { ...s.signatures, manager: null, warehouse: null }
+      });
+      showToast(`Đã trả lại phiếu ${code} về cho NV Sản xuất`, 'warn');
+      renderAll();
+    }
+
+    function loadSlipToEdit(code) {
+      const s = slips.find(x => x.code === code);
+      if (!s) return;
+      editingSlipCode = s.code;
+      formQuantities = {};
+      formBatches = {};
+      s.items.forEach(i => { formQuantities[i.productId] = i.quantity; formBatches[i.productId] = i.batchNumber; });
+      attachedPhotos = [...s.photos];
+      subTabs.SAN_XUAT = 'lap_phieu';
+      switchRole('SAN_XUAT');
+    }
+
+    function cancelEditSlip() {
+      editingSlipCode = null;
+      formQuantities = {};
+      formBatches = {};
+      attachedPhotos = [];
+      renderMainStage();
+    }
+
+    function saveDailyEval() {
+      const productId = document.getElementById('eval-product').value;
+      const shift = document.getElementById('eval-shift').value;
+      const actualBrewedQty = Number(document.getElementById('eval-actual').value) || 0;
+      const rating = document.getElementById('eval-rating').value;
+      const note = document.getElementById('eval-note').value.trim() || 'Đã ghi nhận sản lượng ca sản xuất.';
+      const plan = productionPlans.find(p => p.productId === productId);
+      dailyEvaluations.unshift({
+        id: 'DG-' + Date.now(),
+        date: '2026-11-16',
+        shift,
+        productId,
+        plannedQty: plan ? plan.targetQty : 0,
+        actualBrewedQty,
+        actualHandoverQty: 0,
+        lossQty: 0,
+        rating,
+        note,
+        by: 'Nguyễn Văn Hùng',
+        at: '16/11/2026 ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      });
+      showToast('Đã lưu đánh giá sản lượng sản xuất trong ngày!');
+      renderMainStage();
+    }
+
+    function simulateTankPhoto() {
+      const tankId = document.getElementById('kk-tank')?.value || 'FST-02';
+      const liters = Number(document.getElementById('kk-liters')?.value) || 1120;
+      const batch = document.getElementById('kk-batch')?.value || 'LO-261114-FST02';
+      const t = TANKS.find(x => x.id === tankId) || TANKS[0];
+      tankPhotoDraft = makeTankGaugePhotoSvg(tankId, liters, t.capacityLiters, batch);
+      renderMainStage();
+    }
+
+    function handleTankPhotoUpload(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const rd = new FileReader();
+      rd.onload = ev => { tankPhotoDraft = ev.target.result; renderMainStage(); };
+      rd.readAsDataURL(file);
+    }
+
+    function saveTankInventory() {
+      if (!tankPhotoDraft) return;
+      const tankId = document.getElementById('kk-tank').value;
+      const productId = document.getElementById('kk-product').value;
+      const batchNumber = document.getElementById('kk-batch').value.trim() || 'LO-KHAC';
+      const liters = Number(document.getElementById('kk-liters').value) || 0;
+
+      tankInventories.unshift({
+        id: 'KK-' + Date.now(),
+        month: '2026-11',
+        tankId,
+        productId,
+        batchNumber,
+        liters,
+        statusLabel: 'Kiểm kê cuối tháng',
+        photoUrl: tankPhotoDraft,
+        photoCaption: `Ảnh bồn ${tankId} = ${liters}L`,
+        createdBy: 'Nguyễn Văn Hùng',
+        createdAt: '16/11/2026 ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      });
+      tankPhotoDraft = null;
+      showToast(`Đã lưu kiểm kê bồn ${tankId} (${liters}L) kèm ảnh minh chứng!`);
+      renderMainStage();
+    }
+
+    function addProductionPlan() {
+      const productId = document.getElementById('plan-product').value;
+      const targetQty = Number(document.getElementById('plan-qty').value) || 0;
+      const note = document.getElementById('plan-note').value.trim() || 'Phát hành kế hoạch bổ sung';
+      if (targetQty <= 0) return;
+
+      const existing = productionPlans.find(p => p.productId === productId);
+      if (existing) {
+        existing.targetQty += targetQty;
+        existing.note = note;
+      } else {
+        productionPlans.push({
+          id: 'KH-' + (productionPlans.length + 1),
+          date: '2026-11-16',
+          productId,
+          targetQty,
+          source: 'Quản lý xưởng nạp',
+          batchHint: 'LO-261116-NEW',
+          note,
+          published: true
+        });
+      }
+      showToast('Đã phát hành Kế hoạch sản xuất ➔ Tự động kế thừa sang NV Sản xuất!');
+      renderMainStage();
+    }
+
+    function simulateAgentMailSync() {
+      const p12 = productionPlans.find(p => p.productId === 'p12');
+      if (p12) p12.targetQty += 100;
+      else productionPlans.push({
+        id: 'KH-MAIL',
+        date: '2026-11-16',
+        productId: 'p12',
+        targetQty: 120,
+        source: '🤖 Agent bóc từ Mail',
+        batchHint: 'LO-261116-EC01',
+        note: 'Tự động bóc từ email Kế hoạch sản xuất tuần',
+        published: true
+      });
+      showToast('🤖 Agent vừa đồng bộ thêm kế hoạch Eclipse Plaza Wheat từ Email!');
+      renderMainStage();
+    }
+
+    function submitExportOrder() {
+      const [productId, batchNumber] = document.getElementById('exp-lot').value.split('|');
+      const destination = document.getElementById('exp-dest').value;
+      const qty = Number(document.getElementById('exp-qty').value) || 0;
+      if (!productId || qty <= 0) return;
+
+      const id = `PX-261116-${String(exportOrders.length + 1).padStart(2, '0')}`;
+      exportOrders.unshift({ id, date: '2026-11-16', destination, productId, batchNumber, qty, loss: 0, by: 'Lê Quốc Bảo' });
+      showToast(`Đã xuất ${qty} đơn vị lô ${batchNumber} tới ${destination}!`);
+      renderMainStage();
+    }
+
+    // =========================================================================
+    // 12. MODAL BIỂU MẪU PAPERLESS BM-SKB-01
+    // =========================================================================
+    function openPaperlessModal(code) {
+      const s = slips.find(x => x.code === code);
+      if (!s) return;
+      document.getElementById('modal-slip-title').textContent = `Biểu mẫu điện tử BM-SKB-01 · ${s.code}`;
+      const sigCell = (title, sig) => sig ? `
+        <div class="p-3.5 rounded-xl border-2 border-emerald-600/80 bg-emerald-50/40 text-center space-y-1">
+          <p class="text-[11px] font-extrabold uppercase text-slate-700">${title}</p>
+          <p class="text-xs font-black text-emerald-700">✓ Đã ký điện tử</p>
+          <p class="text-[11px] font-mono text-slate-600">${sig.signedAt}</p>
+          <p class="text-[10px] font-mono font-bold text-emerald-900 bg-emerald-100 rounded px-1.5 py-0.5 inline-block">TOKEN: ${sig.token}</p>
+          <p class="text-xs font-black text-slate-900 pt-1">${sig.name}</p>
+        </div>
+      ` : `
+        <div class="p-3.5 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-center flex flex-col justify-center min-h-[130px]">
+          <p class="text-[11px] font-extrabold uppercase text-slate-500">${title}</p>
+          <p class="text-xs text-slate-400 mt-2">Chưa ký điện tử</p>
+        </div>
+      `;
+
+      document.getElementById('paperless-doc').innerHTML = `
+        <div class="flex justify-between items-start border-b-2 border-slate-900 pb-4 text-xs">
+          <div>
+            <p class="font-black uppercase text-[#8B1E1E]">SUN WORLD BA NA HILLS · SUN KRAFTBEER</p>
+            <p class="text-slate-500">Số hiệu biểu mẫu: <strong class="font-mono">BM-SKB-01</strong></p>
+          </div>
+          <div class="text-right">
+            <p class="font-black uppercase">CÔNG TY CỔ PHẦN DỊCH VỤ CÁP TREO BÀ NÀ</p>
+            <p class="font-mono font-bold mt-0.5">Số phiếu: ${s.code} · Ngày: ${s.dateKey.split('-').reverse().join('/')}</p>
+          </div>
+        </div>
+        <h2 class="text-center text-lg font-black uppercase">PHIẾU BÀN GIAO & NHẬP KHO TỔNG THEO LÔ</h2>
+        <table class="w-full border-collapse border border-slate-900 text-xs">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="border border-slate-900 p-2">STT</th>
+              <th class="border border-slate-900 p-2 text-left">Tên bia</th>
+              <th class="border border-slate-900 p-2">Mã lô</th>
+              <th class="border border-slate-900 p-2 text-right">Số lượng</th>
+              <th class="border border-slate-900 p-2 text-center">Hiện trạng</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${s.items.map((it, idx) => `
+              <tr>
+                <td class="border border-slate-900 p-2 text-center">${idx + 1}</td>
+                <td class="border border-slate-900 p-2 font-bold">${it.productName}</td>
+                <td class="border border-slate-900 p-2 text-center font-mono font-bold">${it.batchNumber}</td>
+                <td class="border border-slate-900 p-2 text-right font-mono font-bold">${it.quantity} ${it.unit}</td>
+                <td class="border border-slate-900 p-2 text-center font-mono">${it.kegText}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div>
+          <p class="text-xs font-bold mb-2">Ảnh chụp hiện trạng bàn giao (${s.photos.length} ảnh):</p>
+          ${s.photos.map(ph => `<img src="${ph.url}" class="w-full max-h-56 object-contain bg-slate-950 rounded-xl border border-slate-300" />`).join('')}
+        </div>
+        <div class="grid grid-cols-3 gap-3 pt-2">
+          ${sigCell('1. Người Lập (Sản xuất)', s.signatures.creator)}
+          ${sigCell('2. Quản Lý Xưởng (Rào 1)', s.signatures.manager)}
+          ${sigCell('3. Kho Tổng Nhận (Rào 2)', s.signatures.warehouse)}
+        </div>
+      `;
+      document.getElementById('modal-paperless').classList.remove('hidden');
+    }
+
+    function closePaperlessModal() {
+      document.getElementById('modal-paperless').classList.add('hidden');
+    }
+
+    function renderMainStage() {
+      const stage = document.getElementById('main-stage');
+      if (currentRole === 'SAN_XUAT') stage.innerHTML = renderSanXuatView();
+      else if (currentRole === 'QUAN_LY_XUONG') stage.innerHTML = renderQuanLyXuongView();
+      else if (currentRole === 'KHO_TONG') stage.innerHTML = renderKhoTongView();
+      else stage.innerHTML = renderKeToanView();
+    }
+
+    function renderAll() {
+      renderHeaderBadges();
+      renderSubBar();
+      renderMainStage();
+    }
+
+    window.addEventListener('keydown', e => { if (e.key === 'Escape') closePaperlessModal(); });
+
+    seedInitialData();
+    renderAll();
+  </script>
+</body>
+</html>
