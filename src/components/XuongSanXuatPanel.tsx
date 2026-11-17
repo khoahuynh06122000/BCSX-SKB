@@ -103,6 +103,7 @@ export default function XuongSanXuatPanel({
   tonDauContent,
 }: Props) {
   const [subTab, setSubTab] = useState<XuongSanXuatSubTab>("lap-phieu");
+  const [lapPhieuView, setLapPhieuView] = useState<"form" | "nhat-ky">("form");
   const [kkMode, setKkMode] = useState<"keg-lit" | "bon" | "ton-dau">("keg-lit");
 
   /* ---------- Tab 1: Lập phiếu giao bia sang Kho tổng ---------- */
@@ -198,6 +199,7 @@ export default function XuongSanXuatPanel({
     setCommonBatch("");
     setEditingCode(slip.code);
     setSubTab("lap-phieu");
+    setLapPhieuView("form");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -333,6 +335,52 @@ export default function XuongSanXuatPanel({
       {/* ================= TAB 1: LẬP PHIẾU GIAO BIA SANG KHO TỔNG ================= */}
       {subTab === "lap-phieu" && (
         <div className="space-y-5 anim-view-enter">
+          {nhatKyPhieuContent && (
+            <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-fit">
+              <button
+                type="button"
+                onClick={() => setLapPhieuView("form")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                  lapPhieuView === "form"
+                    ? "bg-amber-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                Lập phiếu giao bia
+              </button>
+              <button
+                type="button"
+                onClick={() => setLapPhieuView("nhat-ky")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                  lapPhieuView === "nhat-ky"
+                    ? "bg-[#141A23] text-amber-300 shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                Nhật ký phiếu đã lập
+              </button>
+            </div>
+          )}
+
+          {lapPhieuView === "nhat-ky" && nhatKyPhieuContent ? (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-slate-500" />
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Nhật Ký Phiếu Nhập &amp; Chứng Từ Đã Lập
+                  </h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-400">
+                  Bao gồm toàn bộ phiếu cũ &amp; phiếu điện tử mới
+                </span>
+              </div>
+              <div className="p-4 sm:p-6">{nhatKyPhieuContent}</div>
+            </div>
+          ) : (
+            <>
           {/* Phiếu bị trả lại cần sửa */}
           {returnedSlips.length > 0 && (
             <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 space-y-2">
@@ -704,22 +752,7 @@ export default function XuongSanXuatPanel({
               </div>
             </div>
           </div>
-
-          {nhatKyPhieuContent && (
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4 text-slate-500" />
-                  <h3 className="text-sm font-extrabold text-slate-900">
-                    Nhật Ký Phiếu Nhập &amp; Chứng Từ Đã Lập
-                  </h3>
-                </div>
-                <span className="text-[11px] font-bold text-slate-400">
-                  Bao gồm toàn bộ phiếu cũ &amp; phiếu điện tử mới
-                </span>
-              </div>
-              <div className="p-4 sm:p-6">{nhatKyPhieuContent}</div>
-            </div>
+            </>
           )}
         </div>
       )}

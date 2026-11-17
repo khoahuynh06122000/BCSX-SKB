@@ -71,7 +71,7 @@ export default function QuanLyXuongPanel({
   nhatKyPhieuContent,
 }: Props) {
   const [subTab, setSubTab] = useState<QuanLyXuongSubTab>("duyet-nhat-ky");
-  const [nhatKyView, setNhatKyView] = useState<"phieu" | "bang">("phieu");
+  const [nhatKyView, setNhatKyView] = useState<"bang" | "phieu">("bang");
 
   /* ---------- Tab 1: Duyệt Rào 1 + Nhật ký ---------- */
   const slipsWithRows = useMemo(() => {
@@ -327,18 +327,6 @@ export default function QuanLyXuongPanel({
                   <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 font-sans ml-auto sm:ml-2">
                     <button
                       type="button"
-                      onClick={() => setNhatKyView("phieu")}
-                      className={cn(
-                        "px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all",
-                        nhatKyView === "phieu"
-                          ? "bg-[#141A23] text-amber-300 shadow-sm"
-                          : "text-slate-600 hover:text-slate-900",
-                      )}
-                    >
-                      Chứng từ &amp; Ảnh ({slipsWithRows.length})
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setNhatKyView("bang")}
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all",
@@ -348,6 +336,18 @@ export default function QuanLyXuongPanel({
                       )}
                     >
                       Bảng Rào &amp; BM-SKB-01
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNhatKyView("phieu")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all",
+                        nhatKyView === "phieu"
+                          ? "bg-[#141A23] text-amber-300 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900",
+                      )}
+                    >
+                      Chứng từ &amp; Ảnh ({slipsWithRows.length})
                     </button>
                   </div>
                 )}
