@@ -62,8 +62,14 @@ export interface UserProfile {
    * Mã PIN đã băm bằng PBKDF2 (xem src/lib/pin.ts) — KHÔNG lưu số thật.
    * Đây là lớp khoá màn hình cho máy dùng chung, không thay thế đăng nhập.
    */
-  pinHash?: string;
-  pinUpdatedAt?: string;
+  pinHash?: string | null;
+  /** Muối ngẫu nhiên theo người dùng (16 bytes hex) dùng cùng PBKDF2-310k. */
+  pinSalt?: string | null;
+  pinUpdatedAt?: string | null;
+  /** Số lần nhập sai PIN liên tiếp (lưu trên máy chủ, 0..5). */
+  pinFailCount?: number;
+  /** True khi nhập sai PIN 5 lần — chỉ mở khóa sau khi đăng nhập lại Google hoặc chủ sở hữu đặt lại. */
+  pinLocked?: boolean;
 }
 
 export interface Product {

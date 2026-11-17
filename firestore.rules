@@ -28,7 +28,10 @@ rules_version = '2';
 //   - updatedAt: string|null (optional, <= 64)
 //   - approvedBy: string|null (optional, <= 254)
 //   - pinHash: string|null (optional, <= 512)
+//   - pinSalt: string|null (optional, <= 128)
 //   - pinUpdatedAt: string|null (optional, <= 64)
+//   - pinFailCount: number|null (optional, 0..5)
+//   - pinLocked: bool|null (optional)
 //
 // Collection: slips/{slipId} (Document ID = code, e.g. PN-YYMMDD-NN)
 // Fields:
@@ -116,6 +119,15 @@ service cloud.firestore {
     // nguoi khac ma chua chung minh quyen so huu hop thu.
     function emailVerified() {
       return request.auth.token.get('email_verified', false);
+    }
+
+    // Phien dang nhap Google moi trong vong 10 phut (600 giay): bat buoc khi
+    // nguoi dung tu doi PIN da co hoac tu mo khoa tai khoan bi khoa PIN.
+    function hasFreshGoogleAuth() {
+      return isSignedIn()
+        && 'auth_time' in request.auth.token
+        && request.auth.token.auth_time is int
+        && request.time.toMillis() <= (request.auth.token.auth_time + 600) * 1000;
     }
 
     // Chu so huu GOC - xac dinh bang email trong ID token do Google cap, khong
@@ -328,7 +340,8 @@ service cloud.firestore {
     function userAllowedKeys() {
       return [
         'uid', 'email', 'name', 'photoURL', 'role',
-        'createdAt', 'updatedAt', 'approvedBy', 'pinHash', 'pinUpdatedAt'
+        'createdAt', 'updatedAt', 'approvedBy', 'pinHash', 'pinSalt',
+        'pinUpdatedAt', 'pinFailCount', 'pinLocked'
       ];
     }
 
@@ -353,7 +366,12 @@ service cloud.firestore {
         && optStr(data, 'updatedAt', 64)
         && optStr(data, 'approvedBy', 254)
         && optStr(data, 'pinHash', 512)
-        && optStr(data, 'pinUpdatedAt', 64);
+        && optStr(data, 'pinSalt', 128)
+        && optStr(data, 'pinUpdatedAt', 64)
+        && optNum(data, 'pinFailCount', 0, 5)
+        && optBool(data, 'pinLocked')
+        && (!('pinLocked' in data) || data.pinLocked == null || data.pinLocked == false)
+        && (!('pinFailCount' in data) || data.pinFailCount == null || data.pinFailCount == 0);
     }
 
     function isValidUserUpdate(data) {
@@ -371,7 +389,10 @@ service cloud.firestore {
         && optStr(data, 'updatedAt', 64)
         && optStr(data, 'approvedBy', 254)
         && optStr(data, 'pinHash', 512)
-        && optStr(data, 'pinUpdatedAt', 64);
+        && optStr(data, 'pinSalt', 128)
+        && optStr(data, 'pinUpdatedAt', 64)
+        && optNum(data, 'pinFailCount', 0, 5)
+        && optBool(data, 'pinLocked');
     }
 
     // Chu ky dien tu (ChuKyDienTu) tren phieu nhap Paperless.
@@ -619,11 +640,13 @@ service cloud.firestore {
         && request.auth.uid == uid
         && isValidUserCreate(request.resource.data, uid);
 
-      // Chu so huu: sua duoc moi thu (vai tro, dat lai PIN...).
-      // Nguoi dung thuong: CHI sua duoc dung 2 o pinHash/pinUpdatedAt cua
-      // chinh minh, va vai tro bat buoc giu nguyen. Nho dieu kien
-      // affectedKeys().hasOnly(...) nen khong the loi dung viec dat PIN de
-      // tu nang quyen len OWNER.
+      // Chu so huu: sua duoc moi thu (vai tro, dat lai PIN...); nhung neu chinh
+      // chu so huu dang bi khoa PIN (pinLocked == true) thi tu mo khoa hoac doi
+      // pinHash bat buoc phai co phien dang nhap Google moi trong vong 10 phut
+      // (chu so huu KHAC van dat lai duoc tu Cai dat).
+      // Nguoi dung thuong: CHI sua duoc cac truong PIN cua chinh minh theo 3
+      // nhanh hep va bat buoc giu nguyen role. Nho affectedKeys().hasOnly(...)
+      // nen khong the loi dung viec dat PIN de tu nang quyen len OWNER.
       //
       // Mot chu so huu KHONG ha duoc vai tro cua chu so huu GOC. Gio co nhieu
       // hon mot chu so huu, thieu cau nay thi nguoi duoc cap quyen co the ha
@@ -637,15 +660,76 @@ service cloud.firestore {
             resource.data.get('email', '') == ownerEmail()
             && request.resource.data.get('role', '') != 'OWNER'
           )
+          && (
+            !(
+              request.auth.uid == uid
+              && resource.data.get('pinLocked', false) == true
+              && (
+                request.resource.data.get('pinLocked', false) != true
+                || request.resource.data.get('pinHash', null) != resource.data.get('pinHash', null)
+              )
+            )
+            || hasFreshGoogleAuth()
+          )
         )
         || (
           isSignedIn()
           && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['pinHash', 'pinUpdatedAt'])
           && request.resource.data.role == resource.data.role
-          && reqStr(request.resource.data, 'pinHash', 1, 512)
-          && reqStr(request.resource.data, 'pinUpdatedAt', 1, 64)
+          && (
+            // (a) Dat moi hoac dat lai PIN cua chinh minh
+            (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['pinHash', 'pinSalt', 'pinUpdatedAt', 'pinFailCount', 'pinLocked'])
+              && reqStr(request.resource.data, 'pinHash', 1, 512)
+              && reqStr(request.resource.data, 'pinSalt', 1, 128)
+              && reqStr(request.resource.data, 'pinUpdatedAt', 1, 64)
+              && request.resource.data.get('pinFailCount', 0) == 0
+              && request.resource.data.get('pinLocked', false) == false
+              && (
+                (
+                  resource.data.get('pinHash', null) == null
+                  && resource.data.get('pinLocked', false) != true
+                )
+                || hasFreshGoogleAuth()
+              )
+            )
+            // (b) Ghi nhan lan nhap sai PIN (tang tung +1 toi da 5, cham 5 tu khoa)
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['pinFailCount', 'pinLocked'])
+              && resource.data.get('pinLocked', false) != true
+              && 'pinFailCount' in request.resource.data
+              && request.resource.data.pinFailCount is int
+              && request.resource.data.pinFailCount == (
+                ('pinFailCount' in resource.data && resource.data.pinFailCount is int)
+                  ? resource.data.pinFailCount
+                  : 0
+              ) + 1
+              && request.resource.data.pinFailCount >= 1
+              && request.resource.data.pinFailCount <= 5
+              && (
+                (
+                  request.resource.data.pinFailCount >= 5
+                  && request.resource.data.get('pinLocked', false) == true
+                )
+                || (
+                  request.resource.data.pinFailCount < 5
+                  && request.resource.data.get('pinLocked', false) == false
+                )
+              )
+            )
+            // (c) Dat lai bo dem sai ve 0 khi nhap dung PIN (chi khi chua bi khoa)
+            || (
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['pinFailCount', 'pinLocked'])
+              && resource.data.get('pinLocked', false) != true
+              && 'pinFailCount' in request.resource.data
+              && request.resource.data.pinFailCount is int
+              && request.resource.data.pinFailCount == 0
+              && request.resource.data.get('pinLocked', false) == false
+            )
+          )
         )
       );
 

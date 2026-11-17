@@ -124,10 +124,16 @@ import {
   type NgayDoLuong,
 } from "./lib/doLuong";
 import {
+  PIN_MAX_ATTEMPTS,
+  clearLegacyPinStorage,
+  clearPinResetIntent,
+  generatePinSalt,
+  hasPinResetIntentFor,
   hashPin,
-  verifyPin,
   isValidPinFormat,
-  PIN_SESSION_KEY,
+  isWeakPin,
+  savePinResetIntent,
+  verifyPin,
 } from "./lib/pin";
 import ImportSlipPanel, { BieuMauDienTuModal } from "./components/ImportSlip";
 import XuongSanXuatPanel from "./components/XuongSanXuatPanel";
@@ -184,7 +190,10 @@ import {
 } from "./lib/soPhieuBaoCao";
 import DonBNC from "./components/DonBNC";
 import ManHinhDangNhap from "./components/ManHinhDangNhap";
-import ManHinhPin, { type PinStageState } from "./components/ManHinhPin";
+import ManHinhPin, {
+  type PinScreenMode,
+  type PinStageState,
+} from "./components/ManHinhPin";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
 import type { GhiSoPhieu } from "./lib/soPhieu";
 import {
@@ -659,6 +668,31 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  const [pinUnlocked, setPinUnlocked] = useState(false);
+  const pinUnlockedRef = useRef(false);
+  useEffect(() => {
+    pinUnlockedRef.current = pinUnlocked;
+  }, [pinUnlocked]);
+
+  const [pinOffline, setPinOffline] = useState<boolean>(
+    () => typeof navigator !== "undefined" && navigator.onLine === false,
+  );
+  const [pinOfflineHint, setPinOfflineHint] = useState("");
+  const [freshResetUid, setFreshResetUid] = useState<string | null>(null);
+  const manualGoogleLoginRef = useRef(false);
+
+  const laLoiMatMang = (err: unknown): boolean => {
+    const code = String((err as any)?.code || "").toLowerCase();
+    const msg = String((err as any)?.message || "").toLowerCase();
+    return (
+      (typeof navigator !== "undefined" && navigator.onLine === false) ||
+      code === "unavailable" ||
+      msg.includes("offline") ||
+      msg.includes("network") ||
+      msg.includes("failed to get document")
+    );
+  };
+
   /**
    * THEO DOI PHIEN DANG NHAP
    *
@@ -666,9 +700,11 @@ export default function App() {
    * ban cu (vua khong an toan vua de gia mao bang cach sua localStorage).
    *
    * Luong: dang nhap Google -> neu chua co ho so thi tao moi o trang thai
-   * PENDING -> chu so huu duyet -> vao duoc app.
+   * PENDING -> chu so huu duyet -> kiem tra mang + PIN (luon hoi lai khi F5).
    */
   useEffect(() => {
+    clearLegacyPinStorage();
+
     /**
      * Gỡ theo dõi hồ sơ của phiên trước. Đổi tài khoản mà không gỡ thì hai
      * người cùng ghi vào một chỗ, và vai trò của người trước đè lên người sau.
@@ -681,11 +717,20 @@ export default function App() {
       boTheoDoiHoSo();
       boTheoDoiHoSo = () => {};
       vaiTroTruoc = null;
+      clearLegacyPinStorage();
+      pinUnlockedRef.current = false;
+      setPinUnlocked(false);
+      setPinStage("idle");
+      setPinError("");
 
       if (!fbUser) {
         setUser(null);
         setUserRole("PENDING");
         setCurrentUserProfile(null);
+        setPinOffline(false);
+        setPinOfflineHint("");
+        setFreshResetUid(null);
+        setLoiHoSo("");
         setLoading(false);
         return;
       }
@@ -695,68 +740,85 @@ export default function App() {
       setUser(fbUser.displayName || fbUser.email || "Người dùng");
       const ref = doc(db, "users", uid);
 
-      /*
-       * BƯỚC 1 — LẦN ĐẦU ĐĂNG NHẬP THÌ TẠO HỒ SƠ CHỜ DUYỆT.
-       *
-       * Phải đọc một lần để biết đã có hồ sơ chưa. Luật Firestore chỉ cho tạo
-       * với vai trò PENDING nên không thể tự nâng quyền từ đây.
-       *
-       * ĐỌC MÁY CHỦ TRƯỚC, BẢN ĐỆM SAU. `getDocFromServer` bắt buộc đi ra mạng,
-       * không có đường lùi. Trên điện thoại sóng yếu — đúng cảnh dùng app ngoài
-       * kho — lệnh này hỏng thường xuyên. Hỏng thì thử bản đệm trong máy, vẫn
-       * hỏng thì báo ra màn hình chứ KHÔNG tự hạ vai trò của ai: suy ra một vai
-       * trò thấp hơn từ một lần mạng hỏng là đoán bừa về quyền.
-       */
-      try {
-        let snap;
+      // Ghi nhận nếu người dùng vừa chủ động bấm "Đăng nhập bằng Google" trong lượt này
+      if (manualGoogleLoginRef.current) {
         try {
-          snap = await getDocFromServer(ref);
-        } catch (loiMang) {
-          console.warn("Doc ho so tu may chu that bai, thu ban dem:", loiMang);
-          snap = await getDoc(ref);
+          const tokenRes = await fbUser.getIdTokenResult();
+          const authMs = Date.parse(tokenRes.authTime);
+          if (Number.isFinite(authMs) && Date.now() - authMs <= 10 * 60_000) {
+            setFreshResetUid(uid);
+          }
+        } catch {
+          setFreshResetUid(uid);
         }
-        if (!snap.exists()) {
-          const fresh: UserProfile = {
-            uid,
-            email: emailLower,
-            name: fbUser.displayName || undefined,
-            photoURL: fbUser.photoURL || undefined,
-            role: "PENDING",
-            createdAt: new Date().toISOString(),
-          };
-          await setDoc(ref, fresh);
-        }
-      } catch (err: any) {
-        console.error("Khong doc duoc ho so nguoi dung:", err);
-        if (emailLower === OWNER_EMAIL) {
-          // Chủ sở hữu gốc nhận diện bằng email nên không cần hồ sơ.
-          setUserRole("OWNER");
-        } else {
-          setLoiHoSo(
-            err?.code === "permission-denied"
-              ? "Máy chủ từ chối đọc hồ sơ của tài khoản này."
-              : "Không tải được hồ sơ người dùng. Mạng đang chập chờn.",
-          );
-        }
+      } else {
+        setFreshResetUid(null);
+      }
+
+      /*
+       * BƯỚC 1 — ĐỌC MÁY CHỦ TRỰC TIẾP (KHÔNG DÙNG BẢN ĐỆM KHI ĐANG KHÓA PIN).
+       * Giống chuẩn app Kiểm kê: mở / tải lại app bắt buộc có mạng để đọc
+       * trạng thái khóa & hash PIN mới nhất từ Firestore; mất mạng thì dừng ở
+       * màn hình "Chưa kết nối mạng" kèm nút Thử lại.
+       */
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setPinOffline(true);
+        setPinOfflineHint(
+          "Mở app cần có mạng để kiểm tra mã PIN. Bật Wi-Fi hoặc 4G rồi bấm Thử lại.",
+        );
+        setLoiHoSo("");
         setLoading(false);
+      } else {
+        try {
+          const snap = await getDocFromServer(ref);
+          if (!snap.exists()) {
+            const fresh: UserProfile = {
+              uid,
+              email: emailLower,
+              name: fbUser.displayName || undefined,
+              photoURL: fbUser.photoURL || undefined,
+              role: "PENDING",
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(ref, fresh);
+            setCurrentUserProfile(fresh);
+            setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
+          } else {
+            const data = snap.data() as UserProfile;
+            setCurrentUserProfile(data);
+            setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING");
+          }
+          setPinOffline(false);
+          setPinOfflineHint("");
+          setLoiHoSo("");
+        } catch (err: any) {
+          console.error("Khong doc duoc ho so nguoi dung:", err);
+          if (laLoiMatMang(err)) {
+            setPinOffline(true);
+            setPinOfflineHint(
+              "Không kết nối được máy chủ để kiểm tra mã PIN. Kiểm tra mạng rồi thử lại.",
+            );
+            setLoiHoSo("");
+            setLoading(false);
+          } else {
+            if (emailLower === OWNER_EMAIL) {
+              // Chủ sở hữu gốc nhận diện bằng email nên không cần hồ sơ.
+              setUserRole("OWNER");
+            } else {
+              setLoiHoSo(
+                err?.code === "permission-denied"
+                  ? "Máy chủ từ chối đọc hồ sơ của tài khoản này."
+                  : "Không tải được hồ sơ người dùng. Mạng đang chập chờn.",
+              );
+            }
+            setLoading(false);
+          }
+        }
       }
 
       /*
        * BƯỚC 2 — THEO DÕI HỒ SƠ LIÊN TỤC, KHÔNG ĐỌC MỘT LẦN RỒI THÔI.
-       *
-       * Đây là chỗ quyết định "được duyệt là dùng được ngay". Bản cũ đọc hồ sơ
-       * đúng một lần lúc đăng nhập, nên chủ sở hữu duyệt xong thì người kia vẫn
-       * ngồi nhìn màn hình chờ duyệt cho tới khi tự đăng xuất rồi đăng nhập
-       * lại — mà không có gì bảo họ phải làm thế.
-       *
-       * Nay theo dõi tài liệu: chủ sở hữu đổi vai trò là màn hình bên kia đổi
-       * theo trong khoảng một giây. Cũng đúng theo chiều ngược lại — thu hồi
-       * quyền là mất quyền ngay, không phải chờ họ đăng xuất.
-       *
-       * Việc này KHÔNG liên quan tới `firestore.rules`. Luật đọc vai trò từ
-       * `users/{uid}` mỗi lần có yêu cầu, nên phía máy chủ vốn đã có hiệu lực
-       * tức thì; chỗ chậm nãy giờ chỉ là bản sao vai trò nằm trong máy người
-       * dùng.
+       * Giúp chủ sở hữu duyệt/thu hồi quyền hoặc đặt lại PIN là bên kia thấy ngay.
        */
       boTheoDoiHoSo = onSnapshot(
         ref,
@@ -765,15 +827,11 @@ export default function App() {
           if (!snap.exists()) return;
           const data = snap.data() as UserProfile;
           setCurrentUserProfile(data);
-          // Chu so huu goc nhan dien bang EMAIL, khong phu thuoc du lieu trong
-          // Firestore - trung khop voi firestore.rules.
           const vaiTro: UserRole =
             emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING";
           setUserRole(vaiTro);
           setLoiHoSo("");
 
-          // Đổi vai trò giữa chừng thì nói ra: màn hình vừa mọc thêm hoặc mất
-          // bớt vài mục, không nói gì thì người dùng tưởng app lỗi.
           if (vaiTroTruoc && vaiTroTruoc !== vaiTro) {
             showNotification(
               vaiTro === "PENDING"
@@ -787,7 +845,13 @@ export default function App() {
         (err) => {
           console.error("Khong theo doi duoc ho so nguoi dung:", err);
           setLoading(false);
-          // KHÔNG hạ vai trò khi mất kết nối — giữ nguyên cái đang có.
+          if (!pinUnlockedRef.current && laLoiMatMang(err)) {
+            setPinOffline(true);
+            setPinOfflineHint(
+              "Mất kết nối máy chủ khi kiểm tra hồ sơ. Vui lòng thử lại khi có mạng.",
+            );
+            return;
+          }
           if (emailLower !== OWNER_EMAIL) {
             setLoiHoSo(
               "Mất kết nối tới hồ sơ người dùng. Quyền đang dùng là bản đọc được gần nhất.",
@@ -803,9 +867,9 @@ export default function App() {
     };
   }, []);
 
-  // FIRESTORE SYNC
+  // FIRESTORE SYNC — chỉ tải dữ liệu nghiệp vụ sau khi ĐÃ ĐƯỢC DUYỆT và MỞ KHÓA PIN
   useEffect(() => {
-    if (!user) return;
+    if (!user || userRole === "PENDING" || !pinUnlocked) return;
 
     // Test connection as required by security guidelines
     const testConnection = async () => {
@@ -1086,22 +1150,18 @@ export default function App() {
       unsubDanhGia();
       unsubKiemKeBon();
     };
-  }, [user, userRole]);
+  }, [user, userRole, pinUnlocked]);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState("");
 
-  // --- Lop khoa man hinh bang ma PIN -------------------------------------
-  // Chi mo khoa trong pham vi tab hien tai (sessionStorage): dong tab la
-  // phai nhap lai. Day la khoa man hinh cho may dung chung, khong phai lop
-  // xac thuc thay the dang nhap Google.
-  const [pinUnlocked, setPinUnlocked] = useState(
-    () => sessionStorage.getItem(PIN_SESSION_KEY) === "1",
-  );
+  // --- Lớp khóa màn hình bằng mã PIN -------------------------------------
+  // Giống chuẩn app Kiểm kê: LUÔN bắt nhập lại PIN mỗi lần mở / tải lại trang
+  // (kể cả F5 hay Ctrl+Shift+R). Không lưu cờ mở khóa vào sessionStorage/localStorage
+  // và không cho vượt PIN khi mất mạng.
   const [pinStage, setPinStage] = useState<PinStageState>("idle");
   const [pinError, setPinError] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
-  const [pinAttempts, setPinAttempts] = useState(0);
 
   const choMotion = (ms: number) =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -1109,17 +1169,101 @@ export default function App() {
       : new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
   const unlockSession = () => {
-    sessionStorage.setItem(PIN_SESSION_KEY, "1");
+    clearLegacyPinStorage();
+    manualGoogleLoginRef.current = false;
+    pinUnlockedRef.current = true;
     setPinUnlocked(true);
     setPinStage("idle");
     setPinError("");
-    setPinAttempts(0);
   };
 
-  /** Lan dau: nguoi dung tu dat ma PIN 6 so cho tai khoan cua minh. */
+  /** Kiểm tra kết nối máy chủ thực khi mở khóa PIN (chỉ dùng getDocFromServer). */
+  const handleRetryPinNetwork = async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser || pinBusy) return;
+    setPinError("");
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setPinOffline(true);
+      setPinOfflineHint(
+        "Thiết bị vẫn chưa có mạng. Vui lòng bật Wi-Fi hoặc 4G rồi thử lại.",
+      );
+      return;
+    }
+
+    setPinBusy(true);
+    try {
+      const ref = doc(db, "users", fbUser.uid);
+      const snap = await getDocFromServer(ref);
+      const emailLower = (fbUser.email || "").toLowerCase();
+      if (!snap.exists()) {
+        const fresh: UserProfile = {
+          uid: fbUser.uid,
+          email: emailLower,
+          name: fbUser.displayName || undefined,
+          photoURL: fbUser.photoURL || undefined,
+          role: "PENDING",
+          createdAt: new Date().toISOString(),
+        };
+        await setDoc(ref, fresh);
+        setCurrentUserProfile(fresh);
+        setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : "PENDING");
+      } else {
+        const data = snap.data() as UserProfile;
+        setCurrentUserProfile(data);
+        setUserRole(emailLower === OWNER_EMAIL ? "OWNER" : data.role || "PENDING");
+      }
+      setPinOffline(false);
+      setPinOfflineHint("");
+      setLoiHoSo("");
+    } catch (err: any) {
+      if (laLoiMatMang(err)) {
+        setPinOffline(true);
+        setPinOfflineHint(
+          "Vẫn chưa kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.",
+        );
+      } else {
+        setPinError(
+          "Không kiểm tra được hồ sơ: " + (err?.message || "lỗi không xác định"),
+        );
+      }
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  // Theo dõi trạng thái mạng khi đang đứng ở màn hình khóa PIN
+  useEffect(() => {
+    if (!user || pinUnlocked) return;
+    const onOffline = () => {
+      setPinOffline(true);
+      setPinOfflineHint(
+        "Mất kết nối mạng. Kết nối lại Wi-Fi hoặc 4G để kiểm tra mã PIN.",
+      );
+    };
+    const onOnline = () => {
+      void handleRetryPinNetwork();
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [user, pinUnlocked]);
+
+  /** Thiết lập mã PIN lần đầu hoặc đặt lại PIN mới sau khi xác thực lại Google. */
   const handleCreatePin = async (pin: string, confirmPin: string) => {
     if (pinBusy) return;
     setPinError("");
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setPinOffline(true);
+      setPinOfflineHint(
+        "Mất kết nối mạng. Kết nối Wi-Fi hoặc 4G rồi thử lại để lưu mã PIN.",
+      );
+      return;
+    }
 
     if (!isValidPinFormat(pin)) {
       setPinError("Mã PIN phải gồm đúng 6 chữ số.");
@@ -1129,9 +1273,10 @@ export default function App() {
       setPinError("Hai lần nhập chưa khớp nhau.");
       return;
     }
-    // Chan vai to hop qua de doan
-    if (/^(\d)\1{5}$/.test(pin) || pin === "123456" || pin === "654321") {
-      setPinError("Mã PIN quá dễ đoán. Anh/chị chọn dãy số khác nhé.");
+    if (isWeakPin(pin)) {
+      setPinError(
+        "Mã PIN quá dễ đoán (số lặp hoặc liên tiếp). Anh/chị chọn dãy số khác nhé.",
+      );
       return;
     }
 
@@ -1144,19 +1289,52 @@ export default function App() {
     setPinBusy(true);
     setPinStage("verify");
     try {
-      const [pinHash] = await Promise.all([hashPin(pin, uid), choMotion(360)]);
+      const pinSalt = generatePinSalt();
+      const [pinHash] = await Promise.all([
+        hashPin(pin, uid, pinSalt),
+        choMotion(360),
+      ]);
+      const pinUpdatedAt = new Date().toISOString();
       await updateDoc(doc(db, "users", uid), {
         pinHash,
-        pinUpdatedAt: new Date().toISOString(),
+        pinSalt,
+        pinUpdatedAt,
+        pinFailCount: 0,
+        pinLocked: false,
       });
-      setCurrentUserProfile((p) => (p ? { ...p, pinHash } : p));
+      clearPinResetIntent();
+      setFreshResetUid(null);
+      setCurrentUserProfile((p) =>
+        p
+          ? {
+              ...p,
+              pinHash,
+              pinSalt,
+              pinUpdatedAt,
+              pinFailCount: 0,
+              pinLocked: false,
+            }
+          : p,
+      );
       setPinStage("ok");
       await choMotion(480);
       unlockSession();
       showNotification("Đã thiết lập mã PIN bảo vệ");
     } catch (e: any) {
+      if (laLoiMatMang(e)) {
+        setPinOffline(true);
+        setPinOfflineHint(
+          "Không lưu được mã PIN vì mất mạng. Vui lòng kết nối lại rồi thử lại.",
+        );
+        setPinStage("idle");
+        return;
+      }
       setPinStage("sai");
-      setPinError("Không lưu được mã PIN: " + e.message);
+      const msg =
+        e?.code === "permission-denied"
+          ? "Phiên Google đã quá hạn — vui lòng đăng xuất rồi đăng nhập lại Google để đặt PIN mới."
+          : "Không lưu được mã PIN: " + (e?.message || "lỗi không xác định");
+      setPinError(msg);
       await choMotion(450);
       setPinStage("idle");
     } finally {
@@ -1169,50 +1347,147 @@ export default function App() {
     setPinError("");
 
     const uid = auth.currentUser?.uid;
-    const stored = currentUserProfile?.pinHash;
-    if (!uid || !stored) return;
+    if (!uid) return;
 
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setPinOffline(true);
+      setPinOfflineHint(
+        "Mất kết nối mạng. Kết nối Wi-Fi hoặc 4G rồi thử lại để nhập mã PIN.",
+      );
+      return;
+    }
+
+    // Khi người dùng nhập PIN kiểm tra thì xóa cờ khôi phục (tránh tự chuyển sang đặt PIN nếu gõ sai 5 lần)
+    setFreshResetUid(null);
     setPinBusy(true);
     setPinStage("verify");
     try {
-      const [ok] = await Promise.all([verifyPin(pin, uid, stored), choMotion(360)]);
+      const ref = doc(db, "users", uid);
+      // Bắt buộc đọc máy chủ để đồng bộ trạng thái khóa / số lần sai / hash mới nhất
+      const snap = await getDocFromServer(ref);
+      const serverProfile = snap.exists()
+        ? (snap.data() as UserProfile)
+        : currentUserProfile;
+      if (snap.exists()) {
+        setCurrentUserProfile(serverProfile);
+      }
+
+      if (serverProfile?.pinLocked) {
+        setPinStage("sai");
+        setPinError(
+          "Mã PIN đang bị khóa sau 5 lần sai. Đăng nhập lại bằng Google để đặt lại.",
+        );
+        await choMotion(460);
+        setPinStage("idle");
+        return;
+      }
+
+      const stored = serverProfile?.pinHash;
+      if (!stored) {
+        setPinStage("idle");
+        return;
+      }
+
+      const [ok] = await Promise.all([
+        verifyPin(pin, uid, stored, serverProfile?.pinSalt),
+        choMotion(360),
+      ]);
+
       if (ok) {
+        const currentFail = Number(serverProfile?.pinFailCount || 0);
+        if (currentFail > 0) {
+          try {
+            await updateDoc(ref, { pinFailCount: 0, pinLocked: false });
+          } catch {
+            // Không chặn mở khóa nếu đồng bộ reset bộ đếm lỗi tạm thời thất bại
+          }
+        }
+        clearPinResetIntent();
         setPinStage("ok");
         await choMotion(480);
         unlockSession();
       } else {
+        const prevFail = Math.max(0, Number(serverProfile?.pinFailCount || 0));
+        const nextFail = Math.min(PIN_MAX_ATTEMPTS, prevFail + 1);
+        const shouldLock = nextFail >= PIN_MAX_ATTEMPTS;
+
+        try {
+          await updateDoc(ref, {
+            pinFailCount: nextFail,
+            pinLocked: shouldLock,
+          });
+        } catch (err) {
+          console.error("Khong cap nhat duoc pinFailCount:", err);
+        }
+
+        clearPinResetIntent();
+        setCurrentUserProfile((p) =>
+          p ? { ...p, pinFailCount: nextFail, pinLocked: shouldLock } : p,
+        );
         setPinStage("sai");
-        const n = pinAttempts + 1;
-        setPinAttempts(n);
-        if (n >= 5) {
-          // Nhap sai nhieu lan: buoc dang xuat de tranh do PIN
-          setPinError("Sai quá 5 lần. Đang đăng xuất để bảo vệ tài khoản...");
-          setTimeout(() => handleLogout(), 1200);
+
+        if (shouldLock) {
+          setPinError(
+            "Sai mã PIN 5 lần — đăng nhập lại bằng Google để đặt lại mã PIN.",
+          );
+          window.setTimeout(() => {
+            void handleLogout();
+          }, 1800);
         } else {
-          setPinError(`Mã PIN không đúng. Còn ${5 - n} lần thử.`);
+          setPinError(
+            `Mã PIN không đúng. Còn ${PIN_MAX_ATTEMPTS - nextFail} lần thử.`,
+          );
           await choMotion(460);
           setPinStage("idle");
         }
+      }
+    } catch (err: any) {
+      if (laLoiMatMang(err)) {
+        setPinOffline(true);
+        setPinOfflineHint(
+          "Mất kết nối máy chủ khi kiểm tra mã PIN. Vui lòng thử lại khi có mạng.",
+        );
+        setPinStage("idle");
+      } else {
+        setPinStage("sai");
+        setPinError(
+          "Không kiểm tra được mã PIN: " + (err?.message || "lỗi không xác định"),
+        );
+        await choMotion(460);
+        setPinStage("idle");
       }
     } finally {
       setPinBusy(false);
     }
   };
 
+  /** Quên mã PIN hoặc đang bị khóa: đăng xuất để người dùng đăng nhập lại bằng Google rồi đặt PIN mới. */
+  const handleForgotPin = async () => {
+    const uid = auth.currentUser?.uid || currentUserProfile?.uid;
+    if (uid) {
+      savePinResetIntent(uid);
+    }
+    await handleLogout();
+  };
+
   /**
-   * Dang nhap bang tai khoan Google.
+   * Đăng nhập bằng tài khoản Google.
    *
-   * App khong con giu mat khau nao: Google lo phan xac thuc. Sau khi dang
-   * nhap, onAuthStateChanged (o useEffect ben duoi) se lo phan tao ho so va
-   * xac dinh vai tro.
+   * App không giữ mật khẩu: Google lo phần xác thực. Sau khi đăng nhập,
+   * onAuthStateChanged sẽ kiểm tra hồ sơ, mạng và trạng thái khóa PIN.
    */
   const handleGoogleLogin = async () => {
     if (isAuthenticating) return;
     setIsAuthenticating(true);
     setAuthError("");
+    manualGoogleLoginRef.current = true;
     try {
-      await signInWithPopup(auth, googleProvider);
+      const cred = await signInWithPopup(auth, googleProvider);
+      if (cred?.user?.uid) {
+        setFreshResetUid(cred.user.uid);
+      }
     } catch (e: any) {
+      manualGoogleLoginRef.current = false;
       const code = e?.code || "";
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
         // Nguoi dung tu dong cua so - khong phai loi.
@@ -1233,19 +1508,33 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    manualGoogleLoginRef.current = false;
     try {
       await signOut(auth);
     } catch (e) {
       console.error("Loi dang xuat:", e);
     }
-    sessionStorage.removeItem(PIN_SESSION_KEY);
+    clearLegacyPinStorage();
+    pinUnlockedRef.current = false;
     setPinUnlocked(false);
+    setPinOffline(false);
+    setPinOfflineHint("");
+    setFreshResetUid(null);
     setPinStage("idle");
     setPinError("");
-    setPinAttempts(0);
     setUser(null);
     setUserRole("PENDING");
     setCurrentUserProfile(null);
+    setAllUserProfiles([]);
+    setTransactions([]);
+    setPartners([]);
+    setSlips([]);
+    setAnhChungTu([]);
+    setHoaDon([]);
+    setSoPhieu([]);
+    setKeHoach([]);
+    setDanhGia([]);
+    setKiemKeBon([]);
   };
 
   /* ---------------- Du lieu thu nghiem ---------------- */
@@ -5838,9 +6127,9 @@ export default function App() {
    * khi phần lớn lượt đọc là của những người mở app ở kho. Xem `doLuong.ts`.
    */
   useEffect(() => {
-    if (!user || !daDuocDuyet) return;
+    if (!user || !daDuocDuyet || !pinUnlocked) return;
     return batDauGuiDoLuong(currentUserProfile?.email || user || "");
-  }, [user, daDuocDuyet, currentUserProfile?.email]);
+  }, [user, daDuocDuyet, pinUnlocked, currentUserProfile?.email]);
 
   const [doLuong, setDoLuong] = useState<NgayDoLuong[]>([]);
   const [dangTaiDoLuong, setDangTaiDoLuong] = useState(false);
@@ -6170,6 +6459,29 @@ export default function App() {
   }
 
   /**
+   * CHẶN KHI MẤT MẠNG TRƯỚC LỚP PIN:
+   * Giống chuẩn app Kiểm kê: không cho dùng hồ sơ/PIN cache để vượt qua lúc mở app.
+   */
+  if (!pinUnlocked && pinOffline) {
+    return (
+      <ManHinhPin
+        email={currentUserProfile?.email || user || ""}
+        mode="mang"
+        pinStage="idle"
+        pinBusy={pinBusy}
+        pinError={pinError}
+        offlineHint={pinOfflineHint}
+        onClearError={() => setPinError("")}
+        onVerifyPin={handleVerifyPin}
+        onCreatePin={handleCreatePin}
+        onForgotPin={handleForgotPin}
+        onRetryNetwork={handleRetryPinNetwork}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  /**
    * Da dang nhap Google nhung chu so huu chua duyet.
    *
    * Man hinh nay chan hoan toan phan giao dien du lieu. Nhung do khong phai
@@ -6269,27 +6581,45 @@ export default function App() {
   }
 
   /**
-   * LOP BAO VE THU 2: MA PIN
+   * LỚP BẢO VỆ THỨ 2: MÃ PIN
    *
-   * Day la KHOA MAN HINH cho may dung chung, khong phai lop xac thuc
-   * mat ma. Nguoi da co tai khoan Google hop le van co the goi thang vao
-   * co so du lieu ma khong qua man hinh nay - viec chan that su nam o
-   * firestore.rules. Muc dich cua PIN la: dong nghiep ngoi vao may ai do
-   * quen dang xuat thi khong xem/sua duoc du lieu kho.
+   * Giống chuẩn app Kiểm kê F&B: mỗi lần mở hoặc tải lại trang (F5 / Ctrl+Shift+R)
+   * đều bắt nhập lại PIN; kiểm tra trực tiếp máy chủ (không vượt khi mất mạng);
+   * sai 5 lần tự khóa trên máy chủ và buộc đăng nhập lại bằng Google để đặt PIN mới.
    */
   if (!pinUnlocked) {
-    const needsSetup = !currentUserProfile?.pinHash;
+    const pinUid = auth.currentUser?.uid || currentUserProfile?.uid || "";
+    const canRecoverReset =
+      Boolean(pinUid) &&
+      freshResetUid === pinUid &&
+      (Boolean(currentUserProfile?.pinLocked) || hasPinResetIntentFor(pinUid));
+    const pinMode: PinScreenMode = pinOffline
+      ? "mang"
+      : currentUserProfile?.pinLocked && !canRecoverReset
+        ? "khoa"
+        : !currentUserProfile?.pinHash || canRecoverReset
+          ? "dat"
+          : "nhap";
+    const failsRemaining = Math.max(
+      0,
+      PIN_MAX_ATTEMPTS - Number(currentUserProfile?.pinFailCount || 0),
+    );
 
     return (
       <ManHinhPin
         email={currentUserProfile?.email || user || ""}
-        needsSetup={needsSetup}
+        mode={pinMode}
+        isResetRecovery={canRecoverReset}
         pinStage={pinStage}
         pinBusy={pinBusy}
         pinError={pinError}
+        failsRemaining={failsRemaining}
+        offlineHint={pinOfflineHint}
         onClearError={() => setPinError("")}
         onVerifyPin={handleVerifyPin}
         onCreatePin={handleCreatePin}
+        onForgotPin={handleForgotPin}
+        onRetryNetwork={handleRetryPinNetwork}
         onLogout={handleLogout}
       />
     );
@@ -9619,12 +9949,12 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                         ))}
                                       </select>
 
-                                      {profile.pinHash && (
+                                      {(profile.pinHash || profile.pinLocked) && (
                                         <button
                                           onClick={async () => {
                                             if (
                                               !confirm(
-                                                `Đặt lại mã PIN của ${profile.email}?\n\nHọ sẽ được yêu cầu tạo mã PIN mới ở lần đăng nhập tới.`,
+                                                `Đặt lại / mở khóa mã PIN của ${profile.email}?\n\nHọ sẽ được yêu cầu tạo mã PIN mới ở lần đăng nhập tới.`,
                                               )
                                             )
                                               return;
@@ -9633,6 +9963,9 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                                 doc(db, "users", profile.uid),
                                                 {
                                                   pinHash: null,
+                                                  pinSalt: null,
+                                                  pinFailCount: 0,
+                                                  pinLocked: false,
                                                   pinUpdatedAt:
                                                     new Date().toISOString(),
                                                 },
@@ -9648,7 +9981,11 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                             }
                                           }}
                                           className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-primary transition-colors"
-                                          title="Đặt lại mã PIN"
+                                          title={
+                                            profile.pinLocked
+                                              ? "Mở khóa & đặt lại mã PIN"
+                                              : "Đặt lại mã PIN"
+                                          }
                                         >
                                           <Lock className="w-4 h-4" />
                                         </button>

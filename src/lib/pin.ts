@@ -1,30 +1,40 @@
 /**
- * Bam ma PIN truoc khi luu.
+ * Băm mã PIN trước khi lưu.
  *
- * KHONG BAO GIO luu ma PIN dang so that. Ban cu cua app luu thang "061220"
- * vao Firestore nen ai doc duoc tai lieu la biet PIN.
+ * KHÔNG BAO GIỜ lưu mã PIN dạng số thật.
  *
- * Dung PBKDF2-SHA256 voi 200.000 vong lap: PIN chi co 6 chu so (1 trieu to
- * hop) nen neu bam mot vong don gian thi do het chi mat vai giay. Voi 200.000
- * vong, moi lan thu mat vai phan tram giay, do het 1 trieu to hop se mat
- * nhieu ngay - du de ngan trong boi canh nay.
- *
- * Muoi (salt) lay theo uid cua tung nguoi, nen hai nguoi dat cung mot PIN se
- * cho ra hai chuoi bam khac nhau.
+ * Dùng PBKDF2-SHA256 với 310.000 vòng lặp + muối ngẫu nhiên 16 bytes theo người
+ * dùng (giữ tương thích ngược 200.000 vòng cho tài khoản chưa có pinSalt).
  */
 
-const ITERATIONS = 200_000;
+export const PIN_MAX_ATTEMPTS = 5;
+export const PIN_ITERATIONS = 310_000;
+export const PIN_LEGACY_ITERATIONS = 200_000;
+export const PIN_RESET_INTENT_TTL_MS = 15 * 60 * 1000;
 
-function toHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
+function toHex(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-export async function hashPin(pin: string, uid: string): Promise<string> {
-  const enc = new TextEncoder();
+/** Sinh chuỗi muối ngẫu nhiên 16 bytes dạng hex (32 ký tự). */
+export function generatePinSalt(): string {
+  const buf = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(buf);
+  return toHex(buf);
+}
 
-  const keyMaterial = await crypto.subtle.importKey(
+export async function hashPin(
+  pin: string,
+  uid: string,
+  salt?: string | null,
+): Promise<string> {
+  const enc = new TextEncoder();
+  const cleanSalt = typeof salt === 'string' && salt.trim().length > 0 ? salt.trim() : null;
+
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
     'raw',
     enc.encode(pin),
     'PBKDF2',
@@ -32,12 +42,13 @@ export async function hashPin(pin: string, uid: string): Promise<string> {
     ['deriveBits'],
   );
 
-  const bits = await crypto.subtle.deriveBits(
+  const bits = await globalThis.crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      // Them tien to co dinh de muoi khong trung voi du lieu khac
-      salt: enc.encode('bialogistics-pin-v1:' + uid),
-      iterations: ITERATIONS,
+      salt: enc.encode(
+        cleanSalt ? `skb-pin-v2:${cleanSalt}:${uid}` : `bialogistics-pin-v1:${uid}`,
+      ),
+      iterations: cleanSalt ? PIN_ITERATIONS : PIN_LEGACY_ITERATIONS,
       hash: 'SHA-256',
     },
     keyMaterial,
@@ -47,13 +58,15 @@ export async function hashPin(pin: string, uid: string): Promise<string> {
   return toHex(bits);
 }
 
-/** So sanh theo kieu chong do thoi gian phan hoi. */
+/** So sánh theo kiểu chống dò thời gian phản hồi. */
 export async function verifyPin(
   pin: string,
   uid: string,
   storedHash: string,
+  salt?: string | null,
 ): Promise<boolean> {
-  const computed = await hashPin(pin, uid);
+  if (!storedHash || !isValidPinFormat(pin)) return false;
+  const computed = await hashPin(pin, uid, salt);
   if (computed.length !== storedHash.length) return false;
   let diff = 0;
   for (let i = 0; i < computed.length; i++) {
@@ -66,5 +79,66 @@ export function isValidPinFormat(pin: string): boolean {
   return /^\d{6}$/.test(pin);
 }
 
-/** Khoa danh dau da mo khoa PIN trong phien lam viec cua tab hien tai. */
+/**
+ * Chặn các dãy PIN quá dễ đoán (giống chuẩn app Kiểm kê):
+ * 6 số giống nhau (000000, 111111...) hoặc 6 số tăng/giảm liên tiếp (123456, 654321...).
+ */
+export function isWeakPin(pin: string): boolean {
+  if (!isValidPinFormat(pin)) return true;
+  if (/^(\d)\1{5}$/.test(pin)) return true;
+  return '0123456789'.includes(pin) || '9876543210'.includes(pin);
+}
+
+/**
+ * Tên khóa cũ từng lưu trạng thái mở khóa theo tab.
+ * Từ bản siết bảo mật: LUÔN xóa khóa này mỗi lần tải trang — KHÔNG tự mở khóa sau F5.
+ */
 export const PIN_SESSION_KEY = 'bt_pin_unlocked';
+export const PIN_RESET_INTENT_KEY = 'skb_pin_reset_intent';
+
+/** Xóa sạch mọi dấu vết mở khóa PIN cũ trên trình duyệt. */
+export function clearLegacyPinStorage(): void {
+  try {
+    globalThis.sessionStorage?.removeItem(PIN_SESSION_KEY);
+  } catch {
+    // Bo qua trong moi truong khong co sessionStorage
+  }
+  try {
+    globalThis.localStorage?.removeItem(PIN_SESSION_KEY);
+  } catch {
+    // Bo qua trong moi truong khong co localStorage
+  }
+}
+
+export function savePinResetIntent(uid: string): void {
+  try {
+    globalThis.localStorage?.setItem(
+      PIN_RESET_INTENT_KEY,
+      JSON.stringify({ uid, ts: Date.now() }),
+    );
+  } catch {
+    // Bo qua neu trinh duyet chan storage
+  }
+}
+
+export function hasPinResetIntentFor(uid: string, now = Date.now()): boolean {
+  try {
+    const raw = globalThis.localStorage?.getItem(PIN_RESET_INTENT_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { uid?: string; ts?: number };
+    if (!parsed || parsed.uid !== uid || typeof parsed.ts !== 'number') {
+      return false;
+    }
+    return now - parsed.ts >= 0 && now - parsed.ts <= PIN_RESET_INTENT_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function clearPinResetIntent(): void {
+  try {
+    globalThis.localStorage?.removeItem(PIN_RESET_INTENT_KEY);
+  } catch {
+    // Bo qua neu khong co localStorage
+  }
+}
