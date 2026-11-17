@@ -187,59 +187,52 @@
   to   { opacity: 1; transform: none; }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .app-vao .sidebar-vao {
-    animation: skbBlIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .app-vao .topbar-vao {
-    animation: skbBlIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) 40ms both;
-  }
-
-  /* Stagger tung khoi noi dung va cac dong bang khi chuyen tab trong data app */
-  #view.vao > * {
-    animation: skbMucIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  #view.vao > *:nth-child(2) { animation-delay: 40ms; }
-  #view.vao > *:nth-child(3) { animation-delay: 80ms; }
-  #view.vao > *:nth-child(4) { animation-delay: 120ms; }
-  #view.vao > *:nth-child(5) { animation-delay: 160ms; }
-  #view.vao > *:nth-child(6) { animation-delay: 200ms; }
-
-  #view.vao tbody tr:nth-child(-n+14) {
-    animation: skbDongIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  #view.vao tbody tr:nth-child(1)  { animation-delay: 70ms; }
-  #view.vao tbody tr:nth-child(2)  { animation-delay: 92ms; }
-  #view.vao tbody tr:nth-child(3)  { animation-delay: 114ms; }
-  #view.vao tbody tr:nth-child(4)  { animation-delay: 136ms; }
-  #view.vao tbody tr:nth-child(5)  { animation-delay: 158ms; }
-  #view.vao tbody tr:nth-child(6)  { animation-delay: 180ms; }
-  #view.vao tbody tr:nth-child(7)  { animation-delay: 202ms; }
-  #view.vao tbody tr:nth-child(8)  { animation-delay: 224ms; }
-  #view.vao tbody tr:nth-child(9)  { animation-delay: 246ms; }
-  #view.vao tbody tr:nth-child(10) { animation-delay: 268ms; }
-  #view.vao tbody tr:nth-child(11) { animation-delay: 290ms; }
-  #view.vao tbody tr:nth-child(12) { animation-delay: 312ms; }
-  #view.vao tbody tr:nth-child(13) { animation-delay: 334ms; }
-  #view.vao tbody tr:nth-child(14) { animation-delay: 356ms; }
+.app-vao .sidebar-vao {
+  animation: skbBlIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.app-vao .topbar-vao {
+  animation: skbBlIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) 40ms both;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .anim-view-enter,
-  .anim-modal-enter,
-  .skb-toast-in,
-  .pulse-dot,
-  .app-vao .sidebar-vao,
-  .app-vao .topbar-vao,
-  #view.vao > *,
-  #view.vao tbody tr {
-    animation: none !important;
-  }
-  .card-lift:hover,
-  .card-lift:active {
-    transform: none !important;
-  }
+/* Stagger tung khoi noi dung va cac dong bang khi chuyen tab trong data app */
+#view.vao > *,
+#view.vao > .anim-view-enter > *,
+#view.vao > div > .anim-view-enter > * {
+  animation: skbMucIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+#view.vao > *:nth-child(2),
+#view.vao > .anim-view-enter > *:nth-child(2),
+#view.vao > div > .anim-view-enter > *:nth-child(2) { animation-delay: 40ms; }
+#view.vao > *:nth-child(3),
+#view.vao > .anim-view-enter > *:nth-child(3),
+#view.vao > div > .anim-view-enter > *:nth-child(3) { animation-delay: 80ms; }
+#view.vao > *:nth-child(4),
+#view.vao > .anim-view-enter > *:nth-child(4),
+#view.vao > div > .anim-view-enter > *:nth-child(4) { animation-delay: 120ms; }
+#view.vao > *:nth-child(5),
+#view.vao > .anim-view-enter > *:nth-child(5),
+#view.vao > div > .anim-view-enter > *:nth-child(5) { animation-delay: 160ms; }
+#view.vao > *:nth-child(6),
+#view.vao > .anim-view-enter > *:nth-child(6),
+#view.vao > div > .anim-view-enter > *:nth-child(6) { animation-delay: 200ms; }
+
+#view.vao tbody tr:nth-child(-n+14) {
+  animation: skbDongIn 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+#view.vao tbody tr:nth-child(1)  { animation-delay: 70ms; }
+#view.vao tbody tr:nth-child(2)  { animation-delay: 92ms; }
+#view.vao tbody tr:nth-child(3)  { animation-delay: 114ms; }
+#view.vao tbody tr:nth-child(4)  { animation-delay: 136ms; }
+#view.vao tbody tr:nth-child(5)  { animation-delay: 158ms; }
+#view.vao tbody tr:nth-child(6)  { animation-delay: 180ms; }
+#view.vao tbody tr:nth-child(7)  { animation-delay: 202ms; }
+#view.vao tbody tr:nth-child(8)  { animation-delay: 224ms; }
+#view.vao tbody tr:nth-child(9)  { animation-delay: 246ms; }
+#view.vao tbody tr:nth-child(10) { animation-delay: 268ms; }
+#view.vao tbody tr:nth-child(11) { animation-delay: 290ms; }
+#view.vao tbody tr:nth-child(12) { animation-delay: 312ms; }
+#view.vao tbody tr:nth-child(13) { animation-delay: 334ms; }
+#view.vao tbody tr:nth-child(14) { animation-delay: 356ms; }
 
 /* ---------------------------------------------------------------------------
    IN PHIEU NHAP KHO
@@ -771,85 +764,68 @@
   40%, 80% { transform: translateX(6px); }
 }
 
-/* Toàn bộ chuyển động chạy mượt trong prefers-reduced-motion: no-preference;
-   trạng thái mặc định luôn hiển thị rõ nét nếu người dùng tắt hiệu ứng. */
-@media (prefers-reduced-motion: no-preference) {
-  .dn-anim-header {
-    animation: dn-header-vao 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .dn-anim-eyebrow {
-    animation: dn-hien-len 560ms cubic-bezier(0.22, 1, 0.36, 1) 40ms both;
-  }
-  .dn-anim-tieu-de {
-    animation: dn-tieu-de-vao 720ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
-  }
-  .dn-anim-khung {
-    animation: dn-vs-rise 520ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 120ms both;
-  }
-  .dn-anim-khung.dn-shake {
-    animation: dn-shake 420ms ease-in-out;
-  }
-  .dn-vien-chay,
-  .dn-vien-toa {
-    animation: dn-vien-chay-quay 4.2s linear infinite;
-  }
-  .dn-ring-1 {
-    animation: dn-vs-float 14s ease-in-out infinite;
-  }
-  .dn-ring-2 {
-    animation: dn-vs-float 18s ease-in-out infinite reverse;
-  }
-  .dn-ly-de-3d {
-    animation: dn-de-xoay 16s linear infinite;
-  }
-  .dn-ly-hao-quang {
-    animation: dn-hao-quang-bia 4s ease-in-out infinite;
-  }
-  .dn-bot-bia {
-    animation: dn-bot-len var(--d, 2.8s) ease-in var(--t, 0s) infinite;
-  }
-  .dn-song-bia {
-    animation: dn-song-lac 3.2s ease-in-out infinite;
-  }
-  .dn-giot-bot {
-    animation: dn-giot-chay 4.8s ease-in 1.2s infinite;
-  }
-  .dn-ly-shine {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: dn-lap-lanh 2.8s ease-in-out infinite;
-  }
-  .dn-nut-google {
-    animation:
-      dn-lg-flow 6s ease-in-out 1s infinite,
-      dn-lg-halo 3.2s ease-in-out 1s infinite;
-  }
-  .dn-nut-google::after {
-    animation: dn-lg-sheen 3.6s ease-in-out 1.2s infinite;
-  }
-  .dn-nut-google:hover:not(:disabled) {
-    animation: dn-lg-flow 3s ease-in-out infinite;
-  }
-  .dn-nut-google:hover:not(:disabled)::after {
-    animation: dn-lg-sheen 1.4s ease-in-out infinite;
-  }
-  .dn-anim-loi {
-    animation: dn-hien-len 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
+/* Luôn chạy toàn bộ hiệu ứng đã chuẩn hóa, không bị Windows Visual Effects tắt mất */
+.dn-anim-header {
+  animation: dn-header-vao 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .dn-nut-google,
-  .dn-gicon,
-  .dn-google-arrow,
-  .dn-khung-dang-nhap,
-  .dn-ly-3d-body {
-    transition: none;
-  }
-  .dn-nut-google:hover:not(:disabled),
-  .dn-nut-google:hover:not(:disabled) .dn-gicon {
-    transform: none;
-  }
+.dn-anim-eyebrow {
+  animation: dn-hien-len 560ms cubic-bezier(0.22, 1, 0.36, 1) 40ms both;
+}
+.dn-anim-tieu-de {
+  animation: dn-tieu-de-vao 720ms cubic-bezier(0.22, 1, 0.36, 1) 90ms both;
+}
+.dn-anim-khung {
+  animation: dn-vs-rise 520ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 120ms both;
+}
+.dn-anim-khung.dn-shake {
+  animation: dn-shake 420ms ease-in-out;
+}
+.dn-vien-chay,
+.dn-vien-toa {
+  animation: dn-vien-chay-quay 4.2s linear infinite;
+}
+.dn-ring-1 {
+  animation: dn-vs-float 14s ease-in-out infinite;
+}
+.dn-ring-2 {
+  animation: dn-vs-float 18s ease-in-out infinite reverse;
+}
+.dn-ly-de-3d {
+  animation: dn-de-xoay 16s linear infinite;
+}
+.dn-ly-hao-quang {
+  animation: dn-hao-quang-bia 4s ease-in-out infinite;
+}
+.dn-bot-bia {
+  animation: dn-bot-len var(--d, 2.8s) ease-in var(--t, 0s) infinite;
+}
+.dn-song-bia {
+  animation: dn-song-lac 3.2s ease-in-out infinite;
+}
+.dn-giot-bot {
+  animation: dn-giot-chay 4.8s ease-in 1.2s infinite;
+}
+.dn-ly-shine {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dn-lap-lanh 2.8s ease-in-out infinite;
+}
+.dn-nut-google {
+  animation:
+    dn-lg-flow 6s ease-in-out 1s infinite,
+    dn-lg-halo 3.2s ease-in-out 1s infinite;
+}
+.dn-nut-google::after {
+  animation: dn-lg-sheen 3.6s ease-in-out 1.2s infinite;
+}
+.dn-nut-google:hover:not(:disabled) {
+  animation: dn-lg-flow 3s ease-in-out infinite;
+}
+.dn-nut-google:hover:not(:disabled)::after {
+  animation: dn-lg-sheen 1.4s ease-in-out infinite;
+}
+.dn-anim-loi {
+  animation: dn-hien-len 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Gach chan ho phach moc dan duoi cum hero + chuoi mo khoa dang nhap -> PIN/App */
@@ -899,18 +875,16 @@
   100% { transform: translateX(320%); }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .dn-ul-line {
-    transform: scaleX(0);
-    animation: dn-ul-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
-  }
-  .dn-leaving {
-    animation: dn-lc-leave 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    pointer-events: none;
-  }
-  .boot-load-sweep {
-    animation: dn-boot-sweep 1.1s ease-in-out infinite;
-  }
+.dn-ul-line {
+  transform: scaleX(0);
+  animation: dn-ul-grow 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+}
+.dn-leaving {
+  animation: dn-lc-leave 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+.boot-load-sweep {
+  animation: dn-boot-sweep 1.1s ease-in-out infinite;
 }
 
 /* ===========================================================================
@@ -1140,38 +1114,23 @@
   to   { stroke-dashoffset: 0; }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .pin-stage.verify .pin-dots {
-    animation: pinSpin 1.05s linear infinite;
-  }
-  .pin-stage.verify .pin-dots i {
-    animation: pinGlow 0.9s ease-in-out calc(var(--k) * -150ms) infinite;
-  }
-  .pin-stage.verify .pin-ring {
-    animation: pinSpin 0.8s linear infinite reverse;
-  }
-  .pin-stage.verify .pin-core {
-    animation: pinPulse 1s ease-in-out infinite;
-  }
-  .pin-stage.ok .pin-ok-path {
-    animation: pinTick 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
-  }
+.pin-stage.verify .pin-dots {
+  animation: pinSpin 1.05s linear infinite;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .pin-dots i,
-  .pin-ring,
-  .pin-core,
-  .pin-ok,
-  .pin-k {
-    transition: none;
-  }
-  .pin-stage.ok .pin-ok-path {
-    stroke-dashoffset: 0;
-  }
-  .pin-stage.sai {
-    animation: none;
-  }
+.pin-stage.verify .pin-dots i {
+  animation: pinGlow 0.9s ease-in-out calc(var(--k) * -150ms) infinite;
+}
+.pin-stage.verify .pin-ring {
+  animation: pinSpin 0.8s linear infinite reverse;
+}
+.pin-stage.verify .pin-core {
+  animation: pinPulse 1s ease-in-out infinite;
+}
+.pin-stage.ok .pin-dots {
+  animation: none;
+}
+.pin-stage.ok .pin-ok-path {
+  animation: pinTick 0.42s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
 }
 
 /*

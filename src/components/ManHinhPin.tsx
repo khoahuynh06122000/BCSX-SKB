@@ -307,12 +307,15 @@ export default function ManHinhPin({
                   type="button"
                   disabled={pinBusy}
                   onClick={onRetryNetwork}
-                  className="dn-btn-google w-full justify-center py-3 text-[13px] disabled:opacity-60"
+                  className="dn-nut-google w-full text-[13px] disabled:opacity-60"
                 >
-                  <span className="dn-btn-google-ic">
-                    <RefreshCw className={`h-4 w-4 ${pinBusy ? "animate-spin" : ""}`} aria-hidden="true" />
+                  <span className="dn-gicon">
+                    <RefreshCw className={`h-4 w-4 text-[#b45309] ${pinBusy ? "animate-spin" : ""}`} aria-hidden="true" />
                   </span>
-                  <span>{pinBusy ? "Đang kiểm tra mạng..." : "Thử lại kết nối"}</span>
+                  <span className="text-center font-extrabold text-[#231303]">
+                    {pinBusy ? "Đang kiểm tra mạng..." : "Thử lại kết nối"}
+                  </span>
+                  <span className="w-5" aria-hidden="true" />
                 </button>
               </div>
             ) : mode === "khoa" ? (
@@ -329,12 +332,15 @@ export default function ManHinhPin({
                   type="button"
                   disabled={pinBusy}
                   onClick={onForgotPin}
-                  className="dn-btn-google w-full justify-center py-3 text-[13px] disabled:opacity-60"
+                  className="dn-nut-google w-full text-[13px] disabled:opacity-60"
                 >
-                  <span className="dn-btn-google-ic">
-                    <KeyRound className="h-4 w-4" aria-hidden="true" />
+                  <span className="dn-gicon">
+                    <KeyRound className="h-4 w-4 text-[#b45309]" aria-hidden="true" />
                   </span>
-                  <span>Đăng nhập lại Google để cấp PIN mới</span>
+                  <span className="text-center font-extrabold text-[#231303]">
+                    Đăng nhập lại Google để cấp PIN mới
+                  </span>
+                  <span className="w-5" aria-hidden="true" />
                 </button>
                 <p className="text-[11px] leading-relaxed text-white/55">
                   Hoặc liên hệ Chủ sở hữu để mở khóa & cấp mã PIN tạm 6 số trong Cài đặt.

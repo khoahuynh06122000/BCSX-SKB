@@ -1189,9 +1189,7 @@ export default function App() {
   const [pinBusy, setPinBusy] = useState(false);
 
   const choMotion = (ms: number) =>
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+    new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
   const unlockSession = () => {
     clearLegacyPinStorage();

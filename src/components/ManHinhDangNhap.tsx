@@ -85,8 +85,6 @@ export default function ManHinhDangNhap({
    * mà gọi setState là dựng lại cả cây giao diện 60 lần một giây.
    */
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
     const dich = { x: 0, y: 0 };
     const muot = { x: 0, y: 0 };
     const theoChuot = (e: MouseEvent) => {
