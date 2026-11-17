@@ -10,6 +10,7 @@ import {
 import type { KiemKeKegItem, KiemKeKegLit, Product } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 import { cn, formatNumber } from "../lib/utils";
 
 interface Props {
@@ -551,9 +552,10 @@ export default function KiemKeKegLitSection({
                           className="group relative w-32 h-24 rounded-xl overflow-hidden border border-slate-300 bg-slate-950 shrink-0"
                           title={`Mở ảnh hiện trường ${idx + 1} (tải lúc ${formatStampView(a.taiLuc)})`}
                         >
-                          <img
-                            src={a.url}
+                          <OAnhLuoi
+                            url={a.url}
                             alt={`Ảnh kiểm kê ${rec.date} #${idx + 1}`}
+                            rong={400}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
                           <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-slate-900/80 text-amber-300 font-mono text-[9px] font-bold flex items-center gap-0.5">

@@ -14,12 +14,18 @@
 
 const MOC = "/image/upload/";
 
+/** Chuẩn hoá URL ảnh (bỏ khoảng trắng thừa, nâng `http://res.cloudinary.com` -> `https://`). */
+export function chuanHoaUrlAnh(url: string): string {
+  const u = String(url ?? "").trim();
+  return u.replace(/^http:\/\/(res\.cloudinary\.com\/)/i, "https://$1");
+}
+
 /**
  * Bản thu nhỏ rộng tối đa `rong` px (`f_auto,q_auto,w_N,c_limit`).
  * Không phải ảnh Cloudinary gốc thì trả nguyên — không dựng đường dẫn sai.
  */
 export function anhThuNho(url: string, rong = 400): string {
-  const u = String(url ?? "").trim();
+  const u = chuanHoaUrlAnh(url);
   if (!/^https:\/\/res\.cloudinary\.com\//i.test(u)) return u;
   const i = u.indexOf(MOC);
   if (i < 0) return u;

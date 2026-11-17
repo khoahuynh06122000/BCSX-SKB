@@ -142,8 +142,12 @@ import {
   verifyPin,
 } from "./lib/pin";
 import ImportSlipPanel, { BieuMauDienTuModal } from "./components/ImportSlip";
-import XuongSanXuatPanel from "./components/XuongSanXuatPanel";
-import QuanLyXuongPanel from "./components/QuanLyXuongPanel";
+import XuongSanXuatPanel, {
+  type XuongSanXuatSubTab,
+} from "./components/XuongSanXuatPanel";
+import QuanLyXuongPanel, {
+  type QuanLyXuongSubTab,
+} from "./components/QuanLyXuongPanel";
 import KhoTongNxtPanel from "./components/KhoTongNxtPanel";
 import KeToanDashboardPanel from "./components/KeToanDashboardPanel";
 import BulkImportGrid from "./components/BulkImportGrid";
@@ -592,6 +596,18 @@ export default function App() {
   const [products] = useState<Product[]>(INITIAL_PRODUCTS);
 
   const [activeTab, setActiveTab] = useState("");
+  const [xuongSubTab, setXuongSubTab] =
+    useState<XuongSanXuatSubTab>("lap-phieu");
+  const [qlXuongSubTab, setQlXuongSubTab] =
+    useState<QuanLyXuongSubTab>("duyet-nhat-ky");
+  const [reqXuongSubTab, setReqXuongSubTab] = useState<{
+    id: XuongSanXuatSubTab;
+    nonce: number;
+  } | null>(null);
+  const [reqQlXuongSubTab, setReqQlXuongSubTab] = useState<{
+    id: QuanLyXuongSubTab;
+    nonce: number;
+  } | null>(null);
   /**
    * Tab con trong mục Báo cáo. Ba giá trị này đúng với ba nút trên giao diện.
    *
@@ -5131,10 +5147,14 @@ export default function App() {
    * Không cần gán `type` ở đây: giá trị dựng ban đầu đã là "IN", và sau mỗi lần
    * lưu thành công form cũng được đặt lại về "IN".
    */
+  const dangMoNhapLe =
+    (activeTab === "xuong" && xuongSubTab === "nhap-le") ||
+    (activeTab === "ql-xuong" && qlXuongSubTab === "nhap-le");
+
   useEffect(() => {
-    if (activeTab === "import") {
+    if (dangMoNhapLe) {
       // Nhà máy nguồn hàng cũng lấy từ danh mục ghép: Firestore thiếu
-      // SKB-BNC là cả tab nhập kho không chọn được nguồn.
+      // SKB-BNC là cả mục nhập kho không chọn được nguồn.
       const skb = donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC");
       if (skb && newTransaction.partnerId !== skb.id) {
         setNewTransaction((prev) => ({
@@ -5143,7 +5163,7 @@ export default function App() {
         }));
       }
     }
-  }, [activeTab, partners, newTransaction.partnerId]);
+  }, [dangMoNhapLe, partners, newTransaction.partnerId]);
 
   /**
    * Mốc cuối của khoảng ngày báo cáo, tính tới HẾT ngày đó.
@@ -5752,11 +5772,32 @@ export default function App() {
 
       const inTransit = newTransaction.isInTransit;
 
-      // Immediate state updates
-      // Nhap tay thi di thang sang tab Phieu nhap kho: hang chua co anh ky la
-      // chua vao ton, nen viec ke tiep luon la in phieu cho hai ben ky. Dua
-      // nguoi dung ve tab Lich su o day se de ho tuong da xong.
-      setActiveTab(slipCode ? "slips" : inTransit ? "in-transit" : "history");
+      // Nhập lẻ tạo phiếu xong -> mở ngay tab con "5. Phiếu giấy cũ" trong
+      // màn hình hiện tại (Xưởng sản xuất / Quản lý xưởng) để in & gắn ảnh ký.
+      if (slipCode) {
+        const nonce = Date.now();
+        if (activeTab === "ql-xuong") {
+          setReqQlXuongSubTab({ id: "phieu-cu", nonce });
+          setQlXuongSubTab("phieu-cu");
+        } else if (activeTab === "xuong") {
+          setReqXuongSubTab({ id: "phieu-cu", nonce });
+          setXuongSubTab("phieu-cu");
+        } else {
+          setActiveTab(
+            quyen.lapPhieuXuong
+              ? "xuong"
+              : quyen.duyetXuong
+                ? "ql-xuong"
+                : "reports",
+          );
+          setReqXuongSubTab({ id: "phieu-cu", nonce });
+          setReqQlXuongSubTab({ id: "phieu-cu", nonce });
+        }
+      } else if (inTransit) {
+        setActiveTab("in-transit");
+      } else {
+        setActiveTab("reports");
+      }
       setNewTransaction({
         type: "IN",
         partnerId:
@@ -6422,8 +6463,8 @@ export default function App() {
 
   /**
    * Menu bên trái chia rành mạch THEO BAN BỆ (tránh trùng lặp đầu mục):
-   *   1. Xưởng sản xuất (QL Xưởng + NV Sản xuất)
-   *   2. Kho tổng (NXT & Rào 2, Nhập lẻ, Xuất kho, Đơn đi đường, Sổ kho SAP)
+   *   1. Xưởng sản xuất (QL Xưởng + Xưởng sản xuất — đã tích hợp Nhập lẻ & Phiếu giấy cũ bên trong)
+   *   2. Kho tổng (NXT & Rào 2, Xuất kho, Đơn đi đường, Sổ kho SAP)
    *   3. Công nợ & Hóa đơn (Dashboard Kế toán, Công nợ·Hóa đơn, Đơn BNC, Đối tác)
    *   4. Tư liệu & Hệ thống (Thư viện ảnh, Cài đặt)
    */
@@ -6453,24 +6494,6 @@ export default function App() {
                   icon: Factory,
                   color: "#fb923c",
                   badge: pendingSlipStats.traLai,
-                },
-              ]
-            : []),
-          ...(quyen.ghiNhap
-            ? [
-                {
-                  id: "import",
-                  label: "Nhập lẻ & Tồn đầu",
-                  icon: PlusCircle,
-                  color: "#059669",
-                  badge: 0,
-                },
-                {
-                  id: "slips",
-                  label: "Phiếu giấy cũ",
-                  icon: FileText,
-                  color: "#0ea5e9",
-                  badge: 0,
                 },
               ]
             : []),
@@ -6615,6 +6638,709 @@ export default function App() {
       setActiveTab(navIds[0] || "");
     }
   }, [user, activeTab, navItems]);
+
+  const moTabConPanel = (
+    panelScope: "xuong" | "ql-xuong",
+    tab: "lap-phieu" | "duyet-nhat-ky" | "phieu-cu",
+  ) => {
+    const nonce = Date.now();
+    if (panelScope === "ql-xuong") {
+      const targetTab: QuanLyXuongSubTab =
+        tab === "lap-phieu" ? "duyet-nhat-ky" : tab;
+      setReqQlXuongSubTab({ id: targetTab, nonce });
+      setQlXuongSubTab(targetTab);
+    } else {
+      const targetTab: XuongSanXuatSubTab =
+        tab === "duyet-nhat-ky" ? "lap-phieu" : tab;
+      setReqXuongSubTab({ id: targetTab, nonce });
+      setXuongSubTab(targetTab);
+    }
+  };
+
+  const renderNhapXuatForm = (
+    mode: "import" | "export",
+    panelScope?: "xuong" | "ql-xuong",
+  ) => (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="text-center space-y-2 mb-8">
+        <div
+          className={cn(
+            "w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-xl",
+            mode === "import"
+              ? "bg-blue-600 shadow-blue-200"
+              : "bg-rose-600 shadow-rose-200",
+          )}
+        >
+          {mode === "import" ? (
+            <PlusCircle className="text-white w-8 h-8" />
+          ) : (
+            <MinusCircle className="text-white w-8 h-8" />
+          )}
+        </div>
+        <h2 className="text-2xl font-black text-slate-900 italic font-serif">
+          GHI NHẬN{" "}
+          {mode === "import"
+            ? newTransaction.type === "OPENING"
+              ? "TỒN ĐẦU KỲ"
+              : "NHẬP KHO"
+            : "XUẤT KHO"}
+        </h2>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+          Hệ thống ghi nhận đa mặt hàng (Batch Processing)
+        </p>
+      </div>
+
+      {mode === "export" && quyen.napFile && (
+        <Card title="Nạp xuất kho từ file BBGN">
+          <TkhoImport
+            duocGhiNhap={quyen.ghiNhap}
+            products={products}
+            partners={partners}
+            diemBanOverrides={diemBanOverrides}
+            onSaveDiemBan={handleSaveDiemBan}
+            onCreateNhap={handleCreateNhapFromTkho}
+            onCreate={handleCreateFromBbgn}
+            busy={loading}
+          />
+        </Card>
+      )}
+
+      <Card className="p-4 sm:p-10 relative overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+          {mode === "import" && (
+            <div className="md:col-span-2">
+              <Select
+                label="Hình thức ghi nhận"
+                options={[
+                  {
+                    value: "IN",
+                    label: "Nhập kho (Nhập hàng mới về)",
+                  },
+                  {
+                    value: "OPENING",
+                    label: "Tồn đầu kỳ (Số liệu gốc ban đầu)",
+                  },
+                ]}
+                value={newTransaction.type}
+                onChange={(e: any) => {
+                  const type = e.target.value as TransactionType;
+                  setNewTransaction({
+                    ...newTransaction,
+                    type,
+                  });
+                }}
+              />
+            </div>
+          )}
+
+          <div className="md:col-span-1">
+            <ONgay
+              label={
+                mode === "import"
+                  ? newTransaction.type === "OPENING"
+                    ? "Ngày chốt tồn đầu"
+                    : "Ngày thực nhập"
+                  : "Ngày thực xuất"
+              }
+              value={newTransaction.date}
+              onChange={(v: string) =>
+                setNewTransaction({
+                  ...newTransaction,
+                  date: v,
+                })
+              }
+            />
+          </div>
+
+          <div className="md:col-span-1">
+            {newTransaction.type !== "OPENING" && (
+              <Select
+                label={
+                  mode === "import"
+                    ? "Nhà cung cấp"
+                    : "Đơn vị nhận (Đối tác)"
+                }
+                options={(() => {
+                  const ds = donVi.filter((p) =>
+                    mode === "import"
+                      ? p.type === "SUPPLIER"
+                      : p.type !== "SUPPLIER",
+                  );
+                  const out: { value: string; label: string }[] = [];
+                  let daChenBNC = false;
+                  for (const p of ds) {
+                    if (laBoPhanBNC(p.id)) {
+                      if (!daChenBNC) {
+                        out.push({
+                          value: NHOM_BNC_TAM,
+                          label: "BNC [AD0103]",
+                        });
+                        daChenBNC = true;
+                      }
+                      continue;
+                    }
+                    out.push({
+                      value: p.id,
+                      label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
+                    });
+                  }
+                  return out;
+                })()}
+                value={
+                  laBoPhanBNC(newTransaction.partnerId) ||
+                  newTransaction.partnerId === NHOM_BNC_TAM
+                    ? NHOM_BNC_TAM
+                    : newTransaction.partnerId
+                }
+                onChange={(e: any) => {
+                  setNhomBNCChon("");
+                  setNewTransaction({
+                    ...newTransaction,
+                    partnerId: e.target.value,
+                  });
+                }}
+              />
+            )}
+
+            {mode !== "import" &&
+              (newTransaction.partnerId === NHOM_BNC_TAM ||
+                laBoPhanBNC(newTransaction.partnerId)) && (
+                <div className="mt-4 space-y-2">
+                  <label className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
+                    Phần của BNC
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {NHOM_BNC.map((n) => {
+                      const dangChon = nhomBNCDangChon === n.ma;
+                      return (
+                        <button
+                          key={n.ma}
+                          type="button"
+                          onClick={() => {
+                            setNhomBNCChon(n.ma);
+                            setNewTransaction({
+                              ...newTransaction,
+                              partnerId: n.boPhan ?? NHOM_BNC_TAM,
+                            });
+                          }}
+                          className={cn(
+                            "px-3 py-2.5 rounded-xl border transition-all text-left leading-tight",
+                            dangChon
+                              ? "bg-slate-900 text-white border-slate-900 shadow-lg"
+                              : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                          )}
+                        >
+                          <span className="block text-[11px] font-black uppercase tracking-wide">
+                            {n.ten}
+                          </span>
+                          <span
+                            className={cn(
+                              "block text-[9px] font-bold mt-0.5",
+                              dangChon ? "text-white/70" : "text-slate-400",
+                            )}
+                          >
+                            {n.moTa}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {nhomBNCDangChon === "NB" && (
+                    <>
+                      <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1 pt-1">
+                        Điểm bán nội bộ
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                        {donVi
+                          .filter((p) => nhomCuaBoPhan(p.id) === "NB")
+                          .map((p) => {
+                            const dangChon = newTransaction.partnerId === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() =>
+                                  setNewTransaction({
+                                    ...newTransaction,
+                                    partnerId: p.id,
+                                  })
+                                }
+                                className={cn(
+                                  "px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide border transition-all text-left leading-tight",
+                                  dangChon
+                                    ? "bg-slate-900 text-white border-slate-900 shadow-lg"
+                                    : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
+                                )}
+                              >
+                                {p.name.replace(/^BNC · /, "")}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </>
+                  )}
+                  {newTransaction.partnerId === NHOM_BNC_TAM && (
+                    <p className="text-[10px] font-bold text-amber-700">
+                      {nhomBNCDangChon === "NB"
+                        ? "Chưa chọn điểm bán — chưa lưu được."
+                        : "Chưa chọn phần của BNC — chưa lưu được."}
+                    </p>
+                  )}
+
+                  {donViThieu.length > 0 && (
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+                      <p className="text-[10px] font-bold text-rose-700 leading-relaxed">
+                        Danh mục đơn vị trong hệ thống thiếu{" "}
+                        {donViThieu.length} mục so với danh mục chuẩn. Chọn
+                        vẫn được, nhưng mã bộ phận SAP sẽ trống khi kết xuất
+                        công nợ.
+                      </p>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={handleSyncPartners}
+                          disabled={loading}
+                          className="px-4 py-2 rounded-lg bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-40"
+                        >
+                          Cập nhật danh mục đơn vị
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+          </div>
+
+          {mode === "import" && pendingApproval.count > 0 && (
+            <div className="md:col-span-2 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex gap-3">
+              <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider">
+                  {pendingApproval.slipCount} phiếu chưa vào tồn
+                </p>
+                <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
+                  {formatNumber(pendingApproval.liters)} lít đã điền nhưng{" "}
+                  <strong>chưa cộng vào tồn kho</strong> và chưa xuất bán được,
+                  vì phiếu chưa có ảnh chữ ký.{" "}
+                  {panelScope ? (
+                    <button
+                      type="button"
+                      onClick={() => moTabConPanel(panelScope, "phieu-cu")}
+                      className="underline font-black text-amber-900 hover:text-amber-950"
+                    >
+                      Mở mục 5. Phiếu giấy cũ
+                    </button>
+                  ) : (
+                    <strong>Sang mục 5. Phiếu giấy cũ</strong>
+                  )}{" "}
+                  để in, hai bên ký rồi tải ảnh lên.
+                </p>
+                <p className="text-[10px] font-black text-amber-700/70 font-mono tracking-wide">
+                  {pendingApproval.codes.slice(0, 8).join(" · ")}
+                  {pendingApproval.codes.length > 8 &&
+                    ` +${pendingApproval.codes.length - 8}`}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {mode === "import" && (
+            <div className="md:col-span-2 mt-4">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Nhập theo danh mục
+                </h4>
+                <p className="text-[10px] font-bold text-slate-400">
+                  Điền số vào loại nhận được · để trống là không nhập
+                </p>
+              </div>
+              <BulkImportGrid
+                products={products}
+                inventory={inventory}
+                initialRows={newTransaction.items.map((i) => ({
+                  productId: i.productId,
+                  quantity: i.quantity,
+                  batchNumber: i.batchNumber,
+                }))}
+                onChange={(rows) =>
+                  setNewTransaction((prev) => ({
+                    ...prev,
+                    items: rows.length
+                      ? rows
+                      : [{ productId: "", quantity: 0 }],
+                  }))
+                }
+              />
+            </div>
+          )}
+
+          {mode !== "import" && (
+            <div className="md:col-span-2 mt-4">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Danh sách mặt hàng ({newTransaction.items.length})
+                </h4>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const missingProducts = products.filter(
+                        (p) =>
+                          !newTransaction.items.some(
+                            (item) => item.productId === p.id,
+                          ),
+                      );
+                      if (!missingProducts.length)
+                        return showNotification(
+                          "Anh đã chọn hết các mặt hàng hiện có rồi ạ!",
+                        );
+
+                      setNewTransaction((prev) => ({
+                        ...prev,
+                        items: [
+                          ...prev.items.filter((i) => i.productId !== ""),
+                          ...missingProducts.map((p) => ({
+                            productId: p.id,
+                            quantity: 0,
+                          })),
+                        ],
+                      }));
+                    }}
+                    className="text-[10px] font-black text-amber-600 bg-amber-50 uppercase tracking-widest flex items-center gap-1.5 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    <Layers className="w-3.5 h-3.5" /> Thêm toàn bộ danh mục
+                  </button>
+                  <button
+                    onClick={() => {
+                      const availableProducts = products.filter(
+                        (p) =>
+                          !newTransaction.items.some(
+                            (item) => item.productId === p.id,
+                          ),
+                      );
+                      if (availableProducts.length === 0) {
+                        showNotification(
+                          "Anh đã chọn hết các mặt hàng hiện có rồi ạ!",
+                        );
+                        return;
+                      }
+
+                      const selectedIds = window.prompt(
+                        "Nhập tên sản phẩm để chọn nhanh (Ngăn cách bởi dấu phẩy):\n" +
+                          availableProducts.map((p) => p.name).join(", "),
+                      );
+
+                      if (selectedIds) {
+                        const searchTerms = selectedIds
+                          .split(",")
+                          .map((s) => s.trim().toLowerCase());
+                        const matches = availableProducts.filter((p) =>
+                          searchTerms.some((term) =>
+                            p.name.toLowerCase().includes(term),
+                          ),
+                        );
+
+                        if (matches.length > 0) {
+                          setNewTransaction((prev) => ({
+                            ...prev,
+                            items: [
+                              ...prev.items.filter((i) => i.productId !== ""),
+                              ...matches.map((p) => ({
+                                productId: p.id,
+                                quantity: 0,
+                              })),
+                            ],
+                          }));
+                        }
+                      }
+                    }}
+                    className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    <Search className="w-3.5 h-3.5" /> Chọn nhanh
+                  </button>
+                  <button
+                    onClick={addTransactionItem}
+                    className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-1.5 hover:bg-primary/5 px-3 py-1.5 rounded-lg transition-all"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" /> Thêm dòng
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {newTransaction.items.map((item, index) => (
+                  <div
+                    key={`item-${index}-${item.productId}`}
+                    className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 relative group/item"
+                  >
+                    {newTransaction.items.length > 1 && (
+                      <button
+                        onClick={() => removeTransactionItem(index)}
+                        className="absolute -top-2 -right-2 w-7 h-7 bg-white border border-slate-100 text-rose-500 rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover/item:opacity-100 transition-all hover:bg-rose-50"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+                      <div className="sm:col-span-5">
+                        <Select
+                          label={`Sản phẩm ${index + 1}`}
+                          options={products.map((p) => ({
+                            value: p.id,
+                            label: p.name,
+                          }))}
+                          value={item.productId}
+                          onChange={(e: any) =>
+                            updateTransactionItem(index, {
+                              productId: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <Input
+                          label={`Số lượng (${products.find((p) => p.id === item.productId)?.unit || "—"})`}
+                          type="number"
+                          placeholder="0"
+                          value={item.quantity === 0 ? "" : item.quantity}
+                          onChange={(e: any) =>
+                            updateTransactionItem(index, {
+                              quantity: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                      {mode === "export" && (
+                        <div className="sm:col-span-12">
+                          <Input
+                            label="Hao hụt — không ghi công nợ"
+                            type="number"
+                            placeholder="0"
+                            value={item.lossQuantity ? item.lossQuantity : ""}
+                            onChange={(e: any) =>
+                              updateTransactionItem(index, {
+                                lossQuantity: Number(e.target.value),
+                              })
+                            }
+                          />
+                          <p className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
+                            {(() => {
+                              const sp = products.find(
+                                (p) => p.id === item.productId,
+                              );
+                              if (!item.quantity)
+                                return "Điền số lượng xuất trước, app sẽ gợi ý phần hao hụt.";
+                              if (sp?.category !== "Lít")
+                                return "Hàng lon không có keg nên không gợi ý được — điền nếu thực tế có hao hụt.";
+                              const keg = item.quantity / LIT_MOI_KEG_GHI;
+                              const goiY =
+                                Math.round(
+                                  keg *
+                                    (LIT_MOI_KEG_THUC - LIT_MOI_KEG_GHI) *
+                                    100,
+                                ) / 100;
+                              return Math.abs(keg - Math.round(keg)) < 0.005
+                                ? `${formatNumber(item.quantity)} lít = ${Math.round(keg)} keg → gợi ý hao hụt ${formatNumber(goiY)} lít (0,6 lít/keg).`
+                                : `${formatNumber(item.quantity)} lít không chia tròn 20 nên không suy ra được số keg — anh tự điền.`;
+                            })()}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
+                            Ghi thành một dòng hao hụt riêng: tồn kho trừ cả
+                            phần này, còn công nợ và hóa đơn chỉ lấy số lượng ở
+                            trên.
+                          </p>
+                        </div>
+                      )}
+                      {mode === "export" &&
+                        item.productId &&
+                        item.quantity > 0 &&
+                        (() => {
+                          const fifo = goiYLoFIFO(
+                            tonTheoLo,
+                            item.productId,
+                            item.quantity,
+                          );
+                          return fifo.length > 0 ? (
+                            <div className="sm:col-span-4 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                              Lô xuất FIFO tự động:{" "}
+                              <span className="font-mono font-black">
+                                {fifo
+                                  .map(
+                                    (f) =>
+                                      `${f.batchNumber} (${formatNumber(f.quantity)})`,
+                                  )
+                                  .join(" + ")}
+                              </span>
+                            </div>
+                          ) : null;
+                        })()}
+                      <div className="sm:col-span-4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="md:col-span-2">
+            <Input
+              label="Ghi chú tổng quát (Tùy chọn)"
+              placeholder="Ví dụ: Theo xe tải số hiệu..., Ghi chú chung cho cả đơn..."
+              value={newTransaction.notes}
+              onChange={(e: any) =>
+                setNewTransaction({
+                  ...newTransaction,
+                  notes: e.target.value,
+                })
+              }
+            />
+          </div>
+
+          {mode === "export" && (
+            <div className="md:col-span-2">
+              <div className="p-5 bg-amber-50/50 border border-amber-200/50 rounded-2xl flex items-center gap-4">
+                <Truck className="w-8 h-8 text-amber-500" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-black text-amber-900 uppercase tracking-widest">
+                    Mặc định: Đơn hàng đi đường (Giao sau)
+                  </span>
+                  <span className="text-[10px] text-amber-700/70 font-bold italic">
+                    Tất cả đơn xuất kho sẽ được lưu vào mục "Đơn đi đường" để
+                    xác nhận khi hoàn tất.
+                  </span>
+                </div>
+                <div className="ml-auto flex items-center gap-2 px-3 py-1 bg-amber-500 text-white rounded-full text-[8px] font-black uppercase">
+                  Active
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-12 flex flex-col sm:flex-row gap-4 items-center border-t border-slate-100 pt-10">
+          <Button
+            variant={mode === "import" ? "primary" : "danger"}
+            className="w-full sm:flex-1 py-5 text-base shadow-2xl relative group overflow-hidden"
+            onClick={() =>
+              handleAddTransaction(
+                mode === "import" ? newTransaction.type : "OUT",
+              )
+            }
+            disabled={
+              loading ||
+              newTransaction.items.some((i) => !i.productId || i.quantity <= 0)
+            }
+          >
+            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+            {loading ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : mode === "import" ? (
+              <PlusCircle className="w-5 h-5" />
+            ) : (
+              <MinusCircle className="w-5 h-5" />
+            )}
+            <span className="relative z-10">
+              {mode === "import"
+                ? newTransaction.type === "OPENING"
+                  ? "GHI NHẬN TỒN ĐẦU"
+                  : `HOÀN TẤT NHẬP ${newTransaction.items.length} MÓN`
+                : `HOÀN TẤT XUẤT ${newTransaction.items.length} MÓN`}
+            </span>
+          </Button>
+          <Button
+            variant="secondary"
+            className="w-full sm:w-auto px-10 py-5"
+            onClick={() => {
+              if (mode === "import" && panelScope) {
+                moTabConPanel(
+                  panelScope,
+                  panelScope === "ql-xuong" ? "duyet-nhat-ky" : "lap-phieu",
+                );
+              } else {
+                setActiveTab("reports");
+              }
+            }}
+          >
+            Hủy bỏ
+          </Button>
+        </div>
+
+        <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -mr-32 -mt-32 opacity-20 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-slate-50 rounded-full -ml-24 -mb-24 opacity-20 pointer-events-none" />
+      </Card>
+    </div>
+  );
+
+  const renderNhapLeIntegrated = (panelScope: "xuong" | "ql-xuong") =>
+    quyen.ghiNhap ? (
+      <div className="space-y-4">
+        {isAuthorizedFull && quyen.napFile && quyen.ghiNhap && (
+          <div className="flex justify-end">
+            <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
+              <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleImportInventoryExcel}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
+        {renderNhapXuatForm("import", panelScope)}
+      </div>
+    ) : undefined;
+
+  const renderPhieuCuIntegrated = () =>
+    quyen.ghiNhap ? (
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+              Phiếu nhập kho (Phiếu giấy cũ)
+            </h2>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+              Mỗi lượt giao một phiếu · In · Ký tươi · Chụp ảnh là vào tồn
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3 mb-5">
+            <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+              Mỗi lượt sản xuất giao hàng là một phiếu riêng. Kho đếm và đối
+              chiếu với số đã điền, khớp thì bấm <strong>Xem &amp; in</strong>,
+              hai bên ký tươi lên bản in, rồi đưa ảnh tờ đã ký vào đúng phiếu đó
+              — <strong>Chụp ảnh</strong> nếu đang dùng điện thoại, hoặc{" "}
+              <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản quét sẵn.{" "}
+              <strong>Có ảnh ký thì hàng mới vào tồn kho</strong> và mới xuất
+              bán được; chưa ký thì số chỉ nằm chờ ở đây.
+            </p>
+          </div>
+
+          <ImportSlipPanel
+            transactions={transactions}
+            products={products}
+            partners={partners}
+            slips={slips}
+            canWrite={canWrite}
+            currentUserName={currentUserProfile?.name || user || ""}
+            onMarkPrinted={handleMarkSlipPrinted}
+            onUploadSigned={handleUploadSignedSlip}
+            onRemoveSigned={
+              isOwner ? handleRemoveSignedSlipPhoto : undefined
+            }
+            uploadingCode={uploadingSlipCode}
+            onXoaPhieu={quyen.ghiNhap ? handleXoaPhieuNhap : undefined}
+            xoaDuocPhieuDaKy={isOwner}
+            onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
+            anhTheoPhieu={anhTheoChungTu}
+          />
+        </Card>
+      </div>
+    ) : undefined;
 
   if (loading && !user) {
     return (
@@ -7363,29 +8089,6 @@ export default function App() {
               Chỉ còn nút nạp Excel tồn kho — nó vốn nằm nhờ trong thanh này chứ
               không thuộc về bộ lọc, nên giữ lại và cho đứng riêng.
             */}
-            {/*
-              Nút này ghi ra TOÀN BỘ là dòng nhập, nên phải có cả `ghiNhap`.
-              Chỉ xét `napFile` thì người xuất kho thấy nút, bấm vào, rồi nhận
-              lỗi quyền từ máy chủ — bày một nút không bao giờ chạy được còn tệ
-              hơn là không bày.
-            */}
-            {isAuthorizedFull &&
-              quyen.napFile &&
-              quyen.ghiNhap &&
-              activeTab === "import" && (
-                <div className="flex justify-end">
-                  <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
-                    <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={handleImportInventoryExcel}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              )}
-
             {/*
               ĐÃ GỠ "BẢNG ĐIỀU KHIỂN" VÀ "TỒN KHO" (29/09/2026).
 
@@ -8811,14 +9514,11 @@ export default function App() {
             {/* Ẩn menu thôi chưa đủ: tab có thể đang mở sẵn từ trước khi vai
                 trò bị hạ. Chặn cả ở đây để không bao giờ hiện ra một biểu mẫu
                 mà bấm lưu chắc chắn hỏng. */}
-            {((activeTab === "import" && !quyen.ghiNhap) ||
-              (activeTab === "export" && !quyen.ghiXuat)) && (
+            {activeTab === "export" && !quyen.ghiXuat && (
               <div className="max-w-lg mx-auto text-center py-20 space-y-3">
                 <ShieldCheck className="w-10 h-10 text-slate-300 mx-auto" />
                 <p className="text-sm font-black text-slate-900">
-                  {activeTab === "import"
-                    ? "Tài khoản này không ghi được chiều nhập"
-                    : "Tài khoản này không ghi được chiều xuất"}
+                  Tài khoản này không ghi được chiều xuất
                 </p>
                 <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
                   Vai trò hiện tại là <strong>{tenVaiTro(userRole)}</strong> —
@@ -8829,693 +9529,9 @@ export default function App() {
               </div>
             )}
 
-            {((activeTab === "import" && quyen.ghiNhap) ||
-              (activeTab === "export" && quyen.ghiXuat)) && (
-              <div className="max-w-4xl mx-auto space-y-6">
-                <div className="text-center space-y-2 mb-8">
-                  <div
-                    className={cn(
-                      "w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-xl",
-                      activeTab === "import"
-                        ? "bg-blue-600 shadow-blue-200"
-                        : "bg-rose-600 shadow-rose-200",
-                    )}
-                  >
-                    {activeTab === "import" ? (
-                      <PlusCircle className="text-white w-8 h-8" />
-                    ) : (
-                      <MinusCircle className="text-white w-8 h-8" />
-                    )}
-                  </div>
-                  <h2 className="text-2xl font-black text-slate-900 italic font-serif">
-                    GHI NHẬN{" "}
-                    {activeTab === "import"
-                      ? newTransaction.type === "OPENING"
-                        ? "TỒN ĐẦU KỲ"
-                        : "NHẬP KHO"
-                      : "XUẤT KHO"}
-                  </h2>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                    Hệ thống ghi nhận đa mặt hàng (Batch Processing)
-                  </p>
-                </div>
-
-                {/*
-                  Nạp cả tháng từ TỆP GỐC của bộ phận.
-
-                  Trước đây phải chuyển tệp về khuôn tệp mẫu rồi mới nạp được —
-                  một bước chép tay ở giữa, và chép tay là chỗ sinh sai số.
-                  Nay đọc thẳng sheet "T Kho" trong tệp gốc.
-                */}
-                {/*
-                  Nạp tệp hàng loạt CHỈ kế toán và chủ sở hữu: đổ hàng loạt vào
-                  sổ, sai một lần là hỏng nhiều dòng cùng lúc và phải dò ngược
-                  từng dòng để gỡ.
-                */}
-                {activeTab === "export" && quyen.napFile && (
-                  <Card title="Nạp xuất kho từ file BBGN">
-                    <TkhoImport
-                      duocGhiNhap={quyen.ghiNhap}
-                      products={products}
-                      partners={partners}
-                      diemBanOverrides={diemBanOverrides}
-                      onSaveDiemBan={handleSaveDiemBan}
-                      onCreateNhap={handleCreateNhapFromTkho}
-                      onCreate={handleCreateFromBbgn}
-                      busy={loading}
-                    />
-                  </Card>
-                )}
-
-                <Card className="p-4 sm:p-10 relative overflow-hidden">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                    {activeTab === "import" && (
-                      <div className="md:col-span-2">
-                        <Select
-                          label="Hình thức ghi nhận"
-                          options={[
-                            {
-                              value: "IN",
-                              label: "Nhập kho (Nhập hàng mới về)",
-                            },
-                            {
-                              value: "OPENING",
-                              label: "Tồn đầu kỳ (Số liệu gốc ban đầu)",
-                            },
-                          ]}
-                          value={newTransaction.type}
-                          onChange={(e: any) => {
-                            const type = e.target.value as TransactionType;
-                            setNewTransaction({
-                              ...newTransaction,
-                              type,
-                            });
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    <div className="md:col-span-1">
-                      <ONgay
-                        label={
-                          activeTab === "import"
-                            ? newTransaction.type === "OPENING"
-                              ? "Ngày chốt tồn đầu"
-                              : "Ngày thực nhập"
-                            : "Ngày thực xuất"
-                        }
-                        value={newTransaction.date}
-                        onChange={(v: string) =>
-                          setNewTransaction({
-                            ...newTransaction,
-                            date: v,
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="md:col-span-1">
-                      {newTransaction.type !== "OPENING" && (
-                        <Select
-                          label={
-                            activeTab === "import"
-                              ? "Nhà cung cấp"
-                              : "Đơn vị nhận (Đối tác)"
-                          }
-                          /*
-                            BNC gom bon bo phan nhung trong o nay chi hien MOT
-                            dong "BNC". Chon no thi moi hien o thu hai de chon
-                            bo phan. Truoc day bon bo phan nam phang thanh bon
-                            dong trong cung o, khong ai nhan ra day la mot don
-                            vi chia nho.
-                          */
-                          options={(() => {
-                            const ds = donVi.filter((p) =>
-                              activeTab === "import"
-                                ? p.type === "SUPPLIER"
-                                : p.type !== "SUPPLIER",
-                            );
-                            const out: { value: string; label: string }[] = [];
-                            let daChenBNC = false;
-                            for (const p of ds) {
-                              if (laBoPhanBNC(p.id)) {
-                                // Bốn bộ phận gộp thành MỘT dòng "BNC", chèn
-                                // đúng chỗ chúng đứng trong danh mục. Nối vào
-                                // cuối thì BNC rơi xuống đáy danh sách 23 dòng,
-                                // phải cuộn hết mới thấy.
-                                if (!daChenBNC) {
-                                  out.push({
-                                    value: NHOM_BNC_TAM,
-                                    label: "BNC [AD0103]",
-                                  });
-                                  daChenBNC = true;
-                                }
-                                continue;
-                              }
-                              out.push({
-                                value: p.id,
-                                label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
-                              });
-                            }
-                            return out;
-                          })()}
-                          value={
-                            laBoPhanBNC(newTransaction.partnerId) ||
-                            newTransaction.partnerId === NHOM_BNC_TAM
-                              ? NHOM_BNC_TAM
-                              : newTransaction.partnerId
-                          }
-                          onChange={(e: any) => {
-                            // Doi don vi thi bo nhom cu di: giu lai thi chon
-                            // FV roi chon lai BNC se thay "Noi bo" sang san,
-                            // tuong nhu da chon xong.
-                            setNhomBNCChon("");
-                            setNewTransaction({
-                              ...newTransaction,
-                              // Chon BNC thi chua biet bo phan nao -> de o thu
-                              // hai quyet dinh. Khong doan mot bo phan mac dinh:
-                              // doan sai la ghi san luong vao nhom sai.
-                              partnerId: e.target.value,
-                            });
-                          }}
-                        />
-                      )}
-
-                      {/*
-                        O THU HAI — BON NHOM CUA BNC, chi hien khi da chon BNC.
-
-                        BNC chia bon phan: Noi bo, Ngoai giao, HTKD, Chi phi
-                        khac. Ba nhom sau dung bang MOT bo phan nen bam la chon
-                        xong; Noi bo gom 17 diem ban nen mo tiep tang thu ba.
-
-                        Truoc day 20 bo phan nam phang thanh 20 nut trong cung
-                        mot luoi: Ngoai giao va HTKD lan giua mot ruot ten quan,
-                        khong ai nhan ra day la bon phan khac han nhau ve ban
-                        chat — mot ben la ban trong khu, ba ben kia thi khong.
-                      */}
-                      {activeTab !== "import" &&
-                        (newTransaction.partnerId === NHOM_BNC_TAM ||
-                          laBoPhanBNC(newTransaction.partnerId)) && (
-                          <div className="mt-4 space-y-2">
-                            <label className="text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1">
-                              Phần của BNC
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {NHOM_BNC.map((n) => {
-                                const dangChon = nhomBNCDangChon === n.ma;
-                                return (
-                                  <button
-                                    key={n.ma}
-                                    type="button"
-                                    onClick={() => {
-                                      setNhomBNCChon(n.ma);
-                                      setNewTransaction({
-                                        ...newTransaction,
-                                        // Nhóm nào đúng bằng một bộ phận thì
-                                        // chọn luôn. Nội bộ thì để trống chờ
-                                        // chọn điểm bán: đoán sẵn một quán là
-                                        // ghi sản lượng cho nhầm khách.
-                                        partnerId: n.boPhan ?? NHOM_BNC_TAM,
-                                      });
-                                    }}
-                                    className={cn(
-                                      "px-3 py-2.5 rounded-xl border transition-all text-left leading-tight",
-                                      dangChon
-                                        ? "bg-slate-900 text-white border-slate-900 shadow-lg"
-                                        : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
-                                    )}
-                                  >
-                                    <span className="block text-[11px] font-black uppercase tracking-wide">
-                                      {n.ten}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "block text-[9px] font-bold mt-0.5",
-                                        dangChon
-                                          ? "text-white/70"
-                                          : "text-slate-400",
-                                      )}
-                                    >
-                                      {n.moTa}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/*
-                              TANG THU BA — 17 diem ban, chi hien khi dang o
-                              nhom Noi bo. Ba nhom con lai khong co diem ban nao
-                              nen khong bay ra luoi rong.
-                            */}
-                            {nhomBNCDangChon === "NB" && (
-                              <>
-                                <label className="block text-[10px] sm:text-xs font-black text-slate-500 uppercase tracking-widest ml-1 pt-1">
-                                  Điểm bán nội bộ
-                                </label>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
-                                  {donVi
-                                    .filter(
-                                      (p) => nhomCuaBoPhan(p.id) === "NB",
-                                    )
-                                    .map((p) => {
-                                      const dangChon =
-                                        newTransaction.partnerId === p.id;
-                                      return (
-                                        <button
-                                          key={p.id}
-                                          type="button"
-                                          onClick={() =>
-                                            setNewTransaction({
-                                              ...newTransaction,
-                                              partnerId: p.id,
-                                            })
-                                          }
-                                          className={cn(
-                                            "px-3 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-wide border transition-all text-left leading-tight",
-                                            dangChon
-                                              ? "bg-slate-900 text-white border-slate-900 shadow-lg"
-                                              : "bg-white text-slate-500 border-slate-200 hover:border-primary hover:text-primary",
-                                          )}
-                                        >
-                                          {p.name.replace(/^BNC · /, "")}
-                                        </button>
-                                      );
-                                    })}
-                                </div>
-                              </>
-                            )}
-                            {newTransaction.partnerId === NHOM_BNC_TAM && (
-                              <p className="text-[10px] font-bold text-amber-700">
-                                {nhomBNCDangChon === "NB"
-                                  ? "Chưa chọn điểm bán — chưa lưu được."
-                                  : "Chưa chọn phần của BNC — chưa lưu được."}
-                              </p>
-                            )}
-
-                            {/*
-                              Danh muc trong Firestore chua co du don vi cua
-                              code. Van bam chon duoc, nhung ma bo phan SAP se
-                              tra ra rong khi ket xuat cong no — nen phai noi
-                              ra, kem nut sua ngay tai cho.
-                            */}
-                            {donViThieu.length > 0 && (
-                              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
-                                <p className="text-[10px] font-bold text-rose-700 leading-relaxed">
-                                  Danh mục đơn vị trong hệ thống thiếu{" "}
-                                  {donViThieu.length} mục so với danh mục chuẩn.
-                                  Chọn vẫn được, nhưng mã bộ phận SAP sẽ trống
-                                  khi kết xuất công nợ.
-                                </p>
-                                {isOwner && (
-                                  <button
-                                    type="button"
-                                    onClick={handleSyncPartners}
-                                    disabled={loading}
-                                    className="px-4 py-2 rounded-lg bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-40"
-                                  >
-                                    Cập nhật danh mục đơn vị
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                    </div>
-
-                    {/*
-                      NHAP KHO: dung bang nhap nhanh liet ke san toan bo danh
-                      muc. Kho co hon chuc loai bia, bam "them dong" roi chon
-                      trong danh sach tha xuong vua cham vua de bo sot.
-                    */}
-                    {activeTab === "import" && pendingApproval.count > 0 && (
-                      <div className="md:col-span-2 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex gap-3">
-                        <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <p className="text-[11px] font-black text-amber-800 uppercase tracking-wider">
-                            {pendingApproval.slipCount} phiếu chưa vào tồn
-                          </p>
-                          <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
-                            {formatNumber(pendingApproval.liters)} lít đã điền
-                            nhưng <strong>chưa cộng vào tồn kho</strong> và chưa
-                            xuất bán được, vì phiếu chưa có ảnh chữ ký. Sang tab{" "}
-                            <strong>Phiếu nhập kho</strong> để in, hai bên ký
-                            rồi tải ảnh lên.
-                          </p>
-                          <p className="text-[10px] font-black text-amber-700/70 font-mono tracking-wide">
-                            {pendingApproval.codes.slice(0, 8).join(" · ")}
-                            {pendingApproval.codes.length > 8 &&
-                              ` +${pendingApproval.codes.length - 8}`}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === "import" && (
-                      <div className="md:col-span-2 mt-4">
-                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            Nhập theo danh mục
-                          </h4>
-                          <p className="text-[10px] font-bold text-slate-400">
-                            Điền số vào loại nhận được · để trống là không nhập
-                          </p>
-                        </div>
-                        <BulkImportGrid
-                          products={products}
-                          inventory={inventory}
-                          initialRows={newTransaction.items.map((i) => ({
-                            productId: i.productId,
-                            quantity: i.quantity,
-                            batchNumber: i.batchNumber,
-                          }))}
-                          onChange={(rows) =>
-                            setNewTransaction((prev) => ({
-                              ...prev,
-                              items: rows.length
-                                ? rows
-                                : [
-                                    { productId: "", quantity: 0 },
-                                  ],
-                            }))
-                          }
-                        />
-                      </div>
-                    )}
-
-                    {/* Items List (xuat kho / ton dau ky van nhap tung dong) */}
-                    {activeTab !== "import" && (
-                    <div className="md:col-span-2 mt-4">
-                      <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-2">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          Danh sách mặt hàng ({newTransaction.items.length})
-                        </h4>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              const missingProducts = products.filter(
-                                (p) =>
-                                  !newTransaction.items.some(
-                                    (item) => item.productId === p.id,
-                                  ),
-                              );
-                              if (!missingProducts.length)
-                                return showNotification(
-                                  "Anh đã chọn hết các mặt hàng hiện có rồi ạ!",
-                                );
-
-                              setNewTransaction((prev) => ({
-                                ...prev,
-                                items: [
-                                  ...prev.items.filter(
-                                    (i) => i.productId !== "",
-                                  ),
-                                  ...missingProducts.map((p) => ({
-                                    productId: p.id,
-                                    quantity: 0,
-                                  })),
-                                ],
-                              }));
-                            }}
-                            className="text-[10px] font-black text-amber-600 bg-amber-50 uppercase tracking-widest flex items-center gap-1.5 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            <Layers className="w-3.5 h-3.5" /> Thêm toàn bộ danh
-                            mục
-                          </button>
-                          <button
-                            onClick={() => {
-                              // Simple quick select: allow user to select multiple products at once
-                              const availableProducts = products.filter(
-                                (p) =>
-                                  !newTransaction.items.some(
-                                    (item) => item.productId === p.id,
-                                  ),
-                              );
-                              if (availableProducts.length === 0) {
-                                showNotification(
-                                  "Anh đã chọn hết các mặt hàng hiện có rồi ạ!",
-                                );
-                                return;
-                              }
-
-                              const selectedIds = window.prompt(
-                                "Nhập tên sản phẩm để chọn nhanh (Ngăn cách bởi dấu phẩy):\n" +
-                                  availableProducts
-                                    .map((p) => p.name)
-                                    .join(", "),
-                              );
-
-                              if (selectedIds) {
-                                const searchTerms = selectedIds
-                                  .split(",")
-                                  .map((s) => s.trim().toLowerCase());
-                                const matches = availableProducts.filter((p) =>
-                                  searchTerms.some((term) =>
-                                    p.name.toLowerCase().includes(term),
-                                  ),
-                                );
-
-                                if (matches.length > 0) {
-                                  setNewTransaction((prev) => ({
-                                    ...prev,
-                                    items: [
-                                      ...prev.items.filter(
-                                        (i) => i.productId !== "",
-                                      ),
-                                      ...matches.map((p) => ({
-                                        productId: p.id,
-                                        quantity: 0,
-                                      })),
-                                    ],
-                                  }));
-                                }
-                              }
-                            }}
-                            className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            <Search className="w-3.5 h-3.5" /> Chọn nhanh
-                          </button>
-                          <button
-                            onClick={addTransactionItem}
-                            className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-1.5 hover:bg-primary/5 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            <PlusCircle className="w-3.5 h-3.5" /> Thêm dòng
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        {newTransaction.items.map((item, index) => (
-                          <div
-                            key={`item-${index}-${item.productId}`}
-                            className="p-4 sm:p-6 bg-slate-50/50 rounded-2xl border border-dotted border-slate-200 relative group/item"
-                          >
-                            {newTransaction.items.length > 1 && (
-                              <button
-                                onClick={() => removeTransactionItem(index)}
-                                className="absolute -top-2 -right-2 w-7 h-7 bg-white border border-slate-100 text-rose-500 rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover/item:opacity-100 transition-all hover:bg-rose-50"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
-
-                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
-                              <div className="sm:col-span-5">
-                                <Select
-                                  label={`Sản phẩm ${index + 1}`}
-                                  options={products.map((p) => ({
-                                    value: p.id,
-                                    label: p.name,
-                                  }))}
-                                  value={item.productId}
-                                  onChange={(e: any) =>
-                                    updateTransactionItem(index, {
-                                      productId: e.target.value,
-                                    })
-                                  }
-                                />
-                              </div>
-                              <div className="sm:col-span-3">
-                                <Input
-                                  label={`Số lượng (${products.find((p) => p.id === item.productId)?.unit || "—"})`}
-                                  type="number"
-                                  placeholder="0"
-                                  value={
-                                    item.quantity === 0 ? "" : item.quantity
-                                  }
-                                  onChange={(e: any) =>
-                                    updateTransactionItem(index, {
-                                      quantity: Number(e.target.value),
-                                    })
-                                  }
-                                />
-                              </div>
-                              {/*
-                                HAO HỤT — hiện cho MỌI đối tác khi xuất kho tay.
-                                Không hiện ở phần nạp file: ở đó số liệu đến từ
-                                sheet, không có ai ngồi đó để biết hao hụt thật.
-
-                                Để người dùng ĐIỀN TAY, app chỉ gợi ý. Với hàng
-                                bom thì gợi ý theo 0,6 lít/keg — số keg thật chỉ
-                                người giao biết, và không phải lần nào cũng tròn
-                                keg, nên tự áp là ghi hao hụt cho một lượng hàng
-                                chưa chắc có thật.
-                              */}
-                              {activeTab === "export" && (
-                                <div className="sm:col-span-12">
-                                  <Input
-                                    label="Hao hụt — không ghi công nợ"
-                                    type="number"
-                                    placeholder="0"
-                                    value={
-                                      item.lossQuantity ? item.lossQuantity : ""
-                                    }
-                                    onChange={(e: any) =>
-                                      updateTransactionItem(index, {
-                                        lossQuantity: Number(e.target.value),
-                                      })
-                                    }
-                                  />
-                                  <p className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
-                                    {(() => {
-                                      const sp = products.find(
-                                        (p) => p.id === item.productId,
-                                      );
-                                      if (!item.quantity)
-                                        return "Điền số lượng xuất trước, app sẽ gợi ý phần hao hụt.";
-                                      if (sp?.category !== "Lít")
-                                        return "Hàng lon không có keg nên không gợi ý được — điền nếu thực tế có hao hụt.";
-                                      const keg =
-                                        item.quantity / LIT_MOI_KEG_GHI;
-                                      const goiY =
-                                        Math.round(
-                                          keg *
-                                            (LIT_MOI_KEG_THUC -
-                                              LIT_MOI_KEG_GHI) *
-                                            100,
-                                        ) / 100;
-                                      return Math.abs(keg - Math.round(keg)) <
-                                        0.005
-                                        ? `${formatNumber(item.quantity)} lít = ${Math.round(keg)} keg → gợi ý hao hụt ${formatNumber(goiY)} lít (0,6 lít/keg).`
-                                        : `${formatNumber(item.quantity)} lít không chia tròn 20 nên không suy ra được số keg — anh tự điền.`;
-                                    })()}
-                                  </p>
-                                  <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
-                                    Ghi thành một dòng hao hụt riêng: tồn kho
-                                    trừ cả phần này, còn công nợ và hóa đơn chỉ
-                                    lấy số lượng ở trên.
-                                  </p>
-                                </div>
-                              )}
-                              {activeTab === "export" && item.productId && item.quantity > 0 && (() => {
-                                const fifo = goiYLoFIFO(tonTheoLo, item.productId, item.quantity);
-                                return fifo.length > 0 ? (
-                                  <div className="sm:col-span-4 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
-                                    Lô xuất FIFO tự động:{" "}
-                                    <span className="font-mono font-black">
-                                      {fifo.map((f) => `${f.batchNumber} (${formatNumber(f.quantity)})`).join(" + ")}
-                                    </span>
-                                  </div>
-                                ) : null;
-                              })()}
-                              <div className="sm:col-span-4">
-                                {/* Khối này nằm trong nhánh activeTab !==
-                                    "import" (nhập kho dùng bảng nhập nhanh),
-                                    nên điều kiện activeTab === "import" cũ ở
-                                    đây luôn sai — đã bỏ. */}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    )}
-
-                    <div className="md:col-span-2">
-                      <Input
-                        label="Ghi chú tổng quát (Tùy chọn)"
-                        placeholder="Ví dụ: Theo xe tải số hiệu..., Ghi chú chung cho cả đơn..."
-                        value={newTransaction.notes}
-                        onChange={(e: any) =>
-                          setNewTransaction({
-                            ...newTransaction,
-                            notes: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-
-                    {activeTab === "export" && (
-                      <div className="md:col-span-2">
-                        <div className="p-5 bg-amber-50/50 border border-amber-200/50 rounded-2xl flex items-center gap-4">
-                          <Truck className="w-8 h-8 text-amber-500" />
-                          <div className="flex flex-col">
-                            <span className="text-xs font-black text-amber-900 uppercase tracking-widest">
-                              Mặc định: Đơn hàng đi đường (Giao sau)
-                            </span>
-                            <span className="text-[10px] text-amber-700/70 font-bold italic">
-                              Tất cả đơn xuất kho sẽ được lưu vào mục "Đơn đi
-                              đường" để xác nhận khi hoàn tất.
-                            </span>
-                          </div>
-                          <div className="ml-auto flex items-center gap-2 px-3 py-1 bg-amber-500 text-white rounded-full text-[8px] font-black uppercase">
-                            Active
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Anh minh chung da chuyen sang tab "Phieu nhap": chup
-                        anh to phieu DA KY chinh la buoc duyet so lieu. Xem
-                        src/components/ImportSlip.tsx */}
-                  </div>
-
-                  <div className="mt-12 flex flex-col sm:flex-row gap-4 items-center border-t border-slate-100 pt-10">
-                    <Button
-                      variant={activeTab === "import" ? "primary" : "danger"}
-                      className="w-full sm:flex-1 py-5 text-base shadow-2xl relative group overflow-hidden"
-                      onClick={() =>
-                        handleAddTransaction(
-                          activeTab === "import" ? newTransaction.type : "OUT",
-                        )
-                      }
-                      disabled={
-                        loading ||
-                        newTransaction.items.some(
-                          (i) => !i.productId || i.quantity <= 0,
-                        )
-                      }
-                    >
-                      <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      {loading ? (
-                        <RefreshCw className="w-5 h-5 animate-spin" />
-                      ) : activeTab === "import" ? (
-                        <PlusCircle className="w-5 h-5" />
-                      ) : (
-                        <MinusCircle className="w-5 h-5" />
-                      )}
-                      <span className="relative z-10">
-                        {activeTab === "import"
-                          ? newTransaction.type === "OPENING"
-                            ? "GHI NHẬN TỒN ĐẦU"
-                            : `HOÀN TẤT NHẬP ${newTransaction.items.length} MÓN`
-                          : `HOÀN TẤT XUẤT ${newTransaction.items.length} MÓN`}
-                      </span>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="w-full sm:w-auto px-10 py-5"
-                      onClick={() => setActiveTab("reports")}
-                    >
-                      Hủy bỏ
-                    </Button>
-                  </div>
-
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full -mr-32 -mt-32 opacity-20 pointer-events-none" />
-                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-slate-50 rounded-full -ml-24 -mb-24 opacity-20 pointer-events-none" />
-                </Card>
-              </div>
-            )}
+            {activeTab === "export" &&
+              quyen.ghiXuat &&
+              renderNhapXuatForm("export")}
 
             {activeTab === "settings" && isOwner && (
               <div className="space-y-8 animate-in fade-in duration-500">
@@ -10404,6 +10420,11 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onLuuDanhGia={handleLuuDanhGia}
                 onLuuKiemKeBon={handleLuuKiemKeBon}
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
+                nhapLeContent={renderNhapLeIntegrated("xuong")}
+                phieuCuContent={renderPhieuCuIntegrated()}
+                phieuCuCount={pendingApproval.slipCount}
+                requestedSubTab={reqXuongSubTab}
+                onSubTabChange={setXuongSubTab}
               />
             )}
 
@@ -10422,6 +10443,11 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onMoBieuMau={(code) => setBieuMauCode(code)}
                 onLuuKeHoach={handleLuuKeHoach}
                 onXoaKeHoach={handleXoaKeHoach}
+                nhapLeContent={renderNhapLeIntegrated("ql-xuong")}
+                phieuCuContent={renderPhieuCuIntegrated()}
+                phieuCuCount={pendingApproval.slipCount}
+                requestedSubTab={reqQlXuongSubTab}
+                onSubTabChange={setQlXuongSubTab}
               />
             )}
 
@@ -10485,59 +10511,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-
-            {activeTab === "slips" && (
-              <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                      Phiếu nhập kho
-                    </h2>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-                      Mỗi lượt giao một phiếu · In · Ký tươi · Chụp ảnh là vào
-                      tồn
-                    </p>
-                  </div>
-                </div>
-
-                <Card>
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3 mb-5">
-                    <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                    <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-                      Mỗi lượt sản xuất giao hàng là một phiếu riêng. Kho đếm và
-                      đối chiếu với số đã điền, khớp thì bấm{" "}
-                      <strong>Xem &amp; in</strong>, hai bên ký tươi lên bản in,
-                      rồi đưa ảnh tờ đã ký vào đúng phiếu đó —{" "}
-                      <strong>Chụp ảnh</strong> nếu đang dùng điện thoại, hoặc{" "}
-                      <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản quét
-                      sẵn. <strong>Có ảnh ký thì hàng mới vào tồn kho</strong> và
-                      mới xuất bán được; chưa ký thì số chỉ nằm chờ ở đây.
-                    </p>
-                  </div>
-
-                  <ImportSlipPanel
-                    transactions={transactions}
-                    products={products}
-                    partners={partners}
-                    slips={slips}
-                    canWrite={canWrite}
-                    currentUserName={currentUserProfile?.name || user || ""}
-                    onMarkPrinted={handleMarkSlipPrinted}
-                    onUploadSigned={handleUploadSignedSlip}
-                    onRemoveSigned={
-                      isOwner ? handleRemoveSignedSlipPhoto : undefined
-                    }
-                    uploadingCode={uploadingSlipCode}
-                    onXoaPhieu={
-                      quyen.ghiNhap ? handleXoaPhieuNhap : undefined
-                    }
-                    xoaDuocPhieuDaKy={isOwner}
-                    onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
-                    anhTheoPhieu={anhTheoChungTu}
-                  />
-                </Card>
-              </div>
-            )}
 
             {activeTab === "partners" && quyen.xemXuat && (
               <div className="space-y-6">

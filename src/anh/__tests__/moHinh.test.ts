@@ -20,7 +20,7 @@ import {
   type AnhChungTu,
 } from "../moHinh";
 import { HAN_VUA_TAI_MS, lyDoGiuTepVuaTai } from "../mayChu";
-import { anhThuNho } from "../duongDan";
+import { anhThuNho, chuanHoaUrlAnh } from "../duongDan";
 import { tenCaBo, tenGoc, taoZip } from "../taiVe";
 import { nhanDinh, nhomCuaMa, tomTatSoat } from "../soat";
 import { danhSachDonVi, diemBanCuaPhan, dungOAnh, locTheoDonVi, locTheoNgay } from "../thuVien";
@@ -149,6 +149,8 @@ eq("xuat mang slipCode van theo chuyen", maChungTuCuaDong({ id: "a", type: "OUT"
 eq("thu nho chen bien doi", anhThuNho(U1, 400), `${B}/f_auto,q_auto,w_400,c_limit/v1789640255/qzzyesrmtcoubozvyrt3.jpg`);
 eq("da bien doi thi de yen", anhThuNho(`${B}/w_64/v1/a.jpg`, 400), `${B}/w_64/v1/a.jpg`);
 eq("khong phai cloudinary de yen", anhThuNho("blob:x", 400), "blob:x");
+eq("chuan hoa http cloudinary len https", chuanHoaUrlAnh("  http://res.cloudinary.com/zjtjeyqd/image/upload/v1/a.jpg "), `${B}/v1/a.jpg`);
+eq("thu nho nang http len https", anhThuNho("http://res.cloudinary.com/zjtjeyqd/image/upload/v1/a.jpg", 400), `${B}/f_auto,q_auto,w_400,c_limit/v1/a.jpg`);
 
 // ------------------------------------------------------------ tên tệp tải về
 eq("ten bnc", tenGoc({ date: "2026-10-16T08:00:00Z", donVi: "BNC · 1901" }), "16.10.26-1901-BNC");

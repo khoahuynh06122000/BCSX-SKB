@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Camera,
@@ -24,6 +24,7 @@ import type {
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
@@ -31,6 +32,13 @@ import {
   tongHopKeHoachVaThucXuat,
 } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
+
+export type XuongSanXuatSubTab =
+  | "lap-phieu"
+  | "danh-gia"
+  | "kiem-ke"
+  | "nhap-le"
+  | "phieu-cu";
 
 interface Props {
   products: Product[];
@@ -72,6 +80,11 @@ interface Props {
     note: string;
     photos: TepCho[];
   }) => Promise<boolean>;
+  nhapLeContent?: ReactNode;
+  phieuCuContent?: ReactNode;
+  phieuCuCount?: number;
+  requestedSubTab?: { id: XuongSanXuatSubTab; nonce: number } | null;
+  onSubTabChange?: (tab: XuongSanXuatSubTab) => void;
 }
 
 export default function XuongSanXuatPanel({
@@ -90,8 +103,29 @@ export default function XuongSanXuatPanel({
   onLuuDanhGia,
   onLuuKiemKeBon,
   onLuuKiemKeKegLit,
+  nhapLeContent,
+  phieuCuContent,
+  phieuCuCount = 0,
+  requestedSubTab,
+  onSubTabChange,
 }: Props) {
-  const [subTab, setSubTab] = useState<"lap-phieu" | "danh-gia" | "kiem-ke">("lap-phieu");
+  const [subTab, setSubTab] = useState<XuongSanXuatSubTab>("lap-phieu");
+
+  const chonSubTab = (tab: XuongSanXuatSubTab) => {
+    setSubTab(tab);
+    onSubTabChange?.(tab);
+  };
+
+  useEffect(() => {
+    if (requestedSubTab) {
+      setSubTab(requestedSubTab.id);
+    }
+  }, [requestedSubTab]);
+
+  useEffect(() => {
+    onSubTabChange?.(subTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [kkMode, setKkMode] = useState<"keg-lit" | "bon">("keg-lit");
 
   /* ---------- Tab 1: Lập phiếu giao bia sang Kho tổng ---------- */
@@ -297,15 +331,29 @@ export default function XuongSanXuatPanel({
         <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
           {(
             [
-              { id: "lap-phieu", label: "1. Lập phiếu giao bia" },
-              { id: "danh-gia", label: "2. Đánh giá sản lượng ngày" },
-              { id: "kiem-ke", label: "3. Kiểm kê (Keg/Lít & Bồn)" },
-            ] as const
+              { id: "lap-phieu" as const, label: "1. Lập phiếu giao bia" },
+              { id: "danh-gia" as const, label: "2. Đánh giá sản lượng ngày" },
+              { id: "kiem-ke" as const, label: "3. Kiểm kê (Keg/Lít & Bồn)" },
+              ...(nhapLeContent
+                ? [{ id: "nhap-le" as const, label: "4. Nhập lẻ & Tồn đầu" }]
+                : []),
+              ...(phieuCuContent
+                ? [
+                    {
+                      id: "phieu-cu" as const,
+                      label:
+                        phieuCuCount > 0
+                          ? `5. Phiếu giấy cũ (${phieuCuCount})`
+                          : "5. Phiếu giấy cũ",
+                    },
+                  ]
+                : []),
+            ]
           ).map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => setSubTab(t.id)}
+              onClick={() => chonSubTab(t.id)}
               className={cn(
                 "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
                 subTab === t.id
@@ -1088,9 +1136,9 @@ export default function XuongSanXuatPanel({
                       href={anh[0].url}
                       target="_blank"
                       rel="noreferrer"
-                      className="w-28 h-24 rounded-xl overflow-hidden bg-slate-950 border border-slate-300 shrink-0"
+                      className="w-28 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
                     >
-                      <img src={anh[0].url} alt={kk.tankId} className="w-full h-full object-cover" />
+                      <OAnhLuoi url={anh[0].url} alt={kk.tankId} rong={400} className="w-full h-full object-cover" />
                     </a>
                   ) : null}
                   <div className="flex-1 min-w-0 space-y-1">
@@ -1132,6 +1180,16 @@ export default function XuongSanXuatPanel({
             </>
           )}
         </div>
+      )}
+
+      {/* ================= TAB 4: NHẬP LẺ & TỒN ĐẦU ================= */}
+      {subTab === "nhap-le" && nhapLeContent && (
+        <div className="anim-view-enter">{nhapLeContent}</div>
+      )}
+
+      {/* ================= TAB 5: PHIẾU GIẤY CŨ ================= */}
+      {subTab === "phieu-cu" && phieuCuContent && (
+        <div className="anim-view-enter">{phieuCuContent}</div>
       )}
     </div>
   );

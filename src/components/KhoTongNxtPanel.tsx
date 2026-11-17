@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import type { TepCho } from "../anh/ChonAnh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import { dungBangTonKy } from "../lib/tonKho";
 import { quyDoiHienTrang, tinhTonTheoLo } from "../lib/loBia";
@@ -513,9 +514,9 @@ export default function KhoTongNxtPanel({
                           href={ph.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-xl overflow-hidden border border-slate-300 bg-slate-950 block"
+                          className="rounded-xl overflow-hidden border border-slate-300 bg-slate-100 block"
                         >
-                          <img src={ph.url} alt={code} className="w-full h-28 object-cover" />
+                          <OAnhLuoi url={ph.url} alt={code} rong={400} className="w-full h-28 object-cover" />
                         </a>
                       ))}
                     </div>

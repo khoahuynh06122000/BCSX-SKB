@@ -27,6 +27,7 @@ import { cn, formatNumber } from "../lib/utils";
 import { parseSlipCode, phieuDaVaoTon } from "../lib/slip";
 import { quyDoiHienTrang } from "../lib/loBia";
 import type { AnhChungTu } from "../anh/moHinh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 
 /**
  * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU
@@ -480,26 +481,17 @@ export default function ImportSlipPanel({
                           title="Bấm để xem ảnh lớn"
                           className="relative block w-[72px] h-[72px] rounded-xl overflow-hidden border border-slate-200 bg-white cursor-zoom-in hover:border-primary hover:ring-2 hover:ring-primary/20 transition-all"
                         >
-                          {anhHong.has(url) ? (
-                            <span className="flex h-full w-full flex-col items-center justify-center gap-1 bg-rose-50 px-1 text-center">
-                              <ImageOff className="h-4 w-4 text-rose-400" />
-                              <span className="text-[8px] font-black uppercase leading-tight tracking-tight text-rose-500">
-                                Ảnh hỏng
-                              </span>
+                          <OAnhLuoi
+                            url={url}
+                            alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
+                            rong={240}
+                            onHong={() => danhDauHong(url)}
+                            className="h-full w-full object-cover"
+                          />
+                          {!anhHong.has(url) && (
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/45 opacity-0 transition-opacity group-hover:opacity-100">
+                              <ZoomIn className="h-5 w-5 text-white" />
                             </span>
-                          ) : (
-                            <>
-                              <img
-                                src={url}
-                                alt={`Phiếu ${d.code} - ảnh ${i + 1}`}
-                                loading="lazy"
-                                onError={() => danhDauHong(url)}
-                                className="h-full w-full object-cover"
-                              />
-                              <span className="absolute inset-0 flex items-center justify-center bg-slate-900/45 opacity-0 transition-opacity group-hover:opacity-100">
-                                <ZoomIn className="h-5 w-5 text-white" />
-                              </span>
-                            </>
                           )}
                         </button>
                         {canWrite && onRemoveSigned && (
@@ -1067,11 +1059,12 @@ function SlipPreview({
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {photos.map((ph, idx) => (
-                  <div key={ph.id} className="border border-slate-300 rounded-lg overflow-hidden">
-                    <img
-                      src={ph.url}
+                  <div key={ph.id} className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50">
+                    <OAnhLuoi
+                      url={ph.url}
                       alt={`Ảnh hiện trạng ${idx + 1}`}
-                      className="w-full max-h-48 object-contain bg-slate-950"
+                      rong={800}
+                      className="w-full h-44 object-contain bg-slate-950"
                     />
                   </div>
                 ))}

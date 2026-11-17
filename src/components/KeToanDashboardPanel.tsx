@@ -8,6 +8,7 @@ import type {
   Transaction,
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 import {
   tinhTonTheoLo,
   tongHopKeHoachVaThucXuat,
@@ -434,9 +435,9 @@ export default function KeToanDashboardPanel({
                           href={anh[0].url}
                           target="_blank"
                           rel="noreferrer"
-                          className="w-28 h-20 rounded-xl overflow-hidden bg-slate-950 border border-slate-300 shrink-0"
+                          className="w-28 h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
                         >
-                          <img src={anh[0].url} alt={kk.tankId} className="w-full h-full object-cover" />
+                          <OAnhLuoi url={anh[0].url} alt={kk.tankId} rong={400} className="w-full h-full object-cover" />
                         </a>
                       )}
                       <div className="text-xs space-y-1 min-w-0">

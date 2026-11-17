@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -17,12 +17,20 @@ import type {
   Transaction,
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
+import OAnhLuoi from "../anh/OAnhLuoi";
 import {
   DANH_SACH_BON_BIA,
   quyDoiHienTrang,
   tongHopKeHoachVaThucXuat,
 } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
+
+export type QuanLyXuongSubTab =
+  | "duyet-nhat-ky"
+  | "ke-hoach"
+  | "kiem-ke"
+  | "nhap-le"
+  | "phieu-cu";
 
 interface Props {
   products: Product[];
@@ -45,6 +53,11 @@ interface Props {
     source: string;
   }) => Promise<boolean>;
   onXoaKeHoach: (planId: string) => Promise<void>;
+  nhapLeContent?: ReactNode;
+  phieuCuContent?: ReactNode;
+  phieuCuCount?: number;
+  requestedSubTab?: { id: QuanLyXuongSubTab; nonce: number } | null;
+  onSubTabChange?: (tab: QuanLyXuongSubTab) => void;
 }
 
 export default function QuanLyXuongPanel({
@@ -61,10 +74,29 @@ export default function QuanLyXuongPanel({
   onMoBieuMau,
   onLuuKeHoach,
   onXoaKeHoach,
+  nhapLeContent,
+  phieuCuContent,
+  phieuCuCount = 0,
+  requestedSubTab,
+  onSubTabChange,
 }: Props) {
-  const [subTab, setSubTab] = useState<"duyet-nhat-ky" | "ke-hoach" | "kiem-ke">(
-    "duyet-nhat-ky",
-  );
+  const [subTab, setSubTab] = useState<QuanLyXuongSubTab>("duyet-nhat-ky");
+
+  const chonSubTab = (tab: QuanLyXuongSubTab) => {
+    setSubTab(tab);
+    onSubTabChange?.(tab);
+  };
+
+  useEffect(() => {
+    if (requestedSubTab) {
+      setSubTab(requestedSubTab.id);
+    }
+  }, [requestedSubTab]);
+
+  useEffect(() => {
+    onSubTabChange?.(subTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------- Tab 1: Duyệt Rào 1 + Nhật ký ---------- */
   const slipsWithRows = useMemo(() => {
@@ -159,17 +191,31 @@ export default function QuanLyXuongPanel({
           {(
             [
               {
-                id: "duyet-nhat-ky",
+                id: "duyet-nhat-ky" as const,
                 label: `1. Duyệt Rào 1 & Nhật ký (${pendingRao1.length})`,
               },
-              { id: "ke-hoach", label: "2. Kế hoạch sản xuất" },
-              { id: "kiem-ke", label: `3. Kiểm kê FST/BBT (${kiemKeBon.length})` },
-            ] as const
+              { id: "ke-hoach" as const, label: "2. Kế hoạch sản xuất" },
+              { id: "kiem-ke" as const, label: `3. Kiểm kê FST/BBT (${kiemKeBon.length})` },
+              ...(nhapLeContent
+                ? [{ id: "nhap-le" as const, label: "4. Nhập lẻ & Tồn đầu" }]
+                : []),
+              ...(phieuCuContent
+                ? [
+                    {
+                      id: "phieu-cu" as const,
+                      label:
+                        phieuCuCount > 0
+                          ? `5. Phiếu giấy cũ (${phieuCuCount})`
+                          : "5. Phiếu giấy cũ",
+                    },
+                  ]
+                : []),
+            ]
           ).map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => setSubTab(t.id)}
+              onClick={() => chonSubTab(t.id)}
               className={cn(
                 "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
                 subTab === t.id
@@ -287,9 +333,9 @@ export default function QuanLyXuongPanel({
                             href={ph.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded-xl overflow-hidden border border-slate-300 bg-slate-950 block"
+                            className="rounded-xl overflow-hidden border border-slate-300 bg-slate-100 block"
                           >
-                            <img src={ph.url} alt={code} className="w-full h-28 object-cover" />
+                            <OAnhLuoi url={ph.url} alt={code} rong={400} className="w-full h-28 object-cover" />
                           </a>
                         ))}
                       </div>
@@ -640,9 +686,9 @@ export default function QuanLyXuongPanel({
                         href={anh[0].url}
                         target="_blank"
                         rel="noreferrer"
-                        className="w-32 h-24 rounded-xl overflow-hidden bg-slate-950 border border-slate-300 shrink-0"
+                        className="w-32 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
                       >
-                        <img src={anh[0].url} alt={kk.tankId} className="w-full h-full object-cover" />
+                        <OAnhLuoi url={anh[0].url} alt={kk.tankId} rong={400} className="w-full h-full object-cover" />
                       </a>
                     )}
                     <div className="space-y-1 text-xs min-w-0">
@@ -664,6 +710,16 @@ export default function QuanLyXuongPanel({
             )}
           </div>
         </div>
+      )}
+
+      {/* ================= TAB 4: NHẬP LẺ & TỒN ĐẦU ================= */}
+      {subTab === "nhap-le" && nhapLeContent && (
+        <div className="anim-view-enter">{nhapLeContent}</div>
+      )}
+
+      {/* ================= TAB 5: PHIẾU GIẤY CŨ ================= */}
+      {subTab === "phieu-cu" && phieuCuContent && (
+        <div className="anim-view-enter">{phieuCuContent}</div>
       )}
     </div>
   );
