@@ -234,6 +234,8 @@ export interface KeHoachSanXuat {
   updatedAt?: string;
 }
 
+export type SupervisionApprovalStatus = 'pending' | 'approved' | 'returned';
+
 /** Đánh giá sản lượng sản xuất theo ca / ngày tại Xưởng. */
 export interface DanhGiaSanXuat {
   id: string;
@@ -246,6 +248,10 @@ export interface DanhGiaSanXuat {
   note: string;
   createdBy: string;
   createdAt: string;
+  approvalStatus?: SupervisionApprovalStatus;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedReason?: string;
 }
 
 /** Kiểm kê lượng bia còn tồn tại bồn lên men (FST) và bồn thành phẩm (BBT) hàng tháng. */
@@ -260,6 +266,10 @@ export interface KiemKeBon {
   statusLabel?: string;
   createdBy: string;
   createdAt: string;
+  approvalStatus?: SupervisionApprovalStatus;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedReason?: string;
 }
 
 export interface KiemKeKegItem {
@@ -283,5 +293,9 @@ export interface KiemKeKegLit {
   note?: string;
   createdBy: string;
   createdAt: string;
+  approvalStatus?: SupervisionApprovalStatus;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedReason?: string;
 }
 

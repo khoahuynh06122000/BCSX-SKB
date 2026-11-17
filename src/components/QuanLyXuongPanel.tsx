@@ -10,14 +10,19 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
+  DanhGiaSanXuat,
   ImportSlip,
   KeHoachSanXuat,
   KiemKeBon,
+  KiemKeKegItem,
+  KiemKeKegLit,
   Product,
   Transaction,
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
+import type { TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
   quyDoiHienTrang,
@@ -37,7 +42,10 @@ interface Props {
   approvedSlips: Set<string>;
   anhTheoChungTu: Map<string, AnhChungTu[]>;
   keHoach: KeHoachSanXuat[];
+  danhGia: DanhGiaSanXuat[];
   kiemKeBon: KiemKeBon[];
+  kiemKeKeg: KiemKeKegLit[];
+  isAdmin?: boolean;
   busy: boolean;
   onDuyetRao1: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
@@ -51,6 +59,22 @@ interface Props {
     source: string;
   }) => Promise<boolean>;
   onXoaKeHoach: (planId: string) => Promise<void>;
+  onDuyetDanhGia: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onXoaDanhGia: (id: string) => Promise<void>;
+  onDuyetKiemKeBon: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onXoaKiemKeBon: (id: string) => Promise<void>;
+  onDuyetKiemKeKeg: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onXoaKiemKeKeg: (id: string) => Promise<void>;
+  onLuuKiemKeKegLit?: (input: {
+    date: string;
+    shiftOrPeriod: string;
+    location: "XUONG" | "KHO_TONG";
+    items: KiemKeKegItem[];
+    totalKegs: number;
+    totalLiters: number;
+    note: string;
+    photos: TepCho[];
+  }) => Promise<boolean>;
   nhatKyPhieuContent?: ReactNode;
 }
 
@@ -61,17 +85,43 @@ export default function QuanLyXuongPanel({
   approvedSlips,
   anhTheoChungTu,
   keHoach,
+  danhGia,
   kiemKeBon,
+  kiemKeKeg,
+  isAdmin = false,
   busy,
   onDuyetRao1,
   onTraLaiPhieu,
   onMoBieuMau,
   onLuuKeHoach,
   onXoaKeHoach,
+  onDuyetDanhGia,
+  onXoaDanhGia,
+  onDuyetKiemKeBon,
+  onXoaKiemKeBon,
+  onDuyetKiemKeKeg,
+  onXoaKiemKeKeg,
+  onLuuKiemKeKegLit,
   nhatKyPhieuContent,
 }: Props) {
   const [subTab, setSubTab] = useState<QuanLyXuongSubTab>("duyet-nhat-ky");
   const [nhatKyView, setNhatKyView] = useState<"bang" | "phieu">("bang");
+  const [kkSubView, setKkSubView] = useState<"keg-lit" | "bon">("keg-lit");
+
+  const kegXuongRecords = useMemo(
+    () => kiemKeKeg.filter((r) => r.location === "XUONG"),
+    [kiemKeKeg],
+  );
+  const pendingDanhGiaCount = useMemo(
+    () => danhGia.filter((d) => !d.approvalStatus || d.approvalStatus === "pending").length,
+    [danhGia],
+  );
+  const pendingKiemKeCount = useMemo(
+    () =>
+      kegXuongRecords.filter((k) => !k.approvalStatus || k.approvalStatus === "pending").length +
+      kiemKeBon.filter((b) => !b.approvalStatus || b.approvalStatus === "pending").length,
+    [kegXuongRecords, kiemKeBon],
+  );
 
   /* ---------- Tab 1: Duyệt Rào 1 + Nhật ký ---------- */
   const slipsWithRows = useMemo(() => {
@@ -169,8 +219,20 @@ export default function QuanLyXuongPanel({
                 id: "duyet-nhat-ky" as const,
                 label: `1. Duyệt Rào 1 & Nhật ký (${pendingRao1.length})`,
               },
-              { id: "ke-hoach" as const, label: "2. Kế hoạch sản xuất" },
-              { id: "kiem-ke" as const, label: `3. Kiểm kê FST/BBT (${kiemKeBon.length})` },
+              {
+                id: "ke-hoach" as const,
+                label:
+                  pendingDanhGiaCount > 0
+                    ? `2. Kế hoạch & Đánh giá SX (${pendingDanhGiaCount})`
+                    : "2. Kế hoạch & Đánh giá SX",
+              },
+              {
+                id: "kiem-ke" as const,
+                label:
+                  pendingKiemKeCount > 0
+                    ? `3. Duyệt Kiểm kê (${pendingKiemKeCount})`
+                    : `3. Kiểm kê Keg & Bồn (${kegXuongRecords.length + kiemKeBon.length})`,
+              },
             ]
           ).map((t) => (
             <button
@@ -432,13 +494,44 @@ export default function QuanLyXuongPanel({
                         </td>
                         <td className="py-3 px-3">{stBadge}</td>
                         <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onMoBieuMau(code)}
-                            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800"
-                          >
-                            BM-SKB-01
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {!vaoTon && slip?.status !== "cho_kho_tong" && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => void onDuyetRao1(code)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-[#141A23] hover:bg-slate-800 text-amber-300 text-[11px] font-extrabold flex items-center gap-1"
+                                  title="Duyệt Rào 1 (Xuất xưởng sang Kho tổng)"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Duyệt Rào 1
+                                </button>
+                                {slip?.status !== "tra_lai" && (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      const lyDo = window.prompt(
+                                        `Lý do trả lại phiếu ${code}:`,
+                                        "Số lượng trên ảnh hiện trạng không khớp phiếu",
+                                      );
+                                      if (lyDo?.trim()) void onTraLaiPhieu(code, lyDo.trim());
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 text-[11px] font-extrabold"
+                                  >
+                                    Trả lại
+                                  </button>
+                                )}
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onMoBieuMau(code)}
+                              className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800"
+                            >
+                              BM-SKB-01
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -642,19 +735,184 @@ export default function QuanLyXuongPanel({
               )}
             </div>
           </div>
+
+          {/* Duyệt & Quản lý Đánh giá Sản lượng Ngày từ NV Sản xuất */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 bg-[#141A23] text-white flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                  GIÁM SÁT XƯỞNG · ĐÁNH GIÁ SẢN LƯỢNG THEO CA / NGÀY
+                </span>
+                <h3 className="text-base font-extrabold">
+                  Duyệt &amp; Quản Lý Dữ Liệu Đánh Giá Sản Lượng ({danhGia.length})
+                </h3>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-mono text-xs font-black">
+                {pendingDanhGiaCount} chờ duyệt
+              </span>
+            </div>
+
+            {danhGia.length === 0 ? (
+              <p className="py-10 text-center text-xs font-bold text-slate-400">
+                Chưa có bản đánh giá sản lượng ngày nào từ Xưởng sản xuất.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {danhGia.map((ev) => {
+                  const p = products.find((x) => x.id === ev.productId);
+                  return (
+                    <div
+                      key={ev.id}
+                      className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/70"
+                    >
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-full text-[11px] font-extrabold",
+                              ev.rating.includes("Chậm")
+                                ? "bg-rose-100 text-rose-800"
+                                : "bg-emerald-100 text-emerald-800",
+                            )}
+                          >
+                            {ev.rating}
+                          </span>
+                          {ev.approvalStatus === "approved" ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-black">
+                              ✓ QL Xưởng đã duyệt{ev.approvedBy ? ` · ${ev.approvedBy}` : ""}
+                            </span>
+                          ) : ev.approvalStatus === "returned" ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                              ⚠ Đã trả lại{ev.rejectedReason ? `: ${ev.rejectedReason}` : ""}
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
+                              ⏳ Chờ duyệt
+                            </span>
+                          )}
+                          <span className="text-xs font-bold text-slate-500">
+                            {ev.date} · {ev.shift} · {ev.createdBy}
+                          </span>
+                        </div>
+                        <p className="text-sm font-extrabold text-slate-900">
+                          {p?.name || ev.productId}
+                        </p>
+                        {ev.note && <p className="text-xs text-slate-600">{ev.note}</p>}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-4 font-mono pr-2">
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">KẾ HOẠCH</span>
+                            <span className="text-sm font-bold text-slate-700 tabular-nums">
+                              {formatNumber(ev.plannedQty)} {p?.unit}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block">THỰC CHIẾT</span>
+                            <span className="text-sm font-black text-amber-700 tabular-nums">
+                              {formatNumber(ev.actualBrewedQty)} {p?.unit}
+                            </span>
+                          </div>
+                        </div>
+                        {ev.approvalStatus !== "approved" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void onDuyetDanhGia(ev.id, "approved")}
+                            className="px-3 py-1.5 rounded-xl bg-[#141A23] hover:bg-slate-800 text-amber-300 text-xs font-extrabold flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Duyệt
+                          </button>
+                        )}
+                        {ev.approvalStatus !== "returned" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              const lyDo = window.prompt(
+                                "Lý do trả lại / yêu cầu sửa đánh giá sản lượng:",
+                                "Số liệu sản lượng hoặc ghi chú ca chưa khớp",
+                              );
+                              if (lyDo?.trim()) void onDuyetDanhGia(ev.id, "returned", lyDo.trim());
+                            }}
+                            className="px-3 py-1.5 rounded-xl border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 text-xs font-extrabold flex items-center gap-1"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> Trả lại
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onXoaDanhGia(ev.id)}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Xoá bản đánh giá sản lượng"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ================= TAB 3: KIỂM KÊ FST & BBT ================= */}
+      {/* ================= TAB 3: DUYỆT & QUẢN LÝ KIỂM KÊ XƯỞNG (KEG & BỒN) ================= */}
       {subTab === "kiem-ke" && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden anim-view-enter">
+        <div className="space-y-5 anim-view-enter">
+          <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-fit">
+            <button
+              type="button"
+              onClick={() => setKkSubView("keg-lit")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                kkSubView === "keg-lit"
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              Kiểm kê Keg &amp; Lít Xưởng ({kegXuongRecords.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setKkSubView("bon")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                kkSubView === "bon"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              Kiểm kê Bồn FST &amp; BBT ({kiemKeBon.length})
+            </button>
+          </div>
+
+          {kkSubView === "keg-lit" ? (
+            <KiemKeKegLitSection
+              location="XUONG"
+              products={products}
+              records={kiemKeKeg}
+              anhTheoChungTu={anhTheoChungTu}
+              canWrite={isAdmin && Boolean(onLuuKiemKeKegLit)}
+              canApprove={true}
+              canDelete={true}
+              busy={busy}
+              onSave={onLuuKiemKeKegLit || (async () => false)}
+              onApprove={onDuyetKiemKeKeg}
+              onDelete={onXoaKiemKeKeg}
+            />
+          ) : (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-sky-400">
-                GIÁM SÁT TỒN BỒN CUỐI THÁNG
+                GIÁM SÁT TỒN BỒN CUỐI THÁNG · DUYỆT &amp; QUẢN LÝ DỮ LIỆU
               </span>
               <h2 className="text-base font-extrabold">
-                Dữ Liệu Kiểm Kê Bồn FST & BBT (Từ NV Sản Xuất)
+                Duyệt Kiểm Kê Bồn FST &amp; BBT ({kiemKeBon.length})
               </h2>
             </div>
             <Database className="w-5 h-5 text-sky-400" />
@@ -672,36 +930,97 @@ export default function QuanLyXuongPanel({
                 return (
                   <div
                     key={kk.id}
-                    className="p-4 rounded-2xl border border-slate-200 flex gap-4 items-center card-lift"
+                    className="p-4 rounded-2xl border border-slate-200 space-y-3 card-lift"
                   >
-                    {anh[0] && (
-                      <a
-                        href={anh[0].url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-32 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
-                      >
-                        <OAnhLuoi url={anh[0].url} alt={kk.tankId} rong={400} className="w-full h-full object-cover" />
-                      </a>
-                    )}
-                    <div className="space-y-1 text-xs min-w-0">
-                      <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 font-mono font-black">
-                        {kk.tankId} · {kk.month}
+                    <div className="flex gap-4 items-center">
+                      {anh[0] && (
+                        <a
+                          href={anh[0].url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="w-32 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
+                        >
+                          <OAnhLuoi url={anh[0].url} alt={kk.tankId} rong={400} className="w-full h-full object-cover" />
+                        </a>
+                      )}
+                      <div className="space-y-1 text-xs min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-1">
+                          <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 font-mono font-black">
+                            {kk.tankId} · {kk.month}
+                          </span>
+                          {kk.approvalStatus === "approved" ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                              ✓ Đã duyệt{kk.approvedBy ? ` · ${kk.approvedBy}` : ""}
+                            </span>
+                          ) : kk.approvalStatus === "returned" ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                              ⚠ Trả lại{kk.rejectedReason ? `: ${kk.rejectedReason}` : ""}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
+                              ⏳ Chờ duyệt
+                            </span>
+                          )}
+                        </div>
+                        <p className="font-extrabold text-slate-900 truncate">
+                          {p?.name || kk.productId}
+                        </p>
+                        <p className="font-mono font-bold text-amber-700">Lô: {kk.batchNumber}</p>
+                        <p className="font-mono font-black text-emerald-700 text-sm tabular-nums">
+                          {formatNumber(kk.liters)} Lít{" "}
+                          {bon ? `(Max ${formatNumber(bon.sucChuaLit)}L)` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        Người nhập: {kk.createdBy || "—"}
                       </span>
-                      <p className="font-extrabold text-slate-900 truncate">
-                        {p?.name || kk.productId}
-                      </p>
-                      <p className="font-mono font-bold text-amber-700">Lô: {kk.batchNumber}</p>
-                      <p className="font-mono font-black text-emerald-700 text-sm tabular-nums">
-                        {formatNumber(kk.liters)} Lít{" "}
-                        {bon ? `(Max ${formatNumber(bon.sucChuaLit)}L)` : ""}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        {kk.approvalStatus !== "approved" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void onDuyetKiemKeBon(kk.id, "approved")}
+                            className="px-2.5 py-1 rounded-lg bg-[#141A23] hover:bg-slate-800 text-amber-300 text-[11px] font-extrabold flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Duyệt
+                          </button>
+                        )}
+                        {kk.approvalStatus !== "returned" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => {
+                              const lyDo = window.prompt(
+                                `Lý do trả lại kiểm kê bồn ${kk.tankId}:`,
+                                "Số đo lít bồn hoặc ảnh thước đo chưa rõ",
+                              );
+                              if (lyDo?.trim()) void onDuyetKiemKeBon(kk.id, "returned", lyDo.trim());
+                            }}
+                            className="px-2.5 py-1 rounded-lg border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 text-[11px] font-extrabold flex items-center gap-1"
+                          >
+                            <RotateCcw className="w-3 h-3" /> Trả lại
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onXoaKiemKeBon(kk.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Xoá bản kiểm kê bồn"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
               })
             )}
           </div>
+        </div>
+          )}
         </div>
       )}
     </div>

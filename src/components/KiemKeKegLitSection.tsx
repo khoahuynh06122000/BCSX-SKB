@@ -5,6 +5,8 @@ import {
   ClipboardCheck,
   Clock,
   Layers,
+  RotateCcw,
+  Trash2,
   Upload,
 } from "lucide-react";
 import type { KiemKeKegItem, KiemKeKegLit, Product } from "../types";
@@ -22,6 +24,8 @@ interface Props {
   /** Số lượng sổ sách theo productId (nếu có — dùng cho Kho tổng đối chiếu chênh lệch). */
   bookStockByProduct?: Map<string, number>;
   canWrite?: boolean;
+  canApprove?: boolean;
+  canDelete?: boolean;
   busy: boolean;
   onSave: (input: {
     date: string;
@@ -33,6 +37,8 @@ interface Props {
     note: string;
     photos: TepCho[];
   }) => Promise<boolean>;
+  onApprove?: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -55,8 +61,12 @@ export default function KiemKeKegLitSection({
   anhTheoChungTu,
   bookStockByProduct,
   canWrite = true,
+  canApprove = false,
+  canDelete = false,
   busy,
   onSave,
+  onApprove,
+  onDelete,
 }: Props) {
   const [date, setDate] = useState(todayStr);
   const [shiftOrPeriod, setShiftOrPeriod] = useState(
@@ -486,18 +496,69 @@ export default function KiemKeKegLitSection({
                           {rec.shiftOrPeriod}
                         </span>
                       )}
+                      {rec.approvalStatus === "approved" ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                          ✓ Đã duyệt{rec.approvedBy ? ` · ${rec.approvedBy}` : ""}
+                        </span>
+                      ) : rec.approvalStatus === "returned" ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                          ⚠ Trả lại{rec.rejectedReason ? `: ${rec.rejectedReason}` : ""}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                          ⏳ Chờ QL duyệt
+                        </span>
+                      )}
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
                         <Clock className="w-3 h-3" />
                         {formatStampView(rec.createdAt)} · {rec.createdBy}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                    <div className="flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums">
                       <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 font-black text-slate-800">
                         {formatNumber(rec.totalKegs)} Keg/Thùng
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 font-black text-emerald-700">
                         {formatNumber(rec.totalLiters)} Lít
                       </span>
+                      {canApprove && onApprove && (
+                        <>
+                          {rec.approvalStatus !== "approved" && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void onApprove(rec.id, "approved")}
+                              className="px-2.5 py-1 rounded-lg bg-[#141A23] hover:bg-slate-800 text-amber-300 font-sans text-[11px] font-extrabold flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="w-3 h-3" /> Duyệt
+                            </button>
+                          )}
+                          {rec.approvalStatus !== "returned" && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => {
+                                const lyDo = window.prompt("Lý do trả lại / yêu cầu kiểm đếm lại:", "Số lượng Keg hoặc ảnh chưa khớp");
+                                if (lyDo?.trim()) void onApprove(rec.id, "returned", lyDo.trim());
+                              }}
+                              className="px-2.5 py-1 rounded-lg border border-rose-300 bg-white text-rose-700 hover:bg-rose-50 font-sans text-[11px] font-extrabold flex items-center gap-1"
+                            >
+                              <RotateCcw className="w-3 h-3" /> Trả lại
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {canDelete && onDelete && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onDelete(rec.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Xoá bản kiểm kê này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
 

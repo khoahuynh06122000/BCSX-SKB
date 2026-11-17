@@ -6251,6 +6251,84 @@ export default function App() {
     }
   };
 
+  const capNhatDuyetGiamSat = async (
+    bang: "danh_gia_sx" | "kiem_ke_bon" | "kiem_ke_keg",
+    id: string,
+    status: "approved" | "returned",
+    reason?: string,
+  ) => {
+    setLoading(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const actor = currentUserProfile?.name || user || tenVaiTro(userRole);
+      await updateDoc(doc(db, bang, id), {
+        approvalStatus: status,
+        approvedBy: actor,
+        approvedAt: nowIso,
+        rejectedReason: status === "returned" ? reason || "" : "",
+        updatedAt: nowIso,
+        updatedBy: actor,
+      });
+      showNotification(
+        status === "approved"
+          ? "Quản lý xưởng đã duyệt bản ghi giám sát"
+          : "Đã trả lại bản ghi để Xưởng kiểm tra & bổ sung",
+      );
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.UPDATE, bang));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDuyetDanhGia = (id: string, status: "approved" | "returned", reason?: string) =>
+    capNhatDuyetGiamSat("danh_gia_sx", id, status, reason);
+
+  const handleDuyetKiemKeBon = (id: string, status: "approved" | "returned", reason?: string) =>
+    capNhatDuyetGiamSat("kiem_ke_bon", id, status, reason);
+
+  const handleDuyetKiemKeKeg = (id: string, status: "approved" | "returned", reason?: string) =>
+    capNhatDuyetGiamSat("kiem_ke_keg", id, status, reason);
+
+  const handleXoaDanhGia = async (id: string) => {
+    if (!window.confirm("Xoá bản đánh giá sản lượng này?")) return;
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, "danh_gia_sx", id));
+      showNotification("Đã xoá bản đánh giá sản lượng");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "danh_gia_sx"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleXoaKiemKeBon = async (id: string) => {
+    if (!window.confirm("Xoá bản kiểm kê bồn FST/BBT này?")) return;
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, "kiem_ke_bon", id));
+      showNotification("Đã xoá bản kiểm kê bồn FST/BBT");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "kiem_ke_bon"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleXoaKiemKeKeg = async (id: string) => {
+    if (!window.confirm("Xoá bản kiểm kê Keg & Lít này?")) return;
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, "kiem_ke_keg", id));
+      showNotification("Đã xoá bản kiểm kê Keg & Lít");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "kiem_ke_keg"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /*
    * SAU KHI XOÁ LẺ: số phiếu nào không còn dòng hàng nào phía sau thì hỏi hủy
    * luôn. Không hủy thì Sổ số phiếu ghi "còn hiệu lực" cho một chứng từ rỗng.
@@ -10714,10 +10792,15 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
                 nhatKyPhieuContent={renderNhatKyPhieuChungTu()}
                 tonDauContent={renderTonDauVaNapLe()}
+                isAdmin={isOwner}
+                onDuyetKiemKeKeg={handleDuyetKiemKeKeg}
+                onXoaDanhGia={handleXoaDanhGia}
+                onXoaKiemKeBon={handleXoaKiemKeBon}
+                onXoaKiemKeKeg={handleXoaKiemKeKeg}
               />
             )}
 
-            {activeTab === "ql-xuong" && daDuocDuyet && quyen.duyetXuong && (
+            {activeTab === "ql-xuong" && daDuocDuyet && (quyen.duyetXuong || isOwner) && (
               <QuanLyXuongPanel
                 products={products}
                 transactions={transactions}
@@ -10725,13 +10808,23 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 approvedSlips={approvedSlips}
                 anhTheoChungTu={anhTheoChungTu}
                 keHoach={keHoach}
+                danhGia={danhGia}
                 kiemKeBon={kiemKeBon}
+                kiemKeKeg={kiemKeKeg}
+                isAdmin={isOwner}
                 busy={loading}
                 onDuyetRao1={handleDuyetRao1}
                 onTraLaiPhieu={handleTraLaiPhieu}
                 onMoBieuMau={(code) => setBieuMauCode(code)}
                 onLuuKeHoach={handleLuuKeHoach}
                 onXoaKeHoach={handleXoaKeHoach}
+                onDuyetDanhGia={handleDuyetDanhGia}
+                onXoaDanhGia={handleXoaDanhGia}
+                onDuyetKiemKeBon={handleDuyetKiemKeBon}
+                onXoaKiemKeBon={handleXoaKiemKeBon}
+                onDuyetKiemKeKeg={handleDuyetKiemKeKeg}
+                onXoaKiemKeKeg={handleXoaKiemKeKeg}
+                onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
                 nhatKyPhieuContent={renderNhatKyPhieuChungTu()}
               />
             )}
@@ -10746,9 +10839,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 approvedSlips={approvedSlips}
                 anhTheoChungTu={anhTheoChungTu}
                 kiemKeKeg={kiemKeKeg}
-                canApproveGate2={quyen.duyetKhoTong}
-                canExport={quyen.ghiXuat}
-                canWriteInventory={quyen.ghiNhap || quyen.ghiXuat}
+                canApproveGate2={quyen.duyetKhoTong || isOwner}
+                canExport={quyen.ghiXuat || isOwner}
+                canWriteInventory={quyen.ghiNhap || quyen.ghiXuat || isOwner}
+                isAdmin={isOwner}
                 busy={loading}
                 onDuyetRao2={handleDuyetRao2}
                 onTraLaiPhieu={handleTraLaiPhieu}
@@ -10758,6 +10852,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   setActiveTab("export");
                 }}
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
+                onDuyetKiemKeKeg={handleDuyetKiemKeKeg}
+                onXoaKiemKeKeg={handleXoaKiemKeKeg}
               />
             )}
 

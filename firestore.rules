@@ -77,9 +77,13 @@ rules_version = '2';
 //   - actualHandoverQty, lossQty: number|null (optional, 0..10000000)
 //   - rating: string (required, 1..100)
 //   - note: string (required, 0..2000)
-//   - createdBy: string (required, 1..150)
+//   - createdBy: string (required, 0..150)
 //   - createdAt: string (required, 1..64)
 //   - updatedAt, updatedBy, uid, productName, unit (optional bounded fields)
+//   - approvalStatus: string|null (optional, in ['pending', 'approved', 'returned'])
+//   - approvedBy: string|null (optional, <= 150)
+//   - approvedAt: string|null (optional, <= 64)
+//   - rejectedReason: string|null (optional, <= 500)
 //
 // Collection: kiem_ke_bon/{invId}
 // Fields:
@@ -91,9 +95,13 @@ rules_version = '2';
 //   - batchNumber: string (required, 0..128)
 //   - liters: number (required, 0..1000000)
 //   - statusLabel: string|null (optional, <= 200)
-//   - createdBy: string (required, 1..150)
+//   - createdBy: string (required, 0..150)
 //   - createdAt: string (required, 1..64)
 //   - updatedAt, updatedBy, uid, note, productName, tankName (optional bounded)
+//   - approvalStatus: string|null (optional, in ['pending', 'approved', 'returned'])
+//   - approvedBy: string|null (optional, <= 150)
+//   - approvedAt: string|null (optional, <= 64)
+//   - rejectedReason: string|null (optional, <= 500)
 //
 // Collection: kiem_ke_keg/{invId}
 // Fields:
@@ -108,6 +116,10 @@ rules_version = '2';
 //   - createdBy: string (required, 0..150)
 //   - createdAt: string (required, 1..64)
 //   - updatedAt, updatedBy, uid (optional bounded)
+//   - approvalStatus: string|null (optional, in ['pending', 'approved', 'returned'])
+//   - approvedBy: string|null (optional, <= 150)
+//   - approvedAt: string|null (optional, <= 64)
+//   - rejectedReason: string|null (optional, <= 500)
 //
 // Existing Collections (preserved intact):
 //   - test/connection, transactions, revenue, sap_jobs, diem_ban, hoa_don,
@@ -563,12 +575,61 @@ service cloud.firestore {
         && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
     }
 
+    // Truong phe duyet Giam sat xuong (danh_gia_sx, kiem_ke_bon, kiem_ke_keg).
+    function isValidApprovalFields(data) {
+      return optStr(data, 'approvalStatus', 32)
+        && (
+          !('approvalStatus' in data)
+          || data.approvalStatus == null
+          || data.approvalStatus in ['pending', 'approved', 'returned']
+        )
+        && optStr(data, 'approvedBy', 150)
+        && optStr(data, 'approvedAt', 64)
+        && optStr(data, 'rejectedReason', 500);
+    }
+
+    function canCreateApprovalFields(data) {
+      return duyetXuong()
+        || (
+          (
+            data.get('approvalStatus', null) == null
+            || data.get('approvalStatus', null) == 'pending'
+          )
+          && data.get('approvedBy', null) == null
+          && data.get('approvedAt', null) == null
+          && data.get('rejectedReason', null) == null
+        );
+    }
+
+    function canUpdateApprovalFields(data) {
+      return duyetXuong()
+        || (
+          (
+            data.get('approvalStatus', null) == resource.data.get('approvalStatus', null)
+            || data.get('approvalStatus', null) == 'pending'
+          )
+          && (
+            data.get('approvedBy', null) == resource.data.get('approvedBy', null)
+            || data.get('approvedBy', null) == null
+          )
+          && (
+            data.get('approvedAt', null) == resource.data.get('approvedAt', null)
+            || data.get('approvedAt', null) == null
+          )
+          && (
+            data.get('rejectedReason', null) == resource.data.get('rejectedReason', null)
+            || data.get('rejectedReason', null) == null
+          )
+        );
+    }
+
     function danhGiaAllowedKeys() {
       return [
         'id', 'date', 'shift', 'productId', 'plannedQty',
         'actualBrewedQty', 'actualHandoverQty', 'lossQty',
         'rating', 'note', 'createdBy', 'createdAt',
-        'updatedAt', 'updatedBy', 'uid', 'productName', 'unit'
+        'updatedAt', 'updatedBy', 'uid', 'productName', 'unit',
+        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'
       ];
     }
 
@@ -590,25 +651,29 @@ service cloud.firestore {
         && optStr(data, 'updatedBy', 150)
         && optStr(data, 'uid', 128)
         && optStr(data, 'productName', 200)
-        && optStr(data, 'unit', 50);
+        && optStr(data, 'unit', 50)
+        && isValidApprovalFields(data);
     }
 
     function isValidDanhGiaSXCreate(data) {
       return data.keys().hasOnly(danhGiaAllowedKeys())
-        && isValidDanhGiaSXCommon(data);
+        && isValidDanhGiaSXCommon(data)
+        && canCreateApprovalFields(data);
     }
 
     function isValidDanhGiaSXUpdate(data) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(danhGiaAllowedKeys())
         && isValidDanhGiaSXCommon(data)
-        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+        && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
+        && canUpdateApprovalFields(data);
     }
 
     function kiemKeBonAllowedKeys() {
       return [
         'id', 'month', 'tankId', 'tankGroup', 'productId',
         'batchNumber', 'liters', 'statusLabel', 'createdBy', 'createdAt',
-        'updatedAt', 'updatedBy', 'uid', 'note', 'productName', 'tankName'
+        'updatedAt', 'updatedBy', 'uid', 'note', 'productName', 'tankName',
+        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'
       ];
     }
 
@@ -630,25 +695,29 @@ service cloud.firestore {
         && optStr(data, 'uid', 128)
         && optStr(data, 'note', 2000)
         && optStr(data, 'productName', 200)
-        && optStr(data, 'tankName', 150);
+        && optStr(data, 'tankName', 150)
+        && isValidApprovalFields(data);
     }
 
     function isValidKiemKeBonCreate(data) {
       return data.keys().hasOnly(kiemKeBonAllowedKeys())
-        && isValidKiemKeBonCommon(data);
+        && isValidKiemKeBonCommon(data)
+        && canCreateApprovalFields(data);
     }
 
     function isValidKiemKeBonUpdate(data) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeBonAllowedKeys())
         && isValidKiemKeBonCommon(data)
-        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+        && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
+        && canUpdateApprovalFields(data);
     }
 
     function kiemKeKegAllowedKeys() {
       return [
         'id', 'date', 'shiftOrPeriod', 'location', 'items',
         'totalKegs', 'totalLiters', 'note', 'createdBy', 'createdAt',
-        'updatedAt', 'updatedBy', 'uid'
+        'updatedAt', 'updatedBy', 'uid',
+        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'
       ];
     }
 
@@ -667,18 +736,21 @@ service cloud.firestore {
         && reqStr(data, 'createdAt', 1, 64)
         && optStr(data, 'updatedAt', 64)
         && optStr(data, 'updatedBy', 150)
-        && optStr(data, 'uid', 128);
+        && optStr(data, 'uid', 128)
+        && isValidApprovalFields(data);
     }
 
     function isValidKiemKeKegCreate(data) {
       return data.keys().hasOnly(kiemKeKegAllowedKeys())
-        && isValidKiemKeKegCommon(data);
+        && isValidKiemKeKegCommon(data)
+        && canCreateApprovalFields(data);
     }
 
     function isValidKiemKeKegUpdate(data) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeKegAllowedKeys())
         && isValidKiemKeKegCommon(data)
-        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+        && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
+        && canUpdateApprovalFields(data);
     }
 
     // -------------------------------------------------------------------------
@@ -1099,7 +1171,7 @@ service cloud.firestore {
       allow read: if xemKho();
       allow create: if ghiNhapKho() && isValidKiemKeBonCreate(request.resource.data);
       allow update: if ghiNhapKho() && isValidKiemKeBonUpdate(request.resource.data);
-      allow delete: if isOwner();
+      allow delete: if isOwner() || duyetXuong();
     }
 
     // -------------------------------------------------------------------------
@@ -1111,9 +1183,17 @@ service cloud.firestore {
         && ((request.resource.data.location == 'XUONG' && ghiNhapKho())
           || (request.resource.data.location == 'KHO_TONG' && (ghiNhapKho() || ghiXuatKho())));
       allow update: if isValidKiemKeKegUpdate(request.resource.data)
-        && ((request.resource.data.location == 'XUONG' && ghiNhapKho())
-          || (request.resource.data.location == 'KHO_TONG' && (ghiNhapKho() || ghiXuatKho())));
-      allow delete: if isOwner();
+        && (
+          isToanQuyenKho()
+          || (resource.data.get('location', '') == 'XUONG'
+            && request.resource.data.location == 'XUONG'
+            && ghiNhapKho())
+          || (resource.data.get('location', '') == 'KHO_TONG'
+            && request.resource.data.location == 'KHO_TONG'
+            && (ghiNhapKho() || ghiXuatKho()))
+        );
+      allow delete: if isOwner()
+        || (resource.data.get('location', '') == 'XUONG' && duyetXuong());
     }
 
     /*

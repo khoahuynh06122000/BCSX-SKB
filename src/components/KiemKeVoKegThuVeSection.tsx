@@ -5,6 +5,7 @@ import {
   Clock,
   PackageOpen,
   RotateCcw,
+  Trash2,
   Upload,
 } from "lucide-react";
 import type {
@@ -31,6 +32,7 @@ interface Props {
   kiemKeKeg: KiemKeKegLit[];
   anhTheoChungTu: Map<string, AnhChungTu[]>;
   canWrite?: boolean;
+  canDelete?: boolean;
   busy: boolean;
   onSave: (input: {
     date: string;
@@ -42,6 +44,7 @@ interface Props {
     note: string;
     photos: TepCho[];
   }) => Promise<boolean>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -65,8 +68,10 @@ export default function KiemKeVoKegThuVeSection({
   kiemKeKeg,
   anhTheoChungTu,
   canWrite = true,
+  canDelete = false,
   busy,
   onSave,
+  onDelete,
 }: Props) {
   const [date, setDate] = useState(todayStr);
   const [returnMap, setReturnMap] = useState<Record<string, string>>({});
@@ -623,9 +628,22 @@ export default function KiemKeVoKegThuVeSection({
                         {formatStampView(rec.createdAt)} · {rec.createdBy}
                       </span>
                     </div>
-                    <span className="px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono text-xs font-black text-emerald-700 tabular-nums">
-                      +{formatNumber(rec.totalKegs)} Vỏ Keg thu về
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono text-xs font-black text-emerald-700 tabular-nums">
+                        +{formatNumber(rec.totalKegs)} Vỏ Keg thu về
+                      </span>
+                      {canDelete && onDelete && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onDelete(rec.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Xoá phiếu kiểm kê vỏ này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {rec.items?.length > 0 && (

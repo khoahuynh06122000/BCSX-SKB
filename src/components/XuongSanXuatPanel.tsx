@@ -10,6 +10,7 @@ import {
   Loader2,
   Send,
   Sparkles,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -81,6 +82,11 @@ interface Props {
   }) => Promise<boolean>;
   nhatKyPhieuContent?: ReactNode;
   tonDauContent?: ReactNode;
+  isAdmin?: boolean;
+  onDuyetKiemKeKeg?: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onXoaDanhGia?: (id: string) => Promise<void>;
+  onXoaKiemKeBon?: (id: string) => Promise<void>;
+  onXoaKiemKeKeg?: (id: string) => Promise<void>;
 }
 
 export default function XuongSanXuatPanel({
@@ -101,6 +107,11 @@ export default function XuongSanXuatPanel({
   onLuuKiemKeKegLit,
   nhatKyPhieuContent,
   tonDauContent,
+  isAdmin = false,
+  onDuyetKiemKeKeg,
+  onXoaDanhGia,
+  onXoaKiemKeBon,
+  onXoaKiemKeKeg,
 }: Props) {
   const [subTab, setSubTab] = useState<XuongSanXuatSubTab>("lap-phieu");
   const [lapPhieuView, setLapPhieuView] = useState<"form" | "nhat-ky">("form");
@@ -881,7 +892,7 @@ export default function XuongSanXuatPanel({
                       className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70"
                     >
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span
                             className={cn(
                               "px-2.5 py-0.5 rounded-full text-[11px] font-extrabold",
@@ -892,6 +903,19 @@ export default function XuongSanXuatPanel({
                           >
                             {ev.rating}
                           </span>
+                          {ev.approvalStatus === "approved" ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                              ✓ QL Xưởng đã duyệt{ev.approvedBy ? ` · ${ev.approvedBy}` : ""}
+                            </span>
+                          ) : ev.approvalStatus === "returned" ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                              ⚠ Trả lại{ev.rejectedReason ? `: ${ev.rejectedReason}` : ""}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                              ⏳ Chờ QL Xưởng duyệt
+                            </span>
+                          )}
                           <span className="text-xs font-bold text-slate-500">
                             {ev.date} · {ev.shift} · {ev.createdBy}
                           </span>
@@ -914,6 +938,17 @@ export default function XuongSanXuatPanel({
                             {formatNumber(ev.actualBrewedQty)} {p?.unit}
                           </span>
                         </div>
+                        {isAdmin && onXoaDanhGia && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void onXoaDanhGia(ev.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            title="Xoá bản đánh giá sản lượng này"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -974,8 +1009,12 @@ export default function XuongSanXuatPanel({
               products={products}
               records={kiemKeKeg}
               anhTheoChungTu={anhTheoChungTu}
+              canApprove={isAdmin}
+              canDelete={isAdmin}
               busy={busy}
               onSave={onLuuKiemKeKegLit}
+              onApprove={onDuyetKiemKeKeg}
+              onDelete={onXoaKiemKeKeg}
             />
           ) : kkMode === "ton-dau" && tonDauContent ? (
             <>{tonDauContent}</>
@@ -1171,7 +1210,7 @@ export default function XuongSanXuatPanel({
                     </a>
                   ) : null}
                   <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1">
                       <span
                         className={cn(
                           "px-2 py-0.5 rounded-md font-mono text-[11px] font-black",
@@ -1182,9 +1221,35 @@ export default function XuongSanXuatPanel({
                       >
                         {kk.tankId} · Tháng {kk.month}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400">
-                        {anh.length} ảnh
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {kk.approvalStatus === "approved" ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                            ✓ Đã duyệt
+                          </span>
+                        ) : kk.approvalStatus === "returned" ? (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                            ⚠ Trả lại
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                            ⏳ Chờ duyệt
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {anh.length} ảnh
+                        </span>
+                        {isAdmin && onXoaKiemKeBon && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void onXoaKiemKeBon(kk.id)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            title="Xoá bản kiểm kê bồn này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="text-xs font-extrabold text-slate-900 truncate">
                       {p?.name || kk.productId}

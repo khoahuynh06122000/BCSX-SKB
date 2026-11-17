@@ -38,6 +38,7 @@ interface Props {
   canApproveGate2: boolean;
   canExport: boolean;
   canWriteInventory: boolean;
+  isAdmin?: boolean;
   busy: boolean;
   onDuyetRao2: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
@@ -53,6 +54,8 @@ interface Props {
     note: string;
     photos: TepCho[];
   }) => Promise<boolean>;
+  onDuyetKiemKeKeg?: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
+  onXoaKiemKeKeg?: (id: string) => Promise<void>;
 }
 
 export default function KhoTongNxtPanel({
@@ -67,12 +70,15 @@ export default function KhoTongNxtPanel({
   canApproveGate2,
   canExport,
   canWriteInventory,
+  isAdmin = false,
   busy,
   onDuyetRao2,
   onTraLaiPhieu,
   onMoBieuMau,
   onDiToiXuatKho,
   onLuuKiemKeKegLit,
+  onDuyetKiemKeKeg,
+  onXoaKiemKeKeg,
 }: Props) {
   const [subTab, setSubTab] = useState<
     "nxt" | "nhan-bia" | "kiem-ke" | "thu-ve-keg"
@@ -556,8 +562,12 @@ export default function KhoTongNxtPanel({
             anhTheoChungTu={anhTheoChungTu}
             bookStockByProduct={bookStockByProduct}
             canWrite={canWriteInventory}
+            canApprove={isAdmin}
+            canDelete={isAdmin}
             busy={busy}
             onSave={onLuuKiemKeKegLit}
+            onApprove={onDuyetKiemKeKeg}
+            onDelete={onXoaKiemKeKeg}
           />
         </div>
       )}
@@ -572,8 +582,10 @@ export default function KhoTongNxtPanel({
             kiemKeKeg={kiemKeKeg}
             anhTheoChungTu={anhTheoChungTu}
             canWrite={canWriteInventory}
+            canDelete={isAdmin}
             busy={busy}
             onSave={onLuuKiemKeKegLit}
+            onDelete={onXoaKiemKeKeg}
           />
         </div>
       )}
