@@ -3555,8 +3555,9 @@ export default function App() {
     if (kind === "summary" && baoCaoKegDVTV.rows.length > 0) {
       const kegHang = baoCaoKegDVTV.rows.map((r) => [
         r.unitName,
-        r.isStandard206 ? "20,6 L/keg (BNC/FV)" : "20 L/keg (DVTV)",
+        r.isStandard206 ? "20,6 L/keg (BNC/FV)" : "20 L/keg (thực giao 20,6L)",
         r.litersDelivered,
+        r.internalLiters,
         r.kegsDelivered,
         r.expectedStandardLoss,
         r.actualLossRecorded,
@@ -3565,31 +3566,34 @@ export default function App() {
       const bangKeg: BangDep = {
         tieuDeTren: [
           "KIỂM SOÁT GIAO KEG ĐVTV & HAO HỤT ĐỊNH MỨC (0,6 L/KEG)",
-          `Kỳ: ${moTaKyBaoCao} · Tổng ĐVTV: ${formatNumber(baoCaoKegDVTV.totals.dvtvKegsDelivered)} Keg · Chuẩn hao hụt: ${formatNumber(baoCaoKegDVTV.totals.dvtvExpectedLoss06)} L`,
+          `Kỳ: ${moTaKyBaoCao} · ĐVTV ký 20L/keg nhưng thực xuất nội bộ 20,6L/keg · Tổng ĐVTV: ${formatNumber(baoCaoKegDVTV.totals.dvtvKegsDelivered)} Keg · Lệch chuẩn: ${formatNumber(baoCaoKegDVTV.totals.dvtvExpectedLoss06)} L`,
         ],
         tieuDe: [
           "Đơn vị / ĐVTV",
-          "Quy chuẩn",
-          "Số Lít xuất",
+          "Quy ước biên bản",
+          "Khách nhận (OUT)",
+          "Thực xuất kho (20,6L/keg)",
           "Tổng Keg giao (làm tròn lên)",
-          "Hao hụt chuẩn 0,6L/keg",
-          "Hao hụt đã ghi (LOSS)",
+          "Lệch chuẩn 0,6L/keg",
+          "Đã ghi LOSS",
           "Chênh chưa bù",
         ],
         cot: [
           { rong: 28 },
-          { rong: 22, kieu: "giua" },
-          { rong: 14, kieu: "so" },
-          { rong: 18, kieu: "so" },
-          { rong: 18, kieu: "so" },
+          { rong: 24, kieu: "giua" },
+          { rong: 15, kieu: "so" },
           { rong: 18, kieu: "so" },
           { rong: 16, kieu: "so" },
+          { rong: 16, kieu: "so" },
+          { rong: 14, kieu: "so" },
+          { rong: 14, kieu: "so" },
         ],
         hang: kegHang,
         dongTong: [
           "TỔNG CỘNG (ALL ĐƠN VỊ)",
           "",
           baoCaoKegDVTV.totals.allLitersDelivered,
+          baoCaoKegDVTV.totals.allInternalLiters,
           baoCaoKegDVTV.totals.allKegsDelivered,
           baoCaoKegDVTV.totals.dvtvExpectedLoss06,
           baoCaoKegDVTV.totals.allActualLoss,
@@ -7243,8 +7247,8 @@ export default function App() {
                                   : chuan206
                                     ? "Đối tác chuẩn 20,6 L/keg (BNC / FV) — mặc định không trừ bù 0,6 L/keg (chỉ điền nếu có vỡ/hỏng thực tế)."
                                     : tronKeg20
-                                      ? `ĐVTV chuẩn 20 L/keg: ${formatNumber(item.quantity)} L = ${Math.round(keg20)} keg → chênh định mức ${formatNumber(goiY)} L (0,6 L/keg) so với keg chiết 20,6 L.`
-                                      : `ĐVTV chuẩn 20 L/keg: ${formatNumber(item.quantity)} L không chia tròn 20 (làm tròn lên ${Math.ceil(keg20 - 1e-4)} keg, có keg lẻ) — anh điền hao hụt thực tế nếu có.`}
+                                      ? `ĐVTV ký nhận quy ước 20 L/keg (${formatNumber(item.quantity)} L = ${Math.round(keg20)} keg), nhưng thực tế kho giao ${formatNumber(Math.round((item.quantity + goiY) * 100) / 100)} L (20,6 L/keg) → lệch ${formatNumber(goiY)} L (0,6 L/keg).`
+                                      : `ĐVTV có keg lẻ (${formatNumber(item.quantity)} L — làm tròn lên ${Math.ceil(item.quantity / 20.6 - 1e-4)} keg thực tế) — anh điền hao hụt thực tế nếu có.`}
                             </p>
                             <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
                               Ghi thành một dòng hao hụt riêng: tồn kho trừ cả phần
@@ -8486,13 +8490,13 @@ export default function App() {
                           <div className="px-6 py-4 bg-amber-50/50 border-b border-amber-100 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                             <div className="p-3 rounded-xl bg-white border border-slate-200">
                               <span className="text-[10px] font-black uppercase text-slate-400 block">
-                                Tổng Keg giao ĐVTV (20L)
+                                Tổng Keg giao ĐVTV (ký 20L)
                               </span>
                               <span className="font-mono text-lg font-black text-slate-900 tabular-nums">
                                 {formatNumber(baoCaoKegDVTV.totals.dvtvKegsDelivered)} Keg
                               </span>
                               <span className="block text-[10px] font-bold text-slate-500 tabular-nums">
-                                {formatNumber(baoCaoKegDVTV.totals.dvtvLitersDelivered)} Lít xuất
+                                Khách ký: {formatNumber(baoCaoKegDVTV.totals.dvtvLitersDelivered)} L · Thực kho: {formatNumber(baoCaoKegDVTV.totals.dvtvInternalLiters)} L
                               </span>
                             </div>
                             <div className="p-3 rounded-xl bg-white border border-amber-200">
@@ -8549,7 +8553,10 @@ export default function App() {
                                     Quy chuẩn Keg
                                   </th>
                                   <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-right">
-                                    Số Lít xuất
+                                    Khách nhận (OUT)
+                                  </th>
+                                  <th className="font-bold text-[10px] text-sky-700 uppercase tracking-widest py-3.5 px-4 text-right">
+                                    Thực kho (20,6L/keg)
                                   </th>
                                   <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-right">
                                     Tổng Keg giao
@@ -8569,7 +8576,7 @@ export default function App() {
                                 {baoCaoKegDVTV.rows.length === 0 ? (
                                   <tr>
                                     <td
-                                      colSpan={7}
+                                      colSpan={8}
                                       className="py-8 text-center text-slate-400 font-bold"
                                     >
                                       Chưa có giao dịch xuất bia Lít/Keg trong kỳ đang xem.
@@ -8595,11 +8602,14 @@ export default function App() {
                                         >
                                           {r.isStandard206
                                             ? "20,6 L/keg · chuẩn gốc"
-                                            : "20 L/keg · hụt 0,6L"}
+                                            : "Ký 20L · thực 20,6L"}
                                         </span>
                                       </td>
                                       <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-700 tabular-nums">
                                         {formatNumber(r.litersDelivered)} L
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono font-bold text-sky-700 tabular-nums">
+                                        {formatNumber(r.internalLiters)} L
                                       </td>
                                       <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 tabular-nums">
                                         {formatNumber(r.kegsDelivered)} Keg

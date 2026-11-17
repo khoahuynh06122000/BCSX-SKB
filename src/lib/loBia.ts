@@ -48,7 +48,7 @@ export const LIT_KEG_CHUAN = 20.6;
 export const LIT_KEG_DVTV = 20;
 
 /**
- * Quy đổi số lượng thành số Keg hoặc Thùng (24 lon) để đối chiếu ảnh hiện trạng.
+ * Quy đổi số lượng thành số Keg nội bộ (mặc định 20,6 L/keg) hoặc Thùng (24 lon) để đối chiếu ảnh hiện trạng.
  * Quy định nghiệp vụ: nếu có bia lẻ trong keg cuối không đầy thì LÀM TRÒN LÊN
  * thành số Keg nguyên (vì ngoài hiện trường vẫn chiếm 1 vỏ Keg vật lý).
  */
@@ -499,7 +499,10 @@ export interface DongGiaoKegDVTV {
   unitName: string;
   isStandard206: boolean;
   litMoiKeg: number;
+  /** Số Lít ghi nhận giao khách (ĐVTV quy ước 20L/keg; BNC & FV tính đúng 20,6L/keg). */
   litersDelivered: number;
+  /** Số Lít thực tế xuất khỏi kho theo chuẩn nội bộ 20,6 L/keg (= litersDelivered + expectedStandardLoss). */
+  internalLiters: number;
   kegsDelivered: number;
   expectedStandardLoss: number;
   actualLossRecorded: number;
@@ -511,6 +514,7 @@ export interface BaoCaoKegHaoHutDVTV {
   totals: {
     dvtvKegsDelivered: number;
     dvtvLitersDelivered: number;
+    dvtvInternalLiters: number;
     dvtvExpectedLoss06: number;
     dvtvActualLoss: number;
     dvtvUnrecordedGap: number;
@@ -519,6 +523,7 @@ export interface BaoCaoKegHaoHutDVTV {
     bncFvActualLoss: number;
     allKegsDelivered: number;
     allLitersDelivered: number;
+    allInternalLiters: number;
     allActualLoss: number;
   };
 }
@@ -543,6 +548,7 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
         isStandard206,
         litMoiKeg: isStandard206 ? LIT_KEG_CHUAN : LIT_KEG_DVTV,
         litersDelivered: 0,
+        internalLiters: 0,
         kegsDelivered: 0,
         expectedStandardLoss: 0,
         actualLossRecorded: 0,
@@ -581,6 +587,7 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
 
   const rows = Array.from(map.values()).map((r) => ({
     ...r,
+    internalLiters: round2(r.litersDelivered + r.expectedStandardLoss),
     unrecordedGap: round2(r.expectedStandardLoss - r.actualLossRecorded),
   }));
 
@@ -594,6 +601,7 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
   const totals = {
     dvtvKegsDelivered: 0,
     dvtvLitersDelivered: 0,
+    dvtvInternalLiters: 0,
     dvtvExpectedLoss06: 0,
     dvtvActualLoss: 0,
     dvtvUnrecordedGap: 0,
@@ -602,12 +610,14 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
     bncFvActualLoss: 0,
     allKegsDelivered: 0,
     allLitersDelivered: 0,
+    allInternalLiters: 0,
     allActualLoss: 0,
   };
 
   rows.forEach((r) => {
     totals.allKegsDelivered += r.kegsDelivered;
     totals.allLitersDelivered = round2(totals.allLitersDelivered + r.litersDelivered);
+    totals.allInternalLiters = round2(totals.allInternalLiters + r.internalLiters);
     totals.allActualLoss = round2(totals.allActualLoss + r.actualLossRecorded);
     if (r.isStandard206) {
       totals.bncFvKegsDelivered += r.kegsDelivered;
@@ -616,6 +626,7 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
     } else {
       totals.dvtvKegsDelivered += r.kegsDelivered;
       totals.dvtvLitersDelivered = round2(totals.dvtvLitersDelivered + r.litersDelivered);
+      totals.dvtvInternalLiters = round2(totals.dvtvInternalLiters + r.internalLiters);
       totals.dvtvExpectedLoss06 = round2(totals.dvtvExpectedLoss06 + r.expectedStandardLoss);
       totals.dvtvActualLoss = round2(totals.dvtvActualLoss + r.actualLossRecorded);
     }
