@@ -48,6 +48,7 @@ import {
   Warehouse,
   ClipboardList,
   BarChart3,
+  PieChart,
 } from "lucide-react";
 import {
   isValid,
@@ -609,16 +610,9 @@ export default function App() {
     nonce: number;
   } | null>(null);
   /**
-   * Tab con trong mục Báo cáo. Ba giá trị này đúng với ba nút trên giao diện.
-   *
-   * Bản cũ khai là "overview" | "detailed" | "inventory" — không khớp giá trị
-   * nào mà giao diện thực sự dùng, và khởi tạo bằng "overview" nên mở tab Báo
-   * cáo lên là không thấy nội dung nào (khối Tổng hợp chỉ hiện khi bằng
-   * "summary") và cũng không nút nào sáng.
+   * Tab con trong mục Sổ kho & Xuất SAP (tách phần Tổng hợp thành tab riêng `overview`).
    */
-  const [reportSubTab, setReportSubTab] = useState<"summary" | "in" | "out">(
-    "summary",
-  );
+  const [reportSubTab, setReportSubTab] = useState<"in" | "out">("in");
 
   /*
    * Phân hệ Công nợ · Hóa đơn chia làm HAI thẻ, theo trạng thái của đơn.
@@ -3421,11 +3415,13 @@ export default function App() {
    * Số đưa vào là SỐ THẬT, không tự định dạng thành chuỗi "1.234.567": chuỗi
    * thì Excel không cộng, không lọc, không sắp xếp được.
    */
-  const handleExportReportToExcel = () => {
+  const handleExportReportToExcel = (forcedKind?: "summary" | "in" | "out") => {
+    const kind =
+      forcedKind ?? (activeTab === "overview" ? "summary" : reportSubTab);
     let sheetName = "Report";
     let bang: BangDep;
 
-    if (reportSubTab === "summary") {
+    if (kind === "summary") {
       const tieuDe = [
         "Sản phẩm",
         "Quy cách",
@@ -3486,9 +3482,9 @@ export default function App() {
       };
       sheetName = "Tong hop kho";
     } else {
-      const typeLabel = reportSubTab === "in" ? "Nhap" : "Xuat";
+      const typeLabel = kind === "in" ? "Nhap" : "Xuat";
       const targets = filteredTransactionsForReport.filter((t) =>
-        reportSubTab === "in" ? trongNhatKyNhap(t) : trongNhatKyXuat(t),
+        kind === "in" ? trongNhatKyNhap(t) : trongNhatKyXuat(t),
       );
 
       if (targets.length === 0) {
@@ -3497,7 +3493,7 @@ export default function App() {
       }
 
       // Mã lô chỉ có ở chiều nhập; báo cáo xuất giữ nguyên các cột cũ.
-      const coMaLo = reportSubTab === "in";
+      const coMaLo = kind === "in";
       const tieuDe = [
         "Ngày",
         "Số phiếu",
@@ -3523,7 +3519,7 @@ export default function App() {
       ]);
       bang = {
         tieuDeTren: [
-          `BÁO CÁO ${reportSubTab === "in" ? "NHẬP KHO" : "XUẤT KHO"}`,
+          `BÁO CÁO ${kind === "in" ? "NHẬP KHO" : "XUẤT KHO"}`,
           `${targets.length} dòng · Xuất lúc ${format(new Date(), "HH:mm dd/MM/yyyy")}`,
         ],
         tieuDe,
@@ -5225,14 +5221,12 @@ export default function App() {
   const bangSo = useMemo(() => bangSoPhieu(soPhieu), [soPhieu]);
   const chuaCoSoBaoCao = useMemo(
     () =>
-      reportSubTab === "summary"
-        ? []
-        : chungTuChuaCoSo(
-            filteredTransactionsForReport.filter((t) =>
-              reportSubTab === "in" ? trongNhatKyNhap(t) : trongNhatKyXuat(t),
-            ),
-            soPhieu,
-          ),
+      chungTuChuaCoSo(
+        filteredTransactionsForReport.filter((t) =>
+          reportSubTab === "in" ? trongNhatKyNhap(t) : trongNhatKyXuat(t),
+        ),
+        soPhieu,
+      ),
     [filteredTransactionsForReport, soPhieu, reportSubTab],
   );
   const [dangCapSo, setDangCapSo] = useState(false);
@@ -6463,6 +6457,7 @@ export default function App() {
 
   /**
    * Menu bên trái chia rành mạch THEO BAN BỆ (tránh trùng lặp đầu mục):
+   *   0. Tổng quan (Lưu chuyển & Tồn kho tổng thể)
    *   1. Xưởng sản xuất (QL Xưởng + Xưởng sản xuất — đã tích hợp Nhập lẻ & Phiếu giấy cũ bên trong)
    *   2. Kho tổng (NXT & Rào 2, Xuất kho, Đơn đi đường, Sổ kho SAP)
    *   3. Công nợ & Hóa đơn (Dashboard Kế toán, Công nợ·Hóa đơn, Đơn BNC, Đối tác)
@@ -6471,6 +6466,23 @@ export default function App() {
   const navGroups = useMemo(() => {
     const isOwnerRole = userRole === "OWNER";
     const groups = [
+      ...(quyen.xemKho
+        ? [
+            {
+              id: "ban-tong-quan",
+              title: "Tổng quan",
+              items: [
+                {
+                  id: "overview",
+                  label: "Tổng quan kho",
+                  icon: PieChart,
+                  color: "#f59e0b",
+                  badge: 0,
+                },
+              ],
+            },
+          ]
+        : []),
       {
         id: "ban-xuong",
         title: "1. Xưởng sản xuất (Đầu vào & Nhập)",
@@ -8100,76 +8112,49 @@ export default function App() {
               hình cùng nói về một kho mà ra hai con số.
             */}
 
-            {activeTab === "reports" && (
-              <div className="space-y-8">
-                {/* Report Sub-Tabs */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <div className="flex items-center gap-1.5 p-1.5 bg-white border border-slate-100 rounded-2xl w-fit premium-shadow">
-                      {(
-                        [
-                          { id: "summary", label: "Tổng hợp", icon: Layers },
-                          { id: "in", label: "Báo cáo Nhập", icon: PlusCircle },
-                          {
-                            id: "out",
-                            label: "Báo cáo Xuất",
-                            icon: MinusCircle,
-                          },
-                        ] as const
-                      ).map((st) => (
+            {(() => {
+              const renderBoLocKyBaoCao = (
+                excelKind: "summary" | "in" | "out",
+                showPartnerFilter = true,
+              ) => (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-1">
+                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <div className="relative flex-1 sm:w-40">
+                        <ONgay
+                          aria-label="Từ ngày"
+                          value={reportTuNgay}
+                          max={reportDenNgay || undefined}
+                          onChange={(v: string) => setReportTuNgay(v)}
+                          className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+                        />
+                      </div>
+                      <span className="text-slate-300 font-black shrink-0">
+                        —
+                      </span>
+                      <div className="relative flex-1 sm:w-40">
+                        <ONgay
+                          aria-label="Đến ngày"
+                          value={reportDenNgay}
+                          min={reportTuNgay || undefined}
+                          onChange={(v: string) => setReportDenNgay(v)}
+                          className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
+                        />
+                      </div>
+                      {(reportTuNgay || reportDenNgay) && (
                         <button
-                          key={st.id}
-                          onClick={() => setReportSubTab(st.id)}
-                          className={cn(
-                            "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                            reportSubTab === st.id
-                              ? "bg-slate-900 text-white shadow-xl shadow-slate-200"
-                              : "text-slate-400 hover:text-slate-900 hover:bg-slate-50",
-                          )}
+                          onClick={() => {
+                            setReportTuNgay("");
+                            setReportDenNgay("");
+                          }}
+                          className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
                         >
-                          <st.icon className="w-4 h-4" />
-                          {st.label}
+                          Tất cả
                         </button>
-                      ))}
+                      )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                      {/* Khoảng ngày báo cáo — thay ô lọc mã lô cũ. */}
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <div className="relative flex-1 sm:w-40">
-                          <ONgay
-                            aria-label="Từ ngày"
-                            value={reportTuNgay}
-                            max={reportDenNgay || undefined}
-                            onChange={(v: string) => setReportTuNgay(v)}
-                            className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
-                          />
-                        </div>
-                        <span className="text-slate-300 font-black shrink-0">
-                          —
-                        </span>
-                        <div className="relative flex-1 sm:w-40">
-                          <ONgay
-                            aria-label="Đến ngày"
-                            value={reportDenNgay}
-                            min={reportTuNgay || undefined}
-                            onChange={(v: string) => setReportDenNgay(v)}
-                            className="w-full px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary focus:outline-none premium-shadow transition-all text-slate-700"
-                          />
-                        </div>
-                        {(reportTuNgay || reportDenNgay) && (
-                          <button
-                            onClick={() => {
-                              setReportTuNgay("");
-                              setReportDenNgay("");
-                            }}
-                            className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[9px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
-                          >
-                            Tất cả
-                          </button>
-                        )}
-                      </div>
-
+                    {showPartnerFilter && (
                       <div className="relative w-full sm:w-64">
                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                           <Search className="w-4 h-4" />
@@ -8192,12 +8177,10 @@ export default function App() {
                           </button>
                         )}
                       </div>
-                    </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    {/* Nói rõ đang xem kỳ nào. Đọc một bảng số mà không biết
-                        nó cắt theo khoảng nào là chỗ dễ hiểu nhầm nhất. */}
+                  <div className="flex items-center gap-4 shrink-0">
                     <div className="text-right hidden lg:block">
                       <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] leading-none">
                         Kỳ báo cáo
@@ -8209,123 +8192,239 @@ export default function App() {
                     <Button
                       variant="secondary"
                       className="px-6 py-2.5 bg-white border border-slate-100"
-                      onClick={handleExportReportToExcel}
+                      onClick={() => handleExportReportToExcel(excelKind)}
                     >
                       <Download className="w-4 h-4" /> Xuất Báo Cáo
                     </Button>
                   </div>
                 </div>
+              );
 
-                {reportSubTab === "summary" && (
-                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    {/*
-                      BÁO CÁO TỔNG HỢP CHỈ CÒN MỘT BẢNG.
+              return (
+                <>
+                  {activeTab === "overview" && quyen.xemKho && (() => {
+                    const sumByCat = (
+                      cat: "Lít" | "Lon",
+                      field: "openingStock" | "in" | "out" | "loss" | "closingStock",
+                    ) =>
+                      flowSummary
+                        .filter((r) => r.category === cat)
+                        .reduce((s, r) => s + (Number(r[field]) || 0), 0);
 
-                      Trước đây phía trên bảng này còn bốn ô chỉ số, một khối
-                      doanh thu, một bảng "doanh thu tiềm năng" và một biểu đồ
-                      xu hướng — bảy khối phải cuộn qua mới tới thứ người ta vào
-                      đây để xem. Khoa bỏ hết ngày 01/09/2026: cần nhìn tổng
-                      quan thì đã có Bảng điều khiển, còn vào Báo cáo tổng hợp
-                      là để đọc số Nhập · Xuất · Tồn.
-                    */}
-                    <Card title="Báo cáo Lưu chuyển & Tồn kho" noPadding>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                          <thead>
-                            <tr className="bg-slate-50/50">
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
-                                Sản phẩm
-                              </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                                Tồn đầu
-                              </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                                Nhập
-                              </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                                Xuất
-                              </th>
-                              {/*
-                                Hao hut tach thanh cot rieng. Gop vao "Xuat"
-                                thi khong ai biet trong do bao nhieu la hang
-                                minh mat - va cung khong kiem duoc rang hao
-                                hut da ghi hay chua.
-                              */}
-                              <th className="font-bold text-[10px] text-amber-600 uppercase tracking-widest py-4 px-6 text-right">
-                                Hao hụt
-                              </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                                Tồn cuối
-                              </th>
-                              <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
-                                Tình trạng
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {flowSummary.map((item) => {
-                              return (
-                                <tr
-                                  key={item.id}
-                                  className="hover:bg-slate-50 transition-colors group"
+                    const kpiCards = [
+                      {
+                        label: "Tồn đầu kỳ",
+                        lit: sumByCat("Lít", "openingStock"),
+                        lon: sumByCat("Lon", "openingStock"),
+                        accent: "text-slate-700",
+                        chip: "bg-slate-100 text-slate-600",
+                      },
+                      {
+                        label: "Nhập kho (đã duyệt)",
+                        lit: sumByCat("Lít", "in"),
+                        lon: sumByCat("Lon", "in"),
+                        accent: "text-emerald-700",
+                        chip: "bg-emerald-50 text-emerald-700",
+                      },
+                      {
+                        label: "Xuất & Hao hụt",
+                        lit: sumByCat("Lít", "out") + sumByCat("Lít", "loss"),
+                        lon: sumByCat("Lon", "out") + sumByCat("Lon", "loss"),
+                        sub: `Hao hụt: ${formatNumber(sumByCat("Lít", "loss"))} L`,
+                        accent: "text-rose-600",
+                        chip: "bg-rose-50 text-rose-700",
+                      },
+                      {
+                        label: "Tồn cuối sổ sách",
+                        lit: sumByCat("Lít", "closingStock"),
+                        lon: sumByCat("Lon", "closingStock"),
+                        sub:
+                          pendingApproval.slipCount > 0
+                            ? `Chờ duyệt nhập: ${pendingApproval.slipCount} phiếu (${formatNumber(pendingApproval.liters)} L)`
+                            : "Không có phiếu nhập chờ duyệt",
+                        accent: "text-amber-700",
+                        chip: "bg-amber-50 text-amber-800",
+                      },
+                    ];
+
+                    return (
+                      <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div>
+                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                              Tổng quan tồn kho &amp; lưu chuyển
+                            </h2>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.18em] mt-1">
+                              Tồn đầu · Nhập đã duyệt · Xuất · Hao hụt · Tồn cuối toàn kho SKB
+                            </p>
+                          </div>
+                          {renderBoLocKyBaoCao("summary", false)}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {kpiCards.map((c) => (
+                            <div
+                              key={c.label}
+                              className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-2"
+                            >
+                              <span
+                                className={cn(
+                                  "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider",
+                                  c.chip,
+                                )}
+                              >
+                                {c.label}
+                              </span>
+                              <div className="flex items-baseline justify-between gap-2 pt-1">
+                                <span
+                                  className={cn(
+                                    "font-mono text-2xl font-black tabular-nums",
+                                    c.accent,
+                                  )}
                                 >
-                                  <td className="py-4 px-6">
-                                    <p className="font-bold text-slate-900 text-xs">
-                                      {item.productName}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold">
-                                      {item.category}
-                                    </p>
-                                  </td>
-                                  <td className="py-4 px-6 font-mono text-right text-xs font-bold text-slate-500">
-                                    {formatNumber(item.openingStock)}
-                                  </td>
-                                  <td className="py-4 px-6 font-mono text-right text-xs font-bold text-emerald-600">
-                                    {formatNumber(item.in)}
-                                  </td>
-                                  <td className="py-4 px-6 font-mono text-right text-xs font-bold text-rose-500">
-                                    {formatNumber(item.out)}
-                                  </td>
-                                  <td className="py-4 px-6 font-mono text-right text-xs font-bold">
-                                    {item.loss > 0 ? (
-                                      <span className="text-amber-600">
-                                        {formatNumber(item.loss)}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-300">—</span>
-                                    )}
-                                  </td>
-                                  <td className="py-4 px-6 font-mono text-right text-xs font-black text-slate-900">
-                                    {formatNumber(item.closingStock)}
-                                  </td>
-                                  <td className="py-4 px-6 text-right">
-                                    {item.in > 0 && item.out / item.in > 0.8 ? (
-                                      <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
-                                        Dòng vốn nhanh
-                                      </span>
-                                    ) : item.in > 0 &&
-                                      item.out / item.in < 0.2 ? (
-                                      <span className="text-[9px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                                        Tồn đọng
-                                      </span>
-                                    ) : (
-                                      <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                                        Ổn định
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Card>
-                  </div>
-                )}
+                                  {formatNumber(c.lit)}{" "}
+                                  <span className="text-xs font-bold text-slate-400">
+                                    Lít
+                                  </span>
+                                </span>
+                                <span className="font-mono text-xs font-black text-slate-600 tabular-nums">
+                                  {formatNumber(c.lon)}{" "}
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    Lon
+                                  </span>
+                                </span>
+                              </div>
+                              {c.sub && (
+                                <p className="text-[11px] font-bold text-slate-400">
+                                  {c.sub}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
 
-                {(reportSubTab === "in" || reportSubTab === "out") && (
-                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+                        <Card title="Báo cáo Lưu chuyển & Tồn kho" noPadding>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="bg-slate-50/50">
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6">
+                                    Sản phẩm
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
+                                    Tồn đầu
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
+                                    Nhập
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
+                                    Xuất
+                                  </th>
+                                  <th className="font-bold text-[10px] text-amber-600 uppercase tracking-widest py-4 px-6 text-right">
+                                    Hao hụt
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
+                                    Tồn cuối
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-4 px-6 text-right">
+                                    Tình trạng
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {flowSummary.map((item) => (
+                                  <tr
+                                    key={item.id}
+                                    className="hover:bg-slate-50 transition-colors group"
+                                  >
+                                    <td className="py-4 px-6">
+                                      <p className="font-bold text-slate-900 text-xs">
+                                        {item.productName}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold">
+                                        {item.category}
+                                      </p>
+                                    </td>
+                                    <td className="py-4 px-6 font-mono text-right text-xs font-bold text-slate-500 tabular-nums">
+                                      {formatNumber(item.openingStock)}
+                                    </td>
+                                    <td className="py-4 px-6 font-mono text-right text-xs font-bold text-emerald-600 tabular-nums">
+                                      {formatNumber(item.in)}
+                                    </td>
+                                    <td className="py-4 px-6 font-mono text-right text-xs font-bold text-rose-500 tabular-nums">
+                                      {formatNumber(item.out)}
+                                    </td>
+                                    <td className="py-4 px-6 font-mono text-right text-xs font-bold tabular-nums">
+                                      {item.loss > 0 ? (
+                                        <span className="text-amber-600">
+                                          {formatNumber(item.loss)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-300">—</span>
+                                      )}
+                                    </td>
+                                    <td className="py-4 px-6 font-mono text-right text-xs font-black text-slate-900 tabular-nums">
+                                      {formatNumber(item.closingStock)}
+                                    </td>
+                                    <td className="py-4 px-6 text-right">
+                                      {item.in > 0 && item.out / item.in > 0.8 ? (
+                                        <span className="text-[9px] font-black uppercase text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                                          Dòng vốn nhanh
+                                        </span>
+                                      ) : item.in > 0 &&
+                                        item.out / item.in < 0.2 ? (
+                                        <span className="text-[9px] font-black uppercase text-amber-500 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                                          Tồn đọng
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] font-black uppercase text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                          Ổn định
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      </div>
+                    );
+                  })()}
+
+                  {activeTab === "reports" && (
+                    <div className="space-y-8">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="flex items-center gap-1.5 p-1.5 bg-white border border-slate-100 rounded-2xl w-fit premium-shadow shrink-0">
+                          {(
+                            [
+                              { id: "in", label: "Báo cáo Nhập", icon: PlusCircle },
+                              {
+                                id: "out",
+                                label: "Báo cáo Xuất",
+                                icon: MinusCircle,
+                              },
+                            ] as const
+                          ).map((st) => (
+                            <button
+                              key={st.id}
+                              onClick={() => setReportSubTab(st.id)}
+                              className={cn(
+                                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                                reportSubTab === st.id
+                                  ? "bg-slate-900 text-white shadow-xl shadow-slate-200"
+                                  : "text-slate-400 hover:text-slate-900 hover:bg-slate-50",
+                              )}
+                            >
+                              <st.icon className="w-4 h-4" />
+                              {st.label}
+                            </button>
+                          ))}
+                        </div>
+                        {renderBoLocKyBaoCao(reportSubTab, true)}
+                      </div>
+
+                      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
                     {chuaCoSoBaoCao.length > 0 && (
                       <div className="p-3 rounded-2xl border border-amber-200 bg-amber-50 flex flex-wrap items-center gap-3">
                         <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -8567,9 +8666,11 @@ export default function App() {
                       </div>
                     </Card>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/*
               PHÂN HỆ DOANH THU ĐÃ GỠ (25/09/2026), theo yêu cầu của Khoa.

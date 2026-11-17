@@ -26,9 +26,13 @@ const products: Product[] = [
   { id: "p4", name: "Bia Golden Bridge lon 330ml", category: "Lon", unit: "Lon", price: 15833, capacityPerUnit: 330 },
 ];
 
-console.log("\n1. Quy doi Keg / Thung");
-eq("200L = 10 Keg", quyDoiHienTrang(products[0], 200), "10 Keg (20L)");
+console.log("\n1. Quy doi Keg / Thung (lam tron len khi co keg/thung le)");
+eq("206L (chuan 20,6L) = 10 Keg", quyDoiHienTrang(products[0], 206), "10 Keg (20,6L)");
+eq("200L (DVTV 20L) = 10 Keg", quyDoiHienTrang(products[0], 200, 20), "10 Keg (20L)");
+eq("195L (chuan 20,6L) lam tron len = 10 Keg", quyDoiHienTrang(products[0], 195), "10 Keg (keg cuối 9,6L)");
+eq("195L (DVTV 20L) lam tron len = 10 Keg", quyDoiHienTrang(products[0], 195, 20), "10 Keg (keg cuối 15L)");
 eq("240 lon = 10 Thung", quyDoiHienTrang(products[1], 240), "10 Thùng");
+eq("250 lon lam tron len = 11 Thung", quyDoiHienTrang(products[1], 250), "11 Thùng (thùng cuối 10 lon)");
 eq("0 -> dau gach", quyDoiHienTrang(products[0], 0), "—");
 
 console.log("\n2. Token chu ky dien tu on dinh");

@@ -40,24 +40,49 @@ export const DANH_SACH_BON_BIA: BonBia[] = [
 
 export const MA_LO_MAC_DINH = "Chưa gắn mã lô";
 
-/** Quy đổi số lượng thành số Keg (20L) hoặc Thùng (24 lon) để đối chiếu ảnh hiện trạng. */
+/** Mặc định 1 keg chiết tại xưởng (và giao cho BNC / FV) là 20,6 lít; các ĐVTV khác ghi 20 lít/keg. */
+export const LIT_KEG_CHUAN = 20.6;
+export const LIT_KEG_DVTV = 20;
+
+/**
+ * Quy đổi số lượng thành số Keg hoặc Thùng (24 lon) để đối chiếu ảnh hiện trạng.
+ * Quy định nghiệp vụ: nếu có bia lẻ trong keg cuối không đầy thì LÀM TRÒN LÊN
+ * thành số Keg nguyên (vì ngoài hiện trường vẫn chiếm 1 vỏ Keg vật lý).
+ */
 export function quyDoiHienTrang(
   product: Pick<Product, "category" | "unit"> | undefined,
   qty: number,
+  litMoiKeg = LIT_KEG_CHUAN,
 ): string {
   const n = Number(qty) || 0;
   if (n <= 0 || !product) return "—";
   if (product.category === "Lít") {
-    const keg = n / 20;
-    return Math.abs(keg - Math.round(keg)) < 0.001
-      ? `${Math.round(keg)} Keg (20L)`
-      : `${keg.toFixed(1)} Keg`;
+    const chuan = litMoiKeg > 0 ? litMoiKeg : LIT_KEG_CHUAN;
+    const raw = n / chuan;
+    const rounded = Math.round(raw);
+    const chuanLabel = Number.isInteger(chuan)
+      ? `${chuan}L`
+      : `${String(chuan).replace(".", ",")}L`;
+    if (Math.abs(raw - rounded) < 0.001) {
+      return `${rounded} Keg (${chuanLabel})`;
+    }
+    const kegCeil = Math.max(1, Math.ceil(raw - 1e-4));
+    const fullKegs = Math.max(0, kegCeil - 1);
+    const lastKegLiters = Math.round((n - fullKegs * chuan) * 10) / 10;
+    const lastLabel = Number.isInteger(lastKegLiters)
+      ? String(lastKegLiters)
+      : String(lastKegLiters).replace(".", ",");
+    return `${kegCeil} Keg (keg cuối ${lastLabel}L)`;
   }
   if (product.category === "Lon") {
     const thung = n / 24;
-    return Math.abs(thung - Math.round(thung)) < 0.001
-      ? `${Math.round(thung)} Thùng`
-      : `${thung.toFixed(1)} Thùng`;
+    const rounded = Math.round(thung);
+    if (Math.abs(thung - rounded) < 0.001) {
+      return `${rounded} Thùng`;
+    }
+    const thungCeil = Math.max(1, Math.ceil(thung - 1e-4));
+    const lastCans = Math.round(n - (thungCeil - 1) * 24);
+    return `${thungCeil} Thùng (thùng cuối ${lastCans} lon)`;
   }
   return `${n} ${product.unit}`;
 }
