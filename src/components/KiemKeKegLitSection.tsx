@@ -11,6 +11,7 @@ import type { KiemKeKegItem, KiemKeKegLit, Product } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { laBanGhiThuVeVoKeg } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
 
 interface Props {
@@ -72,7 +73,7 @@ export default function KiemKeKegLitSection({
     : "KIỂM KÊ KHO TỔNG · KEG & LÍT";
 
   const scopedRecords = useMemo(
-    () => records.filter((r) => r.location === location),
+    () => records.filter((r) => r.location === location && !laBanGhiThuVeVoKeg(r)),
     [records, location],
   );
 

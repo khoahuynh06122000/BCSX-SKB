@@ -86,8 +86,10 @@ import {
 } from "./lib/slip";
 import {
   goiYLoFIFO,
+  laDoiTacChuan206,
   taoTokenChuKy,
   tinhTonTheoLo,
+  tongHopGiaoKegVaHaoHutDVTV,
 } from "./lib/loBia";
 
 import {
@@ -3550,6 +3552,56 @@ export default function App() {
 
     const wb = XLSXDep.utils.book_new();
     XLSXDep.utils.book_append_sheet(wb, taoSheetDep(bang), sheetName);
+    if (kind === "summary" && baoCaoKegDVTV.rows.length > 0) {
+      const kegHang = baoCaoKegDVTV.rows.map((r) => [
+        r.unitName,
+        r.isStandard206 ? "20,6 L/keg (BNC/FV)" : "20 L/keg (DVTV)",
+        r.litersDelivered,
+        r.kegsDelivered,
+        r.expectedStandardLoss,
+        r.actualLossRecorded,
+        r.unrecordedGap,
+      ]);
+      const bangKeg: BangDep = {
+        tieuDeTren: [
+          "KIỂM SOÁT GIAO KEG ĐVTV & HAO HỤT ĐỊNH MỨC (0,6 L/KEG)",
+          `Kỳ: ${moTaKyBaoCao} · Tổng ĐVTV: ${formatNumber(baoCaoKegDVTV.totals.dvtvKegsDelivered)} Keg · Chuẩn hao hụt: ${formatNumber(baoCaoKegDVTV.totals.dvtvExpectedLoss06)} L`,
+        ],
+        tieuDe: [
+          "Đơn vị / ĐVTV",
+          "Quy chuẩn",
+          "Số Lít xuất",
+          "Tổng Keg giao (làm tròn lên)",
+          "Hao hụt chuẩn 0,6L/keg",
+          "Hao hụt đã ghi (LOSS)",
+          "Chênh chưa bù",
+        ],
+        cot: [
+          { rong: 28 },
+          { rong: 22, kieu: "giua" },
+          { rong: 14, kieu: "so" },
+          { rong: 18, kieu: "so" },
+          { rong: 18, kieu: "so" },
+          { rong: 18, kieu: "so" },
+          { rong: 16, kieu: "so" },
+        ],
+        hang: kegHang,
+        dongTong: [
+          "TỔNG CỘNG (ALL ĐƠN VỊ)",
+          "",
+          baoCaoKegDVTV.totals.allLitersDelivered,
+          baoCaoKegDVTV.totals.allKegsDelivered,
+          baoCaoKegDVTV.totals.dvtvExpectedLoss06,
+          baoCaoKegDVTV.totals.allActualLoss,
+          baoCaoKegDVTV.totals.dvtvUnrecordedGap,
+        ],
+      };
+      XLSXDep.utils.book_append_sheet(
+        wb,
+        taoSheetDep(bangKeg),
+        "Keg DVTV & Hao hut",
+      );
+    }
     XLSXDep.writeFile(
       wb,
       `${sheetName} ${format(new Date(), "ddMMyyyy_HHmm")}.xlsx`,
@@ -5434,6 +5486,15 @@ export default function App() {
     reportHetNgayDen,
   ]);
 
+  const baoCaoKegDVTV = useMemo(
+    () =>
+      tongHopGiaoKegVaHaoHutDVTV({
+        transactions: filteredTransactionsForReport,
+        products,
+      }),
+    [filteredTransactionsForReport, products],
+  );
+
   /**
    * HANG DA DIEN NHUNG CHUA VAO TON - dang cho anh phieu ky.
    *
@@ -7123,47 +7184,75 @@ export default function App() {
                           }
                         />
                       </div>
-                      {mode === "export" && (
-                        <div className="sm:col-span-12">
-                          <Input
-                            label="Hao hụt — không ghi công nợ"
-                            type="number"
-                            placeholder="0"
-                            value={item.lossQuantity ? item.lossQuantity : ""}
-                            onChange={(e: any) =>
-                              updateTransactionItem(index, {
-                                lossQuantity: Number(e.target.value),
-                              })
-                            }
-                          />
-                          <p className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
-                            {(() => {
-                              const sp = products.find(
-                                (p) => p.id === item.productId,
-                              );
-                              if (!item.quantity)
-                                return "Điền số lượng xuất trước, app sẽ gợi ý phần hao hụt.";
-                              if (sp?.category !== "Lít")
-                                return "Hàng lon không có keg nên không gợi ý được — điền nếu thực tế có hao hụt.";
-                              const keg = item.quantity / LIT_MOI_KEG_GHI;
-                              const goiY =
-                                Math.round(
-                                  keg *
-                                    (LIT_MOI_KEG_THUC - LIT_MOI_KEG_GHI) *
-                                    100,
-                                ) / 100;
-                              return Math.abs(keg - Math.round(keg)) < 0.005
-                                ? `${formatNumber(item.quantity)} lít = ${Math.round(keg)} keg → gợi ý hao hụt ${formatNumber(goiY)} lít (0,6 lít/keg).`
-                                : `${formatNumber(item.quantity)} lít không chia tròn 20 nên không suy ra được số keg — anh tự điền.`;
-                            })()}
-                          </p>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
-                            Ghi thành một dòng hao hụt riêng: tồn kho trừ cả
-                            phần này, còn công nợ và hóa đơn chỉ lấy số lượng ở
-                            trên.
-                          </p>
-                        </div>
-                      )}
+                      {mode === "export" && (() => {
+                        const sp = products.find((p) => p.id === item.productId);
+                        const chuan206 = laDoiTacChuan206(newTransaction.partnerId);
+                        const keg20 = item.quantity / LIT_MOI_KEG_GHI;
+                        const tronKeg20 =
+                          !chuan206 &&
+                          sp?.category === "Lít" &&
+                          item.quantity > 0 &&
+                          Math.abs(keg20 - Math.round(keg20)) < 0.005;
+                        const goiY = tronKeg20
+                          ? Math.round(
+                              Math.round(keg20) *
+                                (LIT_MOI_KEG_THUC - LIT_MOI_KEG_GHI) *
+                                100,
+                            ) / 100
+                          : 0;
+                        return (
+                          <div className="sm:col-span-12">
+                            <div className="flex flex-col sm:flex-row sm:items-end gap-2">
+                              <div className="flex-1">
+                                <Input
+                                  label="Hao hụt — không ghi công nợ"
+                                  type="number"
+                                  placeholder="0"
+                                  value={item.lossQuantity ? item.lossQuantity : ""}
+                                  onChange={(e: any) =>
+                                    updateTransactionItem(index, {
+                                      lossQuantity: Number(e.target.value),
+                                    })
+                                  }
+                                />
+                              </div>
+                              {tronKeg20 && goiY > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateTransactionItem(index, {
+                                      lossQuantity: goiY,
+                                    })
+                                  }
+                                  className="px-3.5 py-3 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-black whitespace-nowrap shrink-0 transition"
+                                >
+                                  Áp dụng chuẩn {formatNumber(goiY)} L (0,6 L/keg)
+                                </button>
+                              )}
+                            </div>
+                            <p
+                              className={cn(
+                                "text-[10px] font-bold mt-1.5 leading-relaxed",
+                                chuan206 ? "text-sky-700" : "text-amber-700",
+                              )}
+                            >
+                              {!item.quantity
+                                ? "Điền số lượng xuất trước, app sẽ kiểm tra chuẩn Keg theo đối tác."
+                                : sp?.category !== "Lít"
+                                  ? "Hàng lon không có keg nên không phát sinh chênh 0,6 L/keg — điền nếu thực tế có hao hụt."
+                                  : chuan206
+                                    ? "Đối tác chuẩn 20,6 L/keg (BNC / FV) — mặc định không trừ bù 0,6 L/keg (chỉ điền nếu có vỡ/hỏng thực tế)."
+                                    : tronKeg20
+                                      ? `ĐVTV chuẩn 20 L/keg: ${formatNumber(item.quantity)} L = ${Math.round(keg20)} keg → chênh định mức ${formatNumber(goiY)} L (0,6 L/keg) so với keg chiết 20,6 L.`
+                                      : `ĐVTV chuẩn 20 L/keg: ${formatNumber(item.quantity)} L không chia tròn 20 (làm tròn lên ${Math.ceil(keg20 - 1e-4)} keg, có keg lẻ) — anh điền hao hụt thực tế nếu có.`}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 mt-1 leading-relaxed">
+                              Ghi thành một dòng hao hụt riêng: tồn kho trừ cả phần
+                              này, còn công nợ và hóa đơn chỉ lấy số lượng ở trên.
+                            </p>
+                          </div>
+                        );
+                      })()}
                       {mode === "export" &&
                         item.productId &&
                         item.quantity > 0 &&
@@ -8384,6 +8473,163 @@ export default function App() {
                                     </td>
                                   </tr>
                                 ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+
+                        {/* BẢNG KIỂM SOÁT GIAO KEG ĐVTV (20L vs 20,6L) & HAO HỤT ĐỊNH MỨC */}
+                        <Card
+                          title="Kiểm soát Giao Keg ĐVTV & Hao hụt định mức (0,6 L/keg)"
+                          noPadding
+                        >
+                          <div className="px-6 py-4 bg-amber-50/50 border-b border-amber-100 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                            <div className="p-3 rounded-xl bg-white border border-slate-200">
+                              <span className="text-[10px] font-black uppercase text-slate-400 block">
+                                Tổng Keg giao ĐVTV (20L)
+                              </span>
+                              <span className="font-mono text-lg font-black text-slate-900 tabular-nums">
+                                {formatNumber(baoCaoKegDVTV.totals.dvtvKegsDelivered)} Keg
+                              </span>
+                              <span className="block text-[10px] font-bold text-slate-500 tabular-nums">
+                                {formatNumber(baoCaoKegDVTV.totals.dvtvLitersDelivered)} Lít xuất
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white border border-amber-200">
+                              <span className="text-[10px] font-black uppercase text-amber-700 block">
+                                Hao hụt định mức (0,6L/keg)
+                              </span>
+                              <span className="font-mono text-lg font-black text-amber-700 tabular-nums">
+                                {formatNumber(baoCaoKegDVTV.totals.dvtvExpectedLoss06)} L
+                              </span>
+                              <span className="block text-[10px] font-bold text-slate-500">
+                                Chênh quy chuẩn ĐVTV vs 20,6L
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-white border border-emerald-200">
+                              <span className="text-[10px] font-black uppercase text-emerald-700 block">
+                                Hao hụt đã ghi sổ (LOSS)
+                              </span>
+                              <span className="font-mono text-lg font-black text-emerald-700 tabular-nums">
+                                {formatNumber(baoCaoKegDVTV.totals.dvtvActualLoss)} L
+                              </span>
+                              <span className="block text-[10px] font-bold text-slate-500">
+                                Toàn kho: {formatNumber(baoCaoKegDVTV.totals.allActualLoss)} L
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-xl bg-[#141A23] text-white">
+                              <span className="text-[10px] font-black uppercase text-amber-400 block">
+                                Chênh chưa ghi bù ĐVTV
+                              </span>
+                              <span
+                                className={cn(
+                                  "font-mono text-lg font-black tabular-nums",
+                                  baoCaoKegDVTV.totals.dvtvUnrecordedGap > 0
+                                    ? "text-rose-300"
+                                    : "text-emerald-300",
+                                )}
+                              >
+                                {baoCaoKegDVTV.totals.dvtvUnrecordedGap > 0 ? "+" : ""}
+                                {formatNumber(baoCaoKegDVTV.totals.dvtvUnrecordedGap)} L
+                              </span>
+                              <span className="block text-[10px] font-bold text-slate-300 tabular-nums">
+                                BNC &amp; FV (20,6L): {formatNumber(baoCaoKegDVTV.totals.bncFvKegsDelivered)} Keg
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                              <thead>
+                                <tr className="bg-slate-50/50">
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-6">
+                                    Đơn vị / Nhóm
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-center">
+                                    Quy chuẩn Keg
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-right">
+                                    Số Lít xuất
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-right">
+                                    Tổng Keg giao
+                                  </th>
+                                  <th className="font-bold text-[10px] text-amber-600 uppercase tracking-widest py-3.5 px-4 text-right">
+                                    Hao hụt chuẩn (0,6L)
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-4 text-right">
+                                    Đã ghi LOSS
+                                  </th>
+                                  <th className="font-bold text-[10px] text-slate-400 uppercase tracking-widest py-3.5 px-6 text-right">
+                                    Chênh lệch
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-xs">
+                                {baoCaoKegDVTV.rows.length === 0 ? (
+                                  <tr>
+                                    <td
+                                      colSpan={7}
+                                      className="py-8 text-center text-slate-400 font-bold"
+                                    >
+                                      Chưa có giao dịch xuất bia Lít/Keg trong kỳ đang xem.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  baoCaoKegDVTV.rows.map((r) => (
+                                    <tr
+                                      key={r.unitId}
+                                      className="hover:bg-slate-50 transition-colors"
+                                    >
+                                      <td className="py-3.5 px-6 font-bold text-slate-900">
+                                        {r.unitName}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center">
+                                        <span
+                                          className={cn(
+                                            "px-2.5 py-0.5 rounded-full text-[10px] font-black",
+                                            r.isStandard206
+                                              ? "bg-sky-100 text-sky-800"
+                                              : "bg-amber-100 text-amber-800",
+                                          )}
+                                        >
+                                          {r.isStandard206
+                                            ? "20,6 L/keg · chuẩn gốc"
+                                            : "20 L/keg · hụt 0,6L"}
+                                        </span>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-700 tabular-nums">
+                                        {formatNumber(r.litersDelivered)} L
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono font-black text-slate-900 tabular-nums">
+                                        {formatNumber(r.kegsDelivered)} Keg
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono font-bold text-amber-700 tabular-nums">
+                                        {r.expectedStandardLoss > 0
+                                          ? `${formatNumber(r.expectedStandardLoss)} L`
+                                          : "—"}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700 tabular-nums">
+                                        {r.actualLossRecorded > 0
+                                          ? `${formatNumber(r.actualLossRecorded)} L`
+                                          : "—"}
+                                      </td>
+                                      <td className="py-3.5 px-6 text-right font-mono font-black tabular-nums">
+                                        {Math.abs(r.unrecordedGap) < 0.01 ? (
+                                          <span className="text-emerald-600">Khớp</span>
+                                        ) : r.unrecordedGap > 0 ? (
+                                          <span className="text-rose-600">
+                                            Thiếu {formatNumber(r.unrecordedGap)} L
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-600">
+                                            +{formatNumber(Math.abs(r.unrecordedGap))} L
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>
@@ -10555,6 +10801,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
             {activeTab === "kho-tong" && daDuocDuyet && quyen.xemKho && (
               <KhoTongNxtPanel
                 products={products}
+                partners={donVi}
                 transactions={transactions}
                 countedTransactions={countedTransactions}
                 slips={slips}

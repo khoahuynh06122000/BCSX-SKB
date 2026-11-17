@@ -17,9 +17,12 @@
 import type {
   ImportSlip,
   KeHoachSanXuat,
+  KiemKeKegLit,
+  Partner,
   Product,
   Transaction,
 } from "../types";
+import { laBoPhanBNC } from "./nhomBNC";
 import { dauCuaLoai } from "./tonKho";
 
 export interface BonBia {
@@ -434,4 +437,298 @@ export function tongHopKeHoachVaThucXuat(
   });
 
   return rows.sort((a, b) => b.plannedQty - a.plannedQty || b.soldOut - a.soldOut);
+}
+
+/* ========================================================================== */
+/* KIỂM SOÁT KEG ĐVTV (20L vs 20,6L = 0,6L/KEG) & VỎ KEG THU VỀ              */
+/* ========================================================================== */
+
+/** Chênh lệch định mức mỗi keg 20L xuất cho ĐVTV (trừ BNC & FV) so với keg chiết 20,6L. */
+export const CHUAN_HAO_HUT_DVTV = 0.6;
+
+/** Tiền tố `shiftOrPeriod` đánh dấu bản ghi kiểm kê VỎ KEG THU VỀ trong bảng `kiem_ke_keg`. */
+export const KEG_THU_VE_PREFIX = "KEG_THU_VE · ";
+
+/**
+ * Xác định đối tác có áp dụng đúng chuẩn 20,6 L/keg (không phát sinh chênh 0,6L/keg) hay không.
+ * Quy định nghiệp vụ SKB: chỉ BNC (AD0103*) và FV (AC0107) lấy chuẩn 20,6 L/keg; các ĐVTV khác lấy 20 L/keg.
+ */
+export function laDoiTacChuan206(partnerId: string, partnerName?: string): boolean {
+  const pid = String(partnerId || "").trim().toUpperCase();
+  const pname = String(partnerName || "").trim().toUpperCase();
+  if (laBoPhanBNC(pid) || pid === "AD0103" || pid === "SKB-BNC") return true;
+  if (pid === "AC0107") return true;
+  if (/^BNC(\s|·|-|$)/.test(pname) || pname === "FV" || pname === "SKB-BNC") return true;
+  return false;
+}
+
+/** Chuẩn lít trên 1 keg của đối tác: 20,6L (BNC/FV/Xưởng) hoặc 20L (ĐVTV khác). */
+export function chuanLitMoiKegCuaDoiTac(partnerId: string, partnerName?: string): number {
+  return laDoiTacChuan206(partnerId, partnerName) ? LIT_KEG_CHUAN : LIT_KEG_DVTV;
+}
+
+/** Quy đổi số lít ra số keg vật lý nguyên, LÀM TRÒN LÊN khi có keg lẻ. */
+export function soKegLamTronLen(liters: number, litMoiKeg: number): number {
+  const n = Number(liters) || 0;
+  const chuan = litMoiKeg > 0 ? litMoiKeg : LIT_KEG_CHUAN;
+  if (n <= 0) return 0;
+  return Math.max(1, Math.ceil(n / chuan - 1e-4));
+}
+
+function maNhomDonVi(
+  partnerId: string,
+  partnerName: string,
+): { id: string; name: string; isStandard206: boolean } {
+  const pid = String(partnerId || "").trim();
+  const pname = String(partnerName || "").trim();
+  if (laBoPhanBNC(pid) || pid.toUpperCase() === "AD0103" || /^BNC(\s|·|-|$)/i.test(pname)) {
+    return { id: "AD0103", name: "BNC (Toàn khu)", isStandard206: true };
+  }
+  const is206 = laDoiTacChuan206(pid, pname);
+  return {
+    id: pid || pname || "KHAC",
+    name: pname || pid || "Khác",
+    isStandard206: is206,
+  };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export interface DongGiaoKegDVTV {
+  unitId: string;
+  unitName: string;
+  isStandard206: boolean;
+  litMoiKeg: number;
+  litersDelivered: number;
+  kegsDelivered: number;
+  expectedStandardLoss: number;
+  actualLossRecorded: number;
+  unrecordedGap: number;
+}
+
+export interface BaoCaoKegHaoHutDVTV {
+  rows: DongGiaoKegDVTV[];
+  totals: {
+    dvtvKegsDelivered: number;
+    dvtvLitersDelivered: number;
+    dvtvExpectedLoss06: number;
+    dvtvActualLoss: number;
+    dvtvUnrecordedGap: number;
+    bncFvKegsDelivered: number;
+    bncFvLitersDelivered: number;
+    bncFvActualLoss: number;
+    allKegsDelivered: number;
+    allLitersDelivered: number;
+    allActualLoss: number;
+  };
+}
+
+/**
+ * Tổng hợp sản lượng giao Keg (làm tròn lên khi có keg lẻ) và đối chiếu hao hụt định mức
+ * 0,6 L/keg cho ĐVTV (trừ BNC & FV dùng chuẩn 20,6 L/keg).
+ */
+export function tongHopGiaoKegVaHaoHutDVTV(input: {
+  transactions: readonly Transaction[];
+  products: readonly Product[];
+}): BaoCaoKegHaoHutDVTV {
+  const prodMap = new Map(input.products.map((p) => [p.id, p]));
+  const map = new Map<string, DongGiaoKegDVTV>();
+
+  const ensure = (unitId: string, unitName: string, isStandard206: boolean) => {
+    let row = map.get(unitId);
+    if (!row) {
+      row = {
+        unitId,
+        unitName,
+        isStandard206,
+        litMoiKeg: isStandard206 ? LIT_KEG_CHUAN : LIT_KEG_DVTV,
+        litersDelivered: 0,
+        kegsDelivered: 0,
+        expectedStandardLoss: 0,
+        actualLossRecorded: 0,
+        unrecordedGap: 0,
+      };
+      map.set(unitId, row);
+    }
+    return row;
+  };
+
+  input.transactions.forEach((t) => {
+    if (t.type !== "OUT" && t.type !== "LOSS" && t.type !== "DAMAGE") return;
+    const p = prodMap.get(t.productId);
+    const cat = p?.category || t.category;
+    if (cat !== "Lít") return;
+    const qty = Number(t.quantity) || 0;
+    if (qty <= 0) return;
+
+    const grp = maNhomDonVi(t.partnerId, t.partnerName);
+    const row = ensure(grp.id, grp.name, grp.isStandard206);
+
+    if (t.type === "OUT") {
+      row.litersDelivered = round2(row.litersDelivered + qty);
+      row.kegsDelivered += soKegLamTronLen(qty, row.litMoiKeg);
+      if (!grp.isStandard206) {
+        // Mỗi keg tròn 20L giao ĐVTV phát sinh định mức 0,6 L so với keg chiết 20,6L.
+        const fullKegs20 = Math.floor(qty / LIT_KEG_DVTV + 1e-4);
+        row.expectedStandardLoss = round2(
+          row.expectedStandardLoss + fullKegs20 * CHUAN_HAO_HUT_DVTV,
+        );
+      }
+    } else {
+      row.actualLossRecorded = round2(row.actualLossRecorded + qty);
+    }
+  });
+
+  const rows = Array.from(map.values()).map((r) => ({
+    ...r,
+    unrecordedGap: round2(r.expectedStandardLoss - r.actualLossRecorded),
+  }));
+
+  rows.sort(
+    (a, b) =>
+      Number(a.isStandard206) - Number(b.isStandard206) ||
+      b.kegsDelivered - a.kegsDelivered ||
+      a.unitName.localeCompare(b.unitName, "vi"),
+  );
+
+  const totals = {
+    dvtvKegsDelivered: 0,
+    dvtvLitersDelivered: 0,
+    dvtvExpectedLoss06: 0,
+    dvtvActualLoss: 0,
+    dvtvUnrecordedGap: 0,
+    bncFvKegsDelivered: 0,
+    bncFvLitersDelivered: 0,
+    bncFvActualLoss: 0,
+    allKegsDelivered: 0,
+    allLitersDelivered: 0,
+    allActualLoss: 0,
+  };
+
+  rows.forEach((r) => {
+    totals.allKegsDelivered += r.kegsDelivered;
+    totals.allLitersDelivered = round2(totals.allLitersDelivered + r.litersDelivered);
+    totals.allActualLoss = round2(totals.allActualLoss + r.actualLossRecorded);
+    if (r.isStandard206) {
+      totals.bncFvKegsDelivered += r.kegsDelivered;
+      totals.bncFvLitersDelivered = round2(totals.bncFvLitersDelivered + r.litersDelivered);
+      totals.bncFvActualLoss = round2(totals.bncFvActualLoss + r.actualLossRecorded);
+    } else {
+      totals.dvtvKegsDelivered += r.kegsDelivered;
+      totals.dvtvLitersDelivered = round2(totals.dvtvLitersDelivered + r.litersDelivered);
+      totals.dvtvExpectedLoss06 = round2(totals.dvtvExpectedLoss06 + r.expectedStandardLoss);
+      totals.dvtvActualLoss = round2(totals.dvtvActualLoss + r.actualLossRecorded);
+    }
+  });
+  totals.dvtvUnrecordedGap = round2(totals.dvtvExpectedLoss06 - totals.dvtvActualLoss);
+
+  return { rows, totals };
+}
+
+export interface DongVoKegThuVe {
+  unitId: string;
+  unitName: string;
+  isStandard206: boolean;
+  kegsDelivered: number;
+  kegsReturned: number;
+  kegsOutstanding: number;
+}
+
+export interface BaoCaoVoKegThuVe {
+  theoDonVi: DongVoKegThuVe[];
+  tongDaGiao: number;
+  tongDaThuVe: number;
+  tongThuVeChungTaiKho: number;
+  dangConNgoaiThiTruong: number;
+  lichSuThuVe: KiemKeKegLit[];
+}
+
+export const MA_KHO_TONG_THU_VE = "TONG_KHO";
+
+export function laBanGhiThuVeVoKeg(r: Pick<KiemKeKegLit, "shiftOrPeriod">): boolean {
+  return String(r.shiftOrPeriod || "").startsWith(KEG_THU_VE_PREFIX);
+}
+
+/**
+ * Tổng hợp số Keg đã giao vs số Vỏ Keg đã kiểm kê thu về tại Kho tổng theo từng Đơn vị.
+ */
+export function tongHopVoKegThuVe(input: {
+  transactions: readonly Transaction[];
+  products: readonly Product[];
+  partners: readonly Partner[];
+  kiemKeKeg: readonly KiemKeKegLit[];
+}): BaoCaoVoKegThuVe {
+  const giao = tongHopGiaoKegVaHaoHutDVTV({
+    transactions: input.transactions,
+    products: input.products,
+  });
+
+  const map = new Map<string, DongVoKegThuVe>();
+  const ensure = (unitId: string, unitName: string, isStandard206: boolean) => {
+    let r = map.get(unitId);
+    if (!r) {
+      r = {
+        unitId,
+        unitName,
+        isStandard206,
+        kegsDelivered: 0,
+        kegsReturned: 0,
+        kegsOutstanding: 0,
+      };
+      map.set(unitId, r);
+    }
+    return r;
+  };
+
+  giao.rows.forEach((d) => {
+    const row = ensure(d.unitId, d.unitName, d.isStandard206);
+    row.kegsDelivered += d.kegsDelivered;
+  });
+
+  const lichSuThuVe = input.kiemKeKeg
+    .filter((r) => r.location === "KHO_TONG" && laBanGhiThuVeVoKeg(r))
+    .sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
+
+  let tongThuVeChungTaiKho = 0;
+  let tongDaThuVe = 0;
+
+  lichSuThuVe.forEach((rec) => {
+    const first = rec.items?.[0];
+    const retQty = Number(rec.totalKegs ?? first?.quantity) || 0;
+    if (retQty <= 0) return;
+    tongDaThuVe = round2(tongDaThuVe + retQty);
+
+    const rawId = String(first?.productId || "").trim();
+    if (!rawId || rawId === MA_KHO_TONG_THU_VE) {
+      tongThuVeChungTaiKho = round2(tongThuVeChungTaiKho + retQty);
+      return;
+    }
+
+    const partnerObj = input.partners.find((p) => p.id === rawId);
+    const grp = maNhomDonVi(rawId, partnerObj?.name || first?.productName || rawId);
+    const row = ensure(grp.id, grp.name, grp.isStandard206);
+    row.kegsReturned = round2(row.kegsReturned + retQty);
+  });
+
+  const theoDonVi = Array.from(map.values())
+    .map((r) => ({
+      ...r,
+      kegsOutstanding: round2(r.kegsDelivered - r.kegsReturned),
+    }))
+    .sort(
+      (a, b) =>
+        b.kegsOutstanding - a.kegsOutstanding ||
+        b.kegsDelivered - a.kegsDelivered ||
+        a.unitName.localeCompare(b.unitName, "vi"),
+    );
+
+  const tongDaGiao = giao.totals.allKegsDelivered;
+  return {
+    theoDonVi,
+    tongDaGiao,
+    tongDaThuVe,
+    tongThuVeChungTaiKho,
+    dangConNgoaiThiTruong: round2(tongDaGiao - tongDaThuVe),
+    lichSuThuVe,
+  };
 }

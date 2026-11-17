@@ -11,6 +11,7 @@ import type {
   ImportSlip,
   KiemKeKegItem,
   KiemKeKegLit,
+  Partner,
   Product,
   Transaction,
 } from "../types";
@@ -18,6 +19,7 @@ import type { AnhChungTu } from "../anh/moHinh";
 import type { TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
+import KiemKeVoKegThuVeSection from "./KiemKeVoKegThuVeSection";
 import { dungBangTonKy } from "../lib/tonKho";
 import { quyDoiHienTrang, tinhTonTheoLo } from "../lib/loBia";
 import { pendingSlipTransactions } from "../lib/slip";
@@ -26,6 +28,7 @@ import ONgay from "./ONgay";
 
 interface Props {
   products: Product[];
+  partners: Partner[];
   transactions: Transaction[];
   countedTransactions: Transaction[];
   slips: ImportSlip[];
@@ -54,6 +57,7 @@ interface Props {
 
 export default function KhoTongNxtPanel({
   products,
+  partners,
   transactions,
   countedTransactions,
   slips,
@@ -70,7 +74,9 @@ export default function KhoTongNxtPanel({
   onDiToiXuatKho,
   onLuuKiemKeKegLit,
 }: Props) {
-  const [subTab, setSubTab] = useState<"nxt" | "nhan-bia" | "kiem-ke">("nxt");
+  const [subTab, setSubTab] = useState<
+    "nxt" | "nhan-bia" | "kiem-ke" | "thu-ve-keg"
+  >("nxt");
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
   const [tuKhoa, setTuKhoa] = useState("");
@@ -201,6 +207,18 @@ export default function KhoTongNxtPanel({
             )}
           >
             3. Kiểm kê Keg &amp; Lít
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab("thu-ve-keg")}
+            className={cn(
+              "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
+              subTab === "thu-ve-keg"
+                ? "bg-[#141A23] text-amber-300 shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-white/80",
+            )}
+          >
+            4. Kiểm kê Vỏ Keg thu về
           </button>
         </div>
       </div>
@@ -537,6 +555,22 @@ export default function KhoTongNxtPanel({
             records={kiemKeKeg}
             anhTheoChungTu={anhTheoChungTu}
             bookStockByProduct={bookStockByProduct}
+            canWrite={canWriteInventory}
+            busy={busy}
+            onSave={onLuuKiemKeKegLit}
+          />
+        </div>
+      )}
+
+      {/* ================= TAB 4: KIỂM KÊ VỎ KEG THU VỀ ================= */}
+      {subTab === "thu-ve-keg" && (
+        <div className="anim-view-enter">
+          <KiemKeVoKegThuVeSection
+            transactions={transactions}
+            products={products}
+            partners={partners}
+            kiemKeKeg={kiemKeKeg}
+            anhTheoChungTu={anhTheoChungTu}
             canWrite={canWriteInventory}
             busy={busy}
             onSave={onLuuKiemKeKegLit}

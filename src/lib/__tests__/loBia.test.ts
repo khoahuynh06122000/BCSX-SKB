@@ -1,11 +1,17 @@
-import type { ImportSlip, KeHoachSanXuat, Product, Transaction } from "../../types";
+import type { ImportSlip, KeHoachSanXuat, KiemKeKegLit, Partner, Product, Transaction } from "../../types";
 import {
+  chuanLitMoiKegCuaDoiTac,
   goiYLoFIFO,
+  KEG_THU_VE_PREFIX,
+  laDoiTacChuan206,
   MA_LO_MAC_DINH,
   quyDoiHienTrang,
+  soKegLamTronLen,
   taoTokenChuKy,
   tinhTonTheoLo,
+  tongHopGiaoKegVaHaoHutDVTV,
   tongHopKeHoachVaThucXuat,
+  tongHopVoKegThuVe,
   truyXuatLo,
 } from "../loBia";
 
@@ -88,6 +94,59 @@ eq("xuong da giao khong tinh phieu tra lai (200+100=300)", khSummary[0].sentFrom
 eq("kho da nhan 2 rao chi tinh PN-01 (200)", khSummary[0].receivedByWarehouse, 200);
 eq("thuc xuat ban = 120", khSummary[0].soldOut, 120);
 eq("chenh lech vs KH = -200", khSummary[0].varianceVsPlan, -200);
+
+console.log("\n6. Chuan Keg 20,6L (BNC & FV) vs 20L DVTV (hao hut 0,6L/keg) & Vo Keg thu ve");
+eq("BNC la chuan 20,6L", [laDoiTacChuan206("AD0103-1901", "BNC · 1901"), chuanLitMoiKegCuaDoiTac("AD0103-1901")], [true, 20.6]);
+eq("FV la chuan 20,6L", [laDoiTacChuan206("AC0107", "FV"), chuanLitMoiKegCuaDoiTac("AC0107")], [true, 20.6]);
+eq("BNG/OHL la DVTV 20L", [laDoiTacChuan206("AC0118", "BNG"), chuanLitMoiKegCuaDoiTac("AC0118")], [false, 20]);
+eq("soKegLamTronLen 195L / 20L = 10 keg", soKegLamTronLen(195, 20), 10);
+eq("soKegLamTronLen 41.2L / 20.6L = 2 keg", soKegLamTronLen(41.2, 20.6), 2);
+
+const partnersDVTV: Partner[] = [
+  { id: "AD0103-1901", sapCode: "AD0103", name: "BNC · 1901", type: "AGENT" },
+  { id: "AC0107", sapCode: "AC0107", name: "FV", type: "AGENT" },
+  { id: "AC0118", sapCode: "AC0118", name: "BNG", type: "AGENT" },
+  { id: "AC0128", sapCode: "AC0128", name: "OHL", type: "AGENT" },
+];
+const dvtvTxs: Transaction[] = [
+  { id: "d1", date: "2026-11-10T08:00:00Z", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 100, partnerId: "AC0118", partnerName: "BNG", createdBy: "b" }, // 5 keg * 0.6 = 3L
+  { id: "d2", date: "2026-11-10T08:00:00Z", type: "LOSS", productId: "p1", productName: "GB", category: "Lít", quantity: 1.8, partnerId: "AC0118", partnerName: "BNG", createdBy: "b" }, // thieu 1.2L
+  { id: "d3", date: "2026-11-11T08:00:00Z", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 40, partnerId: "AC0128", partnerName: "OHL", createdBy: "b" }, // 2 keg * 0.6 = 1.2L
+  { id: "d4", date: "2026-11-11T08:00:00Z", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 41.2, partnerId: "AD0103-1901", partnerName: "BNC · 1901", createdBy: "b" }, // 2 keg 20.6L -> 0 hao hut chuan
+  { id: "d5", date: "2026-11-11T08:00:00Z", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 20.6, partnerId: "AC0107", partnerName: "FV", createdBy: "b" }, // 1 keg 20.6L -> 0 hao hut chuan
+  { id: "d6", date: "2026-11-11T08:00:00Z", type: "OUT", productId: "p4", productName: "Lon", category: "Lon", quantity: 48, partnerId: "AC0118", partnerName: "BNG", createdBy: "b" }, // Lon khong tinh vao keg
+];
+const kqDvtv = tongHopGiaoKegVaHaoHutDVTV({ transactions: dvtvTxs, products });
+eq("DVTV tong keg = 7 (BNG 5 + OHL 2)", kqDvtv.totals.dvtvKegsDelivered, 7);
+eq("DVTV hao hut chuan = 4.2L", kqDvtv.totals.dvtvExpectedLoss06, 4.2);
+eq("DVTV da ghi LOSS = 1.8L", kqDvtv.totals.dvtvActualLoss, 1.8);
+eq("DVTV chua ghi bu = 2.4L", kqDvtv.totals.dvtvUnrecordedGap, 2.4);
+eq("BNC + FV tong keg = 3", kqDvtv.totals.bncFvKegsDelivered, 3);
+eq("All tong keg = 10", kqDvtv.totals.allKegsDelivered, 10);
+
+const thuVeRecords: KiemKeKegLit[] = [
+  {
+    id: "tv1",
+    date: "2026-11-12",
+    shiftOrPeriod: `${KEG_THU_VE_PREFIX}BNG`,
+    location: "KHO_TONG",
+    items: [{ productId: "AC0118", productName: "BNG", unit: "Keg", quantity: 3, liters: 0, bookQuantity: 5 }],
+    totalKegs: 3,
+    totalLiters: 0,
+    createdBy: "kho",
+    createdAt: "2026-11-12T17:00:00Z",
+  },
+];
+const kqVo = tongHopVoKegThuVe({
+  transactions: dvtvTxs,
+  products,
+  partners: partnersDVTV,
+  kiemKeKeg: thuVeRecords,
+});
+eq("Tong keg da giao = 10", kqVo.tongDaGiao, 10);
+eq("Tong vo da thu ve = 3", kqVo.tongDaThuVe, 3);
+eq("Con ngoai thi truong = 7", kqVo.dangConNgoaiThiTruong, 7);
+eq("BNG con no vo = 2", kqVo.theoDonVi.find((r) => r.unitId === "AC0118")?.kegsOutstanding, 2);
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);
