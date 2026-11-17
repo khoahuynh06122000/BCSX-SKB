@@ -18,11 +18,15 @@ export type PinStageState = "idle" | "verify" | "ok" | "sai";
 
 interface Props {
   email: string;
+  /** Tên hiển thị của chủ tài khoản để chào mừng khi mở khóa PIN thành công. */
+  displayName?: string;
   mode: PinScreenMode;
   isResetRecovery?: boolean;
   /** True khi người dùng vừa nhập đúng PIN tạm do quản trị cấp và cần đặt PIN cá nhân mới. */
   isTempChange?: boolean;
   pinStage: PinStageState;
+  /** Hiệu ứng thoát mờ nhẹ ở cuối giây chào mừng trước khi vào app chính. */
+  pinLeaving?: boolean;
   pinBusy: boolean;
   pinError: string;
   failsRemaining?: number;
@@ -57,10 +61,12 @@ const vibrateError = () => {
  */
 export default function ManHinhPin({
   email,
+  displayName,
   mode,
   isResetRecovery = false,
   isTempChange = false,
   pinStage,
+  pinLeaving = false,
   pinBusy,
   pinError,
   failsRemaining,
@@ -253,9 +259,9 @@ export default function ManHinhPin({
                 : "Đặt 6 chữ số bảo vệ cho tài khoản của anh/chị"
             : "Nhập lại đúng 6 chữ số vừa đặt"
           : pinStage === "verify"
-            ? "Đang kiểm tra mã PIN..."
+            ? "Đang xác thực & chuẩn bị dữ liệu..."
             : pinStage === "ok"
-              ? "Mở khóa thành công"
+              ? "Dữ liệu làm việc đã sẵn sàng"
               : typeof failsRemaining === "number" && failsRemaining > 0 && failsRemaining < 5
                 ? `Còn ${failsRemaining} lần thử trước khi khóa PIN`
                 : "Mỗi lần mở hoặc tải lại trang đều cần nhập PIN";
@@ -271,7 +277,7 @@ export default function ManHinhPin({
           <div className="dn-ring dn-ring-2" />
         </div>
 
-        <div className={`dn-khung-ao dn-anim-khung relative ${pinStage === "ok" ? "dn-leaving" : ""}`}>
+        <div className={`dn-khung-ao dn-anim-khung relative ${pinLeaving ? "dn-leaving" : ""}`}>
           <div aria-hidden="true" className="dn-vien-toa" />
           <div aria-hidden="true" className="dn-vien-chay" />
 
@@ -386,6 +392,14 @@ export default function ManHinhPin({
                       />
                     </svg>
                   </div>
+                  {pinStage === "ok" && (
+                    <div className="pin-welcome" aria-live="polite">
+                      <span className="pin-welcome-label">Xin chào</span>
+                      <span className="pin-welcome-name">
+                        {displayName?.trim() || email.split("@")[0] || "bạn"}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Thông báo lỗi hoặc quay lại bước 1 */}

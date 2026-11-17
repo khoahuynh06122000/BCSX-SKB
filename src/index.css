@@ -899,7 +899,7 @@
 
 .pin-stage {
   position: relative;
-  height: 98px;
+  height: 108px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1038,12 +1038,67 @@
 
 .pin-stage.ok .pin-ok {
   opacity: 1;
-  transform: scale(1);
+  transform: translateY(-24px) scale(0.84);
 }
 
 .pin-ok-path {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
+}
+
+.pin-welcome {
+  position: absolute;
+  inset-inline: 8px;
+  bottom: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pin-welcome-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(254, 243, 199, 0.72);
+}
+
+.pin-welcome-name {
+  font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-bottom: 2px;
+  background: linear-gradient(90deg, #fef9c3 0%, #fbbf24 50%, #fde047 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.38));
+}
+
+.pin-stage.ok .pin-welcome {
+  animation: pinWelcomeIn 0.52s cubic-bezier(0.16, 1, 0.3, 1) 0.12s forwards;
+}
+
+@keyframes pinWelcomeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
 }
 
 /* Ban phim so 3x4 kieu kinh bam em tay (min-height >= 48px chuan cam ung) */

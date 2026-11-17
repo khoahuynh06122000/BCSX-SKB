@@ -678,6 +678,8 @@ export default function App() {
   };
 
   const [pinUnlocked, setPinUnlocked] = useState(false);
+  const [pinPreloadData, setPinPreloadData] = useState(false);
+  const [pinLeaving, setPinLeaving] = useState(false);
   const pinUnlockedRef = useRef(false);
   useEffect(() => {
     pinUnlockedRef.current = pinUnlocked;
@@ -731,6 +733,8 @@ export default function App() {
       clearLegacyPinStorage();
       pinUnlockedRef.current = false;
       setPinUnlocked(false);
+      setPinPreloadData(false);
+      setPinLeaving(false);
       setTempPinChangeUid(null);
       setPinStage("idle");
       setPinError("");
@@ -873,9 +877,10 @@ export default function App() {
     };
   }, []);
 
-  // FIRESTORE SYNC — chỉ tải dữ liệu nghiệp vụ sau khi ĐÃ ĐƯỢC DUYỆT và MỞ KHÓA PIN
+  // FIRESTORE SYNC — chỉ tải dữ liệu nghiệp vụ sau khi xác thực PIN hợp lệ (preload trong nhịp 2s mở khóa)
+  const canSyncData = Boolean(user) && userRole !== "PENDING" && (pinUnlocked || pinPreloadData);
   useEffect(() => {
-    if (!user || userRole === "PENDING" || !pinUnlocked) return;
+    if (!canSyncData) return;
 
     // Test connection as required by security guidelines
     const testConnection = async () => {
@@ -1175,7 +1180,7 @@ export default function App() {
       unsubKiemKeBon();
       unsubKiemKeKeg();
     };
-  }, [user, userRole, pinUnlocked]);
+  }, [user, userRole, canSyncData]);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState("");
@@ -1194,10 +1199,29 @@ export default function App() {
   const unlockSession = () => {
     clearLegacyPinStorage();
     manualGoogleLoginRef.current = false;
+    setPinLeaving(false);
     pinUnlockedRef.current = true;
     setPinUnlocked(true);
     setPinStage("idle");
     setPinError("");
+  };
+
+  /**
+   * Nhịp mở khóa 2 giây chuẩn theo góp ý của anh Khoa:
+   *   - ~1s đầu (pinStage = "verify"): vòng 6 chấm xoay tròn + bắt đầu tải nền toàn bộ data vào app
+   *   - ~1s sau (pinStage = "ok"): hiện tích xanh + lời chào "Xin chào <Tên chủ user>" rồi trượt vào app đã sẵn sàng data
+   */
+  const chaoVaVaoApp = async (startedAt: number) => {
+    setPinPreloadData(true);
+    const conLaiVerify = Math.max(0, 1000 - (Date.now() - startedAt));
+    if (conLaiVerify > 0) {
+      await choMotion(conLaiVerify);
+    }
+    setPinStage("ok");
+    await choMotion(740);
+    setPinLeaving(true);
+    await choMotion(260);
+    unlockSession();
   };
 
   /** Kiểm tra kết nối máy chủ thực khi mở khóa PIN (chỉ dùng getDocFromServer). */
@@ -1311,12 +1335,10 @@ export default function App() {
 
     setPinBusy(true);
     setPinStage("verify");
+    const tStart = Date.now();
     try {
       const pinSalt = generatePinSalt();
-      const [pinHash] = await Promise.all([
-        hashPin(pin, uid, pinSalt),
-        choMotion(360),
-      ]);
+      const pinHash = await hashPin(pin, uid, pinSalt);
       const pinUpdatedAt = new Date().toISOString();
       await updateDoc(doc(db, "users", uid), {
         pinHash,
@@ -1342,10 +1364,8 @@ export default function App() {
             }
           : p,
       );
-      setPinStage("ok");
-      await choMotion(480);
-      unlockSession();
       showNotification("Đã thiết lập mã PIN bảo vệ");
+      await chaoVaVaoApp(tStart);
     } catch (e: any) {
       if (laLoiMatMang(e)) {
         setPinOffline(true);
@@ -1388,6 +1408,7 @@ export default function App() {
     setTempPinChangeUid(null);
     setPinBusy(true);
     setPinStage("verify");
+    const tStart = Date.now();
     try {
       const ref = doc(db, "users", uid);
       // Bắt buộc đọc máy chủ để đồng bộ trạng thái khóa / số lần sai / hash mới nhất
@@ -1415,10 +1436,7 @@ export default function App() {
         return;
       }
 
-      const [ok] = await Promise.all([
-        verifyPin(pin, uid, stored, serverProfile?.pinSalt),
-        choMotion(360),
-      ]);
+      const ok = await verifyPin(pin, uid, stored, serverProfile?.pinSalt);
 
       if (ok) {
         const currentFail = Number(serverProfile?.pinFailCount || 0);
@@ -1433,15 +1451,15 @@ export default function App() {
         if (serverProfile?.pinMustChange) {
           // Nhân viên vừa mở bằng mã PIN tạm do Chủ sở hữu cấp -> yêu cầu tự đặt PIN cá nhân mới
           setPinStage("ok");
-          await choMotion(420);
+          await choMotion(600);
           setPinStage("idle");
           setTempPinChangeUid(uid);
           return;
         }
-        setPinStage("ok");
-        await choMotion(480);
-        unlockSession();
+        await chaoVaVaoApp(tStart);
       } else {
+        const minWrongSpin = Math.max(0, 320 - (Date.now() - tStart));
+        if (minWrongSpin > 0) await choMotion(minWrongSpin);
         const prevFail = Math.max(0, Number(serverProfile?.pinFailCount || 0));
         const nextFail = Math.min(PIN_MAX_ATTEMPTS, prevFail + 1);
         const shouldLock = nextFail >= PIN_MAX_ATTEMPTS;
@@ -1627,6 +1645,8 @@ export default function App() {
     clearLegacyPinStorage();
     pinUnlockedRef.current = false;
     setPinUnlocked(false);
+    setPinPreloadData(false);
+    setPinLeaving(false);
     setPinOffline(false);
     setPinOfflineHint("");
     setFreshResetUid(null);
@@ -6785,10 +6805,15 @@ export default function App() {
     return (
       <ManHinhPin
         email={currentUserProfile?.email || user || ""}
+        displayName={
+          currentUserProfile?.name ||
+          (user && !user.includes("@") ? user : "")
+        }
         mode={pinMode}
         isResetRecovery={canRecoverReset}
         isTempChange={isTempChange}
         pinStage={pinStage}
+        pinLeaving={pinLeaving}
         pinBusy={pinBusy}
         pinError={pinError}
         failsRemaining={failsRemaining}
