@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type CSSProperties, type FormEvent, useState } from "react";
 import { Check, KeyRound, Lock } from "lucide-react";
 import type { UserProfile } from "../types";
 import {
@@ -138,10 +138,13 @@ export default function DoiPinCaNhanCard({ profile, onSaveNewPin }: Props) {
               </label>
               <input
                 id="self-pin-old"
-                type="password"
+                type="text"
                 inputMode="numeric"
                 autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={6}
+                style={{ WebkitTextSecurity: "disc" } as CSSProperties}
                 value={currentPin}
                 onChange={(e) => {
                   setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 6));
@@ -163,10 +166,13 @@ export default function DoiPinCaNhanCard({ profile, onSaveNewPin }: Props) {
               </label>
               <input
                 id="self-pin-new"
-                type="password"
+                type="text"
                 inputMode="numeric"
                 autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={6}
+                style={{ WebkitTextSecurity: "disc" } as CSSProperties}
                 value={newPin}
                 onChange={(e) => {
                   setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6));
@@ -185,10 +191,13 @@ export default function DoiPinCaNhanCard({ profile, onSaveNewPin }: Props) {
               </label>
               <input
                 id="self-pin-confirm"
-                type="password"
+                type="text"
                 inputMode="numeric"
                 autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 maxLength={6}
+                style={{ WebkitTextSecurity: "disc" } as CSSProperties}
                 value={confirmPin}
                 onChange={(e) => {
                   setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 6));

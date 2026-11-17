@@ -72,7 +72,7 @@ export default function ManHinhPin({
   onRetryNetwork,
   onLogout,
 }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const valueRef = useRef("");
   const [step, setStep] = useState<1 | 2>(1);
   const [firstPin, setFirstPin] = useState("");
@@ -118,17 +118,21 @@ export default function ManHinhPin({
     }
   }, [pinStage, needsSetup, step]);
 
-  // Hỗ trợ gõ trực tiếp trên bàn phím máy tính kể cả sau khi bấm nút trên màn hình
+  // Hỗ trợ gõ trực tiếp trên bàn phím máy tính (0–9, Backspace, Escape) và dán 6 số PIN tạm.
+  // KHÔNG dùng <form>/<input type="password"> ẩn để tránh Chrome/Edge tự điền mật khẩu đã lưu!
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (locked) return;
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" && e.target === inputRef.current) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       if (/^\d$/.test(e.key)) {
         e.preventDefault();
-        handleDigitsChange(valueRef.current + e.key);
+        if (valueRef.current.length < 6) {
+          handleDigitsChange(valueRef.current + e.key);
+        }
       } else if (e.key === "Backspace") {
         e.preventDefault();
         handleDigitsChange(valueRef.current.slice(0, -1));
@@ -137,8 +141,20 @@ export default function ManHinhPin({
         handleDigitsChange("");
       }
     };
+    const onPaste = (e: ClipboardEvent) => {
+      if (locked) return;
+      const pasted = (e.clipboardData?.getData("text") || "").replace(/\D/g, "");
+      if (pasted.length === 6) {
+        e.preventDefault();
+        handleDigitsChange(pasted);
+      }
+    };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("paste", onPaste);
+    };
   });
 
   const triggerLocalError = (msg: string) => {
@@ -325,38 +341,16 @@ export default function ManHinhPin({
                 </p>
               </div>
             ) : (
-              /* Sân khấu 6 chấm tròn chuyển quỹ đạo xoay khi xác thực */
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (value.length === 6 && !locked) submitCompletedPin(value);
-                }}
-                className="mt-2"
-              >
-                <label htmlFor="skb-pin-input" className="sr-only">
-                  {titleText} (6 chữ số)
-                </label>
-                <input
-                  ref={inputRef}
-                  id="skb-pin-input"
-                  name="pin"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  enterKeyHint="done"
-                  maxLength={6}
-                  autoFocus
-                  disabled={locked}
-                  aria-invalid={displayError ? "true" : "false"}
-                  aria-describedby={displayError ? errorId : undefined}
-                  value={value}
-                  onChange={(e) => handleDigitsChange(e.target.value)}
-                  className="sr-only"
-                />
-
+              /* Sân khấu 6 chấm tròn chuyển quỹ đạo xoay + bàn phím số kính chạm */
+              <div className="mt-2">
                 <div
-                  onClick={() => inputRef.current?.focus()}
-                  className={`pin-stage cursor-text ${effectiveStage === "idle" ? "" : effectiveStage}`}
+                  ref={stageRef}
+                  tabIndex={locked ? -1 : 0}
+                  role="group"
+                  aria-label={`${titleText}: đã nhập ${value.length} trên 6 chữ số`}
+                  aria-describedby={displayError ? errorId : undefined}
+                  onClick={() => stageRef.current?.focus()}
+                  className={`pin-stage outline-none ${effectiveStage === "idle" ? "" : effectiveStage}`}
                 >
                   <div aria-hidden="true" className="pin-ring" />
                   <div aria-hidden="true" className="pin-core" />
@@ -461,7 +455,7 @@ export default function ManHinhPin({
                     );
                   })}
                 </div>
-              </form>
+              </div>
             )}
 
             {/* Nút cấp lại khi quên PIN & đổi tài khoản Google */}
