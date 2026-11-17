@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useRef } from "react";
-import { AlertCircle, ArrowRight, Loader2, Lock, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, KeyRound, Loader2, Lock, ShieldCheck } from "lucide-react";
 
 /**
  * MÀN HÌNH ĐĂNG NHẬP
@@ -27,6 +27,8 @@ interface Props {
   onLogin: () => void;
   isAuthenticating: boolean;
   authError: string;
+  /** Email đang ở luồng Quên PIN / mở khóa PIN để hướng dẫn đăng nhập lại. */
+  resetPendingEmail?: string | null;
   /** Hiệu ứng mờ thoát nhẹ khi chuyển sang bước PIN / App */
   isLeaving?: boolean;
   /** Mã commit của bản đang chạy, để đối chiếu khi có sự cố. */
@@ -68,6 +70,7 @@ export default function ManHinhDangNhap({
   onLogin,
   isAuthenticating,
   authError,
+  resetPendingEmail,
   isLeaving = false,
   maBuild,
 }: Props) {
@@ -439,6 +442,19 @@ export default function ManHinhDangNhap({
               >
                 Nhập xuất tồn, duyệt phiếu 2 rào và truy xuất lô bia theo thời gian thực.
               </p>
+
+              {resetPendingEmail !== undefined && resetPendingEmail !== null && (
+                <div
+                  role="status"
+                  className="mt-3.5 flex gap-2.5 rounded-2xl border border-amber-300/35 bg-amber-400/15 p-3 text-left"
+                >
+                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-[#f7c948]" aria-hidden="true" />
+                  <p className="text-xs font-semibold leading-relaxed text-amber-50">
+                    Đang cấp lại mã PIN
+                    {resetPendingEmail ? ` cho ${resetPendingEmail}` : ""}. Đăng nhập lại bằng Google bên dưới để đặt 6 chữ số PIN mới.
+                  </p>
+                </div>
+              )}
 
               {authError && (
                 <div

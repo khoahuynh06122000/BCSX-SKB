@@ -3,6 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  reauthenticateWithPopup,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -165,6 +166,7 @@ export {
   runTransaction,
   writeBatch,
   signInWithPopup,
+  reauthenticateWithPopup,
   signOut,
   onAuthStateChanged,
 };

@@ -70,6 +70,8 @@ export interface UserProfile {
   pinFailCount?: number;
   /** True khi nhập sai PIN 5 lần — chỉ mở khóa sau khi đăng nhập lại Google hoặc chủ sở hữu đặt lại. */
   pinLocked?: boolean;
+  /** True khi vừa được chủ sở hữu cấp mã PIN tạm — bắt buộc đổi PIN mới sau khi mở khóa. */
+  pinMustChange?: boolean;
 }
 
 export interface Product {

@@ -5,6 +5,7 @@ import {
   PIN_ITERATIONS,
   PIN_LEGACY_ITERATIONS,
   generatePinSalt,
+  generateStrongTempPin,
   hashPin,
   isValidPinFormat,
   isWeakPin,
@@ -72,6 +73,15 @@ async function main() {
   ne("hash cu khac hash moi co muoi", legacyHash, await hashPin("482910", uid, s1));
   eq("xac minh hash cu khong salt", await verifyPin("482910", uid, legacyHash, null), true);
   eq("xac minh hash cu sai PIN", await verifyPin("482911", uid, legacyHash, null), false);
+
+  console.log("\n5. Sinh ma PIN tam ngau nhien manh (cap lai PIN)");
+  let weakGenerated = 0;
+  for (let i = 0; i < 100; i++) {
+    const tempPin = generateStrongTempPin();
+    if (!isValidPinFormat(tempPin) || isWeakPin(tempPin)) weakGenerated++;
+  }
+  eq("100 lan sinh PIN tam deu hop le va khong de doan", weakGenerated, 0);
+  ne("hai lan sinh PIN tam lien tiep khong giong nhau", generateStrongTempPin(), generateStrongTempPin());
 
   console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
   process.exit(fail > 0 ? 1 : 0);

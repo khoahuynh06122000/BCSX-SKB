@@ -89,6 +89,16 @@ export function isWeakPin(pin: string): boolean {
   return '0123456789'.includes(pin) || '9876543210'.includes(pin);
 }
 
+/** Sinh mã PIN tạm 6 chữ số ngẫu nhiên an toàn (không lặp hoặc liên tiếp). */
+export function generateStrongTempPin(): string {
+  const buf = new Uint32Array(1);
+  for (;;) {
+    globalThis.crypto.getRandomValues(buf);
+    const candidate = String(buf[0] % 1_000_000).padStart(6, '0');
+    if (!isWeakPin(candidate)) return candidate;
+  }
+}
+
 /**
  * Tên khóa cũ từng lưu trạng thái mở khóa theo tab.
  * Từ bản siết bảo mật: LUÔN xóa khóa này mỗi lần tải trang — KHÔNG tự mở khóa sau F5.
@@ -110,29 +120,37 @@ export function clearLegacyPinStorage(): void {
   }
 }
 
-export function savePinResetIntent(uid: string): void {
+export function savePinResetIntent(uid: string, email?: string): void {
   try {
     globalThis.localStorage?.setItem(
       PIN_RESET_INTENT_KEY,
-      JSON.stringify({ uid, ts: Date.now() }),
+      JSON.stringify({ uid, email: email || '', ts: Date.now() }),
     );
   } catch {
     // Bo qua neu trinh duyet chan storage
   }
 }
 
-export function hasPinResetIntentFor(uid: string, now = Date.now()): boolean {
+export function getActivePinResetHint(now = Date.now()): { uid: string; email: string } | null {
   try {
     const raw = globalThis.localStorage?.getItem(PIN_RESET_INTENT_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as { uid?: string; ts?: number };
-    if (!parsed || parsed.uid !== uid || typeof parsed.ts !== 'number') {
-      return false;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { uid?: string; email?: string; ts?: number };
+    if (!parsed || typeof parsed.uid !== 'string' || typeof parsed.ts !== 'number') {
+      return null;
     }
-    return now - parsed.ts >= 0 && now - parsed.ts <= PIN_RESET_INTENT_TTL_MS;
+    if (now - parsed.ts < 0 || now - parsed.ts > PIN_RESET_INTENT_TTL_MS) {
+      return null;
+    }
+    return { uid: parsed.uid, email: parsed.email || '' };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function hasPinResetIntentFor(uid: string, now = Date.now()): boolean {
+  const active = getActivePinResetHint(now);
+  return Boolean(active && active.uid === uid);
 }
 
 export function clearPinResetIntent(): void {

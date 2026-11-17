@@ -38,6 +38,8 @@ import {
   Sun,
   Moon,
   Lock,
+  Unlock,
+  KeyRound,
   FlaskConical,
   Receipt,
   Loader2,
@@ -92,6 +94,7 @@ import {
   firebaseProjectId,
   firestoreDatabaseId,
   signInWithPopup,
+  reauthenticateWithPopup,
   signOut,
   onAuthStateChanged,
   collection,
@@ -128,6 +131,7 @@ import {
   clearLegacyPinStorage,
   clearPinResetIntent,
   generatePinSalt,
+  getActivePinResetHint,
   hasPinResetIntentFor,
   hashPin,
   isValidPinFormat,
@@ -194,6 +198,8 @@ import ManHinhPin, {
   type PinScreenMode,
   type PinStageState,
 } from "./components/ManHinhPin";
+import CapLaiPinDialog from "./components/CapLaiPinDialog";
+import DoiPinCaNhanCard from "./components/DoiPinCaNhanCard";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
 import type { GhiSoPhieu } from "./lib/soPhieu";
 import {
@@ -679,6 +685,8 @@ export default function App() {
   );
   const [pinOfflineHint, setPinOfflineHint] = useState("");
   const [freshResetUid, setFreshResetUid] = useState<string | null>(null);
+  const [tempPinChangeUid, setTempPinChangeUid] = useState<string | null>(null);
+  const [capLaiPinTarget, setCapLaiPinTarget] = useState<UserProfile | null>(null);
   const manualGoogleLoginRef = useRef(false);
 
   const laLoiMatMang = (err: unknown): boolean => {
@@ -720,6 +728,7 @@ export default function App() {
       clearLegacyPinStorage();
       pinUnlockedRef.current = false;
       setPinUnlocked(false);
+      setTempPinChangeUid(null);
       setPinStage("idle");
       setPinError("");
 
@@ -730,6 +739,7 @@ export default function App() {
         setPinOffline(false);
         setPinOfflineHint("");
         setFreshResetUid(null);
+        setTempPinChangeUid(null);
         setLoiHoSo("");
         setLoading(false);
         return;
@@ -741,16 +751,9 @@ export default function App() {
       const ref = doc(db, "users", uid);
 
       // Ghi nhận nếu người dùng vừa chủ động bấm "Đăng nhập bằng Google" trong lượt này
+      // (tránh so sánh lệch giờ đồng hồ máy trạm với auth_time; firestore.rules tự kiểm tra phía máy chủ)
       if (manualGoogleLoginRef.current) {
-        try {
-          const tokenRes = await fbUser.getIdTokenResult();
-          const authMs = Date.parse(tokenRes.authTime);
-          if (Number.isFinite(authMs) && Date.now() - authMs <= 10 * 60_000) {
-            setFreshResetUid(uid);
-          }
-        } catch {
-          setFreshResetUid(uid);
-        }
+        setFreshResetUid(uid);
       } else {
         setFreshResetUid(null);
       }
@@ -1301,9 +1304,11 @@ export default function App() {
         pinUpdatedAt,
         pinFailCount: 0,
         pinLocked: false,
+        pinMustChange: false,
       });
       clearPinResetIntent();
       setFreshResetUid(null);
+      setTempPinChangeUid(null);
       setCurrentUserProfile((p) =>
         p
           ? {
@@ -1313,6 +1318,7 @@ export default function App() {
               pinUpdatedAt,
               pinFailCount: 0,
               pinLocked: false,
+              pinMustChange: false,
             }
           : p,
       );
@@ -1359,6 +1365,7 @@ export default function App() {
 
     // Khi người dùng nhập PIN kiểm tra thì xóa cờ khôi phục (tránh tự chuyển sang đặt PIN nếu gõ sai 5 lần)
     setFreshResetUid(null);
+    setTempPinChangeUid(null);
     setPinBusy(true);
     setPinStage("verify");
     try {
@@ -1403,6 +1410,14 @@ export default function App() {
           }
         }
         clearPinResetIntent();
+        if (serverProfile?.pinMustChange) {
+          // Nhân viên vừa mở bằng mã PIN tạm do Chủ sở hữu cấp -> yêu cầu tự đặt PIN cá nhân mới
+          setPinStage("ok");
+          await choMotion(420);
+          setPinStage("idle");
+          setTempPinChangeUid(uid);
+          return;
+        }
         setPinStage("ok");
         await choMotion(480);
         unlockSession();
@@ -1420,7 +1435,14 @@ export default function App() {
           console.error("Khong cap nhat duoc pinFailCount:", err);
         }
 
-        clearPinResetIntent();
+        if (shouldLock) {
+          savePinResetIntent(
+            uid,
+            serverProfile?.email || auth.currentUser?.email || "",
+          );
+        } else {
+          clearPinResetIntent();
+        }
         setCurrentUserProfile((p) =>
           p ? { ...p, pinFailCount: nextFail, pinLocked: shouldLock } : p,
         );
@@ -1464,10 +1486,78 @@ export default function App() {
   /** Quên mã PIN hoặc đang bị khóa: đăng xuất để người dùng đăng nhập lại bằng Google rồi đặt PIN mới. */
   const handleForgotPin = async () => {
     const uid = auth.currentUser?.uid || currentUserProfile?.uid;
+    const email = currentUserProfile?.email || auth.currentUser?.email || "";
     if (uid) {
-      savePinResetIntent(uid);
+      savePinResetIntent(uid, email);
     }
     await handleLogout();
+  };
+
+  /** Chủ sở hữu cấp mã PIN tạm 6 số & mở khóa ngay cho thành viên. */
+  const handleIssueTempPin = async (
+    profile: UserProfile,
+    tempPin: string,
+    requireChange: boolean,
+  ) => {
+    const pinSalt = generatePinSalt();
+    const pinHash = await hashPin(tempPin, profile.uid, pinSalt);
+    const pinUpdatedAt = new Date().toISOString();
+    await updateDoc(doc(db, "users", profile.uid), {
+      pinHash,
+      pinSalt,
+      pinUpdatedAt,
+      pinFailCount: 0,
+      pinLocked: false,
+      pinMustChange: requireChange,
+    });
+    showNotification(`Đã cấp lại PIN cho ${profile.email}`);
+  };
+
+  /** Chủ sở hữu xóa trắng PIN cũ & mở khóa để thành viên tự đặt PIN mới khi vào app. */
+  const handleClearPinToReset = async (profile: UserProfile) => {
+    await updateDoc(doc(db, "users", profile.uid), {
+      pinHash: null,
+      pinSalt: null,
+      pinFailCount: 0,
+      pinLocked: false,
+      pinMustChange: false,
+      pinUpdatedAt: new Date().toISOString(),
+    });
+    showNotification(`Đã mở khóa & xóa PIN cũ cho ${profile.email}`);
+  };
+
+  /** Đổi mã PIN của chính tài khoản đang đăng nhập ngay trong modal Thông tin tài khoản. */
+  const handleSaveSelfPinFromModal = async (
+    pinHash: string,
+    pinSalt: string,
+    pinUpdatedAt: string,
+  ) => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) {
+      throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+    }
+    const payload = {
+      pinHash,
+      pinSalt,
+      pinUpdatedAt,
+      pinFailCount: 0,
+      pinLocked: false,
+      pinMustChange: false,
+    };
+    const ref = doc(db, "users", fbUser.uid);
+    try {
+      await updateDoc(ref, payload);
+    } catch (err: any) {
+      if (err?.code === "permission-denied") {
+        // Phiên Google đã quá 10 phút -> xác thực lại bằng popup Google 1 chạm rồi lưu ngay
+        await reauthenticateWithPopup(fbUser, googleProvider);
+        await updateDoc(ref, payload);
+      } else {
+        throw err;
+      }
+    }
+    setCurrentUserProfile((p) => (p ? { ...p, ...payload } : p));
+    showNotification("Đã đổi mã PIN thành công");
   };
 
   /**
@@ -1520,6 +1610,8 @@ export default function App() {
     setPinOffline(false);
     setPinOfflineHint("");
     setFreshResetUid(null);
+    setTempPinChangeUid(null);
+    setCapLaiPinTarget(null);
     setPinStage("idle");
     setPinError("");
     setUser(null);
@@ -6448,11 +6540,13 @@ export default function App() {
   }
 
   if (!user) {
+    const resetHint = getActivePinResetHint();
     return (
       <ManHinhDangNhap
         onLogin={handleGoogleLogin}
         isAuthenticating={isAuthenticating}
         authError={authError}
+        resetPendingEmail={resetHint ? resetHint.email : null}
         maBuild={__BUILD_ID__}
       />
     );
@@ -6589,6 +6683,7 @@ export default function App() {
    */
   if (!pinUnlocked) {
     const pinUid = auth.currentUser?.uid || currentUserProfile?.uid || "";
+    const isTempChange = Boolean(pinUid) && tempPinChangeUid === pinUid;
     const canRecoverReset =
       Boolean(pinUid) &&
       freshResetUid === pinUid &&
@@ -6597,7 +6692,7 @@ export default function App() {
       ? "mang"
       : currentUserProfile?.pinLocked && !canRecoverReset
         ? "khoa"
-        : !currentUserProfile?.pinHash || canRecoverReset
+        : !currentUserProfile?.pinHash || canRecoverReset || isTempChange
           ? "dat"
           : "nhap";
     const failsRemaining = Math.max(
@@ -6610,6 +6705,7 @@ export default function App() {
         email={currentUserProfile?.email || user || ""}
         mode={pinMode}
         isResetRecovery={canRecoverReset}
+        isTempChange={isTempChange}
         pinStage={pinStage}
         pinBusy={pinBusy}
         pinError={pinError}
@@ -6731,6 +6827,12 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Đổi mã PIN khóa màn hình của chính người dùng đang đăng nhập */}
+                <DoiPinCaNhanCard
+                  profile={currentUserProfile}
+                  onSaveNewPin={handleSaveSelfPinFromModal}
+                />
+
                 {/* Mat khau do Google quan ly - app khong luu gi ca */}
                 <div className="p-5 rounded-3xl border border-emerald-200 bg-emerald-50/60 flex gap-3">
                   <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
@@ -6754,6 +6856,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Hộp thoại Chủ sở hữu cấp lại mã PIN / mở khóa cho thành viên */}
+      <CapLaiPinDialog
+        target={capLaiPinTarget}
+        onClose={() => setCapLaiPinTarget(null)}
+        onIssueTempPin={handleIssueTempPin}
+        onClearPinToReset={handleClearPinToReset}
+      />
+
       {/* Processing Overlay */}
       {loading && user && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/5 backdrop-blur-[1px]">
@@ -9862,14 +9973,60 @@ export default function App() {
                                     <p className="text-[11px] font-bold text-slate-400 truncate">
                                       {profile.email}
                                     </p>
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                      {profile.pinLocked ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black">
+                                          <Lock className="w-3 h-3" aria-hidden="true" />
+                                          Đang khóa PIN ({Number(profile.pinFailCount || PIN_MAX_ATTEMPTS)}/{PIN_MAX_ATTEMPTS})
+                                        </span>
+                                      ) : Number(profile.pinFailCount || 0) > 0 ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                                          Sai PIN {profile.pinFailCount}/{PIN_MAX_ATTEMPTS} lần
+                                        </span>
+                                      ) : profile.pinMustChange ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[10px] font-black">
+                                          Dùng PIN tạm · chờ đổi
+                                        </span>
+                                      ) : profile.pinHash ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                                          Đã đặt mã PIN
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                                          Chưa đặt mã PIN
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
                                   {laChuSoHuuGoc ? (
-                                    <span className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest">
-                                      Toàn quyền
-                                    </span>
+                                    <>
+                                      <span className="px-3 py-2 rounded-xl bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest">
+                                        Toàn quyền
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setCapLaiPinTarget(profile)}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black transition-colors border",
+                                          profile.pinLocked
+                                            ? "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
+                                            : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100",
+                                        )}
+                                        title="Cấp lại mã PIN cho Chủ sở hữu"
+                                      >
+                                        {profile.pinLocked ? (
+                                          <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+                                        ) : (
+                                          <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />
+                                        )}
+                                        <span>
+                                          {profile.pinLocked ? "Mở khóa PIN" : "Cấp lại PIN"}
+                                        </span>
+                                      </button>
+                                    </>
                                   ) : (
                                     <>
                                       <select
@@ -9949,47 +10106,32 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                         ))}
                                       </select>
 
-                                      {(profile.pinHash || profile.pinLocked) && (
-                                        <button
-                                          onClick={async () => {
-                                            if (
-                                              !confirm(
-                                                `Đặt lại / mở khóa mã PIN của ${profile.email}?\n\nHọ sẽ được yêu cầu tạo mã PIN mới ở lần đăng nhập tới.`,
-                                              )
-                                            )
-                                              return;
-                                            try {
-                                              await updateDoc(
-                                                doc(db, "users", profile.uid),
-                                                {
-                                                  pinHash: null,
-                                                  pinSalt: null,
-                                                  pinFailCount: 0,
-                                                  pinLocked: false,
-                                                  pinUpdatedAt:
-                                                    new Date().toISOString(),
-                                                },
-                                              );
-                                              showNotification(
-                                                "Đã đặt lại mã PIN",
-                                              );
-                                            } catch (err: any) {
-                                              alert(
-                                                "Không đặt lại được: " +
-                                                  err.message,
-                                              );
-                                            }
-                                          }}
-                                          className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-primary transition-colors"
-                                          title={
-                                            profile.pinLocked
-                                              ? "Mở khóa & đặt lại mã PIN"
-                                              : "Đặt lại mã PIN"
-                                          }
-                                        >
-                                          <Lock className="w-4 h-4" />
-                                        </button>
-                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setCapLaiPinTarget(profile)}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black transition-colors border",
+                                          profile.pinLocked
+                                            ? "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
+                                            : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100",
+                                        )}
+                                        title={
+                                          profile.pinLocked
+                                            ? "Mở khóa & cấp lại mã PIN 6 số"
+                                            : "Cấp mã PIN tạm hoặc xóa PIN cũ"
+                                        }
+                                      >
+                                        {profile.pinLocked ? (
+                                          <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+                                        ) : (
+                                          <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />
+                                        )}
+                                        <span>
+                                          {profile.pinLocked
+                                            ? "Mở khóa & Cấp PIN"
+                                            : "Cấp lại PIN"}
+                                        </span>
+                                      </button>
 
                                       <button
                                         onClick={async () => {

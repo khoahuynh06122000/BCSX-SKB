@@ -1199,3 +1199,14 @@ input[type="number"] {
   -moz-appearance: textfield;   /* Firefox dùng thuộc tính riêng */
   appearance: textfield;
 }
+
+/* Chặn cuộn trang nền khi mở modal <dialog> (theo chuẩn dialog hiện đại) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}

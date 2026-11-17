@@ -20,6 +20,8 @@ interface Props {
   email: string;
   mode: PinScreenMode;
   isResetRecovery?: boolean;
+  /** True khi người dùng vừa nhập đúng PIN tạm do quản trị cấp và cần đặt PIN cá nhân mới. */
+  isTempChange?: boolean;
   pinStage: PinStageState;
   pinBusy: boolean;
   pinError: string;
@@ -57,6 +59,7 @@ export default function ManHinhPin({
   email,
   mode,
   isResetRecovery = false,
+  isTempChange = false,
   pinStage,
   pinBusy,
   pinError,
@@ -99,7 +102,7 @@ export default function ManHinhPin({
     setLocalError("");
     setLocalSai(false);
     setConfirmForgot(false);
-  }, [mode, isResetRecovery]);
+  }, [mode, isResetRecovery, isTempChange]);
 
   useEffect(() => {
     if (pinStage === "sai") {
@@ -211,9 +214,11 @@ export default function ManHinhPin({
         ? "Mã PIN đang bị khóa"
         : needsSetup
           ? step === 1
-            ? isResetRecovery
-              ? "Đặt mã PIN mới"
-              : "Thiết lập mã PIN"
+            ? isTempChange
+              ? "Đổi mã PIN cá nhân mới"
+              : isResetRecovery
+                ? "Đặt mã PIN mới"
+                : "Thiết lập mã PIN"
             : "Xác nhận lại mã PIN"
           : "Nhập mã PIN";
 
@@ -225,9 +230,11 @@ export default function ManHinhPin({
         ? "Nhập sai 5 lần liên tiếp. Cần đăng nhập lại bằng Google để đặt lại mã PIN mới."
         : needsSetup
           ? step === 1
-            ? isResetRecovery
-              ? "Xác thực Google thành công — chọn 6 chữ số PIN mới"
-              : "Đặt 6 chữ số bảo vệ cho tài khoản của anh/chị"
+            ? isTempChange
+              ? "Bạn đang dùng mã PIN tạm do quản trị cấp — chọn 6 chữ số riêng của bạn"
+              : isResetRecovery
+                ? "Xác thực Google thành công — chọn 6 chữ số PIN mới"
+                : "Đặt 6 chữ số bảo vệ cho tài khoản của anh/chị"
             : "Nhập lại đúng 6 chữ số vừa đặt"
           : pinStage === "verify"
             ? "Đang kiểm tra mã PIN..."
@@ -311,8 +318,11 @@ export default function ManHinhPin({
                   <span className="dn-btn-google-ic">
                     <KeyRound className="h-4 w-4" aria-hidden="true" />
                   </span>
-                  <span>Đăng nhập lại Google để đặt PIN mới</span>
+                  <span>Đăng nhập lại Google để cấp PIN mới</span>
                 </button>
+                <p className="text-[11px] leading-relaxed text-white/55">
+                  Hoặc liên hệ Chủ sở hữu để mở khóa & cấp mã PIN tạm 6 số trong Cài đặt.
+                </p>
               </div>
             ) : (
               /* Sân khấu 6 chấm tròn chuyển quỹ đạo xoay khi xác thực */
@@ -454,8 +464,50 @@ export default function ManHinhPin({
               </form>
             )}
 
-            {/* Nút đổi tài khoản Google & đặt lại khi quên PIN */}
+            {/* Nút cấp lại khi quên PIN & đổi tài khoản Google */}
             <div className="mt-4 pt-3 border-t border-white/10 flex flex-col items-center gap-2">
+              {mode === "nhap" && !confirmForgot && (
+                <button
+                  type="button"
+                  disabled={pinBusy}
+                  onClick={() => setConfirmForgot(true)}
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3.5 py-1.5 rounded-full border border-amber-300/30 bg-amber-400/12 text-[11.5px] font-bold text-amber-200 hover:bg-amber-400/20 hover:text-amber-100 transition-colors"
+                >
+                  <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                  Quên mã PIN? Cấp lại qua Google
+                </button>
+              )}
+
+              {mode === "nhap" && confirmForgot && (
+                <div className="w-full rounded-xl border border-amber-300/25 bg-amber-500/12 px-3 py-2.5 text-[11.5px] text-amber-100 space-y-2">
+                  <p className="font-semibold leading-snug">
+                    Đăng xuất và đăng nhập lại bằng Google để cấp mã PIN 6 số mới?
+                  </p>
+                  <p className="text-[10.5px] text-white/65 leading-snug">
+                    Hoặc liên hệ Chủ sở hữu để được cấp mã PIN tạm trong mục Cài đặt.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmForgot(false);
+                        onForgotPin();
+                      }}
+                      className="min-h-[36px] rounded-lg bg-amber-400/30 hover:bg-amber-400/40 border border-amber-300/40 px-3.5 py-1 font-bold text-amber-50 transition-colors"
+                    >
+                      Xác nhận cấp lại
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmForgot(false)}
+                      className="min-h-[36px] rounded-lg bg-white/10 hover:bg-white/15 px-3.5 py-1 font-semibold text-white/80 transition-colors"
+                    >
+                      Huỷ
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={onLogout}
@@ -464,45 +516,6 @@ export default function ManHinhPin({
                 <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                 Đăng xuất · đổi tài khoản khác
               </button>
-
-              {mode === "nhap" && !confirmForgot && (
-                <button
-                  type="button"
-                  disabled={pinBusy}
-                  onClick={() => setConfirmForgot(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-300/75 hover:text-amber-200 transition-colors"
-                >
-                  <KeyRound className="h-3 w-3" aria-hidden="true" />
-                  Quên mã PIN? Đặt lại bằng Google
-                </button>
-              )}
-
-              {mode === "nhap" && confirmForgot && (
-                <div className="w-full rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100 space-y-2">
-                  <p className="font-medium leading-snug">
-                    Đăng xuất và đăng nhập lại Google để đặt mã PIN mới?
-                  </p>
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfirmForgot(false);
-                        onForgotPin();
-                      }}
-                      className="rounded-lg bg-amber-400/25 hover:bg-amber-400/35 border border-amber-300/35 px-3 py-1 font-bold text-amber-100 transition-colors"
-                    >
-                      Xác nhận
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmForgot(false)}
-                      className="rounded-lg bg-white/10 hover:bg-white/15 px-3 py-1 font-semibold text-white/75 transition-colors"
-                    >
-                      Huỷ
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </section>
         </div>

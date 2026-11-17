@@ -32,6 +32,7 @@ rules_version = '2';
 //   - pinUpdatedAt: string|null (optional, <= 64)
 //   - pinFailCount: number|null (optional, 0..5)
 //   - pinLocked: bool|null (optional)
+//   - pinMustChange: bool|null (optional)
 //
 // Collection: slips/{slipId} (Document ID = code, e.g. PN-YYMMDD-NN)
 // Fields:
@@ -341,7 +342,7 @@ service cloud.firestore {
       return [
         'uid', 'email', 'name', 'photoURL', 'role',
         'createdAt', 'updatedAt', 'approvedBy', 'pinHash', 'pinSalt',
-        'pinUpdatedAt', 'pinFailCount', 'pinLocked'
+        'pinUpdatedAt', 'pinFailCount', 'pinLocked', 'pinMustChange'
       ];
     }
 
@@ -370,7 +371,9 @@ service cloud.firestore {
         && optStr(data, 'pinUpdatedAt', 64)
         && optNum(data, 'pinFailCount', 0, 5)
         && optBool(data, 'pinLocked')
+        && optBool(data, 'pinMustChange')
         && (!('pinLocked' in data) || data.pinLocked == null || data.pinLocked == false)
+        && (!('pinMustChange' in data) || data.pinMustChange == null || data.pinMustChange == false)
         && (!('pinFailCount' in data) || data.pinFailCount == null || data.pinFailCount == 0);
     }
 
@@ -392,7 +395,8 @@ service cloud.firestore {
         && optStr(data, 'pinSalt', 128)
         && optStr(data, 'pinUpdatedAt', 64)
         && optNum(data, 'pinFailCount', 0, 5)
-        && optBool(data, 'pinLocked');
+        && optBool(data, 'pinLocked')
+        && optBool(data, 'pinMustChange');
     }
 
     // Chu ky dien tu (ChuKyDienTu) tren phieu nhap Paperless.
@@ -680,15 +684,20 @@ service cloud.firestore {
             // (a) Dat moi hoac dat lai PIN cua chinh minh
             (
               request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['pinHash', 'pinSalt', 'pinUpdatedAt', 'pinFailCount', 'pinLocked'])
+                .hasOnly(['pinHash', 'pinSalt', 'pinUpdatedAt', 'pinFailCount', 'pinLocked', 'pinMustChange'])
               && reqStr(request.resource.data, 'pinHash', 1, 512)
               && reqStr(request.resource.data, 'pinSalt', 1, 128)
               && reqStr(request.resource.data, 'pinUpdatedAt', 1, 64)
               && request.resource.data.get('pinFailCount', 0) == 0
               && request.resource.data.get('pinLocked', false) == false
+              && request.resource.data.get('pinMustChange', false) == false
               && (
                 (
                   resource.data.get('pinHash', null) == null
+                  && resource.data.get('pinLocked', false) != true
+                )
+                || (
+                  resource.data.get('pinMustChange', false) == true
                   && resource.data.get('pinLocked', false) != true
                 )
                 || hasFreshGoogleAuth()
