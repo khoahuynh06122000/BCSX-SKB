@@ -704,21 +704,32 @@ export function tongHopVoKegThuVe(input: {
   let tongDaThuVe = 0;
 
   lichSuThuVe.forEach((rec) => {
-    const first = rec.items?.[0];
-    const retQty = Number(rec.totalKegs ?? first?.quantity) || 0;
-    if (retQty <= 0) return;
-    tongDaThuVe = round2(tongDaThuVe + retQty);
-
-    const rawId = String(first?.productId || "").trim();
-    if (!rawId || rawId === MA_KHO_TONG_THU_VE) {
-      tongThuVeChungTaiKho = round2(tongThuVeChungTaiKho + retQty);
+    const items = rec.items?.length ? rec.items : [];
+    if (!items.length) {
+      const retQty = Number(rec.totalKegs) || 0;
+      if (retQty > 0) {
+        tongDaThuVe = round2(tongDaThuVe + retQty);
+        tongThuVeChungTaiKho = round2(tongThuVeChungTaiKho + retQty);
+      }
       return;
     }
 
-    const partnerObj = input.partners.find((p) => p.id === rawId);
-    const grp = maNhomDonVi(rawId, partnerObj?.name || first?.productName || rawId);
-    const row = ensure(grp.id, grp.name, grp.isStandard206);
-    row.kegsReturned = round2(row.kegsReturned + retQty);
+    items.forEach((it) => {
+      const retQty = Number(it.quantity) || 0;
+      if (retQty <= 0) return;
+      tongDaThuVe = round2(tongDaThuVe + retQty);
+
+      const rawId = String(it.productId || "").trim();
+      if (!rawId || rawId === MA_KHO_TONG_THU_VE) {
+        tongThuVeChungTaiKho = round2(tongThuVeChungTaiKho + retQty);
+        return;
+      }
+
+      const partnerObj = input.partners.find((p) => p.id === rawId);
+      const grp = maNhomDonVi(rawId, partnerObj?.name || it.productName || rawId);
+      const row = ensure(grp.id, grp.name, grp.isStandard206);
+      row.kegsReturned = round2(row.kegsReturned + retQty);
+    });
   });
 
   const theoDonVi = Array.from(map.values())

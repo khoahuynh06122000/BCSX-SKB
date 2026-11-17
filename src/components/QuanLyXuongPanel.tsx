@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -28,9 +28,7 @@ import { cn, formatNumber } from "../lib/utils";
 export type QuanLyXuongSubTab =
   | "duyet-nhat-ky"
   | "ke-hoach"
-  | "kiem-ke"
-  | "nhap-le"
-  | "phieu-cu";
+  | "kiem-ke";
 
 interface Props {
   products: Product[];
@@ -53,11 +51,7 @@ interface Props {
     source: string;
   }) => Promise<boolean>;
   onXoaKeHoach: (planId: string) => Promise<void>;
-  nhapLeContent?: ReactNode;
-  phieuCuContent?: ReactNode;
-  phieuCuCount?: number;
-  requestedSubTab?: { id: QuanLyXuongSubTab; nonce: number } | null;
-  onSubTabChange?: (tab: QuanLyXuongSubTab) => void;
+  nhatKyPhieuContent?: ReactNode;
 }
 
 export default function QuanLyXuongPanel({
@@ -74,29 +68,10 @@ export default function QuanLyXuongPanel({
   onMoBieuMau,
   onLuuKeHoach,
   onXoaKeHoach,
-  nhapLeContent,
-  phieuCuContent,
-  phieuCuCount = 0,
-  requestedSubTab,
-  onSubTabChange,
+  nhatKyPhieuContent,
 }: Props) {
   const [subTab, setSubTab] = useState<QuanLyXuongSubTab>("duyet-nhat-ky");
-
-  const chonSubTab = (tab: QuanLyXuongSubTab) => {
-    setSubTab(tab);
-    onSubTabChange?.(tab);
-  };
-
-  useEffect(() => {
-    if (requestedSubTab) {
-      setSubTab(requestedSubTab.id);
-    }
-  }, [requestedSubTab]);
-
-  useEffect(() => {
-    onSubTabChange?.(subTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [nhatKyView, setNhatKyView] = useState<"phieu" | "bang">("phieu");
 
   /* ---------- Tab 1: Duyệt Rào 1 + Nhật ký ---------- */
   const slipsWithRows = useMemo(() => {
@@ -196,26 +171,12 @@ export default function QuanLyXuongPanel({
               },
               { id: "ke-hoach" as const, label: "2. Kế hoạch sản xuất" },
               { id: "kiem-ke" as const, label: `3. Kiểm kê FST/BBT (${kiemKeBon.length})` },
-              ...(nhapLeContent
-                ? [{ id: "nhap-le" as const, label: "4. Nhập lẻ & Tồn đầu" }]
-                : []),
-              ...(phieuCuContent
-                ? [
-                    {
-                      id: "phieu-cu" as const,
-                      label:
-                        phieuCuCount > 0
-                          ? `5. Phiếu giấy cũ (${phieuCuCount})`
-                          : "5. Phiếu giấy cũ",
-                    },
-                  ]
-                : []),
             ]
           ).map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => chonSubTab(t.id)}
+              onClick={() => setSubTab(t.id)}
               className={cn(
                 "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
                 subTab === t.id
@@ -346,30 +307,61 @@ export default function QuanLyXuongPanel({
             </div>
           </div>
 
-          {/* Nhật ký xuất xưởng / bàn giao kho tổng */}
+          {/* Nhật ký xuất xưởng / bàn giao kho tổng & Toàn bộ chứng từ phiếu nhập */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-slate-500" />
                 <h3 className="text-sm font-extrabold text-slate-900">
-                  Nhật Ký Xuất Xưởng & Trạng Thái 2 Bước Rào
+                  Nhật Ký Xuất Xưởng, Phiếu Nhập &amp; Trạng Thái 2 Bước Rào
                 </h3>
               </div>
-              <div className="flex gap-2 font-mono text-xs font-bold">
+              <div className="flex flex-wrap items-center gap-2 font-mono text-xs font-bold">
                 <span className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
                   Đã vào kho: {formatNumber(stats.approvedL)} L
                 </span>
                 <span className="px-3 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
                   Đang chờ duyệt: {formatNumber(stats.pendingL)} L
                 </span>
+                {nhatKyPhieuContent && (
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200 font-sans ml-auto sm:ml-2">
+                    <button
+                      type="button"
+                      onClick={() => setNhatKyView("phieu")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all",
+                        nhatKyView === "phieu"
+                          ? "bg-[#141A23] text-amber-300 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900",
+                      )}
+                    >
+                      Chứng từ &amp; Ảnh ({slipsWithRows.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNhatKyView("bang")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all",
+                        nhatKyView === "bang"
+                          ? "bg-[#141A23] text-amber-300 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900",
+                      )}
+                    >
+                      Bảng Rào &amp; BM-SKB-01
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+            {nhatKyPhieuContent && nhatKyView === "phieu" ? (
+              <div className="p-4 sm:p-6">{nhatKyPhieuContent}</div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
                   <tr>
                     <th className="py-3 px-4">Số phiếu / Ngày</th>
-                    <th className="py-3 px-3">Mặt hàng & Mã lô</th>
+                    <th className="py-3 px-3">Mặt hàng &amp; Mã lô</th>
                     <th className="py-3 px-3 text-right">Số lượng (Keg)</th>
                     <th className="py-3 px-3 text-center">Ảnh</th>
                     <th className="py-3 px-3">Trạng thái</th>
@@ -377,7 +369,7 @@ export default function QuanLyXuongPanel({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {slipsWithRows.slice(0, 40).map(({ code, slip, txs }) => {
+                  {slipsWithRows.map(({ code, slip, txs }) => {
                     const photos = anhTheoChungTu.get(code) || [];
                     const vaoTon = approvedSlips.has(code);
                     const stBadge = vaoTon ? (
@@ -454,6 +446,7 @@ export default function QuanLyXuongPanel({
                 </tbody>
               </table>
             </div>
+            )}
           </div>
         </div>
       )}
@@ -710,16 +703,6 @@ export default function QuanLyXuongPanel({
             )}
           </div>
         </div>
-      )}
-
-      {/* ================= TAB 4: NHẬP LẺ & TỒN ĐẦU ================= */}
-      {subTab === "nhap-le" && nhapLeContent && (
-        <div className="anim-view-enter">{nhapLeContent}</div>
-      )}
-
-      {/* ================= TAB 5: PHIẾU GIẤY CŨ ================= */}
-      {subTab === "phieu-cu" && phieuCuContent && (
-        <div className="anim-view-enter">{phieuCuContent}</div>
       )}
     </div>
   );

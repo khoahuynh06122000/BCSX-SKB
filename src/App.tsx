@@ -145,12 +145,8 @@ import {
   verifyPin,
 } from "./lib/pin";
 import ImportSlipPanel, { BieuMauDienTuModal } from "./components/ImportSlip";
-import XuongSanXuatPanel, {
-  type XuongSanXuatSubTab,
-} from "./components/XuongSanXuatPanel";
-import QuanLyXuongPanel, {
-  type QuanLyXuongSubTab,
-} from "./components/QuanLyXuongPanel";
+import XuongSanXuatPanel from "./components/XuongSanXuatPanel";
+import QuanLyXuongPanel from "./components/QuanLyXuongPanel";
 import KhoTongNxtPanel from "./components/KhoTongNxtPanel";
 import KeToanDashboardPanel from "./components/KeToanDashboardPanel";
 import BulkImportGrid from "./components/BulkImportGrid";
@@ -599,18 +595,6 @@ export default function App() {
   const [products] = useState<Product[]>(INITIAL_PRODUCTS);
 
   const [activeTab, setActiveTab] = useState("");
-  const [xuongSubTab, setXuongSubTab] =
-    useState<XuongSanXuatSubTab>("lap-phieu");
-  const [qlXuongSubTab, setQlXuongSubTab] =
-    useState<QuanLyXuongSubTab>("duyet-nhat-ky");
-  const [reqXuongSubTab, setReqXuongSubTab] = useState<{
-    id: XuongSanXuatSubTab;
-    nonce: number;
-  } | null>(null);
-  const [reqQlXuongSubTab, setReqQlXuongSubTab] = useState<{
-    id: QuanLyXuongSubTab;
-    nonce: number;
-  } | null>(null);
   /**
    * Tab con trong mục Sổ kho & Xuất SAP (tách phần Tổng hợp thành tab riêng `overview`).
    */
@@ -5199,14 +5183,12 @@ export default function App() {
    * Không cần gán `type` ở đây: giá trị dựng ban đầu đã là "IN", và sau mỗi lần
    * lưu thành công form cũng được đặt lại về "IN".
    */
-  const dangMoNhapLe =
-    (activeTab === "xuong" && xuongSubTab === "nhap-le") ||
-    (activeTab === "ql-xuong" && qlXuongSubTab === "nhap-le");
-
   useEffect(() => {
-    if (dangMoNhapLe) {
-      // Nhà máy nguồn hàng cũng lấy từ danh mục ghép: Firestore thiếu
-      // SKB-BNC là cả mục nhập kho không chọn được nguồn.
+    if (
+      (activeTab === "xuong" || activeTab === "ql-xuong") &&
+      newTransaction.type === "IN"
+    ) {
+      // Nhà máy nguồn hàng lấy từ danh mục ghép SKB-BNC khi nhập lẻ trong Xưởng.
       const skb = donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC");
       if (skb && newTransaction.partnerId !== skb.id) {
         setNewTransaction((prev) => ({
@@ -5215,7 +5197,7 @@ export default function App() {
         }));
       }
     }
-  }, [dangMoNhapLe, partners, newTransaction.partnerId]);
+  }, [activeTab, newTransaction.type, partners, newTransaction.partnerId]);
 
   /**
    * Mốc cuối của khoảng ngày báo cáo, tính tới HẾT ngày đó.
@@ -5831,17 +5813,10 @@ export default function App() {
 
       const inTransit = newTransaction.isInTransit;
 
-      // Nhập lẻ tạo phiếu xong -> mở ngay tab con "5. Phiếu giấy cũ" trong
-      // màn hình hiện tại (Xưởng sản xuất / Quản lý xưởng) để in & gắn ảnh ký.
+      // Tạo phiếu nhập lẻ xong -> giữ hoặc đưa về tab Xưởng / Quản lý xưởng
+      // nơi Nhật ký phiếu & chứng từ đã được tích hợp trực tiếp ở Tab 1.
       if (slipCode) {
-        const nonce = Date.now();
-        if (activeTab === "ql-xuong") {
-          setReqQlXuongSubTab({ id: "phieu-cu", nonce });
-          setQlXuongSubTab("phieu-cu");
-        } else if (activeTab === "xuong") {
-          setReqXuongSubTab({ id: "phieu-cu", nonce });
-          setXuongSubTab("phieu-cu");
-        } else {
+        if (activeTab !== "xuong" && activeTab !== "ql-xuong") {
           setActiveTab(
             quyen.lapPhieuXuong
               ? "xuong"
@@ -5849,12 +5824,10 @@ export default function App() {
                 ? "ql-xuong"
                 : "reports",
           );
-          setReqXuongSubTab({ id: "phieu-cu", nonce });
-          setReqQlXuongSubTab({ id: "phieu-cu", nonce });
         }
       } else if (inTransit) {
         setActiveTab("in-transit");
-      } else {
+      } else if (activeTab !== "xuong" && activeTab !== "ql-xuong") {
         setActiveTab("reports");
       }
       setNewTransaction({
@@ -6716,28 +6689,7 @@ export default function App() {
     }
   }, [user, activeTab, navItems]);
 
-  const moTabConPanel = (
-    panelScope: "xuong" | "ql-xuong",
-    tab: "lap-phieu" | "duyet-nhat-ky" | "phieu-cu",
-  ) => {
-    const nonce = Date.now();
-    if (panelScope === "ql-xuong") {
-      const targetTab: QuanLyXuongSubTab =
-        tab === "lap-phieu" ? "duyet-nhat-ky" : tab;
-      setReqQlXuongSubTab({ id: targetTab, nonce });
-      setQlXuongSubTab(targetTab);
-    } else {
-      const targetTab: XuongSanXuatSubTab =
-        tab === "duyet-nhat-ky" ? "lap-phieu" : tab;
-      setReqXuongSubTab({ id: targetTab, nonce });
-      setXuongSubTab(targetTab);
-    }
-  };
-
-  const renderNhapXuatForm = (
-    mode: "import" | "export",
-    panelScope?: "xuong" | "ql-xuong",
-  ) => (
+  const renderNhapXuatForm = (mode: "import" | "export") => (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="text-center space-y-2 mb-8">
         <div
@@ -7000,17 +6952,7 @@ export default function App() {
                   {formatNumber(pendingApproval.liters)} lít đã điền nhưng{" "}
                   <strong>chưa cộng vào tồn kho</strong> và chưa xuất bán được,
                   vì phiếu chưa có ảnh chữ ký.{" "}
-                  {panelScope ? (
-                    <button
-                      type="button"
-                      onClick={() => moTabConPanel(panelScope, "phieu-cu")}
-                      className="underline font-black text-amber-900 hover:text-amber-950"
-                    >
-                      Mở mục 5. Phiếu giấy cũ
-                    </button>
-                  ) : (
-                    <strong>Sang mục 5. Phiếu giấy cũ</strong>
-                  )}{" "}
+                  <strong>Sang mục 1. Lập phiếu / Duyệt Rào 1 &amp; Nhật ký</strong>{" "}
                   để in, hai bên ký rồi tải ảnh lên.
                 </p>
                 <p className="text-[10px] font-black text-amber-700/70 font-mono tracking-wide">
@@ -7357,17 +7299,24 @@ export default function App() {
             variant="secondary"
             className="w-full sm:w-auto px-10 py-5"
             onClick={() => {
-              if (mode === "import" && panelScope) {
-                moTabConPanel(
-                  panelScope,
-                  panelScope === "ql-xuong" ? "duyet-nhat-ky" : "lap-phieu",
-                );
-              } else {
+              if (mode === "export") {
                 setActiveTab("reports");
+              } else {
+                setNewTransaction({
+                  type: "IN",
+                  partnerId:
+                    donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC")?.id ||
+                    donVi[0]?.id ||
+                    "",
+                  date: format(new Date(), "yyyy-MM-dd"),
+                  isInTransit: false,
+                  notes: "",
+                  items: [{ productId: "", quantity: 0 }],
+                });
               }
             }}
           >
-            Hủy bỏ
+            {mode === "export" ? "Hủy bỏ" : "Làm mới"}
           </Button>
         </div>
 
@@ -7377,7 +7326,7 @@ export default function App() {
     </div>
   );
 
-  const renderNhapLeIntegrated = (panelScope: "xuong" | "ql-xuong") =>
+  const renderTonDauVaNapLe = () =>
     quyen.ghiNhap ? (
       <div className="space-y-4">
         {isAuthorizedFull && quyen.napFile && quyen.ghiNhap && (
@@ -7393,57 +7342,43 @@ export default function App() {
             </label>
           </div>
         )}
-        {renderNhapXuatForm("import", panelScope)}
+        {renderNhapXuatForm("import")}
       </div>
     ) : undefined;
 
-  const renderPhieuCuIntegrated = () =>
+  const renderNhatKyPhieuChungTu = () =>
     quyen.ghiNhap ? (
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-              Phiếu nhập kho (Phiếu giấy cũ)
-            </h2>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-              Mỗi lượt giao một phiếu · In · Ký tươi · Chụp ảnh là vào tồn
-            </p>
-          </div>
+      <div className="space-y-4">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3">
+          <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+            Bao gồm toàn bộ <strong>phiếu giấy cũ</strong> và{" "}
+            <strong>phiếu điện tử mới</strong>. Với phiếu chưa ký: bấm{" "}
+            <strong>Xem &amp; in</strong>, hai bên ký tươi lên bản in, rồi đưa
+            ảnh tờ đã ký vào đúng phiếu đó — <strong>Chụp ảnh</strong> hoặc{" "}
+            <strong>Tải ảnh lên</strong>.{" "}
+            <strong>Có ảnh ký hoặc đã duyệt Rào 1-2 thì hàng mới vào tồn kho</strong>.
+          </p>
         </div>
 
-        <Card>
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex gap-3 mb-5">
-            <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-            <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-              Mỗi lượt sản xuất giao hàng là một phiếu riêng. Kho đếm và đối
-              chiếu với số đã điền, khớp thì bấm <strong>Xem &amp; in</strong>,
-              hai bên ký tươi lên bản in, rồi đưa ảnh tờ đã ký vào đúng phiếu đó
-              — <strong>Chụp ảnh</strong> nếu đang dùng điện thoại, hoặc{" "}
-              <strong>Tải ảnh lên</strong> nếu đã có tệp ảnh/bản quét sẵn.{" "}
-              <strong>Có ảnh ký thì hàng mới vào tồn kho</strong> và mới xuất
-              bán được; chưa ký thì số chỉ nằm chờ ở đây.
-            </p>
-          </div>
-
-          <ImportSlipPanel
-            transactions={transactions}
-            products={products}
-            partners={partners}
-            slips={slips}
-            canWrite={canWrite}
-            currentUserName={currentUserProfile?.name || user || ""}
-            onMarkPrinted={handleMarkSlipPrinted}
-            onUploadSigned={handleUploadSignedSlip}
-            onRemoveSigned={
-              isOwner ? handleRemoveSignedSlipPhoto : undefined
-            }
-            uploadingCode={uploadingSlipCode}
-            onXoaPhieu={quyen.ghiNhap ? handleXoaPhieuNhap : undefined}
-            xoaDuocPhieuDaKy={isOwner}
-            onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
-            anhTheoPhieu={anhTheoChungTu}
-          />
-        </Card>
+        <ImportSlipPanel
+          transactions={transactions}
+          products={products}
+          partners={partners}
+          slips={slips}
+          canWrite={canWrite}
+          currentUserName={currentUserProfile?.name || user || ""}
+          onMarkPrinted={handleMarkSlipPrinted}
+          onUploadSigned={handleUploadSignedSlip}
+          onRemoveSigned={
+            isOwner ? handleRemoveSignedSlipPhoto : undefined
+          }
+          uploadingCode={uploadingSlipCode}
+          onXoaPhieu={quyen.ghiNhap ? handleXoaPhieuNhap : undefined}
+          xoaDuocPhieuDaKy={isOwner}
+          onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
+          anhTheoPhieu={anhTheoChungTu}
+        />
       </div>
     ) : undefined;
 
@@ -10777,11 +10712,8 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onLuuDanhGia={handleLuuDanhGia}
                 onLuuKiemKeBon={handleLuuKiemKeBon}
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
-                nhapLeContent={renderNhapLeIntegrated("xuong")}
-                phieuCuContent={renderPhieuCuIntegrated()}
-                phieuCuCount={pendingApproval.slipCount}
-                requestedSubTab={reqXuongSubTab}
-                onSubTabChange={setXuongSubTab}
+                nhatKyPhieuContent={renderNhatKyPhieuChungTu()}
+                tonDauContent={renderTonDauVaNapLe()}
               />
             )}
 
@@ -10800,11 +10732,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onMoBieuMau={(code) => setBieuMauCode(code)}
                 onLuuKeHoach={handleLuuKeHoach}
                 onXoaKeHoach={handleXoaKeHoach}
-                nhapLeContent={renderNhapLeIntegrated("ql-xuong")}
-                phieuCuContent={renderPhieuCuIntegrated()}
-                phieuCuCount={pendingApproval.slipCount}
-                requestedSubTab={reqQlXuongSubTab}
-                onSubTabChange={setQlXuongSubTab}
+                nhatKyPhieuContent={renderNhatKyPhieuChungTu()}
               />
             )}
 

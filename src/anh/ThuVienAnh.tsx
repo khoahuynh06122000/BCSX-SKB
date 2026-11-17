@@ -411,7 +411,7 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
               {tatCaChieu.length
                 ? `Không có ảnh nào trong bộ lọc đang chọn. Toàn bộ có ${formatNumber(tatCaChieu.length)} ảnh — nới ngày ra hoặc bấm "Tất cả".`
                 : loai === "NHAP"
-                  ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi đưa ảnh tờ phiếu đã ký ở mục Phiếu giấy cũ (trong Xưởng sản xuất / Quản lý xưởng)."
+                  ? "Chưa có ảnh phiếu nhập kho nào. Ảnh vào đây sau khi đưa ảnh tờ phiếu đã ký ở mục Lập phiếu / Nhật ký phiếu (trong Xưởng sản xuất / Quản lý xưởng)."
                   : "Chưa có ảnh biên bản xuất kho nào."}
             </p>
           </div>

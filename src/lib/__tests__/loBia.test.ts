@@ -129,10 +129,13 @@ const thuVeRecords: KiemKeKegLit[] = [
   {
     id: "tv1",
     date: "2026-11-12",
-    shiftOrPeriod: `${KEG_THU_VE_PREFIX}BNG`,
+    shiftOrPeriod: `${KEG_THU_VE_PREFIX}2 don vi`,
     location: "KHO_TONG",
-    items: [{ productId: "AC0118", productName: "BNG", unit: "Keg", quantity: 3, liters: 0, bookQuantity: 5 }],
-    totalKegs: 3,
+    items: [
+      { productId: "AC0118", productName: "BNG", unit: "Keg", quantity: 3, liters: 0, bookQuantity: 5 },
+      { productId: "AC0128", productName: "OHL", unit: "Keg", quantity: 1, liters: 0, bookQuantity: 2 },
+    ],
+    totalKegs: 4,
     totalLiters: 0,
     createdBy: "kho",
     createdAt: "2026-11-12T17:00:00Z",
@@ -145,9 +148,10 @@ const kqVo = tongHopVoKegThuVe({
   kiemKeKeg: thuVeRecords,
 });
 eq("Tong keg da giao = 10", kqVo.tongDaGiao, 10);
-eq("Tong vo da thu ve = 3", kqVo.tongDaThuVe, 3);
-eq("Con ngoai thi truong = 7", kqVo.dangConNgoaiThiTruong, 7);
+eq("Tong vo da thu ve = 4", kqVo.tongDaThuVe, 4);
+eq("Con ngoai thi truong = 6", kqVo.dangConNgoaiThiTruong, 6);
 eq("BNG con no vo = 2", kqVo.theoDonVi.find((r) => r.unitId === "AC0118")?.kegsOutstanding, 2);
+eq("OHL con no vo = 1", kqVo.theoDonVi.find((r) => r.unitId === "AC0128")?.kegsOutstanding, 1);
 
 console.log(`\n=========== ${pass} DUNG / ${fail} SAI ===========\n`);
 process.exit(fail > 0 ? 1 : 0);

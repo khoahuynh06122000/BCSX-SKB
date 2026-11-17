@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Camera,
   CheckCircle2,
   ClipboardCheck,
+  ClipboardList,
   Database,
   Layers,
   Loader2,
@@ -36,9 +37,7 @@ import { cn, formatNumber } from "../lib/utils";
 export type XuongSanXuatSubTab =
   | "lap-phieu"
   | "danh-gia"
-  | "kiem-ke"
-  | "nhap-le"
-  | "phieu-cu";
+  | "kiem-ke";
 
 interface Props {
   products: Product[];
@@ -80,11 +79,8 @@ interface Props {
     note: string;
     photos: TepCho[];
   }) => Promise<boolean>;
-  nhapLeContent?: ReactNode;
-  phieuCuContent?: ReactNode;
-  phieuCuCount?: number;
-  requestedSubTab?: { id: XuongSanXuatSubTab; nonce: number } | null;
-  onSubTabChange?: (tab: XuongSanXuatSubTab) => void;
+  nhatKyPhieuContent?: ReactNode;
+  tonDauContent?: ReactNode;
 }
 
 export default function XuongSanXuatPanel({
@@ -103,30 +99,11 @@ export default function XuongSanXuatPanel({
   onLuuDanhGia,
   onLuuKiemKeBon,
   onLuuKiemKeKegLit,
-  nhapLeContent,
-  phieuCuContent,
-  phieuCuCount = 0,
-  requestedSubTab,
-  onSubTabChange,
+  nhatKyPhieuContent,
+  tonDauContent,
 }: Props) {
   const [subTab, setSubTab] = useState<XuongSanXuatSubTab>("lap-phieu");
-
-  const chonSubTab = (tab: XuongSanXuatSubTab) => {
-    setSubTab(tab);
-    onSubTabChange?.(tab);
-  };
-
-  useEffect(() => {
-    if (requestedSubTab) {
-      setSubTab(requestedSubTab.id);
-    }
-  }, [requestedSubTab]);
-
-  useEffect(() => {
-    onSubTabChange?.(subTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const [kkMode, setKkMode] = useState<"keg-lit" | "bon">("keg-lit");
+  const [kkMode, setKkMode] = useState<"keg-lit" | "bon" | "ton-dau">("keg-lit");
 
   /* ---------- Tab 1: Lập phiếu giao bia sang Kho tổng ---------- */
   const today = format(new Date(), "yyyy-MM-dd");
@@ -334,26 +311,12 @@ export default function XuongSanXuatPanel({
               { id: "lap-phieu" as const, label: "1. Lập phiếu giao bia" },
               { id: "danh-gia" as const, label: "2. Đánh giá sản lượng ngày" },
               { id: "kiem-ke" as const, label: "3. Kiểm kê (Keg/Lít & Bồn)" },
-              ...(nhapLeContent
-                ? [{ id: "nhap-le" as const, label: "4. Nhập lẻ & Tồn đầu" }]
-                : []),
-              ...(phieuCuContent
-                ? [
-                    {
-                      id: "phieu-cu" as const,
-                      label:
-                        phieuCuCount > 0
-                          ? `5. Phiếu giấy cũ (${phieuCuCount})`
-                          : "5. Phiếu giấy cũ",
-                    },
-                  ]
-                : []),
             ]
           ).map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => chonSubTab(t.id)}
+              onClick={() => setSubTab(t.id)}
               className={cn(
                 "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
                 subTab === t.id
@@ -741,6 +704,23 @@ export default function XuongSanXuatPanel({
               </div>
             </div>
           </div>
+
+          {nhatKyPhieuContent && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-slate-500" />
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Nhật Ký Phiếu Nhập &amp; Chứng Từ Đã Lập
+                  </h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-400">
+                  Bao gồm toàn bộ phiếu cũ &amp; phiếu điện tử mới
+                </span>
+              </div>
+              <div className="p-4 sm:p-6">{nhatKyPhieuContent}</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -939,6 +919,20 @@ export default function XuongSanXuatPanel({
             >
               Kiểm kê Bồn FST &amp; BBT
             </button>
+            {tonDauContent && (
+              <button
+                type="button"
+                onClick={() => setKkMode("ton-dau")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                  kkMode === "ton-dau"
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100",
+                )}
+              >
+                Tồn đầu kỳ &amp; Nạp Excel
+              </button>
+            )}
           </div>
 
           {kkMode === "keg-lit" ? (
@@ -950,6 +944,8 @@ export default function XuongSanXuatPanel({
               busy={busy}
               onSave={onLuuKiemKeKegLit}
             />
+          ) : kkMode === "ton-dau" && tonDauContent ? (
+            <>{tonDauContent}</>
           ) : (
             <>
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1180,16 +1176,6 @@ export default function XuongSanXuatPanel({
             </>
           )}
         </div>
-      )}
-
-      {/* ================= TAB 4: NHẬP LẺ & TỒN ĐẦU ================= */}
-      {subTab === "nhap-le" && nhapLeContent && (
-        <div className="anim-view-enter">{nhapLeContent}</div>
-      )}
-
-      {/* ================= TAB 5: PHIẾU GIẤY CŨ ================= */}
-      {subTab === "phieu-cu" && phieuCuContent && (
-        <div className="anim-view-enter">{phieuCuContent}</div>
       )}
     </div>
   );
