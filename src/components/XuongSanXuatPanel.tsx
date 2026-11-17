@@ -17,11 +17,14 @@ import type {
   ImportSlip,
   KeHoachSanXuat,
   KiemKeBon,
+  KiemKeKegItem,
+  KiemKeKegLit,
   Product,
   Transaction,
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
+import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
   quyDoiHienTrang,
@@ -38,6 +41,7 @@ interface Props {
   keHoach: KeHoachSanXuat[];
   danhGia: DanhGiaSanXuat[];
   kiemKeBon: KiemKeBon[];
+  kiemKeKeg: KiemKeKegLit[];
   currentUserName: string;
   busy: boolean;
   onGuiPhieuGiao: (input: {
@@ -58,6 +62,16 @@ interface Props {
     statusLabel: string;
     photos: TepCho[];
   }) => Promise<boolean>;
+  onLuuKiemKeKegLit: (input: {
+    date: string;
+    shiftOrPeriod: string;
+    location: "XUONG" | "KHO_TONG";
+    items: KiemKeKegItem[];
+    totalKegs: number;
+    totalLiters: number;
+    note: string;
+    photos: TepCho[];
+  }) => Promise<boolean>;
 }
 
 export default function XuongSanXuatPanel({
@@ -69,13 +83,16 @@ export default function XuongSanXuatPanel({
   keHoach,
   danhGia,
   kiemKeBon,
+  kiemKeKeg,
   currentUserName,
   busy,
   onGuiPhieuGiao,
   onLuuDanhGia,
   onLuuKiemKeBon,
+  onLuuKiemKeKegLit,
 }: Props) {
   const [subTab, setSubTab] = useState<"lap-phieu" | "danh-gia" | "kiem-ke">("lap-phieu");
+  const [kkMode, setKkMode] = useState<"keg-lit" | "bon">("keg-lit");
 
   /* ---------- Tab 1: Lập phiếu giao bia sang Kho tổng ---------- */
   const today = format(new Date(), "yyyy-MM-dd");
@@ -234,7 +251,10 @@ export default function XuongSanXuatPanel({
   const [kkPhotos, setKkPhotos] = useState<TepCho[]>([]);
 
   const handleChonAnhBon = async (files: FileList | null) => {
-    const { ds } = await taoTepCho(files);
+    const { ds } = await taoTepCho(files, {
+      stampTimestamp: true,
+      stampLabel: "KIỂM KÊ BỒN FST/BBT · XƯỞNG",
+    });
     if (ds.length) setKkPhotos((cu) => [...cu, ...ds]);
   };
 
@@ -279,7 +299,7 @@ export default function XuongSanXuatPanel({
             [
               { id: "lap-phieu", label: "1. Lập phiếu giao bia" },
               { id: "danh-gia", label: "2. Đánh giá sản lượng ngày" },
-              { id: "kiem-ke", label: "3. Kiểm kê tháng (FST & BBT)" },
+              { id: "kiem-ke", label: "3. Kiểm kê (Keg/Lít & Bồn)" },
             ] as const
           ).map((t) => (
             <button
@@ -843,9 +863,47 @@ export default function XuongSanXuatPanel({
         </div>
       )}
 
-      {/* ================= TAB 3: KIỂM KÊ THÁNG TẠI BỒN FST & BBT ================= */}
+      {/* ================= TAB 3: KIỂM KÊ XƯỞNG (KEG/LÍT & BỒN FST/BBT) ================= */}
       {subTab === "kiem-ke" && (
         <div className="space-y-6 anim-view-enter">
+          <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-fit">
+            <button
+              type="button"
+              onClick={() => setKkMode("keg-lit")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                kkMode === "keg-lit"
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              Kiểm kê Keg &amp; Lít tại Xưởng
+            </button>
+            <button
+              type="button"
+              onClick={() => setKkMode("bon")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-extrabold transition-colors",
+                kkMode === "bon"
+                  ? "bg-sky-600 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100",
+              )}
+            >
+              Kiểm kê Bồn FST &amp; BBT
+            </button>
+          </div>
+
+          {kkMode === "keg-lit" ? (
+            <KiemKeKegLitSection
+              location="XUONG"
+              products={products}
+              records={kiemKeKeg}
+              anhTheoChungTu={anhTheoChungTu}
+              busy={busy}
+              onSave={onLuuKiemKeKegLit}
+            />
+          ) : (
+            <>
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-[#141A23] text-white flex items-center justify-between">
               <div>
@@ -1071,6 +1129,8 @@ export default function XuongSanXuatPanel({
               );
             })}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

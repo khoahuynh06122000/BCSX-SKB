@@ -262,3 +262,26 @@ export interface KiemKeBon {
   createdAt: string;
 }
 
+export interface KiemKeKegItem {
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  liters: number;
+  bookQuantity?: number;
+}
+
+/** Kiểm kê Keg & Lít thực tế kèm ảnh hiện trường đóng dấu ngày giờ (Xưởng & Kho tổng). */
+export interface KiemKeKegLit {
+  id: string;
+  date: string; // yyyy-MM-dd
+  shiftOrPeriod?: string;
+  location: 'XUONG' | 'KHO_TONG';
+  items: KiemKeKegItem[];
+  totalKegs: number;
+  totalLiters: number;
+  note?: string;
+  createdBy: string;
+  createdAt: string;
+}
+

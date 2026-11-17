@@ -70,6 +70,8 @@ import {
   KeHoachSanXuat,
   DanhGiaSanXuat,
   KiemKeBon,
+  KiemKeKegItem,
+  KiemKeKegLit,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
 import { cn, formatDate, formatNumber } from "./lib/utils";
@@ -570,6 +572,7 @@ export default function App() {
   const [keHoach, setKeHoach] = useState<KeHoachSanXuat[]>([]);
   const [danhGia, setDanhGia] = useState<DanhGiaSanXuat[]>([]);
   const [kiemKeBon, setKiemKeBon] = useState<KiemKeBon[]>([]);
+  const [kiemKeKeg, setKiemKeKeg] = useState<KiemKeKegLit[]>([]);
   const [bieuMauCode, setBieuMauCode] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   /**
@@ -1079,6 +1082,7 @@ export default function App() {
     let unsubKeHoach = () => {};
     let unsubDanhGia = () => {};
     let unsubKiemKeBon = () => {};
+    let unsubKiemKeKeg = () => {};
     if (!chiXemChieuXuat) {
       unsubKeHoach = onSnapshot(
         collection(db, "ke_hoach_sx"),
@@ -1131,6 +1135,23 @@ export default function App() {
           );
         },
       );
+      unsubKiemKeKeg = onSnapshot(
+        collection(db, "kiem_ke_keg"),
+        (snapshot) => {
+          setKiemKeKeg(
+            snapshot.docs
+              .map((d) => ({ ...d.data(), id: d.id }) as KiemKeKegLit)
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+          );
+          ghiNhanLoiDoc("kiem_ke_keg", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "kiem_ke_keg",
+            handleFirestoreError(error, OperationType.GET, "kiem_ke_keg"),
+          );
+        },
+      );
     }
 
     /*
@@ -1152,6 +1173,7 @@ export default function App() {
       unsubKeHoach();
       unsubDanhGia();
       unsubKiemKeBon();
+      unsubKiemKeKeg();
     };
   }, [user, userRole, pinUnlocked]);
 
@@ -1627,6 +1649,7 @@ export default function App() {
     setKeHoach([]);
     setDanhGia([]);
     setKiemKeBon([]);
+    setKiemKeKeg([]);
   };
 
   /* ---------------- Du lieu thu nghiem ---------------- */
@@ -6076,6 +6099,67 @@ export default function App() {
     }
   };
 
+  const handleLuuKiemKeKegLit = async (input: {
+    date: string;
+    shiftOrPeriod: string;
+    location: "XUONG" | "KHO_TONG";
+    items: KiemKeKegItem[];
+    totalKegs: number;
+    totalLiters: number;
+    note: string;
+    photos: TepCho[];
+  }): Promise<boolean> => {
+    if (!input.photos.length) return false;
+    setLoading(true);
+    let anhMoi: AnhChungTu[] = [];
+    try {
+      const id = `kk-keg-${input.location.toLowerCase()}-${input.date}-${Date.now()}`;
+      const loaiAnh =
+        input.location === "KHO_TONG" && quyen.ghiXuat && !quyen.ghiNhap
+          ? "XUAT"
+          : "NHAP";
+      anhMoi = await taiAnhChoChungTu(
+        input.photos.map((p) => p.du),
+        {
+          chungTu: [id],
+          loai: loaiAnh,
+          ngay: input.date,
+          maDoiTac: input.location === "XUONG" ? "SKB-XUONG" : "SKB-KHOTONG",
+          doiTac:
+            input.location === "XUONG"
+              ? "Kiểm kê Keg & Lít Xưởng"
+              : "Kiểm kê Keg & Lít Kho tổng",
+          taiBoi: currentUserProfile?.email || user || "",
+        },
+      );
+      const batch = writeBatch(db);
+      ghiAnhVaoLo(batch, anhMoi);
+      batch.set(doc(db, "kiem_ke_keg", id), {
+        id,
+        date: input.date,
+        shiftOrPeriod: input.shiftOrPeriod,
+        location: input.location,
+        items: input.items,
+        totalKegs: Number(input.totalKegs),
+        totalLiters: Number(input.totalLiters),
+        note: input.note,
+        createdBy: currentUserProfile?.name || user || "",
+        createdAt: new Date().toISOString(),
+      } as KiemKeKegLit);
+      await batch.commit();
+      showNotification(
+        `Đã lưu kiểm kê Keg & Lít (${input.location === "XUONG" ? "Xưởng" : "Kho tổng"}) kèm ảnh có dấu ngày giờ`,
+      );
+      return true;
+    } catch (e) {
+      if (anhMoi.length) void boTepVuaTai(anhMoi);
+      alert(handleFirestoreError(e, OperationType.WRITE, "kiem_ke_keg"));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   /*
    * SAU KHI XOÁ LẺ: số phiếu nào không còn dòng hàng nào phía sau thì hỏi hủy
    * luôn. Không hủy thì Sổ số phiếu ghi "còn hiệu lực" cho một chứng từ rỗng.
@@ -6330,7 +6414,7 @@ export default function App() {
     const groups = [
       {
         id: "ban-xuong",
-        title: "1. Xưởng sản xuất",
+        title: "1. Xưởng sản xuất (Đầu vào & Nhập)",
         items: [
           ...(quyen.duyetXuong
             ? [
@@ -6354,23 +6438,6 @@ export default function App() {
                 },
               ]
             : []),
-        ],
-      },
-      {
-        id: "ban-kho-tong",
-        title: "2. Kho tổng",
-        items: [
-          ...(quyen.xemKho
-            ? [
-                {
-                  id: "kho-tong",
-                  label: "Kho tổng (NXT & Lô)",
-                  icon: Warehouse,
-                  color: "#10b981",
-                  badge: pendingSlipStats.rao2,
-                },
-              ]
-            : []),
           ...(quyen.ghiNhap
             ? [
                 {
@@ -6386,6 +6453,23 @@ export default function App() {
                   icon: FileText,
                   color: "#0ea5e9",
                   badge: 0,
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        id: "ban-kho-tong",
+        title: "2. Kho tổng (Xuất & Đi đường)",
+        items: [
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "kho-tong",
+                  label: "Kho tổng (NXT & Kiểm kê)",
+                  icon: Warehouse,
+                  color: "#10b981",
+                  badge: pendingSlipStats.rao2,
                 },
               ]
             : []),
@@ -10290,11 +10374,13 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 keHoach={keHoach}
                 danhGia={danhGia}
                 kiemKeBon={kiemKeBon}
+                kiemKeKeg={kiemKeKeg}
                 currentUserName={currentUserProfile?.name || user || ""}
                 busy={loading}
                 onGuiPhieuGiao={handleGuiPhieuXuong}
                 onLuuDanhGia={handleLuuDanhGia}
                 onLuuKiemKeBon={handleLuuKiemKeBon}
+                onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
               />
             )}
 
@@ -10324,8 +10410,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 slips={slips}
                 approvedSlips={approvedSlips}
                 anhTheoChungTu={anhTheoChungTu}
+                kiemKeKeg={kiemKeKeg}
                 canApproveGate2={quyen.duyetKhoTong}
                 canExport={quyen.ghiXuat}
+                canWriteInventory={quyen.ghiNhap || quyen.ghiXuat}
                 busy={loading}
                 onDuyetRao2={handleDuyetRao2}
                 onTraLaiPhieu={handleTraLaiPhieu}
@@ -10334,6 +10422,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   setNewTransaction((prev) => ({ ...prev, isInTransit: true }));
                   setActiveTab("export");
                 }}
+                onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
               />
             )}
 

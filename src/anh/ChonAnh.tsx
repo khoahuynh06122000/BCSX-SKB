@@ -34,15 +34,30 @@ let dem = 0;
  * chọn tệp). Tấm nào máy không cho đọc thì đếm vào `hong` để báo người dùng
  * chọn lại, không âm thầm bỏ.
  */
+export interface TuyChonAnh {
+  /** Tự động đóng dấu ngày giờ thực tế lên góc ảnh (dùng cho ảnh kiểm kê hiện trường). */
+  stampTimestamp?: boolean;
+  /** Nhãn khu vực hiển thị cùng ngày giờ trên ảnh. */
+  stampLabel?: string;
+}
+
 export async function taoTepCho(
   files: FileList | readonly File[] | null | undefined,
+  options?: TuyChonAnh,
 ): Promise<{ ds: TepCho[]; hong: number }> {
   const tep = Array.from(files ?? []);
   const ds: TepCho[] = [];
   let hong = 0;
+  const watermark = options?.stampTimestamp
+    ? {
+        enabled: true,
+        label: options.stampLabel || "KIỂM KÊ HIỆN TRƯỜNG · SKB",
+        timestamp: new Date(),
+      }
+    : undefined;
   for (const f of tep) {
     try {
-      const du = await compressFile(f, 2000, 2000, 0.85);
+      const du = await compressFile(f, 2000, 2000, 0.85, watermark);
       if (!du.startsWith("data:image/")) throw new Error("không phải ảnh");
       ds.push({ id: `cho-${Date.now()}-${dem++}`, du });
     } catch {

@@ -95,6 +95,20 @@ rules_version = '2';
 //   - createdAt: string (required, 1..64)
 //   - updatedAt, updatedBy, uid, note, productName, tankName (optional bounded)
 //
+// Collection: kiem_ke_keg/{invId}
+// Fields:
+//   - id: string|null (optional, <= 128, immutable if set)
+//   - date: string (required, yyyy-MM-dd..., 8..32)
+//   - shiftOrPeriod: string|null (optional, <= 100)
+//   - location: string (required, in ['XUONG', 'KHO_TONG'])
+//   - items: list (required, 1..100)
+//   - totalKegs: number (required, 0..1000000)
+//   - totalLiters: number (required, 0..10000000)
+//   - note: string|null (optional, <= 2000)
+//   - createdBy: string (required, 0..150)
+//   - createdAt: string (required, 1..64)
+//   - updatedAt, updatedBy, uid (optional bounded)
+//
 // Existing Collections (preserved intact):
 //   - test/connection, transactions, revenue, sap_jobs, diem_ban, hoa_don,
 //     anh_chung_tu, anh_minh_chung, do_luong, partners, so_phieu, bo_dem
@@ -630,6 +644,43 @@ service cloud.firestore {
         && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
     }
 
+    function kiemKeKegAllowedKeys() {
+      return [
+        'id', 'date', 'shiftOrPeriod', 'location', 'items',
+        'totalKegs', 'totalLiters', 'note', 'createdBy', 'createdAt',
+        'updatedAt', 'updatedBy', 'uid'
+      ];
+    }
+
+    function isValidKiemKeKegCommon(data) {
+      return optStr(data, 'id', 128)
+        && reqStr(data, 'date', 8, 32)
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}.*')
+        && optStr(data, 'shiftOrPeriod', 100)
+        && reqStr(data, 'location', 4, 16)
+        && data.location in ['XUONG', 'KHO_TONG']
+        && 'items' in data && data.items is list && data.items.size() >= 1 && data.items.size() <= 100
+        && reqNum(data, 'totalKegs', 0, 1000000)
+        && reqNum(data, 'totalLiters', 0, 10000000)
+        && optStr(data, 'note', 2000)
+        && reqStr(data, 'createdBy', 0, 150)
+        && reqStr(data, 'createdAt', 1, 64)
+        && optStr(data, 'updatedAt', 64)
+        && optStr(data, 'updatedBy', 150)
+        && optStr(data, 'uid', 128);
+    }
+
+    function isValidKiemKeKegCreate(data) {
+      return data.keys().hasOnly(kiemKeKegAllowedKeys())
+        && isValidKiemKeKegCommon(data);
+    }
+
+    function isValidKiemKeKegUpdate(data) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeKegAllowedKeys())
+        && isValidKiemKeKegCommon(data)
+        && (!('id' in resource.data) || !('id' in data) || data.id == resource.data.id);
+    }
+
     // -------------------------------------------------------------------------
     // Ho so nguoi dung
     // -------------------------------------------------------------------------
@@ -1048,6 +1099,20 @@ service cloud.firestore {
       allow read: if xemKho();
       allow create: if ghiNhapKho() && isValidKiemKeBonCreate(request.resource.data);
       allow update: if ghiNhapKho() && isValidKiemKeBonUpdate(request.resource.data);
+      allow delete: if isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Kiem ke keg & lit tai Xuong (XUONG) va Kho Tong (KHO_TONG).
+    // -------------------------------------------------------------------------
+    match /kiem_ke_keg/{invId} {
+      allow read: if xemKho();
+      allow create: if isValidKiemKeKegCreate(request.resource.data)
+        && ((request.resource.data.location == 'XUONG' && ghiNhapKho())
+          || (request.resource.data.location == 'KHO_TONG' && (ghiNhapKho() || ghiXuatKho())));
+      allow update: if isValidKiemKeKegUpdate(request.resource.data)
+        && ((request.resource.data.location == 'XUONG' && ghiNhapKho())
+          || (request.resource.data.location == 'KHO_TONG' && (ghiNhapKho() || ghiXuatKho())));
       allow delete: if isOwner();
     }
 

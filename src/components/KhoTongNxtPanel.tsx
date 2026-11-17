@@ -7,8 +7,16 @@ import {
   PackageCheck,
   RotateCcw,
 } from "lucide-react";
-import type { ImportSlip, Product, Transaction } from "../types";
+import type {
+  ImportSlip,
+  KiemKeKegItem,
+  KiemKeKegLit,
+  Product,
+  Transaction,
+} from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
+import type { TepCho } from "../anh/ChonAnh";
+import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import { dungBangTonKy } from "../lib/tonKho";
 import { quyDoiHienTrang, tinhTonTheoLo } from "../lib/loBia";
 import { pendingSlipTransactions } from "../lib/slip";
@@ -22,13 +30,25 @@ interface Props {
   slips: ImportSlip[];
   approvedSlips: Set<string>;
   anhTheoChungTu: Map<string, AnhChungTu[]>;
+  kiemKeKeg: KiemKeKegLit[];
   canApproveGate2: boolean;
   canExport: boolean;
+  canWriteInventory: boolean;
   busy: boolean;
   onDuyetRao2: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
   onMoBieuMau: (slipCode: string) => void;
   onDiToiXuatKho: () => void;
+  onLuuKiemKeKegLit: (input: {
+    date: string;
+    shiftOrPeriod: string;
+    location: "XUONG" | "KHO_TONG";
+    items: KiemKeKegItem[];
+    totalKegs: number;
+    totalLiters: number;
+    note: string;
+    photos: TepCho[];
+  }) => Promise<boolean>;
 }
 
 export default function KhoTongNxtPanel({
@@ -38,15 +58,18 @@ export default function KhoTongNxtPanel({
   slips,
   approvedSlips,
   anhTheoChungTu,
+  kiemKeKeg,
   canApproveGate2,
   canExport,
+  canWriteInventory,
   busy,
   onDuyetRao2,
   onTraLaiPhieu,
   onMoBieuMau,
   onDiToiXuatKho,
+  onLuuKiemKeKegLit,
 }: Props) {
-  const [subTab, setSubTab] = useState<"nxt" | "nhan-bia">("nxt");
+  const [subTab, setSubTab] = useState<"nxt" | "nhan-bia" | "kiem-ke">("nxt");
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
   const [tuKhoa, setTuKhoa] = useState("");
@@ -117,6 +140,12 @@ export default function KhoTongNxtPanel({
     };
   }, [bangTon, products]);
 
+  const bookStockByProduct = useMemo(() => {
+    const m = new Map<string, number>();
+    bangTon.dong.forEach((d) => m.set(d.productId, d.cuoiKy));
+    return m;
+  }, [bangTon]);
+
   return (
     <div className="space-y-6 anim-view-enter">
       {/* Sub-header & Tabs */}
@@ -159,6 +188,18 @@ export default function KhoTongNxtPanel({
                 {pendingRao2.length}
               </span>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab("kiem-ke")}
+            className={cn(
+              "px-3.5 py-2 rounded-lg text-xs font-extrabold transition-all",
+              subTab === "kiem-ke"
+                ? "bg-[#141A23] text-amber-300 shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-white/80",
+            )}
+          >
+            3. Kiểm kê Keg &amp; Lít
           </button>
         </div>
       </div>
@@ -483,6 +524,22 @@ export default function KhoTongNxtPanel({
               })
             )}
           </div>
+        </div>
+      )}
+
+      {/* ================= TAB 3: KIỂM KÊ KEG & LÍT KHO TỔNG ================= */}
+      {subTab === "kiem-ke" && (
+        <div className="anim-view-enter">
+          <KiemKeKegLitSection
+            location="KHO_TONG"
+            products={products}
+            records={kiemKeKeg}
+            anhTheoChungTu={anhTheoChungTu}
+            bookStockByProduct={bookStockByProduct}
+            canWrite={canWriteInventory}
+            busy={busy}
+            onSave={onLuuKiemKeKegLit}
+          />
         </div>
       )}
     </div>
