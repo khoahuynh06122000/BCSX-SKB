@@ -27,6 +27,8 @@ interface Props {
   onLogin: () => void;
   isAuthenticating: boolean;
   authError: string;
+  /** Hiệu ứng mờ thoát nhẹ khi chuyển sang bước PIN / App */
+  isLeaving?: boolean;
   /** Mã commit của bản đang chạy, để đối chiếu khi có sự cố. */
   maBuild: string;
 }
@@ -66,6 +68,7 @@ export default function ManHinhDangNhap({
   onLogin,
   isAuthenticating,
   authError,
+  isLeaving = false,
   maBuild,
 }: Props) {
   const anhRef = useRef<HTMLDivElement>(null);
@@ -225,18 +228,23 @@ export default function ManHinhDangNhap({
       {/* Nội dung */}
       <main className="relative z-20 flex min-h-[100dvh] items-center px-[4%]">
         <div className="w-full max-w-xl py-24 sm:py-20">
-          <p className="dn-anim-eyebrow text-[0.7rem] font-bold uppercase tracking-[0.32em] text-[#f7c948]">
-            BaNa Brew House · 1.400m
-          </p>
+          <div className={isLeaving ? "dn-leaving" : ""}>
+            <div className="dn-anim-eyebrow inline-flex w-fit flex-col">
+              <p className="text-[0.7rem] font-bold uppercase tracking-[0.32em] text-[#f7c948]">
+                BaNa Brew House · 1.400m
+              </p>
+              <span className="dn-ul-line" aria-hidden="true" />
+            </div>
 
-          <h1 className="dn-tieu-de dn-anim-tieu-de mt-3">
-            Tinh hoa
-            <br />
-            Bia Bà Nà
-          </h1>
+            <h1 className="dn-tieu-de dn-anim-tieu-de mt-3">
+              Tinh hoa
+              <br />
+              Bia Bà Nà
+            </h1>
+          </div>
 
           {/* KHỐI ĐĂNG NHẬP TỐI GIẢN (HÌNH 2) — Theo mẫu PKT chuyển sang tông Đồng/Hổ phách SKB */}
-          <div className="dn-card-wrap relative mt-5 max-w-[392px]">
+          <div className={`dn-card-wrap relative mt-5 max-w-[392px] ${isLeaving ? "dn-leaving" : ""}`}>
             {/* 2 vòng quỹ đạo trôi nổi phía sau khung đăng nhập */}
             <div aria-hidden="true" className="pointer-events-none absolute -inset-16 overflow-visible">
               <div className="dn-ring dn-ring-1" />

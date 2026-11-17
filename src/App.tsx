@@ -184,6 +184,7 @@ import {
 } from "./lib/soPhieuBaoCao";
 import DonBNC from "./components/DonBNC";
 import ManHinhDangNhap from "./components/ManHinhDangNhap";
+import ManHinhPin, { type PinStageState } from "./components/ManHinhPin";
 import type { HoaDonGhiNhan } from "./lib/hoaDon";
 import type { GhiSoPhieu } from "./lib/soPhieu";
 import {
@@ -1097,36 +1098,39 @@ export default function App() {
   const [pinUnlocked, setPinUnlocked] = useState(
     () => sessionStorage.getItem(PIN_SESSION_KEY) === "1",
   );
-  const [pinInput, setPinInput] = useState("");
-  const [pinConfirmInput, setPinConfirmInput] = useState("");
+  const [pinStage, setPinStage] = useState<PinStageState>("idle");
   const [pinError, setPinError] = useState("");
   const [pinBusy, setPinBusy] = useState(false);
   const [pinAttempts, setPinAttempts] = useState(0);
 
+  const choMotion = (ms: number) =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
   const unlockSession = () => {
     sessionStorage.setItem(PIN_SESSION_KEY, "1");
     setPinUnlocked(true);
-    setPinInput("");
-    setPinConfirmInput("");
+    setPinStage("idle");
     setPinError("");
     setPinAttempts(0);
   };
 
   /** Lan dau: nguoi dung tu dat ma PIN 6 so cho tai khoan cua minh. */
-  const handleCreatePin = async () => {
+  const handleCreatePin = async (pin: string, confirmPin: string) => {
     if (pinBusy) return;
     setPinError("");
 
-    if (!isValidPinFormat(pinInput)) {
+    if (!isValidPinFormat(pin)) {
       setPinError("Mã PIN phải gồm đúng 6 chữ số.");
       return;
     }
-    if (pinInput !== pinConfirmInput) {
+    if (pin !== confirmPin) {
       setPinError("Hai lần nhập chưa khớp nhau.");
       return;
     }
     // Chan vai to hop qua de doan
-    if (/^(\d)\1{5}$/.test(pinInput) || pinInput === "123456") {
+    if (/^(\d)\1{5}$/.test(pin) || pin === "123456" || pin === "654321") {
       setPinError("Mã PIN quá dễ đoán. Anh/chị chọn dãy số khác nhé.");
       return;
     }
@@ -1138,23 +1142,29 @@ export default function App() {
     }
 
     setPinBusy(true);
+    setPinStage("verify");
     try {
-      const pinHash = await hashPin(pinInput, uid);
+      const [pinHash] = await Promise.all([hashPin(pin, uid), choMotion(360)]);
       await updateDoc(doc(db, "users", uid), {
         pinHash,
         pinUpdatedAt: new Date().toISOString(),
       });
       setCurrentUserProfile((p) => (p ? { ...p, pinHash } : p));
+      setPinStage("ok");
+      await choMotion(480);
       unlockSession();
       showNotification("Đã thiết lập mã PIN bảo vệ");
     } catch (e: any) {
+      setPinStage("sai");
       setPinError("Không lưu được mã PIN: " + e.message);
+      await choMotion(450);
+      setPinStage("idle");
     } finally {
       setPinBusy(false);
     }
   };
 
-  const handleVerifyPin = async () => {
+  const handleVerifyPin = async (pin: string) => {
     if (pinBusy) return;
     setPinError("");
 
@@ -1163,20 +1173,25 @@ export default function App() {
     if (!uid || !stored) return;
 
     setPinBusy(true);
+    setPinStage("verify");
     try {
-      const ok = await verifyPin(pinInput, uid, stored);
+      const [ok] = await Promise.all([verifyPin(pin, uid, stored), choMotion(360)]);
       if (ok) {
+        setPinStage("ok");
+        await choMotion(480);
         unlockSession();
       } else {
+        setPinStage("sai");
         const n = pinAttempts + 1;
         setPinAttempts(n);
-        setPinInput("");
         if (n >= 5) {
           // Nhap sai nhieu lan: buoc dang xuat de tranh do PIN
           setPinError("Sai quá 5 lần. Đang đăng xuất để bảo vệ tài khoản...");
           setTimeout(() => handleLogout(), 1200);
         } else {
           setPinError(`Mã PIN không đúng. Còn ${5 - n} lần thử.`);
+          await choMotion(460);
+          setPinStage("idle");
         }
       }
     } finally {
@@ -1225,6 +1240,9 @@ export default function App() {
     }
     sessionStorage.removeItem(PIN_SESSION_KEY);
     setPinUnlocked(false);
+    setPinStage("idle");
+    setPinError("");
+    setPinAttempts(0);
     setUser(null);
     setUserRole("PENDING");
     setCurrentUserProfile(null);
@@ -5910,19 +5928,28 @@ export default function App() {
   const canWrite = quyen.ghiNhap || quyen.ghiXuat;
 
 
+  const pendingSlipStats = useMemo(
+    () => ({
+      rao1: slips.filter((s) => s.status === "cho_ql_xuong").length,
+      rao2: slips.filter((s) => s.status === "cho_kho_tong").length,
+      traLai: slips.filter((s) => s.status === "tra_lai").length,
+    }),
+    [slips],
+  );
+
   /**
-   * Menu bên trái, chia theo NHÓM CÔNG VIỆC thay vì một danh sách dài.
-   *
-   * Người dùng tìm mục theo việc họ đang làm ("tôi cần nhập hàng") chứ không
-   * theo thứ tự chữ cái, nên gom thành 5 nhóm quen thuộc với nghiệp vụ kho.
-   * Nhóm nào hết mục (do phân quyền) thì tự ẩn luôn cả tiêu đề.
+   * Menu bên trái chia rành mạch THEO BAN BỆ (tránh trùng lặp đầu mục):
+   *   1. Xưởng sản xuất (QL Xưởng + NV Sản xuất)
+   *   2. Kho tổng (NXT & Rào 2, Nhập lẻ, Xuất kho, Đơn đi đường, Sổ kho SAP)
+   *   3. Công nợ & Hóa đơn (Dashboard Kế toán, Công nợ·Hóa đơn, Đơn BNC, Đối tác)
+   *   4. Tư liệu & Hệ thống (Thư viện ảnh, Cài đặt)
    */
   const navGroups = useMemo(() => {
     const isOwnerRole = userRole === "OWNER";
     const groups = [
       {
-        id: "paperless",
-        title: "Quy trình Xưởng & Kho",
+        id: "ban-xuong",
+        title: "1. Xưởng sản xuất",
         items: [
           ...(quyen.duyetXuong
             ? [
@@ -5931,6 +5958,7 @@ export default function App() {
                   label: "Quản lý xưởng",
                   icon: ClipboardList,
                   color: "#f59e0b",
+                  badge: pendingSlipStats.rao1,
                 },
               ]
             : []),
@@ -5941,48 +5969,42 @@ export default function App() {
                   label: "Xưởng sản xuất",
                   icon: Factory,
                   color: "#fb923c",
-                },
-              ]
-            : []),
-          ...(quyen.xemKho
-            ? [
-                {
-                  id: "kho-tong",
-                  label: "Kho tổng (NXT)",
-                  icon: Warehouse,
-                  color: "#10b981",
-                },
-              ]
-            : []),
-          ...(quyen.xemKeHoachDashboard
-            ? [
-                {
-                  id: "ketoan-dashboard",
-                  label: "Dashboard Kế hoạch",
-                  icon: BarChart3,
-                  color: "#38bdf8",
+                  badge: pendingSlipStats.traLai,
                 },
               ]
             : []),
         ],
       },
       {
-        id: "operations",
-        title: "Nhập · Xuất",
+        id: "ban-kho-tong",
+        title: "2. Kho tổng",
         items: [
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "kho-tong",
+                  label: "Kho tổng (NXT & Lô)",
+                  icon: Warehouse,
+                  color: "#10b981",
+                  badge: pendingSlipStats.rao2,
+                },
+              ]
+            : []),
           ...(quyen.ghiNhap
             ? [
                 {
                   id: "import",
-                  label: "Nhập kho lẻ",
+                  label: "Nhập lẻ & Tồn đầu",
                   icon: PlusCircle,
-                  color: "#10b981",
+                  color: "#059669",
+                  badge: 0,
                 },
                 {
                   id: "slips",
-                  label: "Phiếu nhập",
+                  label: "Phiếu giấy cũ",
                   icon: FileText,
                   color: "#0ea5e9",
+                  badge: 0,
                 },
               ]
             : []),
@@ -5993,28 +6015,42 @@ export default function App() {
                   label: "Xuất kho",
                   icon: MinusCircle,
                   color: "#f97316",
+                  badge: 0,
                 },
                 {
                   id: "in-transit",
                   label: "Đơn đi đường",
                   icon: Truck,
                   color: "#fbbf24",
+                  badge: 0,
+                },
+              ]
+            : []),
+          ...(quyen.xemKho
+            ? [
+                {
+                  id: "reports",
+                  label: "Sổ kho & Xuất SAP",
+                  icon: TrendingUp,
+                  color: "#f43f5e",
+                  badge: 0,
                 },
               ]
             : []),
         ],
       },
       {
-        id: "reports",
-        title: "Báo cáo",
+        id: "ban-cong-no",
+        title: "3. Công nợ & Hóa đơn",
         items: [
-          ...(quyen.xemKho
+          ...(quyen.xemKeHoachDashboard
             ? [
                 {
-                  id: "reports",
-                  label: "Báo cáo tổng hợp",
-                  icon: TrendingUp,
-                  color: "#f43f5e",
+                  id: "ketoan-dashboard",
+                  label: "Dashboard Kế toán",
+                  icon: BarChart3,
+                  color: "#38bdf8",
+                  badge: 0,
                 },
               ]
             : []),
@@ -6025,20 +6061,29 @@ export default function App() {
                   label: "Công nợ · Hóa đơn",
                   icon: Receipt,
                   color: "#14b8a6",
+                  badge: 0,
                 },
                 {
                   id: "bnc",
                   label: "Đơn BNC",
                   icon: Building2,
                   color: "#0284c7",
+                  badge: 0,
+                },
+                {
+                  id: "partners",
+                  label: "Đối tác & Điểm bán",
+                  icon: Users,
+                  color: "#6366f1",
+                  badge: 0,
                 },
               ]
             : []),
         ],
       },
       {
-        id: "records",
-        title: "Dữ liệu",
+        id: "system",
+        title: "4. Tư liệu & Hệ thống",
         items: [
           ...(quyen.xemAnh
             ? [
@@ -6047,44 +6092,37 @@ export default function App() {
                   label: "Thư viện ảnh",
                   icon: ImageIcon,
                   color: "#ec4899",
+                  badge: 0,
                 },
               ]
             : []),
-          ...(quyen.xemXuat
+          ...(isOwnerRole
             ? [
                 {
-                  id: "partners",
-                  label: "Đối tác",
-                  icon: Users,
-                  color: "#6366f1",
+                  id: "settings",
+                  label: "Cài đặt & Phân quyền",
+                  icon: ShieldCheck,
+                  color: "#ef4444",
+                  badge: 0,
                 },
               ]
             : []),
         ],
       },
-      {
-        id: "system",
-        title: "Hệ thống",
-        items: isOwnerRole
-          ? [
-              {
-                id: "settings",
-                label: "Cài đặt",
-                icon: ShieldCheck,
-                color: "#ef4444",
-              },
-            ]
-          : [],
-      },
     ];
 
     return groups.filter((g) => g.items.length > 0);
-  }, [userRole, quyen]);
+  }, [userRole, quyen, pendingSlipStats]);
 
-  // Danh sách phẳng — dùng cho kiểm tra quyền vào tab và tra tên tab đang mở
+  // Danh sách phẳng — dùng cho kiểm tra quyền vào tab và tra tên tab + ban bệ đang mở
   const navItems = useMemo(
     () => navGroups.flatMap((g) => g.items),
     [navGroups],
+  );
+
+  const activeGroup = useMemo(
+    () => navGroups.find((g) => g.items.some((i) => i.id === activeTab)),
+    [navGroups, activeTab],
   );
 
   // Handle unauthorized tab access
@@ -6097,31 +6135,23 @@ export default function App() {
 
   if (loading && !user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Superior Background Architecture */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1554469384-e58fac16e23a?q=80&w=2574&auto=format&fit=crop"
-            className="w-full h-full object-cover opacity-20 scale-100"
-            alt="Background"
-          />
-          <div className="absolute inset-0 bg-gradient-to-tr from-slate-100/60 via-white/40 to-slate-100/60" />
-        </div>
+      <div className="pin-backdrop min-h-[100dvh] flex items-center justify-center p-6 relative overflow-hidden text-white">
+        <div aria-hidden="true" className="dn-ambient-grid pointer-events-none fixed inset-0 z-0 opacity-60" />
 
-        <div className="flex flex-col items-center gap-8 relative z-10 transition-all duration-300">
-          <div className="relative">
-            <div className="w-16 h-16 border-2 border-slate-200 border-t-slate-600 rounded-full animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Beer className="w-6 h-6 text-slate-400" />
-            </div>
+        <div className="flex flex-col items-center gap-6 relative z-10 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/30">
+            <Beer className="w-7 h-7" />
           </div>
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-black text-slate-900 tracking-widest font-serif italic uppercase">
-              Bia Bà Nà
+          <div className="space-y-1.5">
+            <h1 className="dn-card-title text-2xl font-bold tracking-tight text-amber-50">
+              Bia Bà Nà · SKB
             </h1>
-            <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.4em]">
-              Đang tải dữ liệu...
+            <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-amber-300/80">
+              Đang khởi động dữ liệu...
             </p>
+          </div>
+          <div className="boot-load-bar">
+            <div className="boot-load-sweep" />
           </div>
         </div>
       </div>
@@ -6251,110 +6281,25 @@ export default function App() {
     const needsSetup = !currentUserProfile?.pinHash;
 
     return (
-      <div className="min-h-screen bg-bg-main flex items-center justify-center p-6 font-sans">
-        <div className="fixed top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-600" />
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 border border-slate-200 premium-shadow space-y-6">
-          <div className="text-center space-y-3">
-            <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25">
-              <Lock className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {needsSetup ? "Thiết lập mã PIN" : "Nhập mã PIN"}
-            </h2>
-            <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-              {needsSetup
-                ? "Đặt mã PIN 6 chữ số để bảo vệ khi dùng máy chung. Bạn sẽ cần mã này mỗi lần mở app."
-                : "Lớp bảo vệ thứ 2 cho tài khoản"}
-              <br />
-              <span className="text-slate-900">{currentUserProfile?.email}</span>
-            </p>
-          </div>
-
-          {pinError && (
-            <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-              <p className="text-[11px] font-bold text-rose-700 leading-relaxed">
-                {pinError}
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            <input
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={6}
-              autoFocus
-              placeholder="● ● ● ● ● ●"
-              value={pinInput}
-              onChange={(e) =>
-                setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  needsSetup ? handleCreatePin() : handleVerifyPin();
-                }
-              }}
-              className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center text-2xl font-black tracking-[0.5em] outline-none focus:border-primary focus:bg-white transition-all"
-            />
-
-            {needsSetup && (
-              <input
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                maxLength={6}
-                placeholder="Nhập lại mã PIN"
-                value={pinConfirmInput}
-                onChange={(e) =>
-                  setPinConfirmInput(
-                    e.target.value.replace(/\D/g, "").slice(0, 6),
-                  )
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreatePin();
-                }}
-                className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-center text-lg font-black tracking-[0.4em] outline-none focus:border-primary focus:bg-white transition-all"
-              />
-            )}
-          </div>
-
-          <Button
-            className="w-full"
-            loading={pinBusy}
-            onClick={needsSetup ? handleCreatePin : handleVerifyPin}
-            disabled={pinBusy || pinInput.length !== 6}
-          >
-            {needsSetup ? "Đặt mã PIN" : "Mở khoá"}
-          </Button>
-
-          {/*
-            Noi ro la doi duoc tai khoan: nguoi ngoi vao may dung chung nhin
-            thay man hinh PIN cua nguoi truoc thi tuong bi ket, khong biet nut
-            nay dan ra man hinh dang nhap.
-          */}
-          <button
-            onClick={handleLogout}
-            className="w-full text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors py-2"
-          >
-            Đăng xuất · đổi tài khoản khác
-          </button>
-
-          {!needsSetup && (
-            <p className="text-[10px] font-bold text-slate-400 text-center leading-relaxed">
-              Quên mã PIN? Liên hệ quản trị viên để đặt lại.
-            </p>
-          )}
-        </div>
-      </div>
+      <ManHinhPin
+        email={currentUserProfile?.email || user || ""}
+        needsSetup={needsSetup}
+        pinStage={pinStage}
+        pinBusy={pinBusy}
+        pinError={pinError}
+        onClearError={() => setPinError("")}
+        onVerifyPin={handleVerifyPin}
+        onCreatePin={handleCreatePin}
+        onLogout={handleLogout}
+      />
     );
   }
 
   return (
     <div
+      id="app"
       className={cn(
-        "flex h-screen bg-bg-main text-slate-900 font-sans overflow-hidden transition-all duration-150",
+        "app-vao flex h-screen bg-bg-main text-slate-900 font-sans overflow-hidden transition-all duration-150",
         (loading || isAccountModalOpen) && user
           ? "blur-[1px] brightness-95"
           : "",
@@ -6506,7 +6451,7 @@ export default function App() {
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none">
           <div
             className={cn(
-              "px-6 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl animate-in fade-in slide-in-from-bottom-5 duration-300",
+              "skb-toast-in px-6 py-3 rounded-2xl shadow-2xl border backdrop-blur-xl",
               notification.type === "success"
                 ? "bg-emerald-500/90 text-white border-emerald-400"
                 : "bg-rose-500/90 text-white border-rose-400",
@@ -6537,7 +6482,7 @@ export default function App() {
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 sm:w-72 bg-white border-r border-slate-100 transition-all duration-200 transform lg:relative lg:translate-x-0 overflow-hidden shrink-0 flex flex-col premium-shadow",
+          "sidebar-vao fixed inset-y-0 left-0 z-50 w-64 sm:w-72 bg-white border-r border-slate-100 transition-all duration-200 transform lg:relative lg:translate-x-0 overflow-hidden shrink-0 flex flex-col premium-shadow",
           sidebarOpen
             ? "translate-x-0"
             : "-translate-x-full lg:w-0 lg:opacity-0 lg:border-none",
@@ -6574,7 +6519,10 @@ export default function App() {
 
           <nav className="flex-1 px-3 sm:px-4 custom-scrollbar overflow-y-auto pb-4">
             {navGroups.map((group, groupIndex) => (
-              <div key={group.id} className={groupIndex > 0 ? "mt-6" : ""}>
+              <div
+                key={group.id}
+                className={groupIndex > 0 ? "mt-5 pt-4 border-t border-slate-100" : ""}
+              >
                 <p className="px-3 sm:px-4 text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.18em] mb-2">
                   {group.title}
                 </p>
@@ -6598,10 +6546,10 @@ export default function App() {
                         if (window.innerWidth < 1024) setSidebarOpen(false);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all duration-200 group relative overflow-hidden text-left",
+                        "w-full flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-all duration-150 group relative overflow-hidden text-left",
                         activeTab === item.id
-                          ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10"
-                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                          ? "skb-nav-active bg-slate-900 text-white shadow-lg shadow-slate-900/10"
+                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 hover:translate-x-0.5",
                       )}
                     >
                       <item.icon
@@ -6614,6 +6562,18 @@ export default function App() {
                       <span className="flex-1 min-w-0 truncate text-[13px] sm:text-sm font-bold tracking-tight">
                         {item.label}
                       </span>
+                      {item.badge > 0 && (
+                        <span
+                          className={cn(
+                            "px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold tabular-nums shrink-0",
+                            activeTab === item.id
+                              ? "bg-amber-400 text-slate-950"
+                              : "bg-amber-100 text-amber-800",
+                          )}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
                       {activeTab === item.id && (
                         <ChevronRight className="w-4 h-4 shrink-0 opacity-70" />
                       )}
@@ -6677,7 +6637,7 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top Command Header (Craft Brewery & Paperless) */}
-        <header className="min-h-16 bg-[#141A23] text-white border-b border-amber-500/30 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5 sticky top-0 z-30 shrink-0 shadow-lg">
+        <header className="topbar-vao min-h-16 bg-[#141A23] text-white border-b border-amber-500/30 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5 sticky top-0 z-30 shrink-0 shadow-lg">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -6694,82 +6654,37 @@ export default function App() {
                 <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-400">
                   Sun KraftBeer · Bà Nà Hills
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  PAPERLESS REALTIME
-                </span>
-                <span className="hidden sm:inline text-xs font-bold text-slate-300">
-                  · {navItems.find((i) => i.id === activeTab)?.label}
-                </span>
+                {activeGroup && (
+                  <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/10 text-slate-200 border border-white/10">
+                    <span className="text-amber-300">{activeGroup.title}</span>
+                    <span className="text-slate-500">▸</span>
+                    <span>{navItems.find((i) => i.id === activeTab)?.label}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Nút chuyển nhanh 4 màn hình chính theo quyền */}
-            <div className="hidden xl:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-700/80">
-              {quyen.lapPhieuXuong && (
-                <button
-                  onClick={() => setActiveTab("xuong")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all",
-                    activeTab === "xuong"
-                      ? "bg-amber-400 text-slate-950 shadow"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800",
-                  )}
-                >
-                  1. Xưởng SX
-                </button>
-              )}
-              {quyen.duyetXuong && (
-                <button
-                  onClick={() => setActiveTab("ql-xuong")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5",
-                    activeTab === "ql-xuong"
-                      ? "bg-amber-400 text-slate-950 shadow"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800",
-                  )}
-                >
-                  <span>2. QL Xưởng</span>
-                  {slips.filter((s) => s.status === "cho_ql_xuong").length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">
-                      {slips.filter((s) => s.status === "cho_ql_xuong").length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {quyen.xemKho && (
-                <button
-                  onClick={() => setActiveTab("kho-tong")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5",
-                    activeTab === "kho-tong"
-                      ? "bg-amber-400 text-slate-950 shadow"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800",
-                  )}
-                >
-                  <span>3. Kho Tổng</span>
-                  {slips.filter((s) => s.status === "cho_kho_tong").length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-sky-500 text-white font-mono">
-                      {slips.filter((s) => s.status === "cho_kho_tong").length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {quyen.xemKeHoachDashboard && (
-                <button
-                  onClick={() => setActiveTab("ketoan-dashboard")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-all",
-                    activeTab === "ketoan-dashboard"
-                      ? "bg-amber-400 text-slate-950 shadow"
-                      : "text-slate-300 hover:text-white hover:bg-slate-800",
-                  )}
-                >
-                  4. Kế Toán
-                </button>
-              )}
-            </div>
+            {/* Chỉ hiện badge nhắc việc khi thực sự có phiếu đang chờ duyệt — không lặp lại thanh menu */}
+            {quyen.duyetXuong && pendingSlipStats.rao1 > 0 && activeTab !== "ql-xuong" && (
+              <button
+                onClick={() => setActiveTab("ql-xuong")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/35 text-amber-300 text-[11px] font-extrabold transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400 pulse-dot" />
+                Chờ Rào 1: {pendingSlipStats.rao1}
+              </button>
+            )}
+            {quyen.duyetKhoTong && pendingSlipStats.rao2 > 0 && activeTab !== "kho-tong" && (
+              <button
+                onClick={() => setActiveTab("kho-tong")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/35 text-sky-300 text-[11px] font-extrabold transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full bg-sky-400 pulse-dot" />
+                Chờ Rào 2: {pendingSlipStats.rao2}
+              </button>
+            )}
 
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl border border-white/10">
               <Calendar className="w-3.5 h-3.5 text-amber-400" />
@@ -6796,7 +6711,8 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-[#F4F1EA] dark:bg-bg-main">
           <div
             key={activeTab}
-            className="max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24 anim-view-enter"
+            id="view"
+            className="vao max-w-[1600px] mx-auto space-y-4 sm:space-y-8 pb-24"
           >
             {/*
               MỘT dải cảnh báo cho mọi kho dữ liệu đang không đọc được.
