@@ -96,9 +96,8 @@ thêm ảnh; sửa, xoá chỉ admin. Xoá chứng từ thì xoá luôn ảnh c�
   - *Hiện tượng*: Danh sách 15/15 chứng từ vẫn tải đủ từ Firestore, nhưng toàn bộ khung ảnh hiện "Lỗi mạng / bị chặn" kèm nút Thử lại.
   - *Nguyên nhân cốt lõi*: Mạng nội bộ văn phòng Sun World / Ba Na Hills (Fortinet, Palo Alto) có chính sách chặn các domain lưu trữ media đám mây bên thứ ba (`res.cloudinary.com`). Tài khoản Admin dùng 4G hoặc máy đã cache ảnh từ trước nên thấy bình thường.
   - *Cách kiểm tra*: Bấm nút **`SOÁT ẢNH`** góc trên — nếu ra Mã 0 (*Không hỏi tới máy chủ được*), hoặc mở link ảnh Cloudinary trên tab mới bị chặn kết nối ➔ 100% do tường lửa mạng công ty.
-  - *Hướng xử lý*:
-    1. Tạm thời: Chuyển sang Wi-Fi phát từ 4G hoặc nhờ IT công ty whitelist `res.cloudinary.com`.
-    2. Giải pháp kiến trúc lâu dài: Bổ sung API Proxy trung chuyển ảnh chạy trên Vercel (`/api/anh/xem?url=...`), trình duyệt chỉ gọi về domain chính `bcsx-skb.vercel.app` để vượt qua tường lửa công ty.
+  - *Đã xử lý (19/11/2026)*: mọi ảnh trong app tải qua **đường trung chuyển** `/api/anh/xem/<đường sau /image/upload/>` trên chính domain app. Trên Vercel do luật `rewrites` trong [`vercel.json`](vercel.json) làm, chạy tại máy do `server.ts` làm. Ô ảnh thử trung chuyển trước, hỏng mới thử thẳng Cloudinary. Nút `SOÁT ẢNH` cũng soát qua trung chuyển. Xem [`src/anh/duongDan.ts`](src/anh/duongDan.ts) (`quaTrungChuyen`).
+  - *Lưu ý*: tên kho `zjtjeyqd` viết cứng ở `vercel.json` và `KHO_ANH` — đổi kho Cloudinary thì sửa cả hai (`moHinh.test.ts` canh). Tải ảnh LÊN vẫn đi thẳng `api.cloudinary.com`; nếu mạng văn phòng chặn cả chiều tải lên thì phải làm thêm.
 
 ---
 
@@ -111,6 +110,7 @@ src/lib/             Phép tính thuần — chạy thử được không cần 
 src/lib/__tests__/   Phép kiểm bằng dữ liệu giả
 src/firebase.ts      Khởi tạo Firebase; mọi lệnh Firestore đi qua lib/firestoreDem.ts
 api/                 Hàm Vercel: quét phiếu AI, xoá ảnh Cloudinary
+                     (/api/anh/xem là luật rewrites trong vercel.json, không phải hàm)
 server.ts            Máy chủ Express khi chạy tại máy (Vercel không dùng)
 firestore.rules      Phân quyền
 ```

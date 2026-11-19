@@ -3,6 +3,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/anh/xem/:duong*",
+      "destination": "https://res.cloudinary.com/zjtjeyqd/image/upload/:duong*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

@@ -18,6 +18,7 @@ import type {
 import type { AnhChungTu } from "../anh/moHinh";
 import type { TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import KiemKeVoKegThuVeSection from "./KiemKeVoKegThuVeSection";
 import { dungBangTonKy } from "../lib/tonKho";
@@ -535,7 +536,7 @@ export default function KhoTongNxtPanel({
                       {photos.map((ph) => (
                         <a
                           key={ph.id}
-                          href={ph.url}
+                          href={quaTrungChuyen(ph.url)}
                           target="_blank"
                           rel="noreferrer"
                           className="rounded-xl overflow-hidden border border-slate-300 bg-slate-100 block"

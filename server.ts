@@ -5,6 +5,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { requireUser } from "./api/_auth";
 import xoaAnhHandler from "./api/anh/xoa";
+import { GOC_TRUNG_CHUYEN, KHO_ANH } from "./src/anh/duongDan";
 
 dotenv.config();
 
@@ -99,6 +100,28 @@ Lưu ý:
 
 // So anh: cung hai ham Vercel dung, de chay tai may khong lech voi that.
 app.post("/api/anh/xoa", (req, res) => xoaAnhHandler(req, res));
+
+// Trung chuyen anh: tren Vercel do luat `rewrites` trong vercel.json lam; o may
+// thi hoi Cloudinary thay trinh duyet. Chi kho cua app (KHO_ANH).
+app.get(/^\/api\/anh\/xem\/(.+)$/, async (req, res) => {
+  const duong = req.path.slice(GOC_TRUNG_CHUYEN.length);
+  if (!duong || duong.includes("..")) return res.status(400).end();
+  try {
+    const r = await fetch(`https://res.cloudinary.com/${KHO_ANH}/image/upload/${duong}`, {
+      method: req.method === "HEAD" ? "HEAD" : "GET",
+    });
+    res.status(r.status);
+    for (const k of ["content-type", "cache-control", "etag", "last-modified", "x-cld-error"]) {
+      const v = r.headers.get(k);
+      if (v) res.setHeader(k, v);
+    }
+    if (req.method === "HEAD") return res.end();
+    res.end(Buffer.from(await r.arrayBuffer()));
+  } catch (e: any) {
+    console.error("Trung chuyen anh loi:", e?.message || e);
+    res.status(502).end();
+  }
+});
 
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

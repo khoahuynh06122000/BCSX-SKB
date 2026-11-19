@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageOff } from "lucide-react";
-import { anhThuNho, chuanHoaUrlAnh } from "./duongDan";
+import { anhThuNho, chuanHoaUrlAnh, quaTrungChuyen } from "./duongDan";
 import { traLuot, xinLuot } from "./hangDoi";
 import { nhomCuaMa } from "./soat";
 
@@ -13,9 +13,11 @@ import { nhomCuaMa } from "./soat";
  * MỘT Ô ẢNH THU NHỎ, CÓ XẾP HÀNG, TRÌ HOÃN THỬ LẠI VÀ CHẨN ĐOÁN LỖI THẬT.
  *
  *   1. Xin lượt ở hàng đợi 4 luồng (`hangDoi.ts`) rồi mới gắn `src`.
- *   2. Tải bản thu nhỏ `w_{rong}` (nếu là Cloudinary). Lỗi thì nghỉ 320ms rồi
- *      lùi sang ẢNH GỐC (tránh chùm lỗi 429 và vượt hạn mức biến đổi ảnh).
- *   3. Ảnh gốc lỗi tiếp thì thử lại 1 nhịp nữa sau 900ms (chống nghẽn mạng / 429).
+ *   2. Tải bản thu nhỏ `w_{rong}` (nếu là Cloudinary) QUA TRUNG CHUYỂN của app
+ *      (`/api/anh/xem/…` — mạng văn phòng chặn `res.cloudinary.com`). Lỗi thì
+ *      nghỉ 320ms rồi lùi sang ẢNH GỐC, vẫn qua trung chuyển.
+ *   3. Vẫn lỗi thì sau 900ms thử ảnh gốc ĐI THẲNG Cloudinary — phòng khi chính
+ *      đường trung chuyển trục trặc.
  *   4. Thua hẳn mới hỏi HEAD 1 nhịp để báo rõ lý do: mất tệp 404, hết hạn mức
  *      Cloudinary (403/420), quá tải tạm (429), hay lỗi mạng — kèm nút Thử lại.
  */
@@ -62,6 +64,8 @@ export default function OAnhLuoi({ url, alt, className = "", rong = 400, onHong 
     [urlNorm, rong],
   );
   const coBanThuNho = Boolean(urlNorm) && urlThuNho !== urlNorm;
+  const quaApp = useMemo(() => quaTrungChuyen(urlNorm), [urlNorm]);
+  const thuNhoQuaApp = useMemo(() => quaTrungChuyen(urlThuNho), [urlThuNho]);
 
   const [nguon, setNguon] = useState("");
   const [buoc, setBuoc] = useState<BuocTai>(() => buocDau(urlNorm, rong));
@@ -110,7 +114,7 @@ export default function OAnhLuoi({ url, alt, className = "", rong = 400, onHong 
         setLyDoLoi("Đường dẫn ảnh không hợp lệ");
         return;
       }
-      fetch(urlNorm, { method: "HEAD", cache: "no-store" })
+      fetch(quaApp, { method: "HEAD", cache: "no-store" })
         .then((r) => {
           if (!huy && !r.ok) setLyDoLoi(moTaLoiHttp(r.status));
         })
@@ -133,7 +137,7 @@ export default function OAnhLuoi({ url, alt, className = "", rong = 400, onHong 
         giu.current = true;
         huyDongHoQueue();
         dongHoQueueRef.current = setTimeout(tra, HET_GIO);
-        setNguon(buoc === "nho" ? urlThuNho : urlNorm);
+        setNguon(buoc === "nho" ? thuNhoQuaApp : buoc === "goc" ? quaApp : urlNorm);
       });
     };
 
@@ -154,7 +158,7 @@ export default function OAnhLuoi({ url, alt, className = "", rong = 400, onHong 
       tra();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlNorm, urlThuNho, coBanThuNho, buoc, lan]);
+  }, [urlNorm, urlThuNho, quaApp, thuNhoQuaApp, coBanThuNho, buoc, lan]);
 
   if (buoc === "hong") {
     return (

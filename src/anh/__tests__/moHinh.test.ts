@@ -20,7 +20,7 @@ import {
   type AnhChungTu,
 } from "../moHinh";
 import { HAN_VUA_TAI_MS, lyDoGiuTepVuaTai } from "../mayChu";
-import { anhThuNho, chuanHoaUrlAnh } from "../duongDan";
+import { anhThuNho, chuanHoaUrlAnh, GOC_TRUNG_CHUYEN, quaTrungChuyen } from "../duongDan";
 import { tenCaBo, tenGoc, taoZip } from "../taiVe";
 import { nhanDinh, nhomCuaMa, tomTatSoat } from "../soat";
 import { danhSachDonVi, diemBanCuaPhan, dungOAnh, locTheoDonVi, locTheoNgay } from "../thuVien";
@@ -151,6 +151,23 @@ eq("da bien doi thi de yen", anhThuNho(`${B}/w_64/v1/a.jpg`, 400), `${B}/w_64/v1
 eq("khong phai cloudinary de yen", anhThuNho("blob:x", 400), "blob:x");
 eq("chuan hoa http cloudinary len https", chuanHoaUrlAnh("  http://res.cloudinary.com/zjtjeyqd/image/upload/v1/a.jpg "), `${B}/v1/a.jpg`);
 eq("thu nho nang http len https", anhThuNho("http://res.cloudinary.com/zjtjeyqd/image/upload/v1/a.jpg", 400), `${B}/f_auto,q_auto,w_400,c_limit/v1/a.jpg`);
+
+// ------------------------------------------------------------ trung chuyển qua domain app
+eq("trung chuyen anh goc", quaTrungChuyen(`${B}/v1/a.jpg`), "/api/anh/xem/v1/a.jpg");
+eq("trung chuyen giu bien doi", quaTrungChuyen(anhThuNho(`${B}/v1/a.jpg`, 400)), "/api/anh/xem/f_auto,q_auto,w_400,c_limit/v1/a.jpg");
+eq("trung chuyen nang http", quaTrungChuyen("http://res.cloudinary.com/zjtjeyqd/image/upload/v1/a.jpg"), "/api/anh/xem/v1/a.jpg");
+eq("kho khac de yen", quaTrungChuyen("https://res.cloudinary.com/demo/image/upload/sample.jpg"), "https://res.cloudinary.com/demo/image/upload/sample.jpg");
+eq("blob de yen", quaTrungChuyen("blob:x"), "blob:x");
+eq("data de yen", quaTrungChuyen("data:image/png;base64,AA"), "data:image/png;base64,AA");
+eq("rong de yen", quaTrungChuyen(""), "");
+{
+  // Luật rewrites trong vercel.json phải trỏ đúng kho và đúng gốc trung chuyển.
+  const { readFileSync } = await import("node:fs");
+  const vc = JSON.parse(readFileSync(new URL("../../../vercel.json", import.meta.url), "utf-8"));
+  const r = vc.rewrites?.[0] ?? {};
+  eq("vercel: luat trung chuyen dung dau", r.source, `${GOC_TRUNG_CHUYEN}:duong*`);
+  eq("vercel: tro dung kho", r.destination, `${B}/:duong*`);
+}
 
 // ------------------------------------------------------------ tên tệp tải về
 eq("ten bnc", tenGoc({ date: "2026-10-16T08:00:00Z", donVi: "BNC · 1901" }), "16.10.26-1901-BNC");

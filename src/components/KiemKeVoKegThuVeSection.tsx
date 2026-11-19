@@ -18,6 +18,7 @@ import type {
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import {
   KEG_THU_VE_PREFIX,
   MA_KHO_TONG_THU_VE,
@@ -675,7 +676,7 @@ export default function KiemKeVoKegThuVeSection({
                       {anh.map((a, idx) => (
                         <a
                           key={a.id}
-                          href={a.url}
+                          href={quaTrungChuyen(a.url)}
                           target="_blank"
                           rel="noreferrer"
                           className="group relative w-32 h-24 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0"

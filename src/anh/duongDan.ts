@@ -35,3 +35,26 @@ export function anhThuNho(url: string, rong = 400): string {
   if (!/^v\d+$/.test(khuc) && (khuc.includes("_") || khuc.includes(","))) return u;
   return `${u.slice(0, i + MOC.length)}f_auto,q_auto,w_${Math.max(1, Math.trunc(rong))},c_limit/${sau}`;
 }
+
+/**
+ * TRUNG CHUYỂN ẢNH QUA DOMAIN APP (`/api/anh/xem/...`).
+ *
+ * Mạng văn phòng Sun World chặn `res.cloudinary.com`, nên máy kế toán thấy
+ * Firestore tải đủ mà ảnh nào cũng "Lỗi mạng / bị chặn". Trình duyệt gọi
+ * đường dẫn cùng domain app; Vercel (luật `rewrites` trong `vercel.json`) và
+ * `server.ts` lúc chạy tại máy đi lấy ảnh ở Cloudinary thay.
+ *
+ * Chỉ nhận ảnh thuộc kho của app — `KHO_ANH` phải khớp `vercel.json`. Ảnh kho
+ * khác, ảnh trên máy (`blob:`, `data:`) thì trả nguyên. Phép biến đổi
+ * (`f_auto,w_400…`) nằm trong đường dẫn nên đi qua nguyên vẹn.
+ */
+export const KHO_ANH = "zjtjeyqd";
+export const GOC_TRUNG_CHUYEN = "/api/anh/xem/";
+
+export function quaTrungChuyen(url: string): string {
+  const u = chuanHoaUrlAnh(url);
+  const tienTo = `https://res.cloudinary.com/${KHO_ANH}${MOC}`;
+  if (!u.toLowerCase().startsWith(tienTo.toLowerCase())) return u;
+  const sau = u.slice(tienTo.length);
+  return sau ? GOC_TRUNG_CHUYEN + sau : u;
+}

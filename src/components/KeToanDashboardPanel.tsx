@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import {
   tinhTonTheoLo,
   tongHopKeHoachVaThucXuat,
@@ -432,7 +433,7 @@ export default function KeToanDashboardPanel({
                     >
                       {anh[0] && (
                         <a
-                          href={anh[0].url}
+                          href={quaTrungChuyen(anh[0].url)}
                           target="_blank"
                           rel="noreferrer"
                           className="w-28 h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"

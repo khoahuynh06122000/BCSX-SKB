@@ -14,4 +14,4 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
    - Dữ liệu Firestore vẫn tải đủ 100% nhưng ảnh không hiện do tường lửa mạng nội bộ công ty (Fortinet/Palo Alto) chặn domain CDN đám mây `res.cloudinary.com`.
    - Máy Admin thấy ảnh vì dùng mạng ngoài/4G hoặc đã có browser cache từ trước.
    - Nút `SOÁT ẢNH` trả về Mã 0 (*Không hỏi tới máy chủ được*).
-   - Giải pháp triệt để khi cần: Dựng endpoint API Proxy `/api/anh/xem` trên Vercel để trung chuyển ảnh qua domain app chính, tránh bị tường lửa mạng nội bộ chặn.
+   - ĐÃ LÀM (19/11/2026): ảnh hiển thị đi qua `/api/anh/xem/...` (luật `rewrites` trong `vercel.json`, `server.ts` khi chạy máy). Hàm `quaTrungChuyen` ở `src/anh/duongDan.ts`. Chỗ nào hiện/mở/tải ảnh mới đều phải bọc `quaTrungChuyen(url)`.

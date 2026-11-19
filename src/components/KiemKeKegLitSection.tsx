@@ -13,6 +13,7 @@ import type { KiemKeKegItem, KiemKeKegLit, Product } from "../types";
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import { laBanGhiThuVeVoKeg } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
 
@@ -608,7 +609,7 @@ export default function KiemKeKegLitSection({
                       {anh.map((a, idx) => (
                         <a
                           key={a.id}
-                          href={a.url}
+                          href={quaTrungChuyen(a.url)}
                           target="_blank"
                           rel="noreferrer"
                           className="group relative w-32 h-24 rounded-xl overflow-hidden border border-slate-300 bg-slate-950 shrink-0"

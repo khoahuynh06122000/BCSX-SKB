@@ -31,7 +31,7 @@ import ONgay from "../components/ONgay";
 import { cn, formatDate, formatNumber } from "../lib/utils";
 import ChonNhieuDonVi from "./ChonNhieuDonVi";
 import OAnhLuoi from "./OAnhLuoi";
-import { anhThuNho } from "./duongDan";
+import { anhThuNho, quaTrungChuyen } from "./duongDan";
 import { traLuot, xinLuot } from "./hangDoi";
 import { kiemTraKhoaXoa } from "./kho";
 import type { AnhChungTu } from "./moHinh";
@@ -119,7 +119,7 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
       while (ke < ds.length && !tran) {
         const k = ke++;
         try {
-          const r = await fetch(ds[k].url);
+          const r = await fetch(quaTrungChuyen(ds[k].url));
           if (!r.ok) throw new Error(String(r.status));
           const du = new Uint8Array(await r.arrayBuffer());
           tongByte += du.length;
@@ -161,13 +161,13 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
       let ma = 0;
       let loi = "";
       try {
-        const r = await fetch(anhThuNho(o.url, 64), { cache: "no-store" });
+        const r = await fetch(quaTrungChuyen(anhThuNho(o.url, 64)), { cache: "no-store" });
         await r.arrayBuffer().catch(() => undefined);
         ma = r.status;
         loi = r.headers.get("x-cld-error") || "";
         // Bản thu nhỏ bị từ chối thì hỏi luôn ảnh gốc: phân biệt hết hạn mức biến đổi với mất tệp.
         if (nhomCuaMa(ma) !== "duoc") {
-          const g = await fetch(o.url, { method: "HEAD", cache: "no-store" });
+          const g = await fetch(quaTrungChuyen(o.url), { method: "HEAD", cache: "no-store" });
           if (g.ok) {
             ma = g.status;
             loi = "";
@@ -448,7 +448,7 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
                   </button>
                 )}
                 <a
-                  href={dangXem.url}
+                  href={quaTrungChuyen(dangXem.url)}
                   target="_blank"
                   rel="noreferrer"
                   title="Mở ảnh gốc"
@@ -466,7 +466,7 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
             </div>
             <div className="flex-1 min-h-0 overflow-auto rounded-3xl flex">
               <img
-                src={dangXem.url}
+                src={quaTrungChuyen(dangXem.url)}
                 onClick={() => setCoThat((v) => !v)}
                 className={cn("m-auto rounded-3xl shadow-2xl", coThat ? "w-full h-auto cursor-zoom-out" : "max-w-full max-h-full object-contain cursor-zoom-in")}
                 alt={dangXem.tieuDe}

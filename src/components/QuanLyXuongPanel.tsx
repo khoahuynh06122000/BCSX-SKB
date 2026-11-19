@@ -22,6 +22,7 @@ import type {
 import type { AnhChungTu } from "../anh/moHinh";
 import type { TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
@@ -353,7 +354,7 @@ export default function QuanLyXuongPanel({
                         {photos.map((ph) => (
                           <a
                             key={ph.id}
-                            href={ph.url}
+                            href={quaTrungChuyen(ph.url)}
                             target="_blank"
                             rel="noreferrer"
                             className="rounded-xl overflow-hidden border border-slate-300 bg-slate-100 block"
@@ -935,7 +936,7 @@ export default function QuanLyXuongPanel({
                     <div className="flex gap-4 items-center">
                       {anh[0] && (
                         <a
-                          href={anh[0].url}
+                          href={quaTrungChuyen(anh[0].url)}
                           target="_blank"
                           rel="noreferrer"
                           className="w-32 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"

@@ -28,6 +28,7 @@ import { parseSlipCode, phieuDaVaoTon } from "../lib/slip";
 import { quyDoiHienTrang } from "../lib/loBia";
 import type { AnhChungTu } from "../anh/moHinh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 
 /**
  * PHIẾU NHẬP KHO — MỘT LƯỢT GIAO NHẬN LÀ MỘT PHIẾU
@@ -607,7 +608,7 @@ export default function ImportSlipPanel({
                 className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden"
               >
                 <img
-                  src={previewPhoto}
+                  src={quaTrungChuyen(previewPhoto)}
                   alt="Phiếu đã ký"
                   onError={() => danhDauHong(previewPhoto)}
                   style={{ transform: `rotate(${gocXoay}deg)` }}
@@ -655,7 +656,7 @@ export default function ImportSlipPanel({
                 </>
               )}
               <a
-                href={previewPhoto}
+                href={quaTrungChuyen(previewPhoto)}
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/20"

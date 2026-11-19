@@ -27,6 +27,7 @@ import type {
 import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
+import { quaTrungChuyen } from "../anh/duongDan";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
@@ -1201,7 +1202,7 @@ export default function XuongSanXuatPanel({
                 >
                   {anh[0] ? (
                     <a
-                      href={anh[0].url}
+                      href={quaTrungChuyen(anh[0].url)}
                       target="_blank"
                       rel="noreferrer"
                       className="w-28 h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-300 shrink-0"
