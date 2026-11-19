@@ -40,6 +40,8 @@ interface Props {
   canExport: boolean;
   canWriteInventory: boolean;
   isAdmin?: boolean;
+  /** Ký duyệt & chốt kiểm kê tháng ở Kho tổng: KẾ TOÁN (và admin). */
+  canApproveKiemKe?: boolean;
   busy: boolean;
   onDuyetRao2: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
@@ -72,6 +74,7 @@ export default function KhoTongNxtPanel({
   canExport,
   canWriteInventory,
   isAdmin = false,
+  canApproveKiemKe,
   busy,
   onDuyetRao2,
   onTraLaiPhieu,
@@ -576,7 +579,8 @@ export default function KhoTongNxtPanel({
             anhTheoChungTu={anhTheoChungTu}
             tonSoDenNgay={tonSoDenNgay}
             canWrite={canWriteInventory}
-            canApprove={isAdmin}
+            canApprove={canApproveKiemKe ?? isAdmin}
+            tenNguoiDuyet="Kế toán"
             canDelete={isAdmin}
             busy={busy}
             onSave={onLuuKiemKeKegLit}

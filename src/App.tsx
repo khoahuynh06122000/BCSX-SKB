@@ -6341,8 +6341,10 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
       });
       showNotification(
         status === "approved"
-          ? "Quản lý xưởng đã duyệt bản ghi giám sát"
-          : "Đã trả lại bản ghi để Xưởng kiểm tra & bổ sung",
+          ? bang === "danh_gia_sx"
+            ? "Quản lý xưởng đã duyệt bản ghi giám sát"
+            : "Đã ký duyệt — bản này là kiểm kê CHỐT THÁNG"
+          : "Đã trả lại bản kiểm để kiểm đếm lại",
       );
     } catch (e) {
       alert(handleFirestoreError(e, OperationType.UPDATE, bang));
@@ -10990,6 +10992,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 kiemKeBon={kiemKeBon}
                 kiemKeKeg={kiemKeKeg}
                 isAdmin={isOwner}
+                laGiamSatXuong={userRole === "QUAN_LY_XUONG" || isOwner}
                 busy={loading}
                 onDuyetRao1={handleDuyetRao1}
                 onTraLaiPhieu={handleTraLaiPhieu}
@@ -11018,6 +11021,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 anhTheoChungTu={anhTheoChungTu}
                 kiemKeKeg={kiemKeKeg}
                 canApproveGate2={quyen.duyetKhoTong || isOwner}
+                canApproveKiemKe={userRole === "KE_TOAN" || isOwner}
                 canExport={quyen.ghiXuat || isOwner}
                 canWriteInventory={quyen.ghiNhap || quyen.ghiXuat || isOwner}
                 isAdmin={isOwner}

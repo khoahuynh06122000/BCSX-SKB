@@ -26,6 +26,7 @@ import { quaTrungChuyen } from "../anh/duongDan";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import {
   DANH_SACH_BON_BIA,
+  kiemKeBonCuaThang,
   quyDoiHienTrang,
   tongHopKeHoachVaThucXuat,
 } from "../lib/loBia";
@@ -77,6 +78,8 @@ interface Props {
     photos: TepCho[];
   }) => Promise<boolean>;
   nhatKyPhieuContent?: ReactNode;
+  /** Ký duyệt & chốt kiểm kê tháng ở Xưởng (keg/lít, bồn): GIÁM SÁT XƯỞNG (và admin). */
+  laGiamSatXuong?: boolean;
 }
 
 export default function QuanLyXuongPanel({
@@ -104,6 +107,7 @@ export default function QuanLyXuongPanel({
   onXoaKiemKeKeg,
   onLuuKiemKeKegLit,
   nhatKyPhieuContent,
+  laGiamSatXuong = false,
 }: Props) {
   const [subTab, setSubTab] = useState<QuanLyXuongSubTab>("duyet-nhat-ky");
   const [nhatKyView, setNhatKyView] = useState<"bang" | "phieu">("bang");
@@ -898,7 +902,8 @@ export default function QuanLyXuongPanel({
               records={kiemKeKeg}
               anhTheoChungTu={anhTheoChungTu}
               canWrite={isAdmin && Boolean(onLuuKiemKeKegLit)}
-              canApprove={true}
+              canApprove={laGiamSatXuong}
+              tenNguoiDuyet="Giám sát xưởng"
               canDelete={true}
               busy={busy}
               onSave={onLuuKiemKeKegLit || (async () => false)}
@@ -951,7 +956,10 @@ export default function QuanLyXuongPanel({
                           </span>
                           {kk.approvalStatus === "approved" ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
-                              ✓ Đã duyệt{kk.approvedBy ? ` · ${kk.approvedBy}` : ""}
+                              ✍ Đã ký duyệt{kk.approvedBy ? ` · ${kk.approvedBy}` : ""}
+                              {kiemKeBonCuaThang(kiemKeBon, kk.month).some((x) => x.id === kk.id)
+                                ? ` · 📌 Chốt T${kk.month.slice(5, 7)}/${kk.month.slice(0, 4)}`
+                                : ""}
                             </span>
                           ) : kk.approvalStatus === "returned" ? (
                             <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
@@ -959,7 +967,7 @@ export default function QuanLyXuongPanel({
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
-                              ⏳ Chờ duyệt
+                              ⏳ Chờ giám sát xưởng ký duyệt
                             </span>
                           )}
                         </div>
@@ -978,17 +986,25 @@ export default function QuanLyXuongPanel({
                         Người nhập: {kk.createdBy || "—"}
                       </span>
                       <div className="flex items-center gap-1.5">
-                        {kk.approvalStatus !== "approved" && (
+                        {laGiamSatXuong && kk.approvalStatus !== "approved" && (
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => void onDuyetKiemKeBon(kk.id, "approved")}
+                            onClick={() => {
+                              const daChot = kiemKeBonCuaThang(kiemKeBon, kk.month).find(
+                                (x) => x.tankId === kk.tankId,
+                              );
+                              const hoi = daChot
+                                ? `Bồn ${kk.tankId} tháng ${kk.month} đã chốt ${daChot.liters} L.\n\nKý duyệt bản này (${kk.liters} L) sẽ THAY làm số chốt tháng. Tiếp tục?`
+                                : `Ký duyệt và CHỐT bồn ${kk.tankId} tháng ${kk.month}: ${kk.liters} L?`;
+                              if (window.confirm(hoi)) void onDuyetKiemKeBon(kk.id, "approved");
+                            }}
                             className="px-2.5 py-1 rounded-lg bg-[#141A23] hover:bg-slate-800 text-amber-300 text-[11px] font-extrabold flex items-center gap-1"
                           >
-                            <CheckCircle2 className="w-3 h-3" /> Duyệt
+                            <CheckCircle2 className="w-3 h-3" /> Ký duyệt & chốt tháng
                           </button>
                         )}
-                        {kk.approvalStatus !== "returned" && (
+                        {laGiamSatXuong && kk.approvalStatus !== "returned" && (
                           <button
                             type="button"
                             disabled={busy}

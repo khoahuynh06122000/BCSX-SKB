@@ -80,4 +80,9 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - **B9 — Kiểm bia riêng, kiểm keg riêng, KHÔNG quy đổi.** Form kiểm kê Keg & Lít có ô **"Số keg đếm thực tế"** nhập tay; `totalKegs` = số keg đếm tay. Bỏ hẳn cách suy keg/thùng từ số lít. Bản kiểm kê cũ lưu "keg" = tổng số lon (lỗi cũ) thì hiện "— Keg".
   - **Quy đổi lít ↔ keg CHỈ dùng khi kho tổng GIAO bia** cho đơn vị: để biết đã giao bao nhiêu lít, bao nhiêu keg (báo cáo keg giao ĐVTV, hao chuẩn 0,6 L/keg).
   - **Việc tiếp theo anh muốn**: mục **Thu hồi keg** ở phân hệ Kho tổng + **đánh giá thời gian thu hồi keg** (keg giao đi bao lâu thì về). Chưa làm.
+- **Ký duyệt = chốt kiểm kê tháng** (quy định anh Khoa 19/11/2026):
+  - **Kho tổng** (Kiểm kê Keg & Lít): **KẾ TOÁN** (và admin) ký duyệt. **Xưởng** (Keg & Lít + bồn FST/BBT): **GIÁM SÁT XƯỞNG** (`QUAN_LY_XUONG`, và admin) ký duyệt. Kế toán mở được panel Quản lý xưởng nhưng không còn nút duyệt kiểm kê xưởng.
+  - Nút "Ký duyệt & chốt tháng" hỏi xác nhận; tháng đó đã có bản chốt thì báo "sẽ THAY làm bản chốt". Bản đã duyệt hiện "✍ Đã ký duyệt · tên · giờ" + "📌 CHỐT KIỂM KÊ THÁNG MM/yyyy". Mỗi nơi mỗi tháng một bản chốt — bản duyệt SAU thay (`banChotThangKiemKe` trong `lib/loBia.ts`).
+  - Tồn bồn tháng ở Dashboard Kế toán chỉ tính bản **đã được giám sát xưởng ký duyệt** (`kiemKeBonCuaThang`), hiện thêm số bản chờ ký duyệt (`soBonChoDuyet`); tháng chưa có bản duyệt hiện "chưa chốt".
+  - Luật Firestore hiện cho OWNER / KE_TOAN / QUAN_LY_XUONG cùng duyệt mọi kiểm kê — UI đã chặn đúng người, còn siết luật theo nơi kiểm thì làm cùng nhóm C.
 

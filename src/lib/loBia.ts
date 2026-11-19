@@ -96,19 +96,47 @@ export function quyDoiHienTrang(
  * TỒN BỒN CHỐT THEO THÁNG — tháng nào dứt điểm tháng đó, KHÔNG cộng dồn.
  *
  * Kiểm kê bồn là kiểm và chốt số của một tháng (quy định anh Khoa 19/11/2026).
- * Tồn bồn của tháng T chỉ lấy các bản kiểm của chính tháng T; tháng chưa kiểm
- * thì là chưa chốt, không mượn số tháng trước. Cùng một bồn kiểm hai lần trong
- * tháng thì lấy lần ghi sau (lần trước coi như làm lại). Bản bị quản lý xưởng
- * TRẢ LẠI không tính.
+ * Bản kiểm chỉ thành số CHỐT khi GIÁM SÁT XƯỞNG ĐÃ KÝ DUYỆT. Tồn bồn của tháng
+ * T chỉ lấy bản đã duyệt của chính tháng T; tháng chưa chốt thì là chưa chốt,
+ * không mượn số tháng trước. Cùng một bồn có hai bản đã duyệt trong tháng thì
+ * bản DUYỆT SAU là bản chốt.
  */
 export function kiemKeBonCuaThang(ds: readonly KiemKeBon[], thang: string): KiemKeBon[] {
   const m = new Map<string, KiemKeBon>();
   ds.forEach((k) => {
-    if (k.month !== thang || k.approvalStatus === "returned") return;
+    if (k.month !== thang || k.approvalStatus !== "approved") return;
     const cu = m.get(k.tankId);
-    if (!cu || String(k.createdAt || "") > String(cu.createdAt || "")) m.set(k.tankId, k);
+    if (!cu || String(k.approvedAt || "") > String(cu.approvedAt || "")) m.set(k.tankId, k);
   });
   return [...m.values()];
+}
+
+/** Số bản kiểm bồn của tháng còn CHỜ ký duyệt (chưa duyệt, chưa trả lại). */
+export function soBonChoDuyet(ds: readonly KiemKeBon[], thang: string): number {
+  return ds.filter(
+    (k) => k.month === thang && (!k.approvalStatus || k.approvalStatus === "pending"),
+  ).length;
+}
+
+/**
+ * BẢN KIỂM KÊ KEG & LÍT CHỐT THÁNG.
+ *
+ * Kiểm kê xong, người có quyền KÝ DUYỆT (Kho tổng: kế toán; Xưởng: giám sát
+ * xưởng) duyệt thì bản đó là kiểm kê chốt của tháng, theo từng nơi kiểm. Một
+ * tháng một nơi chỉ một bản chốt: có hai bản đã duyệt thì bản DUYỆT SAU thay.
+ * Trả về mã bản ghi → tháng (`yyyy-MM`). Bản thu về vỏ keg không xét ở đây.
+ */
+export function banChotThangKiemKe(ds: readonly KiemKeKegLit[]): Map<string, string> {
+  const m = new Map<string, KiemKeKegLit>();
+  ds.forEach((r) => {
+    if (r.approvalStatus !== "approved" || laBanGhiThuVeVoKeg(r)) return;
+    const k = `${r.location}|${String(r.date || "").slice(0, 7)}`;
+    const cu = m.get(k);
+    if (!cu || String(r.approvedAt || "") > String(cu.approvedAt || "")) m.set(k, r);
+  });
+  const ra = new Map<string, string>();
+  m.forEach((r) => ra.set(r.id, String(r.date || "").slice(0, 7)));
+  return ra;
 }
 
 export function taoTokenChuKy(

@@ -1011,6 +1011,7 @@ export default function XuongSanXuatPanel({
               records={kiemKeKeg}
               anhTheoChungTu={anhTheoChungTu}
               canApprove={isAdmin}
+              tenNguoiDuyet="Giám sát xưởng"
               canDelete={isAdmin}
               busy={busy}
               onSave={onLuuKiemKeKegLit}

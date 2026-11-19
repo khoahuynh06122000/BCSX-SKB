@@ -13,7 +13,9 @@ import {
   tongHopKeHoachVaThucXuat,
   tongHopVoKegThuVe,
   truyXuatLo,
+  banChotThangKiemKe,
   kiemKeBonCuaThang,
+  soBonChoDuyet,
 } from "../loBia";
 
 let pass = 0;
@@ -153,27 +155,47 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
   eq("tra nha may: tong keg khong doi", kq.totals.allKegsDelivered, 10);
 }
 
-// Tồn bồn chốt theo tháng: không cộng dồn, không mượn tháng trước, bỏ bản bị trả lại.
+// Tồn bồn chốt theo tháng: chỉ bản ĐÃ KÝ DUYỆT, không cộng dồn, không mượn tháng trước.
 {
-  const bon = (id: string, tankId: string, month: string, liters: number, extra: object = {}) =>
+  const duyet = (at: string) => ({ approvalStatus: "approved", approvedAt: at });
+  const bon = (id: string, tankId: string, month: string, liters: number, extra: object = duyet(`${month}-16T08:00:00`)) =>
     ({ id, month, tankId, tankGroup: "FST", productId: "p1", batchNumber: "", liters, createdBy: "x", createdAt: `${month}-15T08:00:00`, ...extra }) as any;
   const ds = [
     bon("a", "FST-01", "2026-09", 1500),
     bon("b", "FST-01", "2026-10", 1500),
     bon("c", "FST-01", "2026-11", 1500),
     bon("d", "BBT-01", "2026-11", 800),
-    bon("e", "BBT-01", "2026-11", 9999, { approvalStatus: "returned", createdAt: "2026-11-20T08:00:00" }),
+    bon("e", "BBT-01", "2026-11", 9999, { approvalStatus: "returned" }),
+    bon("g", "BBT-02", "2026-11", 500, {}), // chờ duyệt
   ];
   const t11 = kiemKeBonCuaThang(ds, "2026-11");
-  eq("T11: chi so thang 11", t11.reduce((s: number, k: any) => s + k.liters, 0), 2300);
+  eq("T11: chi ban da duyet thang 11", t11.reduce((s: number, k: any) => s + k.liters, 0), 2300);
   eq("T11: FST-01 la ban thang 11", t11.find((k: any) => k.tankId === "FST-01")?.id, "c");
+  eq("T11: ban cho duyet chua tinh", t11.some((k: any) => k.id === "g"), false);
+  eq("T11: 1 ban cho duyet", soBonChoDuyet(ds, "2026-11"), 1);
   eq("T10: chi FST-01", kiemKeBonCuaThang(ds, "2026-10").map((k: any) => k.id).join(","), "b");
-  eq("T12 chua kiem -> rong", kiemKeBonCuaThang(ds, "2026-12").length, 0);
-  const lamLai = kiemKeBonCuaThang(
-    [...ds, bon("f", "FST-01", "2026-11", 1400, { createdAt: "2026-11-28T08:00:00" })],
+  eq("T12 chua chot -> rong", kiemKeBonCuaThang(ds, "2026-12").length, 0);
+  const thay = kiemKeBonCuaThang(
+    [...ds, bon("f", "FST-01", "2026-11", 1400, duyet("2026-11-28T08:00:00"))],
     "2026-11",
   );
-  eq("kiem lai trong thang lay lan sau", lamLai.find((k: any) => k.tankId === "FST-01")?.liters, 1400);
+  eq("duyet sau thay ban chot", thay.find((k: any) => k.tankId === "FST-01")?.liters, 1400);
+}
+
+// Kiểm kê Keg & Lít: bản đã ký duyệt là bản chốt tháng, mỗi nơi mỗi tháng một bản.
+{
+  const kk = (id: string, location: string, date: string, extra: object = {}) =>
+    ({ id, date, location, shiftOrPeriod: "Chốt tháng", items: [], totalKegs: 0, totalLiters: 0, createdBy: "x", createdAt: date, ...extra }) as any;
+  const ds = [
+    kk("k1", "KHO_TONG", "2026-11-10", { approvalStatus: "approved", approvedAt: "2026-11-10T10:00:00" }),
+    kk("k2", "KHO_TONG", "2026-11-30", { approvalStatus: "approved", approvedAt: "2026-11-30T10:00:00" }),
+    kk("k3", "XUONG", "2026-11-30", { approvalStatus: "approved", approvedAt: "2026-11-30T09:00:00" }),
+    kk("k4", "KHO_TONG", "2026-10-31", {}),
+  ];
+  const chot = banChotThangKiemKe(ds);
+  eq("chot: kho tong T11 la k2 (duyet sau)", chot.has("k2") && !chot.has("k1"), true);
+  eq("chot: xuong T11 rieng", chot.get("k3"), "2026-11");
+  eq("chot: chua duyet khong chot", chot.has("k4"), false);
 }
 
 const thuVeRecords: KiemKeKegLit[] = [

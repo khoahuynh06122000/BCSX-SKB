@@ -12,6 +12,7 @@ import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
 import {
   kiemKeBonCuaThang,
+  soBonChoDuyet,
   tinhTonTheoLo,
   tongHopKeHoachVaThucXuat,
   truyXuatLo,
@@ -216,7 +217,7 @@ export default function KeToanDashboardPanel({
                 {bonThang.length ? (
                   <strong>{formatNumber(kpi.totalTankL)}L</strong>
                 ) : (
-                  <strong className="text-rose-600">chưa kiểm</strong>
+                  <strong className="text-rose-600">chưa chốt</strong>
                 )}
               </p>
             </div>
@@ -435,14 +436,16 @@ export default function KeToanDashboardPanel({
                   className="px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono bg-slate-50"
                 />
                 <span>
-                  · {bonThang.length} bồn đã chốt · {formatNumber(kpi.totalTankL)} L
+                  · {bonThang.length} bồn đã chốt (giám sát xưởng ký duyệt) · {formatNumber(kpi.totalTankL)} L
+                  {soBonChoDuyet(kiemKeBon, thangBon) > 0 &&
+                    ` · ${soBonChoDuyet(kiemKeBon, thangBon)} bản chờ ký duyệt`}
                 </span>
               </div>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
               {bonThang.length === 0 ? (
                 <p className="col-span-2 py-8 text-center text-xs font-bold text-slate-400">
-                  Tháng {nhanThang} chưa có bản kiểm kê bồn FST/BBT nào.
+                  Tháng {nhanThang} chưa có bồn FST/BBT nào được giám sát xưởng ký duyệt chốt.
                 </p>
               ) : (
                 bonThang.map((kk) => {

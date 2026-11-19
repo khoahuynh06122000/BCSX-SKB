@@ -14,7 +14,7 @@ import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
-import { laBanGhiThuVeVoKeg } from "../lib/loBia";
+import { banChotThangKiemKe, laBanGhiThuVeVoKeg } from "../lib/loBia";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
@@ -31,6 +31,8 @@ interface Props {
   tonSoDenNgay?: (ngay: string) => Map<string, number>;
   canWrite?: boolean;
   canApprove?: boolean;
+  /** Ai ký duyệt & chốt kiểm kê tháng ở nơi này — Kho tổng: "Kế toán"; Xưởng: "Giám sát xưởng". */
+  tenNguoiDuyet?: string;
   canDelete?: boolean;
   busy: boolean;
   onSave: (input: {
@@ -69,6 +71,7 @@ export default function KiemKeKegLitSection({
   tonSoDenNgay,
   canWrite = true,
   canApprove = false,
+  tenNguoiDuyet = "Quản lý",
   canDelete = false,
   busy,
   onSave,
@@ -103,6 +106,20 @@ export default function KiemKeKegLitSection({
     () => records.filter((r) => r.location === location && !laBanGhiThuVeVoKeg(r)),
     [records, location],
   );
+  // Bản đã ký duyệt = kiểm kê CHỐT THÁNG (mỗi tháng một bản, bản duyệt sau thay).
+  const chotThang = useMemo(() => banChotThangKiemKe(scopedRecords), [scopedRecords]);
+  const nhanThang = (d: string) => `${String(d).slice(5, 7)}/${String(d).slice(0, 4)}`;
+  const kyDuyet = (rec: KiemKeKegLit) => {
+    if (!onApprove) return;
+    const thang = String(rec.date || "").slice(0, 7);
+    const daChot = scopedRecords.find(
+      (r) => r.id !== rec.id && r.approvalStatus === "approved" && String(r.date || "").slice(0, 7) === thang,
+    );
+    const hoi = daChot
+      ? `Tháng ${nhanThang(thang)} đã chốt bản kiểm ngày ${daChot.date}.\n\nKý duyệt bản ngày ${rec.date} sẽ THAY làm bản chốt kiểm kê tháng. Tiếp tục?`
+      : `Ký duyệt và CHỐT bản kiểm ngày ${rec.date} làm kiểm kê tháng ${nhanThang(thang)}?`;
+    if (window.confirm(hoi)) void onApprove(rec.id, "approved");
+  };
 
   // Tính toán danh sách mặt hàng + quy đổi Lít hoàn toàn bằng code
   const computedRows = useMemo(() => {
@@ -529,16 +546,24 @@ export default function KiemKeKegLitSection({
                         </span>
                       )}
                       {rec.approvalStatus === "approved" ? (
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
-                          ✓ Đã duyệt{rec.approvedBy ? ` · ${rec.approvedBy}` : ""}
-                        </span>
+                        <>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                            ✍ Đã ký duyệt{rec.approvedBy ? ` · ${rec.approvedBy}` : ""}
+                            {rec.approvedAt ? ` · ${formatStampView(rec.approvedAt)}` : ""}
+                          </span>
+                          {chotThang.has(rec.id) && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-[#141A23] text-amber-300 text-[10px] font-black">
+                              📌 CHỐT KIỂM KÊ THÁNG {nhanThang(chotThang.get(rec.id) || "")}
+                            </span>
+                          )}
+                        </>
                       ) : rec.approvalStatus === "returned" ? (
                         <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
                           ⚠ Trả lại{rec.rejectedReason ? `: ${rec.rejectedReason}` : ""}
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
-                          ⏳ Chờ QL duyệt
+                          ⏳ Chờ {tenNguoiDuyet} ký duyệt
                         </span>
                       )}
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
@@ -571,10 +596,10 @@ export default function KiemKeKegLitSection({
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => void onApprove(rec.id, "approved")}
+                              onClick={() => kyDuyet(rec)}
                               className="px-2.5 py-1 rounded-lg bg-[#141A23] hover:bg-slate-800 text-amber-300 font-sans text-[11px] font-extrabold flex items-center gap-1"
                             >
-                              <CheckCircle2 className="w-3 h-3" /> Duyệt
+                              <CheckCircle2 className="w-3 h-3" /> Ký duyệt & chốt tháng
                             </button>
                           )}
                           {rec.approvalStatus !== "returned" && (
