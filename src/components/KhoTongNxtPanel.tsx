@@ -580,6 +580,7 @@ export default function KhoTongNxtPanel({
             tonSoDenNgay={tonSoDenNgay}
             canWrite={canWriteInventory}
             canApprove={canApproveKiemKe ?? isAdmin}
+            canKiemDotXuat={canApproveKiemKe ?? isAdmin}
             tenNguoiDuyet="Kế toán"
             canDelete={isAdmin}
             busy={busy}

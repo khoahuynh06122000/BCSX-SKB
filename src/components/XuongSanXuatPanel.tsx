@@ -1124,11 +1124,20 @@ export default function XuongSanXuatPanel({
               <div className="p-4 rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/40 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
+                    {/*
+                      ẢNH XÁC NHẬN TỒN BỒN (anh Khoa 19/11/2026): FST chụp BẢNG HỆ
+                      THỐNG theo dõi trên bồn nấu; BBT chụp RÕ BIA trong từng bồn.
+                    */}
                     <p className="text-xs font-extrabold text-slate-900">
-                      📸 Ảnh chụp thước đo / đồng hồ bồn FST & BBT (Bắt buộc)
+                      {DANH_SACH_BON_BIA.find((t) => t.id === kkTank)?.nhom === "BBT"
+                        ? `📸 Ảnh chụp rõ bia trong bồn ${kkTank} (Bắt buộc)`
+                        : `📸 Ảnh bảng hệ thống theo dõi trên bồn nấu ${kkTank} (Bắt buộc)`}
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      Không có ảnh minh chứng thước đo sẽ không thể lưu kiểm kê bồn.
+                      {DANH_SACH_BON_BIA.find((t) => t.id === kkTank)?.nhom === "BBT"
+                        ? "Chụp thấy rõ mức bia trong bồn BBT để xác nhận đúng số lít tồn."
+                        : "Chụp rõ màn hình hệ thống, thấy số lít đang hiển thị của bồn FST."}{" "}
+                      Không có ảnh thì không lưu được.
                     </p>
                   </div>
                   <div className="flex gap-2 shrink-0">

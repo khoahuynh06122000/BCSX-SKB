@@ -14,7 +14,15 @@ import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
-import { banChotThangKiemKe, laBanGhiThuVeVoKeg } from "../lib/loBia";
+import {
+  banChotThangKiemKe,
+  KIEM_KE_CHOT_THANG,
+  KIEM_KE_DOT_XUAT,
+  laBanGhiThuVeVoKeg,
+  laKiemKeDotXuat,
+  soKegCuaDong,
+  soLuongTuKien,
+} from "../lib/loBia";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
@@ -34,6 +42,8 @@ interface Props {
   /** Ai ký duyệt & chốt kiểm kê tháng ở nơi này — Kho tổng: "Kế toán"; Xưởng: "Giám sát xưởng". */
   tenNguoiDuyet?: string;
   canDelete?: boolean;
+  /** Kho tổng: được làm KIỂM KÊ ĐỘT XUẤT (kế toán, admin). */
+  canKiemDotXuat?: boolean;
   busy: boolean;
   onSave: (input: {
     date: string;
@@ -73,6 +83,7 @@ export default function KiemKeKegLitSection({
   canApprove = false,
   tenNguoiDuyet = "Quản lý",
   canDelete = false,
+  canKiemDotXuat = false,
   busy,
   onSave,
   onApprove,
@@ -84,7 +95,7 @@ export default function KiemKeKegLitSection({
     [tonSoDenNgay, date],
   );
   const [shiftOrPeriod, setShiftOrPeriod] = useState(
-    location === "XUONG" ? "Cuối ca xưởng" : "Cuối ngày kho tổng",
+    location === "XUONG" ? "Cuối ca xưởng" : "Chốt tồn cuối tháng",
   );
   const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
@@ -98,9 +109,26 @@ export default function KiemKeKegLitSection({
   const [allowZeroConfirm, setAllowZeroConfirm] = useState(false);
 
   const isXuong = location === "XUONG";
+  const isKho = !isXuong;
+  /*
+   * KHO TỔNG có 2 loại kiểm kê — xem `KIEM_KE_CHOT_THANG` / `KIEM_KE_DOT_XUAT`.
+   * Đếm theo KIỆN: keg đầy (bia Lít) / thùng (bia lon) + phần lẻ.
+   */
+  const [loai, setLoai] = useState<"CHOT_THANG" | "DOT_XUAT">("CHOT_THANG");
+  const laDotXuat = isKho && loai === "DOT_XUAT";
+  const [kienMap, setKienMap] = useState<Record<string, string>>({});
+  const [leMap, setLeMap] = useState<Record<string, string>>({});
+  // Đột xuất = ĐẾM MÙ: không hiện tồn app khi đang đếm.
+  const hienTonApp = Boolean(bookStockByProduct) && !laDotXuat;
   const stampLabel = isXuong
     ? "KIỂM KÊ XƯỞNG · KEG & LÍT"
-    : "KIỂM KÊ KHO TỔNG · KEG & LÍT";
+    : laDotXuat
+      ? "KIỂM KÊ ĐỘT XUẤT · KHO TỔNG"
+      : "KIỂM KÊ CHỐT THÁNG · KHO TỔNG";
+  const doiLoai = (l: "CHOT_THANG" | "DOT_XUAT") => {
+    setLoai(l);
+    setShiftOrPeriod(l === "DOT_XUAT" ? "Kế toán kiểm đột xuất" : "Chốt tồn cuối tháng");
+  };
 
   const scopedRecords = useMemo(
     () => records.filter((r) => r.location === location && !laBanGhiThuVeVoKeg(r)),
@@ -124,8 +152,11 @@ export default function KiemKeKegLitSection({
   // Tính toán danh sách mặt hàng + quy đổi Lít hoàn toàn bằng code
   const computedRows = useMemo(() => {
     return products.map((p) => {
-      const raw = qtyMap[p.id] ?? "";
-      const qty = Math.max(0, Number(raw) || 0);
+      const kien = Number(kienMap[p.id]) || 0;
+      const le = Number(leMap[p.id]) || 0;
+      const qty = isKho
+        ? soLuongTuKien(p.category, kien, le)
+        : Math.max(0, Number(qtyMap[p.id] ?? "") || 0);
       const capLiters = (p.capacityPerUnit || 1000) / 1000;
       const liters = Math.round(qty * capLiters * 100) / 100;
       const bookQty = bookStockByProduct?.get(p.id);
@@ -133,6 +164,8 @@ export default function KiemKeKegLitSection({
         typeof bookQty === "number" ? Math.round((qty - bookQty) * 100) / 100 : undefined;
       return {
         product: p,
+        kien,
+        le,
         qty,
         capLiters,
         liters,
@@ -140,7 +173,7 @@ export default function KiemKeKegLitSection({
         diff,
       };
     });
-  }, [products, qtyMap, bookStockByProduct]);
+  }, [products, qtyMap, kienMap, leMap, isKho, bookStockByProduct]);
 
   const totals = useMemo(() => {
     let totalLiters = 0;
@@ -149,14 +182,16 @@ export default function KiemKeKegLitSection({
       if (r.qty > 0) nonZeroCount++;
       totalLiters += r.liters;
     });
-    // Keg là số ĐẾM TAY ở ô riêng, không quy đổi từ lít.
-    const keg = Math.max(0, Math.trunc(Number(soKegDem) || 0));
+    // Xưởng: keg là số ĐẾM TAY ở ô riêng. Kho tổng: keg đầy + keg lẻ đếm theo từng mặt hàng.
+    const keg = isKho
+      ? computedRows.reduce((t, r) => t + soKegCuaDong(r.product.category, r.kien, r.le), 0)
+      : Math.max(0, Math.trunc(Number(soKegDem) || 0));
     return {
       totalKegs: keg,
       totalLiters: Math.round(totalLiters * 100) / 100,
       nonZeroCount,
     };
-  }, [computedRows, soKegDem]);
+  }, [computedRows, soKegDem, isKho]);
 
   const handlePickPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -184,7 +219,12 @@ export default function KiemKeKegLitSection({
 
   const hasValidNumbers = totals.nonZeroCount > 0 || allowZeroConfirm;
   const canSave =
-    canWrite && !busy && Boolean(date) && photos.length > 0 && hasValidNumbers;
+    canWrite &&
+    !busy &&
+    Boolean(date) &&
+    photos.length > 0 &&
+    hasValidNumbers &&
+    (!laDotXuat || canKiemDotXuat);
 
   const handleSubmit = async () => {
     if (!canSave) return;
@@ -197,6 +237,7 @@ export default function KiemKeKegLitSection({
         quantity: r.qty,
         liters: r.liters,
         ...(typeof r.bookQty === "number" ? { bookQuantity: r.bookQty } : {}),
+        ...(isKho ? { kienDem: r.kien, leDem: r.le } : {}),
       }));
 
     // Nếu kiểm kê toàn bộ bằng 0 thì vẫn ghi nhận ít nhất 1 dòng chuẩn để lưu phiếu kiểm kê bằng 0
@@ -212,7 +253,8 @@ export default function KiemKeKegLitSection({
 
     const ok = await onSave({
       date,
-      shiftOrPeriod: shiftOrPeriod.trim() || (isXuong ? "Tại Xưởng" : "Tại Kho tổng"),
+      shiftOrPeriod: (isKho ? (laDotXuat ? KIEM_KE_DOT_XUAT : KIEM_KE_CHOT_THANG) : "") +
+        (shiftOrPeriod.trim() || (isXuong ? "Tại Xưởng" : "Tại Kho tổng")),
       location,
       items: itemsToSave,
       totalKegs: totals.totalKegs,
@@ -223,6 +265,8 @@ export default function KiemKeKegLitSection({
 
     if (ok) {
       setQtyMap({});
+      setKienMap({});
+      setLeMap({});
       setNote("");
       setSoKegDem("");
       setPhotos([]);
@@ -254,8 +298,36 @@ export default function KiemKeKegLitSection({
               <h3 className="text-base font-extrabold">
                 {isXuong
                   ? "Kiểm Kê Keg & Lít Thành Phẩm Tại Xưởng"
-                  : "Kiểm Kê Keg & Lít Thực Tế Tại Kho Tổng"}
+                  : laDotXuat
+                    ? "Kiểm Kê Đột Xuất Kho Tổng (Đếm Mù)"
+                    : "Kiểm Kê Chốt Tháng Kho Tổng · Đối Chiếu Tồn App"}
               </h3>
+              {isKho && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => doiLoai("CHOT_THANG")}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-[11px] font-extrabold border",
+                      !laDotXuat ? "bg-emerald-400 text-slate-900 border-emerald-400" : "border-white/20 text-white/70 hover:bg-white/10",
+                    )}
+                  >
+                    Chốt tháng
+                  </button>
+                  {canKiemDotXuat && (
+                    <button
+                      type="button"
+                      onClick={() => doiLoai("DOT_XUAT")}
+                      className={cn(
+                        "px-3 py-1 rounded-lg text-[11px] font-extrabold border",
+                        laDotXuat ? "bg-rose-400 text-slate-900 border-rose-400" : "border-white/20 text-white/70 hover:bg-white/10",
+                      )}
+                    >
+                      Đột xuất (kế toán)
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3 text-xs font-mono">
               <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 tabular-nums">
@@ -286,6 +358,7 @@ export default function KiemKeKegLitSection({
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-bold bg-slate-50"
                 />
               </div>
+              {isXuong && (
               <div className="sm:col-span-2">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   Số keg đếm thực tế
@@ -302,7 +375,8 @@ export default function KiemKeKegLitSection({
                   className="w-full px-3 py-2.5 rounded-xl border border-amber-300 font-mono text-xs font-bold bg-amber-50"
                 />
               </div>
-              <div className="sm:col-span-3">
+              )}
+              <div className={isXuong ? "sm:col-span-3" : "sm:col-span-4"}>
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   Đợt / Ca kiểm kê
                 </label>
@@ -314,7 +388,7 @@ export default function KiemKeKegLitSection({
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
                 />
               </div>
-              <div className="sm:col-span-4">
+              <div className={isXuong ? "sm:col-span-4" : "sm:col-span-5"}>
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   Ghi chú hiện trường
                 </label>
@@ -328,6 +402,29 @@ export default function KiemKeKegLitSection({
               </div>
             </div>
 
+            {isKho && (
+              <div
+                className={cn(
+                  "px-4 py-3 rounded-2xl border text-[11px] font-semibold leading-relaxed",
+                  laDotXuat ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-emerald-50 border-emerald-200 text-emerald-900",
+                )}
+              >
+                {laDotXuat ? (
+                  <>
+                    <strong>Đếm mù:</strong> không hiện tồn app khi đang đếm. Đếm keg đầy / thùng nguyên kiện và phần lẻ,
+                    chụp ảnh hiện trạng rồi lưu — lưu xong mới hiện chênh lệch so với tồn app tại thời điểm kiểm.
+                    Bản đột xuất không thay bản chốt tháng.
+                  </>
+                ) : (
+                  <>
+                    <strong>Chốt tháng:</strong> cột Tồn app là tồn đến ngày chốt. Đếm <strong>keg đầy</strong> (× 20,6 L) và{" "}
+                    <strong>thùng</strong> (× 24 lon) nguyên kiện, phần lẻ nhập ô Lẻ; chụp ảnh hiện trạng toàn bộ keg &amp; thùng.
+                    Khớp tồn app thì báo ✓; kế toán ký duyệt = chốt tháng.
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Bảng nhập số lượng Keg / Lít thực tế */}
             <div className="rounded-2xl border border-slate-200 overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
@@ -335,7 +432,7 @@ export default function KiemKeKegLitSection({
                   <Layers className="w-3.5 h-3.5 text-amber-600" />
                   Nhập số lượng đếm thực tế từng mặt hàng
                 </span>
-                {bookStockByProduct && (
+                {bookStockByProduct && isXuong && (
                   <button
                     type="button"
                     onClick={handlePrefillBookStock}
@@ -351,13 +448,15 @@ export default function KiemKeKegLitSection({
                     <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-wider text-slate-400 bg-white">
                       <th className="py-2.5 px-4">Sản phẩm</th>
                       <th className="py-2.5 px-3">ĐVT</th>
-                      {bookStockByProduct && (
-                        <th className="py-2.5 px-3 text-right">Sổ sách</th>
+                      {hienTonApp && (
+                        <th className="py-2.5 px-3 text-right">{isKho ? "Tồn app" : "Sổ sách"}</th>
                       )}
-                      <th className="py-2.5 px-3 text-right">Thực tế đếm</th>
+                      <th className="py-2.5 px-3 text-right">
+                        {isKho ? "Kiện đếm (keg / thùng) · Lẻ" : "Thực tế đếm"}
+                      </th>
                       <th className="py-2.5 px-3 text-right">Quy đổi (Lít)</th>
-                      {bookStockByProduct && (
-                        <th className="py-2.5 px-4 text-right">Chênh lệch</th>
+                      {hienTonApp && (
+                        <th className="py-2.5 px-4 text-right">{isKho ? "Đối chiếu" : "Chênh lệch"}</th>
                       )}
                     </tr>
                   </thead>
@@ -375,12 +474,43 @@ export default function KiemKeKegLitSection({
                         <td className="py-2.5 px-3 font-bold text-slate-600">
                           {row.product.unit}
                         </td>
-                        {bookStockByProduct && (
+                        {hienTonApp && (
                           <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-500">
                             {formatNumber(row.bookQty || 0)}
                           </td>
                         )}
                         <td className="py-2.5 px-3 text-right">
+                          {isKho ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={kienMap[row.product.id] ?? ""}
+                                onChange={(e) =>
+                                  setKienMap((prev) => ({ ...prev, [row.product.id]: e.target.value }))
+                                }
+                                placeholder={row.product.category === "Lon" ? "Thùng" : "Keg đầy"}
+                                title={row.product.category === "Lon" ? "Số thùng nguyên (24 lon)" : "Số keg đầy (20,6 L)"}
+                                className="w-20 px-2 py-1.5 rounded-lg border border-slate-300 focus:border-amber-500 text-right font-mono font-black tabular-nums outline-none bg-white"
+                              />
+                              <span className="text-[10px] font-bold text-slate-400">+</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={leMap[row.product.id] ?? ""}
+                                onChange={(e) =>
+                                  setLeMap((prev) => ({ ...prev, [row.product.id]: e.target.value }))
+                                }
+                                placeholder={row.product.category === "Lon" ? "Lon lẻ" : "Lít lẻ"}
+                                className="w-16 px-2 py-1.5 rounded-lg border border-slate-200 text-right font-mono font-bold tabular-nums outline-none bg-white"
+                              />
+                              <span className="w-20 text-right font-mono font-black text-slate-900 tabular-nums">
+                                = {formatNumber(row.qty)} {row.product.unit}
+                              </span>
+                            </div>
+                          ) : (
                           <input
                             type="number"
                             min="0"
@@ -395,13 +525,16 @@ export default function KiemKeKegLitSection({
                             placeholder="0"
                             className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 focus:border-amber-500 text-right font-mono font-black tabular-nums outline-none bg-white"
                           />
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums text-slate-800">
                           {row.liters > 0 ? `${formatNumber(row.liters)} L` : "—"}
                         </td>
-                        {bookStockByProduct && (
+                        {hienTonApp && (
                           <td className="py-2.5 px-4 text-right font-mono font-black tabular-nums">
-                            {typeof row.diff === "number" ? (
+                            {isKho && typeof row.diff === "number" && Math.abs(row.diff) < 0.01 ? (
+                              <span className="text-emerald-600">✓ Khớp</span>
+                            ) : typeof row.diff === "number" ? (
                               <span
                                 className={cn(
                                   row.diff === 0
@@ -501,7 +634,7 @@ export default function KiemKeKegLitSection({
               >
                 {busy
                   ? "Đang tải ảnh & lưu..."
-                  : `✓ Lưu Kiểm Kê ${isXuong ? "Xưởng" : "Kho Tổng"}`}
+                  : `✓ Lưu ${isXuong ? "Kiểm Kê Xưởng" : laDotXuat ? "Kiểm Kê Đột Xuất" : "Kiểm Kê Chốt Tháng"}`}
               </button>
             </div>
           </div>
@@ -545,7 +678,11 @@ export default function KiemKeKegLitSection({
                           {rec.shiftOrPeriod}
                         </span>
                       )}
-                      {rec.approvalStatus === "approved" ? (
+                      {laKiemKeDotXuat(rec) ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                          🕵 KIỂM KÊ ĐỘT XUẤT · không thay bản chốt tháng
+                        </span>
+                      ) : rec.approvalStatus === "approved" ? (
                         <>
                           <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
                             ✍ Đã ký duyệt{rec.approvedBy ? ` · ${rec.approvedBy}` : ""}
@@ -590,7 +727,7 @@ export default function KiemKeKegLitSection({
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 font-black text-emerald-700">
                         {formatNumber(rec.totalLiters)} Lít
                       </span>
-                      {canApprove && onApprove && (
+                      {canApprove && onApprove && !laKiemKeDotXuat(rec) && (
                         <>
                           {rec.approvalStatus !== "approved" && (
                             <button
@@ -651,6 +788,12 @@ export default function KiemKeKegLitSection({
                           <span className="font-mono font-black text-slate-900 tabular-nums">
                             {formatNumber(it.quantity)} {it.unit}
                           </span>
+                          {typeof it.kienDem === "number" && (it.kienDem > 0 || (it.leDem || 0) > 0) && (
+                            <span className="text-slate-500 font-mono tabular-nums">
+                              [{formatNumber(it.kienDem)} {it.unit === "Lít" || it.unit === "L" ? "keg" : "thùng"}
+                              {(it.leDem || 0) > 0 ? ` + ${formatNumber(it.leDem || 0)} lẻ` : ""}]
+                            </span>
+                          )}
                           <span className="text-slate-400 font-mono tabular-nums">
                             ({formatNumber(it.liters)} L)
                           </span>
@@ -658,13 +801,13 @@ export default function KiemKeKegLitSection({
                             <span
                               className={cn(
                                 "font-mono text-[10px] font-black",
-                                it.quantity - it.bookQuantity === 0
+                                Math.abs(it.quantity - it.bookQuantity) < 0.01
                                   ? "text-emerald-600"
                                   : "text-rose-600",
                               )}
                             >
-                              {it.quantity - it.bookQuantity === 0
-                                ? "Khớp sổ"
+                              {Math.abs(it.quantity - it.bookQuantity) < 0.01
+                                ? "Khớp tồn app"
                                 : `Lệch ${it.quantity - it.bookQuantity > 0 ? "+" : ""}${formatNumber(it.quantity - it.bookQuantity)}`}
                             </span>
                           )}

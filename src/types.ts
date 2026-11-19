@@ -279,6 +279,10 @@ export interface KiemKeKegItem {
   quantity: number;
   liters: number;
   bookQuantity?: number;
+  /** Kho tổng: số KIỆN đếm được — keg đầy (bia Lít) hoặc thùng (bia lon). */
+  kienDem?: number;
+  /** Kho tổng: phần LẺ — lít trong keg lẻ (bia Lít) hoặc lon lẻ (bia lon). */
+  leDem?: number;
 }
 
 /** Kiểm kê Keg & Lít thực tế kèm ảnh hiện trường đóng dấu ngày giờ (Xưởng & Kho tổng). */

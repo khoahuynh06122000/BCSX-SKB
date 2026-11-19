@@ -14,8 +14,11 @@ import {
   tongHopVoKegThuVe,
   truyXuatLo,
   banChotThangKiemKe,
+  KIEM_KE_DOT_XUAT,
   kiemKeBonCuaThang,
   soBonChoDuyet,
+  soKegCuaDong,
+  soLuongTuKien,
 } from "../loBia";
 
 let pass = 0;
@@ -196,6 +199,27 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
   eq("chot: kho tong T11 la k2 (duyet sau)", chot.has("k2") && !chot.has("k1"), true);
   eq("chot: xuong T11 rieng", chot.get("k3"), "2026-11");
   eq("chot: chua duyet khong chot", chot.has("k4"), false);
+}
+
+// Kiểm kê kho tổng theo KIỆN: keg × 20,6 L + lít lẻ; thùng × 24 + lon lẻ.
+{
+  eq("50 keg = 1030 L", soLuongTuKien("Lít", 50, 0), 1030);
+  eq("10 keg + 5,4 L le", soLuongTuKien("Lít", 10, 5.4), 211.4);
+  eq("40 thung = 960 lon", soLuongTuKien("Lon", 40, 0), 960);
+  eq("2 thung + 7 lon", soLuongTuKien("Lon", 2, 7), 55);
+  eq("so keg: 10 day + 1 le", soKegCuaDong("Lít", 10, 5.4), 11);
+  eq("so keg: lon khong tinh", soKegCuaDong("Lon", 40, 0), 0);
+}
+
+// Bản ĐỘT XUẤT đã duyệt không được thành bản chốt tháng.
+{
+  const ds = [
+    { id: "dx", date: "2026-11-20", location: "KHO_TONG", shiftOrPeriod: `${KIEM_KE_DOT_XUAT}Kế toán`, items: [], totalKegs: 0, totalLiters: 0, createdBy: "kt", createdAt: "x", approvalStatus: "approved", approvedAt: "2026-11-20T10:00:00" },
+    { id: "ct", date: "2026-11-30", location: "KHO_TONG", shiftOrPeriod: "CHỐT THÁNG · cuối tháng", items: [], totalKegs: 0, totalLiters: 0, createdBy: "kho", createdAt: "x", approvalStatus: "approved", approvedAt: "2026-11-29T10:00:00" },
+  ] as any;
+  const chot = banChotThangKiemKe(ds);
+  eq("dot xuat khong chot", chot.has("dx"), false);
+  eq("chot thang van chot", chot.has("ct"), true);
 }
 
 const thuVeRecords: KiemKeKegLit[] = [

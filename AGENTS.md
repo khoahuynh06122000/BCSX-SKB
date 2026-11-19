@@ -89,5 +89,11 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Xoá `api/gemini/scan-invoice.ts`, route Gemini trong `server.ts`, `requireUser` + `AI_ALLOWED_EMAILS` trong `api/_auth.ts`, nút "Quét bằng Tin" + `handleScanInvoice` + `scannedInvoiceDate` trong `App.tsx` (ngày nhận nay là ngày của dòng đơn), `lib/khopPhieuQuet.ts` + test, gói `@google/genai`, biến `GEMINI_API_KEY` trong `vite.config.ts` / `.env.example` / README.
   - Khung xác nhận đơn đi đường còn 2 nút ảnh: Chụp thêm, Chọn từ máy (vẫn bắt buộc có ảnh).
   - **Việc anh làm**: có thể xoá biến `GEMINI_API_KEY`, `AI_ALLOWED_EMAILS` trên Vercel (không còn dùng).
-- **B10 — đang chờ anh chốt thiết kế** kiểm kê tháng (đối chiếu tồn app bằng số keg đầy × 20,6 L / số thùng × 24 lon + ảnh hiện trạng) và/hoặc kiểm kê đột xuất (đếm mù để kiểm soát rủi ro).
+- B10 — anh đã chốt thiết kế, xem dòng dưới.
+- **B10 làm lại — 2 loại kiểm kê, CHỈ Kho tổng** (anh Khoa chốt 19/11/2026):
+  - **Chốt tháng (đối chiếu tồn app)**: cột Tồn app = tồn đến ngày chốt; kho đếm **keg đầy** (× 20,6 L) / **thùng** (× 24 lon) + phần **lẻ**, chụp ảnh hiện trạng toàn bộ keg & thùng; mỗi dòng báo "✓ Khớp" hoặc "Lệch ±x". Kế toán ký duyệt = chốt tháng.
+  - **Đột xuất (đếm mù)**: chỉ **kế toán** (và admin) tạo; không hiện tồn app khi đếm; lưu xong danh sách mới hiện lệch so với tồn app; không có nút ký duyệt, **không thay bản chốt tháng**.
+  - Đánh dấu loại bằng tiền tố `shiftOrPeriod` ("CHỐT THÁNG · " / "ĐỘT XUẤT · ") — không thêm trường, không sửa luật. Mỗi dòng lưu thêm `kienDem` (keg/thùng) và `leDem` (lẻ). Hàm `soLuongTuKien`, `soKegCuaDong`, `laKiemKeDotXuat` trong `lib/loBia.ts`. Kho tổng không còn ô "Số keg đếm thực tế" (keg suy từ kiện đếm); Xưởng vẫn giữ.
+  - **Xưởng chú trọng kiểm kê bồn**: ảnh bắt buộc đổi theo loại bồn — **FST: ảnh bảng hệ thống theo dõi trên bồn nấu**; **BBT: ảnh chụp rõ bia trong bồn**. Giám sát xưởng ký duyệt = chốt tháng (đã làm trước).
+  - Chưa thử trên giao diện thật (khoá PIN). Còn: nhóm C; mục Thu hồi keg + đánh giá thời gian thu hồi.
 

@@ -119,6 +119,43 @@ export function soBonChoDuyet(ds: readonly KiemKeBon[], thang: string): number {
 }
 
 /**
+ * HAI LOẠI KIỂM KÊ Ở KHO TỔNG (quy định anh Khoa 19/11/2026), đánh dấu bằng
+ * tiền tố của `shiftOrPeriod` — không thêm trường, không phải sửa luật Firestore:
+ *
+ *   CHỐT THÁNG  Lấy tồn app đến ngày chốt; kho đếm KEG ĐẦY / THÙNG nguyên kiện
+ *               (+ phần lẻ), chụp ảnh hiện trạng; keg × 20,6 L (thùng × 24 lon)
+ *               phải khớp tồn app. Kế toán ký duyệt = chốt tháng.
+ *   ĐỘT XUẤT    Kế toán kiểm bất chợt để kiểm soát rủi ro, ĐẾM MÙ (không thấy
+ *               tồn app lúc đếm), lưu xong mới hiện lệch. Không thay bản chốt.
+ */
+export const KIEM_KE_CHOT_THANG = "CHỐT THÁNG · ";
+export const KIEM_KE_DOT_XUAT = "ĐỘT XUẤT · ";
+
+export function laKiemKeDotXuat(r: Pick<KiemKeKegLit, "shiftOrPeriod">): boolean {
+  return String(r.shiftOrPeriod || "").startsWith(KIEM_KE_DOT_XUAT);
+}
+
+/** Số lượng theo ĐVT của mặt hàng từ số kiện + phần lẻ: keg × 20,6 L + lít lẻ; thùng × 24 + lon lẻ. */
+export function soLuongTuKien(
+  category: string | undefined,
+  kien: number,
+  le: number,
+  litMoiKeg = LIT_KEG_CHUAN,
+): number {
+  const k = Math.max(0, Number(kien) || 0);
+  const l = Math.max(0, Number(le) || 0);
+  if (category === "Lít") return Math.round((k * litMoiKeg + l) * 100) / 100;
+  if (category === "Lon") return Math.round(k * 24 + l);
+  return Math.round((k + l) * 100) / 100;
+}
+
+/** Số keg vật lý của một dòng bia Lít: keg đầy + 1 keg lẻ nếu có phần lẻ. */
+export function soKegCuaDong(category: string | undefined, kien: number, le: number): number {
+  if (category !== "Lít") return 0;
+  return Math.max(0, Math.trunc(Number(kien) || 0)) + ((Number(le) || 0) > 0 ? 1 : 0);
+}
+
+/**
  * BẢN KIỂM KÊ KEG & LÍT CHỐT THÁNG.
  *
  * Kiểm kê xong, người có quyền KÝ DUYỆT (Kho tổng: kế toán; Xưởng: giám sát
@@ -129,7 +166,7 @@ export function soBonChoDuyet(ds: readonly KiemKeBon[], thang: string): number {
 export function banChotThangKiemKe(ds: readonly KiemKeKegLit[]): Map<string, string> {
   const m = new Map<string, KiemKeKegLit>();
   ds.forEach((r) => {
-    if (r.approvalStatus !== "approved" || laBanGhiThuVeVoKeg(r)) return;
+    if (r.approvalStatus !== "approved" || laBanGhiThuVeVoKeg(r) || laKiemKeDotXuat(r)) return;
     const k = `${r.location}|${String(r.date || "").slice(0, 7)}`;
     const cu = m.get(k);
     if (!cu || String(r.approvedAt || "") > String(cu.approvedAt || "")) m.set(k, r);
