@@ -4,7 +4,7 @@ App quản lý nhập / xuất kho bia (Lon / Lít / Chai), đơn đi đường,
 công nợ, hóa đơn và thư viện ảnh minh chứng.
 
 **Nền tảng:** React + Vite + TailwindCSS · dữ liệu **Firebase (Firestore)** ·
-ảnh **Cloudinary** · quét phiếu bằng AI **Gemini** · chạy trên **Vercel**.
+ảnh **Cloudinary** · chạy trên **Vercel**.
 
 ---
 
@@ -24,8 +24,6 @@ nhật app.** Nhánh khác tạo bản xem thử riêng.
 | Cơ sở dữ liệu | `VITE_FIREBASE_DATABASE_ID` | `ai-studio-af5bc7f8-…` — app **không** dùng `(default)` |
 | Cloudinary tải ảnh | `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET` | preset **Unsigned** |
 | Cloudinary xoá ảnh | `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Chỉ máy chủ đọc. Thiếu thì xoá dữ liệu không xoá được ảnh — app báo đỏ cho admin |
-| Gemini | `GEMINI_API_KEY` | Chỉ máy chủ đọc |
-| AI (tuỳ chọn) | `AI_ALLOWED_EMAILS` | Email được dùng AI, cách nhau dấu phẩy |
 
 ### Phân quyền Firestore
 
@@ -109,7 +107,7 @@ src/components/      Các màn hình tách riêng (sổ phiếu, công nợ, hó
 src/lib/             Phép tính thuần — chạy thử được không cần Firebase
 src/lib/__tests__/   Phép kiểm bằng dữ liệu giả
 src/firebase.ts      Khởi tạo Firebase; mọi lệnh Firestore đi qua lib/firestoreDem.ts
-api/                 Hàm Vercel: quét phiếu AI, xoá ảnh Cloudinary
+api/                 Hàm Vercel: xoá ảnh Cloudinary
                      (/api/anh/xem là luật rewrites trong vercel.json, không phải hàm)
 server.ts            Máy chủ Express khi chạy tại máy (Vercel không dùng)
 firestore.rules      Phân quyền

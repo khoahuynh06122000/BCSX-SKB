@@ -4,11 +4,10 @@
  */
 
 /**
- * CHẶN CỬA CHO CÁC ENDPOINT AI
+ * CHẶN CỬA CHO CÁC ENDPOINT MÁY CHỦ (hiện là `/api/anh/xoa`).
  *
- * Trước đây `/api/gemini/scan-invoice` và `/api/gemini/verify-slip` không kiểm
- * người gọi. Ai biết URL cũng gọi được: đốt quota Gemini của chủ app, và vì
- * endpoint nhận ảnh tới 25MB nên còn có thể bị dùng làm chỗ xả dữ liệu.
+ * (Endpoint quét phiếu bằng AI Gemini đã gỡ hẳn 19/11/2026 — nay chụp ảnh
+ * hiện trường, không quét giấy.)
  *
  * Cách chặn ở đây: bắt buộc gửi kèm **Firebase ID token** của người đã đăng
  * nhập, rồi hỏi lại Google xem token đó có thật và có thuộc đúng project này
@@ -19,7 +18,7 @@
  * cả project. Cách gọi Identity Toolkit dưới đây chỉ cần đúng web API key vốn
  * đã có trong biến môi trường, và nó vẫn xác minh chữ ký token phía Google nên
  * không thể giả mạo. Đổi lại là mất một lượt gọi mạng (~100-300ms) mỗi request
- * — chấp nhận được với thao tác quét ảnh vốn đã mất vài giây.
+ * — chấp nhận được với thao tác xoá ảnh vốn hiếm.
  */
 
 interface VerifiedUser {
@@ -73,62 +72,7 @@ async function verifyIdToken(idToken: string): Promise<VerifiedUser | null> {
 }
 
 /**
- * Cửa chặn dùng chung. Trả về người dùng đã xác minh, hoặc null nếu đã tự trả
- * lời lỗi cho client (nơi gọi chỉ cần `return` là xong).
- *
- * Ngoài việc token phải thật, còn bắt buộc email đã xác minh — chặn trường hợp
- * tạo tài khoản bằng email người khác mà chưa chứng minh quyền sở hữu hộp thư.
- *
- * Muốn siết thêm thì đặt biến môi trường AI_ALLOWED_EMAILS (danh sách email
- * cách nhau bởi dấu phẩy); để trống thì mọi người đã đăng nhập đều dùng được.
- */
-export async function requireUser(req: any, res: any): Promise<VerifiedUser | null> {
-  const token = readBearer(req);
-  if (!token) {
-    res.status(401).json({
-      error: "Thiếu thông tin đăng nhập. Hãy đăng nhập lại rồi thử lại.",
-    });
-    return null;
-  }
-
-  let user: VerifiedUser | null;
-  try {
-    user = await verifyIdToken(token);
-  } catch (e: any) {
-    // Thiếu cấu hình phía máy chủ là lỗi của hệ thống, không phải của người gọi
-    console.error("Lỗi xác minh token:", e?.message || e);
-    res.status(500).json({ error: "Máy chủ chưa cấu hình đủ để xác minh." });
-    return null;
-  }
-
-  if (!user) {
-    res.status(401).json({
-      error: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn.",
-    });
-    return null;
-  }
-
-  if (!user.emailVerified) {
-    res.status(403).json({ error: "Email chưa được xác minh." });
-    return null;
-  }
-
-  const allowList = String(process.env.AI_ALLOWED_EMAILS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (allowList.length > 0 && !allowList.includes(user.email.toLowerCase())) {
-    res.status(403).json({ error: "Tài khoản này không được phép dùng AI." });
-    return null;
-  }
-
-  return user;
-}
-
-/**
- * Chỉ xác minh đăng nhập (token thật, email đã xác minh) — KHÔNG áp danh sách
- * AI. Trả về cả token để máy chủ hỏi Firestore BẰNG QUYỀN CỦA NGƯỜI GỌI.
+ * Chỉ xác minh đăng nhập (token thật, email đã xác minh). Trả về cả token để máy chủ hỏi Firestore BẰNG QUYỀN CỦA NGƯỜI GỌI.
  */
 export async function xacMinhDangNhap(
   req: any,
@@ -215,8 +159,6 @@ async function docVaiTro(uid: string, idToken: string): Promise<string> {
  * trong firestore.rules. Hai bên phải khớp: luật chặn xoá sổ ảnh, cửa này
  * chặn xoá tệp; lệch một bên là mở một nửa cánh cửa.
  *
- * KHÔNG áp danh sách `AI_ALLOWED_EMAILS` — đó là hạn mức dùng AI, không liên
- * quan tới quyền xoá.
  */
 export async function requireOwner(
   req: any,

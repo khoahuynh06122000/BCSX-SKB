@@ -233,7 +233,6 @@ import {
   nguonPhieuDaHuy,
 } from "./lib/phieuHuy";
 import { chuanTen, ghiChuHienThi } from "./lib/ghiChu";
-import { dongKhopTenQuet } from "./lib/khopPhieuQuet";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -298,42 +297,6 @@ const parseDateSafe = (dateStr: any): Date => {
  * Bằng đúng con số 10 mà thẻ "Cảnh báo cạn kho" vẫn dùng từ trước.
  */
 const DEFAULT_MIN_STOCK = 10;
-
-/**
- * Gọi endpoint AI kèm chứng minh đăng nhập.
- *
- * Hai endpoint `/api/gemini/*` giờ bắt buộc có Firebase ID token (xem
- * api/_auth.ts), nếu không sẽ trả 401. Token chỉ sống khoảng một giờ nên phải
- * lấy mới ở mỗi lần gọi thay vì giữ lại — `getIdToken()` tự làm mới khi cần.
- */
-async function callAiApi(path: string, body: unknown): Promise<Response> {
-  const current = auth.currentUser;
-  if (!current) {
-    throw new Error("Chưa đăng nhập nên không dùng được tính năng AI.");
-  }
-  const token = await current.getIdToken();
-  return fetch(path, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-const formatDisplayDate = (dateStr: string) => {
-  try {
-    const date = parseISO(dateStr);
-    if (!isValid(date)) {
-      // Try to return as-is if it looks like a date string already
-      return dateStr;
-    }
-    return format(date, "dd/MM/yyyy");
-  } catch {
-    return dateStr;
-  }
-};
 
 const Card = ({
   children,
@@ -656,10 +619,6 @@ export default function App() {
 
 
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannedInvoiceDate, setScannedInvoiceDate] = useState<string | null>(
-    null,
-  );
   const [matchedProductIds, setMatchedProductIds] = useState<Set<string>>(
     new Set(),
   );
@@ -4436,124 +4395,12 @@ export default function App() {
      */
     setMatchedProductIds(new Set());
 
-    // Ngày quét, số đang gõ dở và lý do hao của ĐƠN MỞ TRƯỚC (đóng mà không
-    // xác nhận) không được lọt sang đơn này: ngày quét sẽ thành ngày nhận của
-    // cả đơn, số gõ dở hiện trên ô nhưng sổ ghi số khác.
-    setScannedInvoiceDate(null);
+    // Số đang gõ dở, lý do hao và ảnh của ĐƠN MỞ TRƯỚC (đóng mà không xác
+    // nhận) không được lọt sang đơn này.
     setSoThucNhanText({});
     setLossReason("");
     setAnhCho([]);
     setShowLossModal(true);
-  };
-
-  const handleScanInvoice = async (base64Image: string) => {
-    if (!selectedInTransitGroup) return;
-
-    try {
-      setIsScanning(true);
-      const response = await callAiApi("/api/gemini/scan-invoice", {
-        image: base64Image,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server error: ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.items) {
-        if (data.exactDate) {
-          setScannedInvoiceDate(data.exactDate);
-        }
-        const newQtyMap = { ...actualReceivedQtyMap };
-        const newMatchedIds = new Set(matchedProductIds);
-        let matchedCount = 0;
-
-        // Vietnamese accent normalization
-        const cleanVietnamese = (str: string) => {
-          return str
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/[đĐ]/g, "d")
-            .toLowerCase();
-        };
-
-        const normalize = (s: string) => {
-          if (!s) return "";
-          return cleanVietnamese(s)
-            .replace(/bia/g, "")
-            .replace(/vo/g, "")
-            .replace(/keg/g, "")
-            .replace(/lon/g, "")
-            .replace(/thung/g, "")
-            .replace(/chai/g, "")
-            .replace(/\s+/g, "")
-            .trim();
-        };
-
-        data.items.forEach((scannedItem: any) => {
-          if (!normalize(scannedItem.productName)) return;
-
-          // Khớp KHẮT KHE: đủ chữ riêng của tên bia + đúng dạng keg / lon —
-          // xem `src/lib/khopPhieuQuet.ts`. Chung một chữ "lager" không còn
-          // kéo theo bia khác.
-          const matches = dongKhopTenQuet(
-            String(scannedItem.productName || ""),
-            selectedInTransitGroup,
-          );
-
-          if (matches.length > 0) {
-            const firstMatch = matches[0];
-            const pId = firstMatch.productId;
-
-            // Calculate total expected transit quantity for this product ID in the group
-            const totalTransit = selectedInTransitGroup
-              .filter((t) => t.productId === pId)
-              .reduce((sum, t) => sum + t.quantity, 0);
-
-            // Since beer name matches, it's a 100% quantity match with the in-transit amount, ignoring any keg mismatch from the invoice
-            newQtyMap[pId] = parseFloat(totalTransit.toFixed(4));
-
-            matches.forEach((match) => {
-              newMatchedIds.add(match.id);
-              matchedCount++;
-            });
-          }
-        });
-
-        setActualReceivedQtyMap(newQtyMap);
-        setMatchedProductIds(newMatchedIds);
-        if (matchedCount > 0) {
-          showNotification(
-            `Tin đã khớp được ${matchedCount} đơn hàng dựa trên phiếu!`,
-          );
-        } else {
-          const scannedList = data.items
-            .map(
-              (i: any) => `${i.productName} (${i.quantity} ${i.unit || "món"})`,
-            )
-            .join(", ");
-          showNotification(
-            `Tin đọc được trên phiếu: [ ${scannedList} ] nhưng chưa khớp tự động được với các đơn đang chọn. Anh vui lòng bấm chọn thủ công nhé!`,
-            "error",
-          );
-        }
-      } else {
-        showNotification(
-          "Tin đọc nhưng không lấy được thông tin mặt hàng nào trên phiếu. Anh chọn góc chụp chính diện đầy đủ nhé!",
-          "error",
-        );
-      }
-    } catch (err) {
-      console.error(err);
-      showNotification(
-        "Tin không đọc được ảnh này, anh thử lại với góc chụp rõ hơn nhé!",
-        "error",
-      );
-    } finally {
-      setIsScanning(false);
-    }
   };
 
   /*
@@ -4627,7 +4474,7 @@ export default function App() {
           {
             chungTu: chungTuXacNhan,
             loai: "XUAT",
-            ngay: String(scannedInvoiceDate || trxsToConfirm[0].date || "").slice(0, 10),
+            ngay: String(trxsToConfirm[0].date || "").slice(0, 10),
             maDoiTac: trxsToConfirm[0].partnerId || "",
             doiTac: trxsToConfirm[0].partnerName || "",
             taiBoi: currentUserProfile?.email || user || "",
@@ -4685,7 +4532,7 @@ export default function App() {
 
         for (const trx of groupTrxs) {
           // Determine final date: Scanning priority, then existing in-transit date
-          const finalDate = scannedInvoiceDate || trx.date || now;
+          const finalDate = trx.date || now;
 
           let lossForThisTrx = parseFloat(
             Number(Math.max(
@@ -4862,7 +4709,7 @@ export default function App() {
         haoChoTheo.forEach((t) => {
           batchHao.update(doc(db, "transactions", t.id), {
             status: "completed",
-            date: scannedInvoiceDate || t.date,
+            date: t.date,
             updatedAt: now,
           });
         });
@@ -4881,7 +4728,6 @@ export default function App() {
       setSelectedInTransitGroup(null);
       setSelectedInTransitIds([]);
       setMatchedProductIds(new Set());
-      setScannedInvoiceDate(null);
       setActualReceivedQtyMap({});
       setSoThucNhanText({});
       setLossReason("");
@@ -9313,7 +9159,6 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                                   // Mở ra là chưa khớp gì, người kho dò từng
                                   // loại — xem ghi chú ở `handleBulkConfirm`.
                                   setMatchedProductIds(new Set());
-                                  setScannedInvoiceDate(null);
                                   setSoThucNhanText({});
                                   setLossReason("");
                                   setAnhCho([]);
@@ -9508,8 +9353,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                                         // Mở ra là chưa khớp gì, người kho dò
                                         // từng loại — xem `handleBulkConfirm`.
                                         setMatchedProductIds(new Set());
-                                        setScannedInvoiceDate(null);
-                                        setSoThucNhanText({});
+                                              setSoThucNhanText({});
                                         setLossReason("");
                                         setAnhCho([]);
                                         setShowLossModal(true);
@@ -9587,17 +9431,6 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                                     ? `Đang chọn ${selectedInTransitIds.length} mã phiếu khác nhau`
                                     : `Mã phiếu hệ thống: ${selectedInTransitGroup[0].referenceGroupId?.replace("multi-", "") || "Cá lẻ"}`}
                                 </p>
-                                {scannedInvoiceDate && (
-                                  <span className="flex items-center gap-2 text-[9px] px-2.5 py-1 bg-indigo-50 text-indigo-600 font-bold rounded-full border border-indigo-100 uppercase animate-in fade-in slide-in-from-left-2">
-                                    <Clock className="w-3 h-3" />
-                                    Phiếu:{" "}
-                                    {formatDisplayDate(scannedInvoiceDate)}{" "}
-                                    {format(
-                                      parseISO(scannedInvoiceDate),
-                                      "HH:mm",
-                                    )}
-                                  </span>
-                                )}
                               </div>
                             </div>
                             <button
@@ -9905,53 +9738,15 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                             </label>
 
                             {/*
-                              BA NÚT NHỎ LẠI, XẾP NGANG.
+                              HAI NÚT NHỎ, XẾP NGANG. (Nút quét phiếu bằng AI đã
+                              bỏ 19/11/2026: nay chụp HIỆN TRƯỜNG, không chụp giấy.)
                               Chúng chỉ là chỗ bấm một lần rồi thôi; chiếm ba
                               khối lớn chồng lên nhau thì đẩy ảnh minh chứng
                               xuống tận đáy, phải cuộn mới thấy. Chỗ cần rộng
                               là ẢNH, để đối chiếu chữ viết tay với số lượng ở
                               trên.
                             */}
-                            <div className="grid grid-cols-3 gap-2">
-                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/40 hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group relative overflow-hidden min-h-[58px] sm:min-h-[76px]">
-                                {isScanning ? (
-                                  <div className="flex flex-col items-center gap-1.5">
-                                    <Loader2 className="w-5 h-5 text-emerald-500 animate-spin" />
-                                    <span className="text-[9px] font-black text-emerald-600 uppercase animate-pulse text-center leading-tight">
-                                      Đang đọc...
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <Sun className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
-                                    <span className="text-[9px] font-black text-emerald-600 uppercase text-center leading-tight tracking-tight">
-                                      Quét bằng Tin
-                                    </span>
-                                  </>
-                                )}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  multiple
-                                  disabled={isScanning}
-                                  onChange={async (e) => {
-                                    // Đọc và nén NGAY lúc chọn (xem ChonAnh.tsx);
-                                    // AI quét bằng bản nén của tấm đầu.
-                                    const o = e.target;
-                                    const { ds: moi, hong } = await taoTepCho(o.files);
-                                    o.value = "";
-                                    if (hong) baoAnhKhongDoc(hong);
-                                    if (!moi.length) return;
-                                    setAnhCho((cu) => [...cu, ...moi]);
-                                    try {
-                                      await handleScanInvoice(moi[0].du);
-                                    } catch (err) {
-                                      console.error("Lỗi đọc ảnh:", err);
-                                    }
-                                  }}
-                                />
-                              </label>
+                            <div className="grid grid-cols-2 gap-2">
                               <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
                                 <Camera className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
                                 <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-primary text-center leading-tight tracking-tight">

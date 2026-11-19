@@ -1,9 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import { requireUser } from "./api/_auth";
 import xoaAnhHandler from "./api/anh/xoa";
 import { GOC_TRUNG_CHUYEN, KHO_ANH } from "./src/anh/duongDan";
 
@@ -14,89 +12,6 @@ const PORT = 3000;
 
 // Increase payload size for image uploads
 app.use(express.json({ limit: '50mb' }));
-
-// Gemini initialization
-let aiInstance: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GEMINI_API_KEY environment variable. Please configure it in Settings.");
-    }
-    aiInstance = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-  }
-  return aiInstance;
-}
-
-// API Routes
-app.post("/api/gemini/scan-invoice", async (req, res) => {
-  // Cung cua chan nhu ban tren Vercel, de chay tai may khong lech voi that.
-  const user = await requireUser(req, res);
-  if (!user) return;
-
-  try {
-    const { image } = req.body; // base64 string
-
-    if (!image) {
-      return res.status(400).json({ error: "No image provided" });
-    }
-
-    const imagePart = {
-      inlineData: {
-        mimeType: "image/jpeg",
-        data: image.split(',')[1] || image,
-      },
-    };
-
-    const prompt = `Bạn là một trợ lý thông minh giúp đọc "PHIẾU CHUYỂN BỘ PHẬN". 
-Hãy trích xuất danh sách các mặt hàng (tên bia), số lượng (mục "Thực xuất"), và đặc biệt là "NGÀY THỰC XUẤT" bao gồm cả GIỜ:PHÚT.
-Ví dụ: "NGÀY THỰC XUẤT: 10:16 26/04/2026".
-Lưu ý: 
-- Cột "SL" và "Đvt" có thể ghi lít hoặc số lượng keg. Hãy ưu tiên lấy số lượng thực xuất cuối cùng được ghi tay.
-- Nếu ghi "22 keg" thì quantity là 22, unit là "keg".
-- Trả về kết quả chính xác theo cấu trúc JSON.`;
-
-    const ai = getGeminiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: { parts: [imagePart, { text: prompt }] },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            exactDate: { type: Type.STRING, description: "Ngày và giờ thực xuất từ phiếu (ví dụ: 2026-04-26T10:16:00)" },
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  productName: { type: Type.STRING, description: "Tên mặt hàng" },
-                  quantity: { type: Type.NUMBER, description: "Số lượng thực xuất" },
-                  unit: { type: Type.STRING, description: "Đơn vị tính" }
-                },
-                required: ["productName", "quantity"]
-              }
-            }
-          }
-        }
-      }
-    });
-
-    const result = JSON.parse(response.text || "{}");
-    res.json(result);
-  } catch (error) {
-    console.error("Gemini Scan Error:", error);
-    res.status(500).json({ error: "Failed to scan image" });
-  }
-});
 
 // So anh: cung hai ham Vercel dung, de chay tai may khong lech voi that.
 app.post("/api/anh/xoa", (req, res) => xoaAnhHandler(req, res));

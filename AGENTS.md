@@ -85,4 +85,9 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Nút "Ký duyệt & chốt tháng" hỏi xác nhận; tháng đó đã có bản chốt thì báo "sẽ THAY làm bản chốt". Bản đã duyệt hiện "✍ Đã ký duyệt · tên · giờ" + "📌 CHỐT KIỂM KÊ THÁNG MM/yyyy". Mỗi nơi mỗi tháng một bản chốt — bản duyệt SAU thay (`banChotThangKiemKe` trong `lib/loBia.ts`).
   - Tồn bồn tháng ở Dashboard Kế toán chỉ tính bản **đã được giám sát xưởng ký duyệt** (`kiemKeBonCuaThang`), hiện thêm số bản chờ ký duyệt (`soBonChoDuyet`); tháng chưa có bản duyệt hiện "chưa chốt".
   - Luật Firestore hiện cho OWNER / KE_TOAN / QUAN_LY_XUONG cùng duyệt mọi kiểm kê — UI đã chặn đúng người, còn siết luật theo nơi kiểm thì làm cùng nhóm C.
+- **Gỡ hẳn OCR / AI quét phiếu** (anh Khoa 19/11/2026: nay chụp ảnh HIỆN TRƯỜNG, không chụp giấy) — B11 bỏ luôn:
+  - Xoá `api/gemini/scan-invoice.ts`, route Gemini trong `server.ts`, `requireUser` + `AI_ALLOWED_EMAILS` trong `api/_auth.ts`, nút "Quét bằng Tin" + `handleScanInvoice` + `scannedInvoiceDate` trong `App.tsx` (ngày nhận nay là ngày của dòng đơn), `lib/khopPhieuQuet.ts` + test, gói `@google/genai`, biến `GEMINI_API_KEY` trong `vite.config.ts` / `.env.example` / README.
+  - Khung xác nhận đơn đi đường còn 2 nút ảnh: Chụp thêm, Chọn từ máy (vẫn bắt buộc có ảnh).
+  - **Việc anh làm**: có thể xoá biến `GEMINI_API_KEY`, `AI_ALLOWED_EMAILS` trên Vercel (không còn dùng).
+- **B10 — đang chờ anh chốt thiết kế** kiểm kê tháng (đối chiếu tồn app bằng số keg đầy × 20,6 L / số thùng × 24 lon + ảnh hiện trạng) và/hoặc kiểm kê đột xuất (đếm mù để kiểm soát rủi ro).
 
