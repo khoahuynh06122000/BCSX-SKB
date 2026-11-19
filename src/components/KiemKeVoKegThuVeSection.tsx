@@ -24,7 +24,7 @@ import {
   MA_KHO_TONG_THU_VE,
   tongHopVoKegThuVe,
 } from "../lib/loBia";
-import { cn, formatNumber } from "../lib/utils";
+import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
   transactions: Transaction[];
@@ -48,7 +48,8 @@ interface Props {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Ngày theo giờ VN — `toISOString` là UTC, trước 7h sáng ra hôm qua.
+const todayStr = () => homNayDiaPhuong();
 
 function formatStampView(iso: string): string {
   const d = new Date(iso);

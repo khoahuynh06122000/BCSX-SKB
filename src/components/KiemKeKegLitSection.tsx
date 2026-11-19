@@ -15,7 +15,7 @@ import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
 import { laBanGhiThuVeVoKeg } from "../lib/loBia";
-import { cn, formatNumber } from "../lib/utils";
+import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
   location: "XUONG" | "KHO_TONG";
@@ -42,7 +42,8 @@ interface Props {
   onDelete?: (id: string) => Promise<void>;
 }
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Ngày theo giờ VN — `toISOString` là UTC, trước 7h sáng ra hôm qua.
+const todayStr = () => homNayDiaPhuong();
 
 function formatStampView(iso: string): string {
   const d = new Date(iso);

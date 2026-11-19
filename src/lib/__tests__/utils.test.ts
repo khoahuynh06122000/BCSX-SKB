@@ -11,7 +11,7 @@
  * đường và Thư viện ảnh — giờ không ai giao hàng lúc đó.
  */
 
-import { formatDate } from "../utils";
+import { formatDate, homNayDiaPhuong, ngayGioDiaPhuong } from "../utils";
 import { ngayCham } from "../oNgay";
 
 let pass = 0;
@@ -43,6 +43,16 @@ eq("null khong vo", formatDate(null as unknown as string), "—");
 eq("ngayCham", ngayCham("2026-08-27T15:00:00.000Z"), "27.08.2026");
 eq("ngayCham rong", ngayCham(""), "");
 eq("ngayCham khong dung dang", ngayCham("27/08/2026"), "");
+
+// ------------------------------------------------------------ ngày nghiệp vụ + giờ VN
+{
+  // 03:05:09 sáng 20/11 giờ máy — bản cũ ghép giờ UTC thành 21/11 khi đọc lại.
+  const luc = new Date(2026, 10, 20, 3, 5, 9);
+  eq("ghep ngay chon + gio may", ngayGioDiaPhuong("2026-10-31", luc), "2026-10-31T03:05:09");
+  eq("doc lai van dung ngay chon", new Date(ngayGioDiaPhuong("2026-10-31", luc)).getDate(), 31);
+  eq("khong co ngay -> hom nay theo may", ngayGioDiaPhuong("", luc), "2026-11-20T03:05:09");
+  eq("homNay khong qua UTC", homNayDiaPhuong(luc), "2026-11-20");
+}
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

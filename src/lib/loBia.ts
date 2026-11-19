@@ -559,6 +559,15 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
     return row;
   };
 
+  /*
+   * Làm tròn keg theo TỪNG LƯỢT GIAO (một mặt hàng trong một chuyến), không
+   * theo từng dòng giao dịch: lưu phiếu xuất thì một mặt hàng có thể tách
+   * thành vài dòng theo lô FIFO (30 L + 70 L cho một đơn 100 L). Làm tròn từng
+   * dòng ra ceil(1,5) + ceil(3,5) = 6 keg thay vì 5, và hao hụt chuẩn 2,4 L
+   * thay vì 3,0 L. Dòng không có mã chuyến thì tự là một lượt.
+   */
+  const luotGiao = new Map<string, { row: DongGiaoKegDVTV; isStandard206: boolean; lit: number }>();
+
   input.transactions.forEach((t) => {
     if (t.type !== "OUT" && t.type !== "LOSS" && t.type !== "DAMAGE") return;
     const p = prodMap.get(t.productId);
@@ -572,16 +581,23 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
 
     if (t.type === "OUT") {
       row.litersDelivered = round2(row.litersDelivered + qty);
-      row.kegsDelivered += soKegLamTronLen(qty, row.litMoiKeg);
-      if (!grp.isStandard206) {
-        // Mỗi keg tròn 20L giao ĐVTV phát sinh định mức 0,6 L so với keg chiết 20,6L.
-        const fullKegs20 = Math.floor(qty / LIT_KEG_DVTV + 1e-4);
-        row.expectedStandardLoss = round2(
-          row.expectedStandardLoss + fullKegs20 * CHUAN_HAO_HUT_DVTV,
-        );
-      }
+      const khoa = `${grp.id}|${t.referenceGroupId || `id:${t.id}`}|${t.productId}`;
+      const l = luotGiao.get(khoa);
+      if (l) l.lit += qty;
+      else luotGiao.set(khoa, { row, isStandard206: grp.isStandard206, lit: qty });
     } else {
       row.actualLossRecorded = round2(row.actualLossRecorded + qty);
+    }
+  });
+
+  luotGiao.forEach(({ row, isStandard206, lit }) => {
+    row.kegsDelivered += soKegLamTronLen(lit, row.litMoiKeg);
+    if (!isStandard206) {
+      // Mỗi keg tròn 20L giao ĐVTV phát sinh định mức 0,6 L so với keg chiết 20,6L.
+      const fullKegs20 = Math.floor(lit / LIT_KEG_DVTV + 1e-4);
+      row.expectedStandardLoss = round2(
+        row.expectedStandardLoss + fullKegs20 * CHUAN_HAO_HUT_DVTV,
+      );
     }
   });
 

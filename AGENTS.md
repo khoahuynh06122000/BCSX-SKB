@@ -8,10 +8,58 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
 - Luôn xưng hô là "Tin Tin" hoặc trợ lý chuyên nghiệp.
 - Cung cấp giải pháp kỹ thuật đi kèm với góc nhìn phân tích dữ liệu.
 - Giữ phong cách làm việc của một chuyên gia giỏi nhất thế giới.
+- **Xong mỗi task thì ghi vào mục "Nhật ký công việc" bên dưới** (ngày, việc gì, commit, còn dở gì) — để phiên sau (Claude Code hay Antigravity) đọc là nắm được ngay. Ghi cùng commit với code.
 
 ## Ghi nhớ vận hành & Khắc phục sự cố thực tế:
 1. **Sự cố ảnh chứng từ "LỖI MẠNG / BỊ CHẶN" trên máy văn phòng Sun World (Kế toán)**:
-   - Dữ liệu Firestore vẫn tải đủ 100% nhưng ảnh không hiện do tường lửa mạng nội bộ công ty (Fortinet/Palo Alto) chặn domain CDN đám mây `res.cloudinary.com`.
-   - Máy Admin thấy ảnh vì dùng mạng ngoài/4G hoặc đã có browser cache từ trước.
-   - Nút `SOÁT ẢNH` trả về Mã 0 (*Không hỏi tới máy chủ được*).
-   - ĐÃ LÀM (19/11/2026): ảnh hiển thị đi qua `/api/anh/xem/...` (luật `rewrites` trong `vercel.json`, `server.ts` khi chạy máy). Hàm `quaTrungChuyen` ở `src/anh/duongDan.ts`. Chỗ nào hiện/mở/tải ảnh mới đều phải bọc `quaTrungChuyen(url)`.
+   - Dữ liệu Firestore vẫn tải đủ 100% nhưng ảnh không hiện. Nút `SOÁT ẢNH` trả về Mã 0 (*Không hỏi tới máy chủ được*).
+   - Anh Khoa xác nhận (19/11/2026): máy kế toán và máy admin **cùng một mạng**, admin thấy ảnh còn user khác thì không. Luồng tải ảnh trong code **không phân biệt vai trò** (luật Firestore cho mọi vai trò đã duyệt trừ DNC đọc đủ `anh_chung_tu`; tệp ảnh tải bằng cùng một URL). Nên nghi chặn ở chính máy đó (diệt virus lọc web, chính sách trình duyệt, proxy trên máy) hoặc admin còn cache.
+   - ĐÃ LÀM (19/11/2026): ảnh hiển thị đi qua `/api/anh/xem/...` (luật `rewrites` trong `vercel.json`, `server.ts` khi chạy máy). Hàm `quaTrungChuyen` ở `src/anh/duongDan.ts`. Chỗ nào hiện/mở/tải ảnh mới đều phải bọc `quaTrungChuyen(url)`. Ô ảnh: thu nhỏ qua app → gốc qua app → gốc thẳng Cloudinary (dự phòng).
+   - `SOÁT ẢNH` có dòng **Kiểm luồng**: cùng một tấm hỏi thẳng Cloudinary và qua app, nói đường nào bị chặn trên máy đang dùng.
+   - Chiều TẢI LÊN vẫn đi thẳng `api.cloudinary.com` — nếu máy văn phòng báo lỗi lúc lưu ảnh thì làm thêm trung chuyển cho chiều này.
+2. **Tải lại trang là app khoá, đòi PIN** — trợ lý không nhập PIN thay người dùng; muốn kiểm bản mới trên Vercel thì đọc tệp JS đã build (có mã build `xxxxxxx`).
+
+## Nhật ký công việc
+
+### 17/11/2026 (Antigravity)
+- Gộp phiếu cũ + nhập lẻ vào panel Xưởng/Kho tổng; ảnh minh chứng thêm thử lại + chẩn đoán.
+- Tách tab Tổng quan; chuẩn keg nội bộ 20,6 L, keg lẻ làm tròn lên; ĐVTV ký 20 L/keg (trừ BNC, FV nhận 20,6 L) → báo cáo hao hụt ĐVTV.
+- Kho tổng: kiểm kê vỏ keg thu về + danh sách ĐVTV còn giữ keg.
+- Nhật ký phiếu thành nút chọn riêng; bảng Rào & BM đứng trước Chứng từ ảnh.
+- Phân hệ Quản lý xưởng: duyệt / trả về / nhật ký; admin thấy toàn bộ. `firestore.rules` thêm trường duyệt (commit `8a6e798`). **Chưa xác nhận đã đẩy luật lên Firebase** (`day-rules.cmd`).
+
+### 19/11/2026 (Claude Code)
+- `457ec93` — Trung chuyển ảnh `/api/anh/xem` (xem mục 1 ở trên). Soát trên app thật bằng admin: 15/15 nhập + 325/325 xuất hiện được, 100% qua app.
+- `cf39289` — Thêm Kiểm luồng vào `SOÁT ẢNH`. **Còn chờ** kế toán chạy trên máy họ và gửi lại dòng Kiểm luồng.
+- Rà soát lỗi toàn app (chưa sửa gì). ✔ = Tin Tin đã tự đọc code xác nhận; còn lại do agent rà, độ tin trung bình–cao.
+  - **A. Sai số liệu / tiền — ĐÃ SỬA cả 7 (19/11/2026, xem dòng dưới cùng)**
+    1. ✔ Xuất kho lưu nhầm đối tác `SKB-BNC`: chuyển sang tab Xuất kho không đặt lại `partnerId`, ô chọn hiện APC nhưng state vẫn SKB-BNC → công nợ tính cho nhà máy (`App.tsx` ~5186, 5833, 6870).
+    2. ✔ Công nợ / hoá đơn tính cả phiếu xuất ĐÃ HUỶ: `DebtExport` và các bảng kế hoạch, vỏ keg nhận `transactions` thô, không qua `boGiaoDichPhieuDaHuy` (`App.tsx` 10726…).
+    3. ✔ Hai dòng xuất cùng mặt hàng ghi đè nhau: mã `split-${Date.now()}-${productId}-${allocIdx}` trùng → mất dòng, sổ số phiếu vẫn ghi tổng (`App.tsx` ~5670, 5697).
+    4. ✔ Lệch ngày khi lưu 00:00–06:59 giờ VN: ghép ngày địa phương với giờ UTC (`App.tsx` ~5616, 5897); form kiểm kê lấy ngày theo UTC (`KiemKeKegLitSection` 45, `KiemKeVoKegThuVeSection` 51).
+    5. ✔ Keg giao ĐVTV và hao hụt 0,6 L sai khi một đơn chia nhiều lô FIFO — đang làm tròn theo từng dòng lô (`lib/loBia.ts` ~575).
+    6. Số hoá đơn thật không lên sheet Chốt cho đơn vị không có mã SAP (khoá `maBp || donVi` lệch với chỉ mục `h.maBp`) (`lib/congNo.ts` ~432).
+    7. Xác nhận đơn đi đường dính ngày quét / số thực nhận của đơn trước (không reset `scannedInvoiceDate`, `soThucNhanText`).
+  - **B. Báo cáo / hiển thị sai**
+    8. ✔ Dashboard Kế toán cộng tồn bồn của mọi tháng (phải lấy lần kiểm mới nhất mỗi bồn) (`KeToanDashboardPanel` 87).
+    9. ✔ Kiểm kê "Keg/Thùng" đếm lon, bỏ keg — và lưu sai `totalKegs` (`KiemKeKegLitSection` 118).
+    10. Kiểm kê kho tổng so với tồn sổ theo bộ lọc của tab 1, không theo ngày kiểm (`KhoTongNxtPanel` ~157).
+    11. Quét phiếu AI khớp nhầm mặt hàng chỉ vì trùng một từ ("lager") (`App.tsx` ~4509).
+    12. Nạp lại cùng tệp BBGN báo "vượt tồn" giả (chỉ cảnh báo) (`App.tsx` ~2594).
+  - **C. Bảo mật / quyền**
+    13. ✔ Bản ghi giám sát ĐÃ DUYỆT vẫn sửa được số liệu bởi người không có quyền duyệt mà vẫn giữ "đã duyệt" (`firestore.rules` `canUpdateApprovalFields` ~604).
+    14. ✔ API Gemini chỉ đòi đăng nhập Google, tài khoản CHỜ DUYỆT cũng gọi được → đốt quota (`api/gemini/scan-invoice.ts` 41).
+    15. `/api/anh/xoa` (`vuaTai`) mở cho tài khoản chờ duyệt → có thể đốt hạn mức Admin API Cloudinary.
+    16. ✔ Xoá kiểm kê bồn / keg (QLX, kế toán) bỏ lại ảnh và tệp Cloudinary mồ côi (`App.tsx` ~6306, 6319).
+    17. Lý do "Trả lại" > 500 ký tự hoặc tên > 150 ký tự làm thao tác duyệt bị từ chối.
+    18. Trung chuyển ảnh ở `server.ts` (chỉ khi chạy tại máy) lách được bằng `%2e%2e` — lỗi của bản 19/11, không ảnh hưởng Vercel.
+- Sửa nhóm A:
+  - A1: sang tab Xuất kho mà đối tác đang là nhà cung cấp thì xoá trắng + ô chọn có dòng "— Chọn đơn vị nhận —"; lưu phiếu xuất cho NHÀ CUNG CẤP bị chặn.
+  - A2: `giaoDichConHieuLuc` (bỏ phiếu đã huỷ) truyền cho DebtExport, TraCuuHoaDon, Xưởng, Quản lý xưởng, Kho tổng, Dashboard Kế toán. Lịch sử / ImportSlip / Đơn BNC vẫn dùng dữ liệu thô.
+  - A3: mã giao dịch có số thứ tự dòng `d{n}`; kiểm tồn cộng dồn theo mặt hàng; FIFO trừ lô đã chia cho dòng trước.
+  - A4: ngày lưu = ngày chọn + giờ máy, KHÔNG kèm `Z` (`ngayGioDiaPhuong` trong `lib/utils.ts`); form kiểm kê dùng `homNayDiaPhuong`. **Dữ liệu cũ** lưu 0h–7h vẫn mang giờ UTC — `slice(0,10)` vẫn đúng ngày, chỉ chỗ đọc bằng `new Date` lệch; chưa chuyển đổi dữ liệu cũ.
+  - A5: keg & hao chuẩn 0,6 L làm tròn theo lượt giao (`referenceGroupId` + mặt hàng), không theo dòng lô (`lib/loBia.ts`); vỏ keg dùng chung kết quả.
+  - A6: chỉ mục hoá đơn thật trong DebtExport dùng `maBp || donVi` khớp với khoá lưu.
+  - A7: mở khung xác nhận đơn đi đường (3 chỗ) đặt lại ngày quét, số gõ dở, lý do hao, ảnh chờ.
+  - Chưa kiểm trên giao diện thật (app khoá PIN khi tải lại); đã qua lint, test (thêm phép kiểm tách lô, ngày giờ VN), build.
+  - Còn lại nhóm B, C chưa sửa.

@@ -125,6 +125,20 @@ eq("BNC + FV tong keg = 3", kqDvtv.totals.bncFvKegsDelivered, 3);
 eq("All tong keg = 10", kqDvtv.totals.allKegsDelivered, 10);
 eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
 
+// Một đơn 100 L cho BNG bị tách 30 L + 70 L theo lô FIFO (cùng referenceGroupId):
+// vẫn là 5 keg và 3,0 L hao chuẩn — không làm tròn từng dòng lô.
+{
+  const tach: Transaction[] = [
+    { id: "s1", date: "2026-11-12T08:00:00", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 30, partnerId: "AC0118", partnerName: "BNG", createdBy: "b", referenceGroupId: "multi-1", batchNumber: "L1" },
+    { id: "s2", date: "2026-11-12T08:00:00", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 70, partnerId: "AC0118", partnerName: "BNG", createdBy: "b", referenceGroupId: "multi-1", batchNumber: "L2" },
+    // Chuyến khác cùng đơn vị: 10 L lẻ -> 1 keg riêng, không gộp với chuyến trên.
+    { id: "s3", date: "2026-11-13T08:00:00", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 10, partnerId: "AC0118", partnerName: "BNG", createdBy: "b", referenceGroupId: "multi-2" },
+  ];
+  const kq = tongHopGiaoKegVaHaoHutDVTV({ transactions: tach, products });
+  eq("tach lo FIFO: keg = 5 + 1", kq.totals.dvtvKegsDelivered, 6);
+  eq("tach lo FIFO: hao chuan = 3.0L", kq.totals.dvtvExpectedLoss06, 3);
+}
+
 const thuVeRecords: KiemKeKegLit[] = [
   {
     id: "tv1",

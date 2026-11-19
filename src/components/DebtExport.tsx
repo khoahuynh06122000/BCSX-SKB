@@ -172,7 +172,10 @@ export default function DebtExport({
     const m = new Map<string, { soHoaDon: string; ngayHoaDon: string }>();
     hoaDon.forEach((h) => {
       if (!h.soHoaDon) return;
-      m.set([h.tuNgay, h.denNgay, h.maBp].join("|"), {
+      // Đơn vị chưa có mã BP: khoá hóa đơn (và `dungBangCongNo`) dùng TÊN đơn
+      // vị thay mã — chỉ mục ở đây cũng phải vậy, không thì số thật không bao
+      // giờ lên sheet Chốt và hai đơn vị thiếu mã đè nhau ở khoá `tu|den|`.
+      m.set([h.tuNgay, h.denNgay, h.maBp || h.donVi].join("|"), {
         soHoaDon: h.soHoaDon,
         ngayHoaDon: h.ngayHoaDon,
       });

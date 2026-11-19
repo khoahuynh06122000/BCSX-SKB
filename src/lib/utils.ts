@@ -48,3 +48,24 @@ export function formatNumber(num: number | string | null | undefined) {
     maximumFractionDigits: 4,
   }).format(rounded);
 }
+
+/**
+ * NGÀY NGHIỆP VỤ + GIỜ HIỆN TẠI THEO GIỜ MÁY (Việt Nam), KHÔNG kèm `Z`.
+ *
+ * Bản cũ ghép ngày người dùng chọn với giờ UTC (`2026-11-20T20:00:00Z` lúc
+ * 03:00 sáng 20/11 giờ VN). 10 ký tự đầu vẫn là 20/11 nên sổ tồn / công nợ
+ * (cắt chuỗi) thấy đúng ngày, nhưng mọi chỗ đọc bằng `new Date` / `parseISO`
+ * (mã phiếu, lọc báo cáo) lại thấy 21/11 — lệch ngày, lệch cả tháng khi lùi
+ * ngày về cuối tháng. Không kèm `Z` thì hai kiểu đọc cùng ra một ngày.
+ */
+export function ngayGioDiaPhuong(ngay?: string, luc: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  const homNay = `${luc.getFullYear()}-${p(luc.getMonth() + 1)}-${p(luc.getDate())}`;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(ngay ?? '').trim()) ? String(ngay).trim() : homNay;
+  return `${d}T${p(luc.getHours())}:${p(luc.getMinutes())}:${p(luc.getSeconds())}`;
+}
+
+/** Ngày hôm nay theo giờ máy, `yyyy-MM-dd` (không qua UTC). */
+export function homNayDiaPhuong(luc: Date = new Date()): string {
+  return ngayGioDiaPhuong(undefined, luc).slice(0, 10);
+}

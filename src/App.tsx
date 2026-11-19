@@ -75,7 +75,7 @@ import {
   KiemKeKegLit,
 } from "./types";
 import { INITIAL_PRODUCTS, INITIAL_PARTNERS } from "./constants";
-import { cn, formatDate, formatNumber } from "./lib/utils";
+import { cn, formatDate, formatNumber, ngayGioDiaPhuong } from "./lib/utils";
 import { useTheme } from "./lib/useTheme";
 import {
   nextSlipCode,
@@ -4413,6 +4413,11 @@ export default function App() {
      */
     setMatchedProductIds(new Set());
 
+    // Ngày quét, số đang gõ dở và lý do hao của ĐƠN MỞ TRƯỚC (đóng mà không
+    // xác nhận) không được lọt sang đơn này: ngày quét sẽ thành ngày nhận của
+    // cả đơn, số gõ dở hiện trên ô nhưng sổ ghi số khác.
+    setScannedInvoiceDate(null);
+    setSoThucNhanText({});
     setLossReason("");
     setAnhCho([]);
     setShowLossModal(true);
@@ -5099,6 +5104,17 @@ export default function App() {
    */
   const nguonDaHuy = useMemo(() => nguonPhieuDaHuy(soPhieu), [soPhieu]);
 
+  /*
+   * Giao dịch CÒN HIỆU LỰC — bỏ mọi dòng thuộc chứng từ đã hủy trong sổ số
+   * phiếu. Công nợ, hoá đơn, kế hoạch vs thực xuất, vỏ keg phải dùng bản này:
+   * phiếu xuất đã hủy mà vẫn lên sheet Chốt là tính tiền khách cho hàng không
+   * giao. Tab Lịch sử / nhật ký phiếu vẫn dùng `transactions` thô để tra lại.
+   */
+  const giaoDichConHieuLuc = useMemo(
+    () => boGiaoDichPhieuDaHuy(transactions, nguonDaHuy),
+    [transactions, nguonDaHuy],
+  );
+
   const countedTransactions = useMemo(
     () =>
       boGiaoDichPhieuDaHuy(
@@ -5195,6 +5211,14 @@ export default function App() {
           ...prev,
           partnerId: skb.id,
         }));
+      }
+    } else if (activeTab === "export") {
+      // Sang Xuất kho mà còn giữ nhà cung cấp (SKB-BNC) từ form nhập thì xoá
+      // trắng: ô chọn chỉ liệt kê đơn vị nhận, giữ giá trị cũ thì ô HIỆN đơn vị
+      // đầu danh sách nhưng lưu vẫn là SKB-BNC → công nợ ghi nhầm cho nhà máy.
+      const cu = donVi.find((p) => p.id === newTransaction.partnerId);
+      if (cu?.type === "SUPPLIER") {
+        setNewTransaction((prev) => ({ ...prev, partnerId: "" }));
       }
     }
   }, [activeTab, newTransaction.type, partners, newTransaction.partnerId]);
@@ -5582,6 +5606,15 @@ export default function App() {
       return;
     }
 
+    // Xuất kho mà đơn vị nhận là NHÀ CUNG CẤP (vd SKB-BNC còn sót từ form nhập)
+    // thì công nợ sẽ ghi cho nhà máy thay vì khách — chặn lại, bắt chọn lại.
+    if (type === "OUT" && par?.type === "SUPPLIER") {
+      alert(
+        `"${par.name}" là nhà cung cấp, không phải đơn vị nhận hàng.\n\nChọn lại ô "Đơn vị nhận" trước khi lưu phiếu xuất.`,
+      );
+      return;
+    }
+
     // Items Validation
     const validItems = newTransaction.items.filter(
       (item) => item.productId && item.quantity > 0,
@@ -5592,11 +5625,22 @@ export default function App() {
     }
 
     if (type === "OUT") {
+      // Cộng dồn theo MẶT HÀNG: cùng một mặt hàng ở hai dòng thì phải đủ tồn
+      // cho tổng hai dòng, không phải từng dòng một.
+      const canTheoMatHang = new Map<string, number>();
+      validItems.forEach((it) =>
+        canTheoMatHang.set(
+          it.productId,
+          (canTheoMatHang.get(it.productId) || 0) +
+            Number(it.quantity) +
+            (Number(it.lossQuantity) || 0),
+        ),
+      );
       for (const item of validItems) {
         const currentItem = inventory.find(
           (i) => i.productId === item.productId,
         );
-        const canDung = Number(item.quantity) + (Number(item.lossQuantity) || 0);
+        const canDung = canTheoMatHang.get(item.productId) || 0;
         // Phai cong ca hao hut: hang di ra khoi kho la ca hai phan, khong chi
         // phan ghi cong no. Bo qua thi ton kho tut xuong am ma khong ai chan.
         if (!currentItem || currentItem.stock < canDung) {
@@ -5612,12 +5656,10 @@ export default function App() {
     try {
       const batch = writeBatch(db);
       const referenceGroupId = `multi-${Date.now()}`;
-      const timestamp = new Date().toISOString();
-      const transactionDate = newTransaction.date
-        ? newTransaction.date.includes("T")
-          ? newTransaction.date
-          : `${newTransaction.date}T${timestamp.split("T")[1]}`
-        : timestamp;
+      // Ngày người dùng chọn + giờ hiện tại theo giờ VN — xem `ngayGioDiaPhuong`.
+      const transactionDate = newTransaction.date?.includes("T")
+        ? newTransaction.date
+        : ngayGioDiaPhuong(newTransaction.date);
 
       /**
        * MOT LUOT NHAP LA MOT PHIEU.
@@ -5651,15 +5693,33 @@ export default function App() {
           : undefined;
 
 
-      for (const item of validItems) {
+      /*
+       * Mã giao dịch phải KHÁC NHAU giữa các dòng. Cả vòng lặp chạy trong cùng
+       * một mili-giây nên `Date.now()` trùng; hai dòng cùng mặt hàng mà mã chỉ
+       * gồm `Date.now()-productId` thì dòng sau GHI ĐÈ dòng trước — mất hàng.
+       * Gắn thêm số thứ tự dòng `d{n}`.
+       *
+       * Lô đã chia cho dòng trước được trừ ra trước khi chia FIFO cho dòng
+       * sau, không thì hai dòng cùng rút một lô quá tồn của lô.
+       */
+      const daChiaTheoLo = new Map<string, number>();
+      const khoaLo = (pid: string, lo: string) => `${pid}|${lo}`;
+      for (const [itemIdx, item] of validItems.entries()) {
         const p = products.find((prod) => prod.id === item.productId);
         if (!p) continue;
 
         if (type === "OUT") {
           const itemQty = Number(item.quantity);
+          const tonLoConLai = daChiaTheoLo.size
+            ? tonTheoLo.map((l) => ({
+                ...l,
+                closing:
+                  l.closing - (daChiaTheoLo.get(khoaLo(l.productId, l.batchNumber)) || 0),
+              }))
+            : tonTheoLo;
           const fifoAllocs = item.batchNumber?.trim()
             ? [{ batchNumber: item.batchNumber.trim(), quantity: itemQty }]
-            : goiYLoFIFO(tonTheoLo, p.id, itemQty);
+            : goiYLoFIFO(tonLoConLai, p.id, itemQty);
           const totalAllocated = fifoAllocs.reduce((s, a) => s + a.quantity, 0);
           const allocations =
             fifoAllocs.length > 0 && Math.abs(totalAllocated - itemQty) < 0.001
@@ -5667,7 +5727,11 @@ export default function App() {
               : [{ batchNumber: fifoAllocs[0]?.batchNumber || "", quantity: itemQty }];
 
           allocations.forEach((alloc, allocIdx) => {
-            const transactionId = `split-${Date.now()}-${item.productId}-${allocIdx}`;
+            if (alloc.batchNumber) {
+              const k = khoaLo(p.id, alloc.batchNumber);
+              daChiaTheoLo.set(k, (daChiaTheoLo.get(k) || 0) + alloc.quantity);
+            }
+            const transactionId = `split-${Date.now()}-d${itemIdx}-${item.productId}-${allocIdx}`;
             const transaction: Transaction = {
               id: transactionId,
               date: transactionDate,
@@ -5694,7 +5758,7 @@ export default function App() {
           const hao = Number(item.lossQuantity) || 0;
           if (hao > 0) {
             {
-              const haoId = `hao-${Date.now()}-${p.id}-0`;
+              const haoId = `hao-${Date.now()}-d${itemIdx}-${p.id}-0`;
               batch.set(doc(db, "transactions", haoId), {
                 id: haoId,
                 date: transactionDate,
@@ -5718,7 +5782,10 @@ export default function App() {
             }
           }
         } else {
-          const transactionId = `trx-${Date.now()}-${item.productId}`;
+          const transactionId =
+            itemIdx === 0
+              ? `trx-${Date.now()}-${item.productId}`
+              : `trx-${Date.now()}-d${itemIdx}-${item.productId}`;
           const transaction: Transaction = {
             id: transactionId,
             date: transactionDate,
@@ -5894,7 +5961,7 @@ export default function App() {
       const email = currentUserProfile?.email || user || "";
       const signerName = currentUserProfile?.name || user || "Nhân viên sản xuất";
       const nowIso = new Date().toISOString();
-      const txDate = `${ngayPhieu}T${nowIso.split("T")[1]}`;
+      const txDate = ngayGioDiaPhuong(ngayPhieu);
       const referenceGroupId = `xuong-${Date.now()}`;
 
       anhMoi = await taiAnhChoChungTu(
@@ -6874,6 +6941,11 @@ export default function App() {
                       : p.type !== "SUPPLIER",
                   );
                   const out: { value: string; label: string }[] = [];
+                  // Chưa chọn thì hiện dòng nhắc chọn, KHÔNG để trình duyệt tự
+                  // hiện đơn vị đầu danh sách trong khi giá trị thật là rỗng.
+                  if (mode === "export" && !newTransaction.partnerId) {
+                    out.push({ value: "", label: "— Chọn đơn vị nhận —" });
+                  }
                   let daChenBNC = false;
                   for (const p of ds) {
                     if (laBoPhanBNC(p.id)) {
@@ -9141,6 +9213,10 @@ export default function App() {
                                   // Mở ra là chưa khớp gì, người kho dò từng
                                   // loại — xem ghi chú ở `handleBulkConfirm`.
                                   setMatchedProductIds(new Set());
+                                  setScannedInvoiceDate(null);
+                                  setSoThucNhanText({});
+                                  setLossReason("");
+                                  setAnhCho([]);
                                   setShowLossModal(true);
                                 }}
                                 className="flex-1 py-3 bg-emerald-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
@@ -9332,6 +9408,10 @@ export default function App() {
                                         // Mở ra là chưa khớp gì, người kho dò
                                         // từng loại — xem `handleBulkConfirm`.
                                         setMatchedProductIds(new Set());
+                                        setScannedInvoiceDate(null);
+                                        setSoThucNhanText({});
+                                        setLossReason("");
+                                        setAnhCho([]);
                                         setShowLossModal(true);
                                       }}
                                       className="px-3 py-1.5 bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
@@ -10723,7 +10803,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                   <div className="space-y-6">
                     <DebtExport
                       phan={theCongNo === "da-xuat" ? "da" : "chua"}
-                      transactions={transactions}
+                      transactions={giaoDichConHieuLuc}
                       products={products}
                       /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
                          ma thieu ma BP la hoa don sai khach. */
@@ -10759,7 +10839,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                     */}
                     {theCongNo === "da-xuat" && (
                       <TraCuuHoaDon
-                        transactions={transactions}
+                        transactions={giaoDichConHieuLuc}
                         products={products}
                         partners={donVi}
                         hoaDon={hoaDon}
@@ -10776,7 +10856,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
             {activeTab === "xuong" && daDuocDuyet && quyen.lapPhieuXuong && (
               <XuongSanXuatPanel
                 products={products}
-                transactions={transactions}
+                transactions={giaoDichConHieuLuc}
                 slips={slips}
                 approvedSlips={approvedSlips}
                 anhTheoChungTu={anhTheoChungTu}
@@ -10803,7 +10883,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
             {activeTab === "ql-xuong" && daDuocDuyet && (quyen.duyetXuong || isOwner) && (
               <QuanLyXuongPanel
                 products={products}
-                transactions={transactions}
+                transactions={giaoDichConHieuLuc}
                 slips={slips}
                 approvedSlips={approvedSlips}
                 anhTheoChungTu={anhTheoChungTu}
@@ -10833,7 +10913,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               <KhoTongNxtPanel
                 products={products}
                 partners={donVi}
-                transactions={transactions}
+                transactions={giaoDichConHieuLuc}
                 countedTransactions={countedTransactions}
                 slips={slips}
                 approvedSlips={approvedSlips}
@@ -10862,7 +10942,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               quyen.xemKeHoachDashboard && (
                 <KeToanDashboardPanel
                   products={products}
-                  transactions={transactions}
+                  transactions={giaoDichConHieuLuc}
                   countedTransactions={countedTransactions}
                   slips={slips}
                   approvedSlips={approvedSlips}
