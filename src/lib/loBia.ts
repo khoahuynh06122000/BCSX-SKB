@@ -535,8 +535,13 @@ export interface BaoCaoKegHaoHutDVTV {
 export function tongHopGiaoKegVaHaoHutDVTV(input: {
   transactions: readonly Transaction[];
   products: readonly Product[];
+  /** Có thì bỏ dòng TRẢ BIA VỀ NHÀ MÁY (đơn vị nhận là nhà cung cấp) — không phải giao ĐVTV. */
+  partners?: readonly Partner[];
 }): BaoCaoKegHaoHutDVTV {
   const prodMap = new Map(input.products.map((p) => [p.id, p]));
+  const nhaCungCap = new Set(
+    (input.partners || []).filter((p) => p.type === "SUPPLIER").map((p) => p.id),
+  );
   const map = new Map<string, DongGiaoKegDVTV>();
 
   const ensure = (unitId: string, unitName: string, isStandard206: boolean) => {
@@ -570,6 +575,7 @@ export function tongHopGiaoKegVaHaoHutDVTV(input: {
 
   input.transactions.forEach((t) => {
     if (t.type !== "OUT" && t.type !== "LOSS" && t.type !== "DAMAGE") return;
+    if (nhaCungCap.has(t.partnerId)) return;
     const p = prodMap.get(t.productId);
     const cat = p?.category || t.category;
     if (cat !== "Lít") return;
@@ -688,6 +694,7 @@ export function tongHopVoKegThuVe(input: {
   const giao = tongHopGiaoKegVaHaoHutDVTV({
     transactions: input.transactions,
     products: input.products,
+    partners: input.partners,
   });
 
   const map = new Map<string, DongVoKegThuVe>();

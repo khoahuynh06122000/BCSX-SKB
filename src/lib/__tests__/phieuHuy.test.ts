@@ -13,6 +13,7 @@
 
 import {
   boGiaoDichPhieuDaHuy,
+  giaoDichConSotCuaPhieuDaHuy,
   nguonCuaGiaoDich,
   nguonPhieuDaHuy,
 } from "../phieuHuy";
@@ -154,6 +155,22 @@ eq("so rong", nguonPhieuDaHuy([]).size, 0);
   const con = boGiaoDichPhieuDaHuy(ds, new Set(["multi-abc"]));
   eq("chi con chuyen khac", con.length, 1);
   eq("dung chuyen con lai", con[0].id, "y1");
+}
+
+// Du lieu con sot cua phieu da huy: dung phan BU cua boGiaoDichPhieuDaHuy.
+{
+  const ds = [
+    { id: "a1", type: "IN", slipCode: "SLIP-11" },
+    { id: "b1", type: "IN", slipCode: "SLIP-10" },
+    { id: "c1", type: "OPENING" },
+    { id: "x1", type: "OUT", referenceGroupId: "multi-abc" },
+    { id: "x2", type: "LOSS", referenceGroupId: "multi-abc" },
+  ];
+  const daHuy = new Set(["SLIP-11", "multi-abc"]);
+  const sot = giaoDichConSotCuaPhieuDaHuy(ds, daHuy);
+  eq("con sot: 3 dong", sot.map((t) => t.id).join(","), "a1,x1,x2");
+  eq("con sot + con lai = tat ca", sot.length + boGiaoDichPhieuDaHuy(ds, daHuy).length, ds.length);
+  eq("khong co phieu huy -> rong", giaoDichConSotCuaPhieuDaHuy(ds, new Set()).length, 0);
 }
 
 // Danh sach rong thi tra ve nguyen ban — khong duoc dung do loc lam mat gi.

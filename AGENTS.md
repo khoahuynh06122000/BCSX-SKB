@@ -63,3 +63,9 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - A7: mở khung xác nhận đơn đi đường (3 chỗ) đặt lại ngày quét, số gõ dở, lý do hao, ảnh chờ.
   - Chưa kiểm trên giao diện thật (app khoá PIN khi tải lại); đã qua lint, test (thêm phép kiểm tách lô, ngày giờ VN), build.
   - Còn lại nhóm B, C chưa sửa.
+- Anh Khoa xác nhận quy định (19/11/2026) và chỉnh lại A1, A2:
+  - **A5 đúng ý anh**: keg lẻ làm tròn lên 1 keg, tính theo từng phiếu xuất (lượt giao).
+  - **A1 — Trả bia về nhà máy**: được xuất cho nhà cung cấp (SKB-BNC) nhưng CHỈ khi có ảnh kho tổng chụp xác nhận trả bia. Làm: ô đơn vị nhận ở form xuất có dòng "↩ Trả bia về nhà máy · … (cần ảnh xác nhận)" ở cuối; chọn dòng này thì phiếu bắt buộc lưu dạng Đơn đi đường → bước xác nhận đơn (vốn bắt buộc ảnh) mới hoàn tất. Lưu thẳng "đã giao" cho nhà cung cấp bị chặn. SKB-BNC SÓT từ form nhập vẫn bị xoá trắng (`traVeNhaMayRef` phân biệt chủ ý với sót). Hàng trả nhà máy **không lên công nợ** (`dungBangCongNo` bỏ đối tác SUPPLIER) và **không tính là giao ĐVTV** trong báo cáo keg / vỏ keg (`tongHopGiaoKegVaHaoHutDVTV` nhận `partners`).
+  - **A2 — Phiếu hủy = xoá hẳn**: dữ liệu (dòng hàng, tờ phiếu nhập, ảnh + tệp Cloudinary) xoá khỏi data lẫn server; sổ số phiếu chỉ giữ ghi chú "đã hủy", bấm vào không còn gì. Hai đường hủy hiện có (xoá phiếu nhập, hủy số mồ côi) vốn đã xoá dữ liệu trước. Phiếu hủy CŨ còn sót dữ liệu: admin thấy dải đỏ ở đầu tab Báo cáo + nút **"Xoá hẳn dữ liệu phiếu hủy"** (`giaoDichConSotCuaPhieuDaHuy` trong `lib/phieuHuy.ts`). `giaoDichConHieuLuc` vẫn giữ làm lớp chặn phụ.
+  - **Việc anh cần làm**: vào Báo cáo bằng tài khoản admin, nếu có dải đỏ thì bấm nút để dọn dữ liệu phiếu hủy cũ.
+

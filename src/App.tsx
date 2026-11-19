@@ -229,6 +229,7 @@ import {
 } from "./lib/nhatKyKho";
 import {
   boGiaoDichPhieuDaHuy,
+  giaoDichConSotCuaPhieuDaHuy,
   nguonPhieuDaHuy,
 } from "./lib/phieuHuy";
 import { chuanTen, ghiChuHienThi } from "./lib/ghiChu";
@@ -5199,6 +5200,16 @@ export default function App() {
    * Không cần gán `type` ở đây: giá trị dựng ban đầu đã là "IN", và sau mỗi lần
    * lưu thành công form cũng được đặt lại về "IN".
    */
+  /**
+   * Người dùng CHỦ Ý chọn "Trả bia về nhà máy" ở form xuất — khác với SKB-BNC
+   * SÓT LẠI từ form nhập (cái đó phải xoá trắng, không thì phiếu xuất âm thầm
+   * thành trả nhà máy).
+   */
+  const traVeNhaMayRef = useRef(false);
+  useEffect(() => {
+    if (activeTab !== "export") traVeNhaMayRef.current = false;
+  }, [activeTab]);
+
   useEffect(() => {
     if (
       (activeTab === "xuong" || activeTab === "ql-xuong") &&
@@ -5216,8 +5227,9 @@ export default function App() {
       // Sang Xuất kho mà còn giữ nhà cung cấp (SKB-BNC) từ form nhập thì xoá
       // trắng: ô chọn chỉ liệt kê đơn vị nhận, giữ giá trị cũ thì ô HIỆN đơn vị
       // đầu danh sách nhưng lưu vẫn là SKB-BNC → công nợ ghi nhầm cho nhà máy.
+      // Chủ ý chọn "Trả bia về nhà máy" thì giữ — xem `traVeNhaMayRef`.
       const cu = donVi.find((p) => p.id === newTransaction.partnerId);
-      if (cu?.type === "SUPPLIER") {
+      if (cu?.type === "SUPPLIER" && !traVeNhaMayRef.current) {
         setNewTransaction((prev) => ({ ...prev, partnerId: "" }));
       }
     }
@@ -5501,8 +5513,9 @@ export default function App() {
       tongHopGiaoKegVaHaoHutDVTV({
         transactions: filteredTransactionsForReport,
         products,
+        partners: donVi,
       }),
-    [filteredTransactionsForReport, products],
+    [filteredTransactionsForReport, products, donVi],
   );
 
   /**
@@ -5606,11 +5619,17 @@ export default function App() {
       return;
     }
 
-    // Xuất kho mà đơn vị nhận là NHÀ CUNG CẤP (vd SKB-BNC còn sót từ form nhập)
-    // thì công nợ sẽ ghi cho nhà máy thay vì khách — chặn lại, bắt chọn lại.
-    if (type === "OUT" && par?.type === "SUPPLIER") {
+    /*
+     * XUẤT CHO NHÀ CUNG CẤP = TRẢ BIA VỀ NHÀ MÁY. Chỉ hợp lệ khi đi theo đơn
+     * đi đường: đơn chỉ hoàn tất khi kho tổng chụp ẢNH xác nhận trả bia lên
+     * (bước xác nhận bắt buộc có ảnh). Lưu thẳng "đã giao" thì không có ảnh
+     * nào — chặn. Hàng trả về nhà máy không lên công nợ (`dungBangCongNo`).
+     */
+    if (type === "OUT" && par?.type === "SUPPLIER" && !newTransaction.isInTransit) {
       alert(
-        `"${par.name}" là nhà cung cấp, không phải đơn vị nhận hàng.\n\nChọn lại ô "Đơn vị nhận" trước khi lưu phiếu xuất.`,
+        `Xuất cho "${par.name}" là TRẢ BIA VỀ NHÀ MÁY.
+
+Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nhận trả bia lên ở bước xác nhận đơn thì mới hoàn tất.`,
       );
       return;
     }
@@ -5897,6 +5916,8 @@ export default function App() {
       } else if (activeTab !== "xuong" && activeTab !== "ql-xuong") {
         setActiveTab("reports");
       }
+      // Form về mặc định (SKB-BNC) — đó là giá trị SÓT, không phải chủ ý trả nhà máy.
+      traVeNhaMayRef.current = false;
       setNewTransaction({
         type: "IN",
         partnerId:
@@ -6404,6 +6425,62 @@ export default function App() {
    *
    * `truocXoa` phải là danh sách giao dịch TRƯỚC lần xoá (state lúc bấm).
    */
+  /*
+   * PHIẾU HỦY = XOÁ HẲN. Sổ số phiếu chỉ giữ ghi chú "đã hủy"; dòng hàng, tờ
+   * phiếu nhập và ảnh của nó phải biến khỏi dữ liệu lẫn Cloudinary. Phiếu hủy
+   * từ trước khi có quy định này còn sót dữ liệu — admin dọn bằng nút ở Báo cáo.
+   */
+  const conSotPhieuDaHuy = useMemo(() => {
+    const dong = giaoDichConSotCuaPhieuDaHuy(transactions, nguonDaHuy);
+    const phieu = slips.filter((s) => nguonDaHuy.has(s.code));
+    const soPhieuHuy = new Set(
+      [...dong.map((t) => (t.type === "IN" ? t.slipCode : t.referenceGroupId || t.id)), ...phieu.map((p) => p.code)].filter(Boolean),
+    );
+    return { dong, phieu, soPhieu: soPhieuHuy.size };
+  }, [transactions, slips, nguonDaHuy]);
+
+  const handleXoaHanPhieuDaHuy = async () => {
+    if (!isOwner) return;
+    const { dong, phieu, soPhieu: n } = conSotPhieuDaHuy;
+    if (!dong.length && !phieu.length) return;
+    const viecAnh = viecAnhCuaLuotXoa(dong, phieu);
+    if (!viecAnh) return;
+    if (
+      !window.confirm(
+        `Xoá hẳn dữ liệu của ${n} phiếu đã hủy?
+
+` +
+          `· ${dong.length} dòng hàng
+· ${phieu.length} tờ phiếu nhập
+· ${viecAnh.xoa.length} ảnh (xoá luôn trên Cloudinary)
+
+` +
+          "Sổ số phiếu vẫn giữ dòng ghi chú \"đã hủy\". Không khôi phục được.",
+      )
+    )
+      return;
+    try {
+      setLoading(true);
+      const viec = [
+        ...dong.map((t) => doc(db, "transactions", t.id)),
+        ...phieu.map((p) => doc(db, "slips", p.id)),
+      ];
+      // Firestore giới hạn 500 thao tác một lô.
+      for (let i = 0; i < viec.length; i += 400) {
+        const lo = writeBatch(db);
+        viec.slice(i, i + 400).forEach((r) => lo.delete(r));
+        await lo.commit();
+      }
+      const kqAnh = await lamViecAnhKhiXoa(viecAnh);
+      showNotification(`Đã xoá hẳn dữ liệu ${n} phiếu đã hủy${chuAnhDaXoa(kqAnh)}`);
+      baoAnhChuaXoa(kqAnh);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "transactions"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const hoiHuySoPhieuMoCoi = async (
     xoa: Transaction[],
     truocXoa: Transaction[],
@@ -6963,6 +7040,18 @@ export default function App() {
                       label: `${p.name} ${p.sapCode ? "[" + p.sapCode + "]" : ""}`,
                     });
                   }
+                  // TRẢ BIA VỀ NHÀ MÁY: nhà cung cấp đứng cuối danh sách xuất,
+                  // ghi rõ là trả về để không chọn nhầm như một khách hàng.
+                  if (mode === "export") {
+                    donVi
+                      .filter((p) => p.type === "SUPPLIER")
+                      .forEach((p) =>
+                        out.push({
+                          value: p.id,
+                          label: `↩ Trả bia về nhà máy · ${p.name} (cần ảnh xác nhận)`,
+                        }),
+                      );
+                  }
                   return out;
                 })()}
                 value={
@@ -6973,10 +7062,21 @@ export default function App() {
                 }
                 onChange={(e: any) => {
                   setNhomBNCChon("");
+                  const chon = donVi.find((p) => p.id === e.target.value);
+                  const traNhaMay = mode === "export" && chon?.type === "SUPPLIER";
+                  traVeNhaMayRef.current = traNhaMay;
                   setNewTransaction({
                     ...newTransaction,
                     partnerId: e.target.value,
+                    // Trả nhà máy luôn đi dạng đơn đi đường: chỉ hoàn tất khi
+                    // kho tổng chụp ảnh xác nhận trả bia ở bước xác nhận đơn.
+                    ...(traNhaMay ? { isInTransit: true } : {}),
                   });
+                  if (traNhaMay) {
+                    showNotification(
+                      "Trả bia về nhà máy: phiếu lưu dạng Đơn đi đường — kho tổng chụp ảnh xác nhận trả bia ở bước xác nhận đơn mới hoàn tất.",
+                    );
+                  }
                 }}
               />
             )}
@@ -8735,6 +8835,22 @@ export default function App() {
 
                   {activeTab === "reports" && (
                     <div className="space-y-8">
+                      {isOwner && conSotPhieuDaHuy.soPhieu > 0 && (
+                        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <p className="text-[12px] font-bold text-rose-700 leading-relaxed">
+                            {conSotPhieuDaHuy.soPhieu} phiếu đã hủy còn sót dữ liệu ({conSotPhieuDaHuy.dong.length} dòng hàng
+                            {conSotPhieuDaHuy.phieu.length ? `, ${conSotPhieuDaHuy.phieu.length} tờ phiếu nhập` : ""}). Phiếu hủy phải xoá hẳn —
+                            sổ số phiếu chỉ giữ ghi chú "đã hủy".
+                          </p>
+                          <button
+                            onClick={handleXoaHanPhieuDaHuy}
+                            disabled={loading}
+                            className="shrink-0 px-4 py-2.5 rounded-xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 disabled:opacity-40"
+                          >
+                            Xoá hẳn dữ liệu phiếu hủy
+                          </button>
+                        </div>
+                      )}
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex items-center gap-1.5 p-1.5 bg-white border border-slate-100 rounded-2xl w-fit premium-shadow shrink-0">
                           {(

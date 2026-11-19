@@ -68,6 +68,25 @@ export function nguonPhieuDaHuy(soPhieu: GhiSoPhieu[]): Set<string> {
  * Dùng cho MỌI phép tính tồn kho và báo cáo. Tab Lịch sử cố ý không dùng — ở
  * đó vẫn phải thấy được dòng đã hủy, kèm nhãn, để còn tra lại.
  */
+/**
+ * Dữ liệu CÒN SÓT của phiếu đã hủy — phải xoá hẳn.
+ *
+ * Quy định (anh Khoa, 19/11/2026): phiếu hủy thì XOÁ HẲN dữ liệu và ảnh, sổ
+ * số phiếu chỉ giữ dòng ghi chú "đã hủy". Hai đường hủy hiện tại (xoá phiếu
+ * nhập, hủy số mồ côi) đã xoá dữ liệu trước rồi mới hủy số; đây là để dọn
+ * những phiếu hủy từ trước khi có quy định, dữ liệu vẫn còn nằm lại.
+ */
+export function giaoDichConSotCuaPhieuDaHuy<T extends GiaoDichCoNguon>(
+  transactions: T[],
+  daHuy: Set<string>,
+): T[] {
+  if (!daHuy || daHuy.size === 0) return [];
+  return transactions.filter((t) => {
+    const n = nguonCuaGiaoDich(t);
+    return n !== "" && daHuy.has(n);
+  });
+}
+
 export function boGiaoDichPhieuDaHuy<T extends GiaoDichCoNguon>(
   transactions: T[],
   daHuy: Set<string>,

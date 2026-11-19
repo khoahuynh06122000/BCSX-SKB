@@ -315,7 +315,13 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
 
   const tatCaOut = input.transactions.filter((t) => t.type === "OUT");
   const diDuong = tatCaOut.filter((t) => t.status === "in_transit");
-  const banDuoc = billableTransactions(input.transactions);
+  /*
+   * TRẢ BIA VỀ NHÀ MÁY (đơn vị nhận là NHÀ CUNG CẤP, vd SKB-BNC) không phải
+   * bán — hàng quay về nơi sản xuất, không ai trả tiền. Bỏ khỏi bảng Chốt.
+   */
+  const banDuoc = billableTransactions(input.transactions).filter(
+    (t) => doiTac.get(t.partnerId)?.type !== "SUPPLIER",
+  );
 
   // Gom theo (đợt, mã BP, mã vật tư). Mã BP chứ không phải tên: 20 bộ phận BNC
   // phải rơi vào cùng một dòng.

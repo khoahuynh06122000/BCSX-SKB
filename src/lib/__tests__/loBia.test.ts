@@ -139,6 +139,19 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
   eq("tach lo FIFO: hao chuan = 3.0L", kq.totals.dvtvExpectedLoss06, 3);
 }
 
+// Trả bia về nhà máy không tính là giao ĐVTV.
+{
+  const kq = tongHopGiaoKegVaHaoHutDVTV({
+    transactions: [
+      ...dvtvTxs,
+      { id: "r1", date: "2026-11-12T08:00:00", type: "OUT", productId: "p1", productName: "GB", category: "Lít", quantity: 60, partnerId: "SKB-BNC", partnerName: "SKB-BNC", createdBy: "k" },
+    ],
+    products,
+    partners: [...partnersDVTV, { id: "SKB-BNC", name: "SKB-BNC", type: "SUPPLIER" }],
+  });
+  eq("tra nha may: tong keg khong doi", kq.totals.allKegsDelivered, 10);
+}
+
 const thuVeRecords: KiemKeKegLit[] = [
   {
     id: "tv1",

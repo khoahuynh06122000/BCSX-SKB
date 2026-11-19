@@ -321,6 +321,23 @@ kiemTra("o[3] la don vi", o[3], "BNC");
 kiemTra("o[12] la so hoa don", o[12], "C26TKB#00000192");
 kiemTra("o[17] la ma BP", o[17], "AD0103");
 
+// Trả bia về nhà máy (đơn vị nhận là NHÀ CUNG CẤP) không lên bảng Chốt.
+{
+  const coTra = dungBangCongNo({
+    transactions: [
+      ...transactions,
+      tx({ quantity: 999, partnerId: "SKB-BNC", partnerName: "SKB-BNC" }),
+    ],
+    products,
+    partners: [...partners, { id: "SKB-BNC", name: "SKB-BNC", type: "SUPPLIER" } as Partner],
+    dot,
+    tienToHoaDon: "C26TKB#",
+    soHoaDonBatDau: 192,
+  });
+  kiemTra("tra nha may khong them dong", coTra.dong.length, bang.dong.length);
+  kiemTra("tra nha may khong co trong bang", coTra.dong.some((d) => d.donVi.includes("SKB")), false);
+}
+
 // Không khai đợt nào thì không dựng dòng nào, và phải báo hết ra ngoài đợt.
 const trong = dungBangCongNo({
   transactions,
