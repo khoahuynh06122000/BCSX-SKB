@@ -82,7 +82,7 @@ thêm ảnh; sửa, xoá chỉ admin. Xoá chứng từ thì xoá luôn ảnh c�
 
 ---
 
-## Theo dõi sức khỏe
+## Theo dõi sức khỏe & Sự cố thường gặp
 
 - **Dải cảnh báo nguồn dữ liệu** (mọi người dùng thấy): hết hạn mức Firebase,
   mất mạng, lệnh lưu treo chưa lên máy chủ, lưu hỏng, Cloudinary từ chối ảnh.
@@ -92,6 +92,13 @@ thêm ảnh; sửa, xoá chỉ admin. Xoá chứng từ thì xoá luôn ảnh c�
   Cao thì có dải cảnh báo. Xem [`src/lib/doLuong.ts`](src/lib/doLuong.ts).
 - **Dung lượng**: Cài đặt → Sức khỏe hệ thống ước tính *cao hơn* số thật. Số
   thật ở Firebase Console → Firestore → Usage.
+- **Sự cố ảnh báo "LỖI MẠNG / BỊ CHẶN" (Máy Kế toán / Văn phòng)**:
+  - *Hiện tượng*: Danh sách 15/15 chứng từ vẫn tải đủ từ Firestore, nhưng toàn bộ khung ảnh hiện "Lỗi mạng / bị chặn" kèm nút Thử lại.
+  - *Nguyên nhân cốt lõi*: Mạng nội bộ văn phòng Sun World / Ba Na Hills (Fortinet, Palo Alto) có chính sách chặn các domain lưu trữ media đám mây bên thứ ba (`res.cloudinary.com`). Tài khoản Admin dùng 4G hoặc máy đã cache ảnh từ trước nên thấy bình thường.
+  - *Cách kiểm tra*: Bấm nút **`SOÁT ẢNH`** góc trên — nếu ra Mã 0 (*Không hỏi tới máy chủ được*), hoặc mở link ảnh Cloudinary trên tab mới bị chặn kết nối ➔ 100% do tường lửa mạng công ty.
+  - *Hướng xử lý*:
+    1. Tạm thời: Chuyển sang Wi-Fi phát từ 4G hoặc nhờ IT công ty whitelist `res.cloudinary.com`.
+    2. Giải pháp kiến trúc lâu dài: Bổ sung API Proxy trung chuyển ảnh chạy trên Vercel (`/api/anh/xem?url=...`), trình duyệt chỉ gọi về domain chính `bcsx-skb.vercel.app` để vượt qua tường lửa công ty.
 
 ---
 
