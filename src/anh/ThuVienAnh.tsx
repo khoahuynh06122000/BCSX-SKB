@@ -35,7 +35,7 @@ import { anhThuNho, quaTrungChuyen } from "./duongDan";
 import { traLuot, xinLuot } from "./hangDoi";
 import { kiemTraKhoaXoa } from "./kho";
 import type { AnhChungTu } from "./moHinh";
-import { baoCao, nhanDinh, nhomCuaMa, tomTatSoat, type KetQuaMotTam, type TomTatSoat } from "./soat";
+import { baoCao, nhanDinh, nhanDinhLuong, nhomCuaMa, tomTatSoat, type KetQuaLuong, type KetQuaMotTam, type TomTatSoat } from "./soat";
 import { tenCaBo, taoZip } from "./taiVe";
 import {
   danhSachDonVi,
@@ -68,6 +68,7 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
   const [tai, setTai] = useState({ tong: 0, xong: 0 });
   const [soat, setSoat] = useState({ tong: 0, xong: 0 });
   const [ketQuaSoat, setKetQuaSoat] = useState<TomTatSoat | null>(null);
+  const [luong, setLuong] = useState<KetQuaLuong | null>(null);
   const [khoaXoa, setKhoaXoa] = useState<{ ok: boolean; loi?: string } | null>(null);
 
   useEffect(() => setCoThat(false), [dangXem?.id]);
@@ -154,7 +155,23 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
   const soatAnh = async () => {
     if (soat.tong || !theoNgay.length) return;
     setKetQuaSoat(null);
+    setLuong(null);
     setSoat({ tong: theoNgay.length, xong: 0 });
+    // Kiểm luồng trước, KHÔNG xếp hàng: cùng một tấm, đi thẳng Cloudinary và đi qua app.
+    {
+      const mau = anhThuNho(theoNgay[0].url, 64);
+      const hoi = async (u: string) => {
+        try {
+          const r = await fetch(u, { cache: "no-store", signal: AbortSignal.timeout(10000) });
+          await r.arrayBuffer().catch(() => undefined);
+          return r.status;
+        } catch {
+          return 0;
+        }
+      };
+      const [trucTiep, quaApp] = await Promise.all([hoi(mau), hoi(quaTrungChuyen(mau))]);
+      setLuong({ trucTiep, quaApp });
+    }
     const ra: KetQuaMotTam[] = [];
     for (const o of theoNgay) {
       await xinLuot();
@@ -316,11 +333,18 @@ export default function ThuVienAnh({ anh, giaoDich, laAdmin, onXoa, bao }: Props
                 Kết quả soát · {formatNumber(ketQuaSoat.tong)} tấm, hỏng {formatNumber(ketQuaSoat.hong)}
               </p>
               <p className="text-[13px] font-bold text-slate-700 mt-1 leading-relaxed">{nhanDinh(ketQuaSoat)}</p>
+              {luong && (
+                <p className="text-[12px] font-bold text-slate-500 mt-1 leading-relaxed">
+                  Kiểm luồng · thẳng Cloudinary: {nhomCuaMa(luong.trucTiep) === "duoc" ? "thông" : `chặn (mã ${luong.trucTiep})`} · qua app:{" "}
+                  {nhomCuaMa(luong.quaApp) === "duoc" ? "thông" : `chặn (mã ${luong.quaApp})`}. {nhanDinhLuong(luong)}
+                </p>
+              )}
             </div>
             <button
               onClick={() =>
                 navigator.clipboard
-                  ?.writeText(baoCao(ketQuaSoat))
+                  ?.writeText((luong ? `Kiểm luồng: ${nhanDinhLuong(luong)} (thẳng ${luong.trucTiep}, qua app ${luong.quaApp})
+` : "") + baoCao(ketQuaSoat))
                   .then(() => bao("Đã sao chép báo cáo"))
                   .catch(() => bao("Không sao chép được", "error"))
               }

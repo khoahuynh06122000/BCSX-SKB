@@ -112,3 +112,31 @@ export function baoCao(t: TomTatSoat): string {
     .filter(Boolean)
     .join("\n\n");
 }
+
+/**
+ * KIỂM LUỒNG — cùng một tấm, hỏi qua HAI đường để biết chặn ở đâu.
+ *
+ *   trực tiếp  trình duyệt → res.cloudinary.com
+ *   qua app    trình duyệt → /api/anh/xem (domain app) → Cloudinary
+ *
+ * Hai máy cùng mạng mà một máy thấy ảnh, một máy không: lỗi nằm ở chính máy
+ * đó (phần mềm diệt virus, chính sách trình duyệt, proxy cài trên máy), không
+ * phải ở vai trò tài khoản — luồng tải ảnh không phân biệt vai trò.
+ */
+export interface KetQuaLuong {
+  /** Mã trả về khi đi thẳng Cloudinary; 0 = không hỏi tới được. */
+  trucTiep: number;
+  /** Mã trả về khi đi qua app. */
+  quaApp: number;
+}
+
+export function nhanDinhLuong({ trucTiep, quaApp }: KetQuaLuong): string {
+  const tt = nhomCuaMa(trucTiep) === "duoc";
+  const app = nhomCuaMa(quaApp) === "duoc";
+  if (tt && app) return "Cả hai luồng đều thông — máy này không bị chặn.";
+  if (!tt && app)
+    return "Máy này bị chặn đường thẳng tới Cloudinary nhưng luồng qua app vẫn thông — ảnh hiện bình thường qua trung chuyển.";
+  if (tt && !app)
+    return `Luồng qua app hỏng (mã ${quaApp}) nhưng đường thẳng Cloudinary thông — ảnh vẫn hiện nhờ đường dự phòng; báo admin kiểm tra trung chuyển.`;
+  return `Cả hai luồng đều không tới được (trực tiếp mã ${trucTiep}, qua app mã ${quaApp}) — kiểm tra mạng / tường lửa của máy này.`;
+}

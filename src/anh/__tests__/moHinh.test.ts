@@ -22,7 +22,7 @@ import {
 import { HAN_VUA_TAI_MS, lyDoGiuTepVuaTai } from "../mayChu";
 import { anhThuNho, chuanHoaUrlAnh, GOC_TRUNG_CHUYEN, quaTrungChuyen } from "../duongDan";
 import { tenCaBo, tenGoc, taoZip } from "../taiVe";
-import { nhanDinh, nhomCuaMa, tomTatSoat } from "../soat";
+import { nhanDinh, nhanDinhLuong, nhomCuaMa, tomTatSoat } from "../soat";
 import { danhSachDonVi, diemBanCuaPhan, dungOAnh, locTheoDonVi, locTheoNgay } from "../thuVien";
 import { datLaiHangDoi, SUC_CHUA, traLuot, trangThaiHangDoi, xinLuot } from "../hangDoi";
 
@@ -168,6 +168,12 @@ eq("rong de yen", quaTrungChuyen(""), "");
   eq("vercel: luat trung chuyen dung dau", r.source, `${GOC_TRUNG_CHUYEN}:duong*`);
   eq("vercel: tro dung kho", r.destination, `${B}/:duong*`);
 }
+
+// ------------------------------------------------------------ kiểm luồng
+eq("luong: ca hai thong", nhanDinhLuong({ trucTiep: 200, quaApp: 200 }).startsWith("Cả hai luồng đều thông"), true);
+eq("luong: chan thang, app thong", nhanDinhLuong({ trucTiep: 0, quaApp: 200 }).includes("luồng qua app vẫn thông"), true);
+eq("luong: app hong", nhanDinhLuong({ trucTiep: 200, quaApp: 502 }).includes("mã 502"), true);
+eq("luong: ca hai chan", nhanDinhLuong({ trucTiep: 0, quaApp: 0 }).startsWith("Cả hai luồng đều không"), true);
 
 // ------------------------------------------------------------ tên tệp tải về
 eq("ten bnc", tenGoc({ date: "2026-10-16T08:00:00Z", donVi: "BNC · 1901" }), "16.10.26-1901-BNC");
