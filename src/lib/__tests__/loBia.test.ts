@@ -13,8 +13,7 @@ import {
   tongHopKeHoachVaThucXuat,
   tongHopVoKegThuVe,
   truyXuatLo,
-  demKegThungKiemKe,
-  kiemKeBonMoiNhat,
+  kiemKeBonCuaThang,
 } from "../loBia";
 
 let pass = 0;
@@ -154,24 +153,7 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
   eq("tra nha may: tong keg khong doi", kq.totals.allKegsDelivered, 10);
 }
 
-// Kiểm kê: 206 L keg + 48 lon = 10 keg + 2 thùng (không phải "48").
-{
-  const k = demKegThungKiemKe([
-    { category: "Lít", qty: 206 },
-    { category: "Lon", qty: 48 },
-  ]);
-  eq("kiem ke 206L = 10 keg", k.keg, 10);
-  eq("kiem ke 48 lon = 2 thung", k.thung, 2);
-  const le = demKegThungKiemKe([
-    { category: "Lít", qty: 25 },
-    { category: "Lít", qty: 10 },
-    { category: "Lon", qty: 30 },
-  ]);
-  eq("keg le lam tron len tung mat hang", le.keg, 3);
-  eq("thung le lam tron len", le.thung, 2);
-}
-
-// Tồn bồn: lấy lần kiểm mới nhất mỗi bồn, bỏ bản bị trả lại.
+// Tồn bồn chốt theo tháng: không cộng dồn, không mượn tháng trước, bỏ bản bị trả lại.
 {
   const bon = (id: string, tankId: string, month: string, liters: number, extra: object = {}) =>
     ({ id, month, tankId, tankGroup: "FST", productId: "p1", batchNumber: "", liters, createdBy: "x", createdAt: `${month}-15T08:00:00`, ...extra }) as any;
@@ -182,9 +164,16 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
     bon("d", "BBT-01", "2026-11", 800),
     bon("e", "BBT-01", "2026-11", 9999, { approvalStatus: "returned", createdAt: "2026-11-20T08:00:00" }),
   ];
-  const moi = kiemKeBonMoiNhat(ds);
-  eq("ton bon khong cong don", moi.reduce((s: number, k: any) => s + k.liters, 0), 2300);
-  eq("FST-01 lay thang 11", moi.find((k: any) => k.tankId === "FST-01")?.id, "c");
+  const t11 = kiemKeBonCuaThang(ds, "2026-11");
+  eq("T11: chi so thang 11", t11.reduce((s: number, k: any) => s + k.liters, 0), 2300);
+  eq("T11: FST-01 la ban thang 11", t11.find((k: any) => k.tankId === "FST-01")?.id, "c");
+  eq("T10: chi FST-01", kiemKeBonCuaThang(ds, "2026-10").map((k: any) => k.id).join(","), "b");
+  eq("T12 chua kiem -> rong", kiemKeBonCuaThang(ds, "2026-12").length, 0);
+  const lamLai = kiemKeBonCuaThang(
+    [...ds, bon("f", "FST-01", "2026-11", 1400, { createdAt: "2026-11-28T08:00:00" })],
+    "2026-11",
+  );
+  eq("kiem lai trong thang lay lan sau", lamLai.find((k: any) => k.tankId === "FST-01")?.liters, 1400);
 }
 
 const thuVeRecords: KiemKeKegLit[] = [

@@ -11,12 +11,12 @@ import type { AnhChungTu } from "../anh/moHinh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
 import {
-  kiemKeBonMoiNhat,
+  kiemKeBonCuaThang,
   tinhTonTheoLo,
   tongHopKeHoachVaThucXuat,
   truyXuatLo,
 } from "../lib/loBia";
-import { cn, formatNumber } from "../lib/utils";
+import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 import ONgay from "./ONgay";
 
 interface Props {
@@ -42,6 +42,10 @@ export default function KeToanDashboardPanel({
 }: Props) {
   const [subTab, setSubTab] = useState<"tong-quan" | "truy-xuat">("tong-quan");
   const [filterDate, setFilterDate] = useState("");
+  // Tháng chốt tồn bồn: mặc định tháng hiện tại; tháng nào dứt điểm tháng đó.
+  const [thangBon, setThangBon] = useState(() => homNayDiaPhuong().slice(0, 7));
+  const bonThang = useMemo(() => kiemKeBonCuaThang(kiemKeBon, thangBon), [kiemKeBon, thangBon]);
+  const nhanThang = `${thangBon.slice(5, 7)}/${thangBon.slice(0, 4)}`;
   const [lotQuery, setLotQuery] = useState("");
 
   const progress = useMemo(
@@ -85,8 +89,8 @@ export default function KeToanDashboardPanel({
       (s, l) => s + l.closing * capFactor(l.productId),
       0,
     );
-    // Mỗi bồn chỉ lấy lần kiểm mới nhất — xem `kiemKeBonMoiNhat`.
-    const totalTankL = kiemKeBonMoiNhat(kiemKeBon).reduce((s, k) => s + (k.liters || 0), 0);
+    // Chỉ các bồn đã chốt trong tháng đang xem — xem `kiemKeBonCuaThang`.
+    const totalTankL = bonThang.reduce((s, k) => s + (k.liters || 0), 0);
     const rate = totalPlanL > 0 ? Math.round((totalRecL / totalPlanL) * 100) : 0;
     return {
       totalPlanL,
@@ -97,7 +101,7 @@ export default function KeToanDashboardPanel({
       totalTankL,
       rate,
     };
-  }, [progress, tonLo, kiemKeBon, products]);
+  }, [progress, tonLo, bonThang, products]);
 
   const lotTraces = useMemo(() => {
     if (lotQuery.trim()) {
@@ -208,8 +212,12 @@ export default function KeToanDashboardPanel({
                 <span className="text-sm font-bold text-slate-400">Lít</span>
               </p>
               <p className="text-[11px] text-slate-500 mt-1">
-                Kho: <strong>{formatNumber(Math.round(kpi.totalClosingL))}L</strong> · Bồn:{" "}
-                <strong>{formatNumber(kpi.totalTankL)}L</strong>
+                Kho: <strong>{formatNumber(Math.round(kpi.totalClosingL))}L</strong> · Bồn chốt T{nhanThang}:{" "}
+                {bonThang.length ? (
+                  <strong>{formatNumber(kpi.totalTankL)}L</strong>
+                ) : (
+                  <strong className="text-rose-600">chưa kiểm</strong>
+                )}
               </p>
             </div>
           </div>
@@ -418,14 +426,26 @@ export default function KeToanDashboardPanel({
               <h3 className="text-sm font-extrabold text-slate-900">
                 Kiểm Kê Tồn Bồn FST & BBT Hàng Tháng (Kèm Ảnh Minh Chứng)
               </h3>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                Tháng chốt:
+                <input
+                  type="month"
+                  value={thangBon}
+                  onChange={(e) => e.target.value && setThangBon(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono bg-slate-50"
+                />
+                <span>
+                  · {bonThang.length} bồn đã chốt · {formatNumber(kpi.totalTankL)} L
+                </span>
+              </div>
             </div>
             <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {kiemKeBon.length === 0 ? (
+              {bonThang.length === 0 ? (
                 <p className="col-span-2 py-8 text-center text-xs font-bold text-slate-400">
-                  Chưa có bản kiểm kê bồn FST/BBT nào.
+                  Tháng {nhanThang} chưa có bản kiểm kê bồn FST/BBT nào.
                 </p>
               ) : (
-                kiemKeBon.map((kk) => {
+                bonThang.map((kk) => {
                   const p = products.find((x) => x.id === kk.productId);
                   const anh = anhTheoChungTu.get(kk.id) || [];
                   return (

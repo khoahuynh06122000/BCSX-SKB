@@ -75,4 +75,9 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - B11: quét phiếu AI khớp khắt khe — đủ chữ riêng của tên bia + đúng dạng keg/lon (`lib/khopPhieuQuet.ts`, có test riêng). Không khớp được thì người kho tự tích.
   - B12: nạp lại tệp BBGN trả lại tồn tạm phần dòng cũ sắp ghi đè / xoá → hết báo "vượt tồn" giả; bỏ chữ "VUOT_DINH_MUC" trong thông báo.
   - Lint, test, build sạch. Chưa kiểm trên giao diện thật (khoá PIN). Còn nhóm C.
+- Anh Khoa chỉnh lại quy định B8, B9 (19/11/2026) — **thay thế** cách sửa B8, B9 ở trên:
+  - **B8 — Kiểm kê bồn chốt theo THÁNG, tháng nào dứt điểm tháng đó**, không cộng dồn, không mượn số tháng trước. Dashboard Kế toán có ô **"Tháng chốt"** (mặc định tháng hiện tại); thẻ Tồn kho + Bồn chỉ cộng bồn đã chốt trong tháng đó, tháng chưa kiểm hiện "chưa kiểm". Cùng bồn kiểm 2 lần trong tháng lấy lần sau; bản bị trả lại không tính (`kiemKeBonCuaThang` trong `lib/loBia.ts`).
+  - **B9 — Kiểm bia riêng, kiểm keg riêng, KHÔNG quy đổi.** Form kiểm kê Keg & Lít có ô **"Số keg đếm thực tế"** nhập tay; `totalKegs` = số keg đếm tay. Bỏ hẳn cách suy keg/thùng từ số lít. Bản kiểm kê cũ lưu "keg" = tổng số lon (lỗi cũ) thì hiện "— Keg".
+  - **Quy đổi lít ↔ keg CHỈ dùng khi kho tổng GIAO bia** cho đơn vị: để biết đã giao bao nhiêu lít, bao nhiêu keg (báo cáo keg giao ĐVTV, hao chuẩn 0,6 L/keg).
+  - **Việc tiếp theo anh muốn**: mục **Thu hồi keg** ở phân hệ Kho tổng + **đánh giá thời gian thu hồi keg** (keg giao đi bao lâu thì về). Chưa làm.
 

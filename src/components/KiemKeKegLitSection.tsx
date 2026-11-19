@@ -14,7 +14,7 @@ import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
-import { demKegThungKiemKe, laBanGhiThuVeVoKeg } from "../lib/loBia";
+import { laBanGhiThuVeVoKeg } from "../lib/loBia";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
@@ -85,6 +85,12 @@ export default function KiemKeKegLitSection({
   );
   const [qtyMap, setQtyMap] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  /*
+   * SỐ KEG ĐẾM TAY — kiểm bia riêng, kiểm keg riêng (quy định anh Khoa
+   * 19/11/2026). Không suy keg từ số lít: quy đổi lít ↔ keg chỉ dùng lúc kho
+   * tổng GIAO bia cho đơn vị (để biết đã giao bao nhiêu lít, bao nhiêu keg).
+   */
+  const [soKegDem, setSoKegDem] = useState("");
   const [photos, setPhotos] = useState<TepCho[]>([]);
   const [allowZeroConfirm, setAllowZeroConfirm] = useState(false);
 
@@ -126,18 +132,14 @@ export default function KiemKeKegLitSection({
       if (r.qty > 0) nonZeroCount++;
       totalLiters += r.liters;
     });
-    // Keg (bia Lít, 20,6 L, keg lẻ làm tròn lên) + Thùng (24 lon) — xem `demKegThungKiemKe`.
-    const { keg, thung } = demKegThungKiemKe(
-      computedRows.map((r) => ({ category: r.product.category, qty: r.qty })),
-    );
+    // Keg là số ĐẾM TAY ở ô riêng, không quy đổi từ lít.
+    const keg = Math.max(0, Math.trunc(Number(soKegDem) || 0));
     return {
-      keg,
-      thung,
-      totalKegs: keg + thung,
+      totalKegs: keg,
       totalLiters: Math.round(totalLiters * 100) / 100,
       nonZeroCount,
     };
-  }, [computedRows]);
+  }, [computedRows, soKegDem]);
 
   const handlePickPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -205,6 +207,7 @@ export default function KiemKeKegLitSection({
     if (ok) {
       setQtyMap({});
       setNote("");
+      setSoKegDem("");
       setPhotos([]);
       setAllowZeroConfirm(false);
     }
@@ -239,13 +242,13 @@ export default function KiemKeKegLitSection({
             </div>
             <div className="flex items-center gap-3 text-xs font-mono">
               <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 tabular-nums">
-                <span className="text-white/60 mr-1.5">Keg/Thùng:</span>
+                <span className="text-white/60 mr-1.5">Keg đếm:</span>
                 <strong className="text-amber-300">
-                  {formatNumber(totals.keg)} Keg · {formatNumber(totals.thung)} Thùng
+                  {formatNumber(totals.totalKegs)} Keg
                 </strong>
               </div>
               <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 tabular-nums">
-                <span className="text-white/60 mr-1.5">Quy đổi Lít:</span>
+                <span className="text-white/60 mr-1.5">Tổng bia:</span>
                 <strong className="text-emerald-300">
                   {formatNumber(totals.totalLiters)} L
                 </strong>
@@ -266,7 +269,23 @@ export default function KiemKeKegLitSection({
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-bold bg-slate-50"
                 />
               </div>
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
+                  Số keg đếm thực tế
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={soKegDem}
+                  onChange={(e) => setSoKegDem(e.target.value)}
+                  placeholder="Đếm tay"
+                  title="Đếm số keg vật lý tại chỗ — không quy đổi từ số lít bia"
+                  className="w-full px-3 py-2.5 rounded-xl border border-amber-300 font-mono text-xs font-bold bg-amber-50"
+                />
+              </div>
+              <div className="sm:col-span-3">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   Đợt / Ca kiểm kê
                 </label>
@@ -278,7 +297,7 @@ export default function KiemKeKegLitSection({
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
                 />
               </div>
-              <div className="sm:col-span-5">
+              <div className="sm:col-span-4">
                 <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
                   Ghi chú hiện trường
                 </label>
@@ -530,15 +549,17 @@ export default function KiemKeKegLitSection({
                     <div className="flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums">
                       <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 font-black text-slate-800">
                         {(() => {
-                          // Tính lại từ từng dòng, không đọc `totalKegs` đã lưu:
-                          // bản ghi cũ lưu sai (đếm lon, bỏ keg).
-                          const { keg, thung } = demKegThungKiemKe(
-                            (rec.items || []).map((it) => ({
-                              category: products.find((p) => p.id === it.productId)?.category,
-                              qty: it.quantity,
-                            })),
+                          // Bản lưu trước 19/11/2026 ghi "keg" bằng tổng số LON
+                          // (lỗi cũ) — nhận ra thì hiện "—" thay vì số sai.
+                          const tongLon = (rec.items || []).reduce(
+                            (t, it) =>
+                              products.find((p) => p.id === it.productId)?.category === "Lít"
+                                ? t
+                                : t + (Number(it.quantity) || 0),
+                            0,
                           );
-                          return `${formatNumber(keg)} Keg · ${formatNumber(thung)} Thùng`;
+                          const saiCu = tongLon > 0 && Number(rec.totalKegs) === tongLon;
+                          return saiCu ? "— Keg" : `${formatNumber(rec.totalKegs)} Keg đếm`;
                         })()}
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 font-black text-emerald-700">

@@ -93,46 +93,20 @@ export function quyDoiHienTrang(
 
 /** Sinh mã Token xác thực chữ ký điện tử dạng XXXX-XXXX. */
 /**
- * ĐẾM KEG / THÙNG CỦA MỘT LẦN KIỂM KÊ — số vật thể đếm được ngoài hiện trường.
+ * TỒN BỒN CHỐT THEO THÁNG — tháng nào dứt điểm tháng đó, KHÔNG cộng dồn.
  *
- * Bia Lít: số keg 20,6 L của TỪNG mặt hàng, keg lẻ làm tròn lên (vẫn chiếm một
- * vỏ keg). Bia lon: số thùng 24 lon, thùng lẻ làm tròn lên. Bản cũ cộng thẳng
- * số LON vào ô "Keg/Thùng" và bỏ qua keg: 206 L + 48 lon ra "48".
+ * Kiểm kê bồn là kiểm và chốt số của một tháng (quy định anh Khoa 19/11/2026).
+ * Tồn bồn của tháng T chỉ lấy các bản kiểm của chính tháng T; tháng chưa kiểm
+ * thì là chưa chốt, không mượn số tháng trước. Cùng một bồn kiểm hai lần trong
+ * tháng thì lấy lần ghi sau (lần trước coi như làm lại). Bản bị quản lý xưởng
+ * TRẢ LẠI không tính.
  */
-export function demKegThungKiemKe(
-  dong: readonly { category?: string; qty: number }[],
-  litMoiKeg = LIT_KEG_CHUAN,
-): { keg: number; thung: number } {
-  let keg = 0;
-  let thung = 0;
-  dong.forEach((d) => {
-    const q = Number(d.qty) || 0;
-    if (q <= 0) return;
-    if (d.category === "Lít") keg += Math.ceil(q / litMoiKeg - 1e-4);
-    else if (d.category === "Lon") thung += Math.ceil(q / 24 - 1e-4);
-  });
-  return { keg, thung };
-}
-
-/**
- * TỒN BỒN HIỆN TẠI = LẦN KIỂM MỚI NHẤT CỦA MỖI BỒN, không cộng mọi lần kiểm.
- *
- * Bồn FST-01 kiểm 1.500 L ba tháng liền vẫn chỉ là 1.500 L trong bồn — cộng
- * dồn ra 4.500 L. Bản ghi bị quản lý xưởng TRẢ LẠI (sai, chờ làm lại) không
- * tính. Mới nhất: tháng lớn nhất, cùng tháng thì lúc tạo muộn nhất.
- */
-export function kiemKeBonMoiNhat(ds: readonly KiemKeBon[]): KiemKeBon[] {
+export function kiemKeBonCuaThang(ds: readonly KiemKeBon[], thang: string): KiemKeBon[] {
   const m = new Map<string, KiemKeBon>();
   ds.forEach((k) => {
-    if (k.approvalStatus === "returned") return;
+    if (k.month !== thang || k.approvalStatus === "returned") return;
     const cu = m.get(k.tankId);
-    if (
-      !cu ||
-      k.month > cu.month ||
-      (k.month === cu.month && String(k.createdAt || "") > String(cu.createdAt || ""))
-    ) {
-      m.set(k.tankId, k);
-    }
+    if (!cu || String(k.createdAt || "") > String(cu.createdAt || "")) m.set(k.tankId, k);
   });
   return [...m.values()];
 }
