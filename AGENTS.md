@@ -40,7 +40,7 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
     5. ✔ Keg giao ĐVTV và hao hụt 0,6 L sai khi một đơn chia nhiều lô FIFO — đang làm tròn theo từng dòng lô (`lib/loBia.ts` ~575).
     6. Số hoá đơn thật không lên sheet Chốt cho đơn vị không có mã SAP (khoá `maBp || donVi` lệch với chỉ mục `h.maBp`) (`lib/congNo.ts` ~432).
     7. Xác nhận đơn đi đường dính ngày quét / số thực nhận của đơn trước (không reset `scannedInvoiceDate`, `soThucNhanText`).
-  - **B. Báo cáo / hiển thị sai**
+  - **B. Báo cáo / hiển thị sai — ĐÃ SỬA cả 5 (19/11/2026, xem dòng dưới cùng)**
     8. ✔ Dashboard Kế toán cộng tồn bồn của mọi tháng (phải lấy lần kiểm mới nhất mỗi bồn) (`KeToanDashboardPanel` 87).
     9. ✔ Kiểm kê "Keg/Thùng" đếm lon, bỏ keg — và lưu sai `totalKegs` (`KiemKeKegLitSection` 118).
     10. Kiểm kê kho tổng so với tồn sổ theo bộ lọc của tab 1, không theo ngày kiểm (`KhoTongNxtPanel` ~157).
@@ -68,4 +68,11 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - **A1 — Trả bia về nhà máy**: được xuất cho nhà cung cấp (SKB-BNC) nhưng CHỈ khi có ảnh kho tổng chụp xác nhận trả bia. Làm: ô đơn vị nhận ở form xuất có dòng "↩ Trả bia về nhà máy · … (cần ảnh xác nhận)" ở cuối; chọn dòng này thì phiếu bắt buộc lưu dạng Đơn đi đường → bước xác nhận đơn (vốn bắt buộc ảnh) mới hoàn tất. Lưu thẳng "đã giao" cho nhà cung cấp bị chặn. SKB-BNC SÓT từ form nhập vẫn bị xoá trắng (`traVeNhaMayRef` phân biệt chủ ý với sót). Hàng trả nhà máy **không lên công nợ** (`dungBangCongNo` bỏ đối tác SUPPLIER) và **không tính là giao ĐVTV** trong báo cáo keg / vỏ keg (`tongHopGiaoKegVaHaoHutDVTV` nhận `partners`).
   - **A2 — Phiếu hủy = xoá hẳn**: dữ liệu (dòng hàng, tờ phiếu nhập, ảnh + tệp Cloudinary) xoá khỏi data lẫn server; sổ số phiếu chỉ giữ ghi chú "đã hủy", bấm vào không còn gì. Hai đường hủy hiện có (xoá phiếu nhập, hủy số mồ côi) vốn đã xoá dữ liệu trước. Phiếu hủy CŨ còn sót dữ liệu: admin thấy dải đỏ ở đầu tab Báo cáo + nút **"Xoá hẳn dữ liệu phiếu hủy"** (`giaoDichConSotCuaPhieuDaHuy` trong `lib/phieuHuy.ts`). `giaoDichConHieuLuc` vẫn giữ làm lớp chặn phụ.
   - **Việc anh cần làm**: vào Báo cáo bằng tài khoản admin, nếu có dải đỏ thì bấm nút để dọn dữ liệu phiếu hủy cũ.
+- Sửa nhóm B:
+  - B8: tồn bồn ở Dashboard Kế toán = lần kiểm mới nhất của MỖI bồn, bỏ bản bị trả lại (`kiemKeBonMoiNhat` trong `lib/loBia.ts`).
+  - B9: ô "Keg/Thùng" kiểm kê = số keg 20,6 L (keg lẻ làm tròn lên, theo từng mặt hàng) + số thùng 24 lon (`demKegThungKiemKe`); hiện "X Keg · Y Thùng". Danh sách bản ghi cũ tính lại từ từng dòng, không đọc `totalKegs` đã lưu sai.
+  - B10: kiểm kê kho tổng so với tồn sổ TÍNH ĐẾN NGÀY KIỂM, mọi mặt hàng — không theo bộ lọc của tab Sổ NXT (`tonSoDenNgay` truyền vào `KiemKeKegLitSection`).
+  - B11: quét phiếu AI khớp khắt khe — đủ chữ riêng của tên bia + đúng dạng keg/lon (`lib/khopPhieuQuet.ts`, có test riêng). Không khớp được thì người kho tự tích.
+  - B12: nạp lại tệp BBGN trả lại tồn tạm phần dòng cũ sắp ghi đè / xoá → hết báo "vượt tồn" giả; bỏ chữ "VUOT_DINH_MUC" trong thông báo.
+  - Lint, test, build sạch. Chưa kiểm trên giao diện thật (khoá PIN). Còn nhóm C.
 

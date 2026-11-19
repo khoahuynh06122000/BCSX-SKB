@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -154,11 +154,24 @@ export default function KhoTongNxtPanel({
     };
   }, [bangTon, products]);
 
-  const bookStockByProduct = useMemo(() => {
-    const m = new Map<string, number>();
-    bangTon.dong.forEach((d) => m.set(d.productId, d.cuoiKy));
-    return m;
-  }, [bangTon]);
+  // Tồn sổ cho kiểm kê: tính đến ĐÚNG ngày kiểm, mọi mặt hàng — KHÔNG theo bộ
+  // lọc ngày / từ khoá đang đặt ở tab Sổ NXT.
+  const tonSoDenNgay = useCallback(
+    (ngay: string) => {
+      const b = dungBangTonKy({
+        giaoDichTinhTon: countedTransactions,
+        giaoDichChoKy,
+        products,
+        tuNgay: "",
+        denNgay: ngay,
+        tuKhoa: "",
+      });
+      const m = new Map<string, number>();
+      b.dong.forEach((d) => m.set(d.productId, d.cuoiKy));
+      return m;
+    },
+    [countedTransactions, giaoDichChoKy, products],
+  );
 
   return (
     <div className="space-y-6 anim-view-enter">
@@ -561,7 +574,7 @@ export default function KhoTongNxtPanel({
             products={products}
             records={kiemKeKeg}
             anhTheoChungTu={anhTheoChungTu}
-            bookStockByProduct={bookStockByProduct}
+            tonSoDenNgay={tonSoDenNgay}
             canWrite={canWriteInventory}
             canApprove={isAdmin}
             canDelete={isAdmin}

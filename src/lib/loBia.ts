@@ -17,6 +17,7 @@
 import type {
   ImportSlip,
   KeHoachSanXuat,
+  KiemKeBon,
   KiemKeKegLit,
   Partner,
   Product,
@@ -91,6 +92,51 @@ export function quyDoiHienTrang(
 }
 
 /** Sinh mã Token xác thực chữ ký điện tử dạng XXXX-XXXX. */
+/**
+ * ĐẾM KEG / THÙNG CỦA MỘT LẦN KIỂM KÊ — số vật thể đếm được ngoài hiện trường.
+ *
+ * Bia Lít: số keg 20,6 L của TỪNG mặt hàng, keg lẻ làm tròn lên (vẫn chiếm một
+ * vỏ keg). Bia lon: số thùng 24 lon, thùng lẻ làm tròn lên. Bản cũ cộng thẳng
+ * số LON vào ô "Keg/Thùng" và bỏ qua keg: 206 L + 48 lon ra "48".
+ */
+export function demKegThungKiemKe(
+  dong: readonly { category?: string; qty: number }[],
+  litMoiKeg = LIT_KEG_CHUAN,
+): { keg: number; thung: number } {
+  let keg = 0;
+  let thung = 0;
+  dong.forEach((d) => {
+    const q = Number(d.qty) || 0;
+    if (q <= 0) return;
+    if (d.category === "Lít") keg += Math.ceil(q / litMoiKeg - 1e-4);
+    else if (d.category === "Lon") thung += Math.ceil(q / 24 - 1e-4);
+  });
+  return { keg, thung };
+}
+
+/**
+ * TỒN BỒN HIỆN TẠI = LẦN KIỂM MỚI NHẤT CỦA MỖI BỒN, không cộng mọi lần kiểm.
+ *
+ * Bồn FST-01 kiểm 1.500 L ba tháng liền vẫn chỉ là 1.500 L trong bồn — cộng
+ * dồn ra 4.500 L. Bản ghi bị quản lý xưởng TRẢ LẠI (sai, chờ làm lại) không
+ * tính. Mới nhất: tháng lớn nhất, cùng tháng thì lúc tạo muộn nhất.
+ */
+export function kiemKeBonMoiNhat(ds: readonly KiemKeBon[]): KiemKeBon[] {
+  const m = new Map<string, KiemKeBon>();
+  ds.forEach((k) => {
+    if (k.approvalStatus === "returned") return;
+    const cu = m.get(k.tankId);
+    if (
+      !cu ||
+      k.month > cu.month ||
+      (k.month === cu.month && String(k.createdAt || "") > String(cu.createdAt || ""))
+    ) {
+      m.set(k.tankId, k);
+    }
+  });
+  return [...m.values()];
+}
+
 export function taoTokenChuKy(
   slipCode: string,
   role: string,

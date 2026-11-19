@@ -233,6 +233,7 @@ import {
   nguonPhieuDaHuy,
 } from "./lib/phieuHuy";
 import { chuanTen, ghiChuHienThi } from "./lib/ghiChu";
+import { dongKhopTenQuet } from "./lib/khopPhieuQuet";
 /**
  * Email chu so huu GOC - tai khoan khong bao gio bi khoa ra ngoai.
  *
@@ -2708,6 +2709,27 @@ export default function App() {
         ),
         ...xoaThem,
       ];
+
+      /*
+       * TRẢ LẠI TỒN TẠM phần của những dòng cũ sắp bị GHI ĐÈ hoặc XOÁ trong
+       * lần nạp này. `tonTheoMatHang` đã trừ chúng rồi; nạp lại đúng tệp cũ mà
+       * không trả lại thì mỗi dòng bị trừ hai lần và báo "vượt tồn" giả.
+       * Dòng giữ nguyên (đã xác nhận) thì không ghi lại, nên không trả.
+       */
+      {
+        const seDe = new Set<string>(canXoa.map((t) => t.id));
+        khoaDong.forEach((k) => {
+          if (giuNguyen.has(`${k}-0`)) return;
+          seDe.add(`${k}-0`);
+          seDe.add(`${k}-hao-0`);
+        });
+        countedTransactions.forEach((t) => {
+          if (!seDe.has(t.id)) return;
+          const q = Number(t.quantity) || 0;
+          const dau = t.type === "IN" || t.type === "OPENING" ? -1 : 1;
+          tonTam.set(t.productId, (tonTam.get(t.productId) ?? 0) + dau * q);
+        });
+      }
       // Người thường không xoá được dữ liệu (luật Firestore): còn dòng thừa
       // của lần nạp trước mà không dọn thì hàng bị trừ hai lần — dừng hẳn.
       if (!isOwner && canXoa.length) {
@@ -2956,8 +2978,8 @@ export default function App() {
       }
       if (shortfall > 0) {
         alert(
-          `Đã ghi xong, nhưng có ${shortfall} dòng xuất vượt tồn kho hiện có ` +
-            `(đánh dấu lô VUOT_DINH_MUC).\n\nThường là do chưa nhập kho phần ` +
+          `Đã ghi xong, nhưng có ${shortfall} dòng xuất vượt tồn kho hiện có` +
+            `.\n\nThường là do chưa nhập kho phần ` +
             `hàng tương ứng. Anh kiểm tra lại phần nhập trước rồi sửa các dòng này.`,
         );
       }
@@ -4470,56 +4492,16 @@ export default function App() {
             .trim();
         };
 
-        // Keyword extraction helper to split and filter noise words
-        const getKeywords = (s: string) => {
-          if (!s) return [];
-          const clean = cleanVietnamese(s).replace(/[^a-z0-9\s]/g, " ");
-          return clean
-            .split(/\s+/)
-            .filter(
-              (word) =>
-                word &&
-                word.length >= 2 &&
-                ![
-                  "bia",
-                  "vo",
-                  "keg",
-                  "lon",
-                  "thung",
-                  "chai",
-                  "lit",
-                  "kegs",
-                  "va",
-                  "loai",
-                  "so",
-                  "luong",
-                ].includes(word),
-            );
-        };
-
         data.items.forEach((scannedItem: any) => {
-          const target = normalize(scannedItem.productName);
-          if (!target) return;
+          if (!normalize(scannedItem.productName)) return;
 
-          const targetKeywords = getKeywords(scannedItem.productName);
-
-          // Try to find a match in the currently being confirmed group
-          const matches = selectedInTransitGroup.filter((t) => {
-            const pName = normalize(t.productName);
-
-            // 1. Direct or partial substring match
-            if (pName.includes(target) || target.includes(pName)) {
-              return true;
-            }
-
-            // 2. Keyword overlap match (fuzzy matching)
-            const transitKeywords = getKeywords(t.productName);
-            const commonKeywords = targetKeywords.filter((w) =>
-              transitKeywords.includes(w),
-            );
-
-            return commonKeywords.length > 0;
-          });
+          // Khớp KHẮT KHE: đủ chữ riêng của tên bia + đúng dạng keg / lon —
+          // xem `src/lib/khopPhieuQuet.ts`. Chung một chữ "lager" không còn
+          // kéo theo bia khác.
+          const matches = dongKhopTenQuet(
+            String(scannedItem.productName || ""),
+            selectedInTransitGroup,
+          );
 
           if (matches.length > 0) {
             const firstMatch = matches[0];

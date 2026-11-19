@@ -14,7 +14,7 @@ import type { AnhChungTu } from "../anh/moHinh";
 import ChonAnh, { taoTepCho, type TepCho } from "../anh/ChonAnh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
-import { laBanGhiThuVeVoKeg } from "../lib/loBia";
+import { demKegThungKiemKe, laBanGhiThuVeVoKeg } from "../lib/loBia";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 
 interface Props {
@@ -22,8 +22,13 @@ interface Props {
   products: Product[];
   records: KiemKeKegLit[];
   anhTheoChungTu: Map<string, AnhChungTu[]>;
-  /** Số lượng sổ sách theo productId (nếu có — dùng cho Kho tổng đối chiếu chênh lệch). */
-  bookStockByProduct?: Map<string, number>;
+  /**
+   * Tồn SỔ SÁCH theo productId TÍNH ĐẾN NGÀY KIỂM (nếu có — Kho tổng đối chiếu
+   * chênh lệch). Nhận ngày chứ không nhận bảng dựng sẵn: bảng của tab Sổ NXT đi
+   * theo bộ lọc ngày / từ khoá của tab đó, lấy nhầm là so số kiểm hôm nay với
+   * tồn cuối tháng trước, hoặc mất cả mặt hàng bị từ khoá ẩn.
+   */
+  tonSoDenNgay?: (ngay: string) => Map<string, number>;
   canWrite?: boolean;
   canApprove?: boolean;
   canDelete?: boolean;
@@ -61,7 +66,7 @@ export default function KiemKeKegLitSection({
   products,
   records,
   anhTheoChungTu,
-  bookStockByProduct,
+  tonSoDenNgay,
   canWrite = true,
   canApprove = false,
   canDelete = false,
@@ -71,6 +76,10 @@ export default function KiemKeKegLitSection({
   onDelete,
 }: Props) {
   const [date, setDate] = useState(todayStr);
+  const bookStockByProduct = useMemo(
+    () => (tonSoDenNgay && date ? tonSoDenNgay(date) : undefined),
+    [tonSoDenNgay, date],
+  );
   const [shiftOrPeriod, setShiftOrPeriod] = useState(
     location === "XUONG" ? "Cuối ca xưởng" : "Cuối ngày kho tổng",
   );
@@ -111,18 +120,20 @@ export default function KiemKeKegLitSection({
   }, [products, qtyMap, bookStockByProduct]);
 
   const totals = useMemo(() => {
-    let totalKegs = 0;
     let totalLiters = 0;
     let nonZeroCount = 0;
     computedRows.forEach((r) => {
       if (r.qty > 0) nonZeroCount++;
-      if (r.product.category !== "Lít") {
-        totalKegs += r.qty;
-      }
       totalLiters += r.liters;
     });
+    // Keg (bia Lít, 20,6 L, keg lẻ làm tròn lên) + Thùng (24 lon) — xem `demKegThungKiemKe`.
+    const { keg, thung } = demKegThungKiemKe(
+      computedRows.map((r) => ({ category: r.product.category, qty: r.qty })),
+    );
     return {
-      totalKegs: Math.round(totalKegs * 100) / 100,
+      keg,
+      thung,
+      totalKegs: keg + thung,
       totalLiters: Math.round(totalLiters * 100) / 100,
       nonZeroCount,
     };
@@ -230,7 +241,7 @@ export default function KiemKeKegLitSection({
               <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 tabular-nums">
                 <span className="text-white/60 mr-1.5">Keg/Thùng:</span>
                 <strong className="text-amber-300">
-                  {formatNumber(totals.totalKegs)}
+                  {formatNumber(totals.keg)} Keg · {formatNumber(totals.thung)} Thùng
                 </strong>
               </div>
               <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/15 tabular-nums">
@@ -518,7 +529,17 @@ export default function KiemKeKegLitSection({
                     </div>
                     <div className="flex flex-wrap items-center gap-2 font-mono text-xs tabular-nums">
                       <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 font-black text-slate-800">
-                        {formatNumber(rec.totalKegs)} Keg/Thùng
+                        {(() => {
+                          // Tính lại từ từng dòng, không đọc `totalKegs` đã lưu:
+                          // bản ghi cũ lưu sai (đếm lon, bỏ keg).
+                          const { keg, thung } = demKegThungKiemKe(
+                            (rec.items || []).map((it) => ({
+                              category: products.find((p) => p.id === it.productId)?.category,
+                              qty: it.quantity,
+                            })),
+                          );
+                          return `${formatNumber(keg)} Keg · ${formatNumber(thung)} Thùng`;
+                        })()}
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 font-black text-emerald-700">
                         {formatNumber(rec.totalLiters)} Lít

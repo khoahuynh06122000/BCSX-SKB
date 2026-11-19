@@ -11,6 +11,7 @@ import type { AnhChungTu } from "../anh/moHinh";
 import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
 import {
+  kiemKeBonMoiNhat,
   tinhTonTheoLo,
   tongHopKeHoachVaThucXuat,
   truyXuatLo,
@@ -84,7 +85,8 @@ export default function KeToanDashboardPanel({
       (s, l) => s + l.closing * capFactor(l.productId),
       0,
     );
-    const totalTankL = kiemKeBon.reduce((s, k) => s + (k.liters || 0), 0);
+    // Mỗi bồn chỉ lấy lần kiểm mới nhất — xem `kiemKeBonMoiNhat`.
+    const totalTankL = kiemKeBonMoiNhat(kiemKeBon).reduce((s, k) => s + (k.liters || 0), 0);
     const rate = totalPlanL > 0 ? Math.round((totalRecL / totalPlanL) * 100) : 0;
     return {
       totalPlanL,
