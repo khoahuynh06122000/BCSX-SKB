@@ -183,6 +183,7 @@ import {
   type DongPhieuNhap,
 } from "./lib/chuKy";
 import { idKeHoach, lapViecGhiKeHoach, type DongKeHoach } from "./lib/keHoachSX";
+import type { DongSoKeg } from "./lib/soKeg";
 import { isoSangVn } from "./lib/oNgay";
 import type { OAnh } from "./anh/thuVien";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
@@ -201,7 +202,7 @@ import {
   lapKeHoachDongBo,
   TEN_LOAI,
 } from "./lib/napTonKho";
-import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro } from "./lib/quyen";
+import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro, vaiTroDeChon } from "./lib/quyen";
 import { dauCuaLoai } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
@@ -559,6 +560,8 @@ export default function App() {
   const [keHoach, setKeHoach] = useState<KeHoachSanXuat[]>([]);
   /** Chữ ký mẫu vẽ tay của mọi người (bảng `chu_ky_mau`, bất biến). */
   const [chuKyMau, setChuKyMau] = useState<ChuKyMau[]>([]);
+  /** Sổ keg: tồn đầu sở hữu / tại ĐVTV, mua thêm, hỏng — xem `lib/soKeg.ts`. */
+  const [soKeg, setSoKeg] = useState<DongSoKeg[]>([]);
   const [daTaiChuKyMau, setDaTaiChuKyMau] = useState(false);
   /** Mở màn đổi chữ ký mẫu (từ Cài đặt, hoặc khi ký mà chưa có mẫu). */
   const [moDoiChuKy, setMoDoiChuKy] = useState(false);
@@ -1069,10 +1072,21 @@ export default function App() {
 
     let unsubKeHoach = () => {};
     let unsubChuKyMau = () => {};
+    let unsubSoKeg = () => {};
     let unsubDanhGia = () => {};
     let unsubKiemKeBon = () => {};
     let unsubKiemKeKeg = () => {};
     if (!chiXemChieuXuat) {
+      unsubSoKeg = onSnapshot(
+        collection(db, "so_keg"),
+        (snapshot) => {
+          setSoKeg(snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as DongSoKeg));
+          ghiNhanLoiDoc("so_keg", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc("so_keg", handleFirestoreError(error, OperationType.GET, "so_keg"));
+        },
+      );
       unsubChuKyMau = onSnapshot(
         collection(db, "chu_ky_mau"),
         (snapshot) => {
@@ -1175,6 +1189,7 @@ export default function App() {
       unsubUsers();
       unsubKeHoach();
       unsubChuKyMau();
+      unsubSoKeg();
       unsubDanhGia();
       unsubKiemKeBon();
       unsubKiemKeKeg();
@@ -6508,6 +6523,40 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
   const handleDuyetKiemKeKeg = (id: string, status: "approved" | "returned", reason?: string) =>
     capNhatDuyetGiamSat("kiem_ke_keg", id, status, reason);
 
+  /** Ghi một dòng sổ keg (admin, kế toán). */
+  const handleThemSoKeg = async (
+    d: Omit<DongSoKeg, "id" | "createdBy" | "createdAt" | "uid">,
+  ): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const id = `keg-${d.ngay}-${d.loai.toLowerCase()}-${Date.now()}`;
+      await setDoc(doc(db, "so_keg", id), {
+        ...d,
+        id,
+        createdBy: currentUserProfile?.name || user || "",
+        createdAt: new Date().toISOString(),
+        uid: auth.currentUser?.uid || "",
+      });
+      showNotification("Đã ghi sổ keg");
+      return true;
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "so_keg"));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleXoaSoKeg = async (id: string) => {
+    if (!isOwner || !window.confirm("Xoá dòng sổ keg ghi nhầm này?")) return;
+    try {
+      await deleteDoc(doc(db, "so_keg", id));
+      showNotification("Đã xoá dòng sổ keg");
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.DELETE, "so_keg"));
+    }
+  };
+
   const handleXoaDanhGia = async (id: string) => {
     if (!window.confirm("Xoá bản đánh giá sản lượng này?")) return;
     setLoading(true);
@@ -8430,7 +8479,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                   }
                   className="bg-transparent outline-none font-extrabold max-w-[150px] sm:max-w-none cursor-pointer"
                 >
-                  {DANH_SACH_VAI_TRO.filter((v) => v.ma !== "PENDING").map((v) => (
+                  {vaiTroDeChon().filter((v) => v.ma !== "PENDING").map((v) => (
                     <option key={v.ma} value={v.ma} className="text-slate-900">
                       {v.ma === "OWNER" ? "Admin (thật)" : v.ten}
                     </option>
@@ -10942,7 +10991,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                                           diện dùng để ẩn hiện nút, nên nhãn
                                           không thể nói khác quyền thật.
                                         */}
-                                        {DANH_SACH_VAI_TRO.map((v) => (
+                                        {vaiTroDeChon(profile.role).map((v) => (
                                           <option
                                             key={v.ma}
                                             value={v.ma}
@@ -11205,6 +11254,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
                 onDuyetKiemKeKeg={handleDuyetKiemKeKeg}
                 onXoaKiemKeKeg={handleXoaKiemKeKeg}
+                soKeg={soKeg}
+                canGhiSoKeg={isOwner || vaiTroXem === "KE_TOAN"}
+                onThemSoKeg={handleThemSoKeg}
+                onXoaSoKeg={handleXoaSoKeg}
               />
             )}
 

@@ -21,6 +21,7 @@ import {
   laChieuXuat,
   quyenCua,
   tenVaiTro,
+  vaiTroDeChon,
 } from "../quyen";
 import type { UserRole } from "../../types";
 
@@ -127,23 +128,8 @@ eq("quan ly xuong duyet rao 1 va ke hoach, khong duyet rao 2, khong xem tien", q
   quanTri: false,
 });
 
-eq("nhan vien san xuat chi lap phieu xuong, khong tu duyet", quyenCua("SAN_XUAT"), {
-  xemXuat: false,
-  xemAnh: false,
-  xemKho: true,
-  ghiNhap: true,
-  ghiXuat: false,
-  doanhThu: false,
-  napFile: false,
-  lapPhieuXuong: true,
-  duyetXuong: false,
-  duyetKhoTong: false,
-  xemKeHoachDashboard: false,
-  quanTri: false,
-});
-
-// Kho tổng (NHAP_KHO): duyệt Rào 2 xác nhận nhận bia vào tồn, xem được ảnh hiện trạng, không xem phần tiền.
-eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
+// Nhân viên xưởng = nhân viên nhập kho (20/11/2026): một bộ quyền.
+eq("nhan vien xuong · nhap kho", quyenCua("SAN_XUAT"), {
   xemXuat: false,
   xemAnh: true,
   xemKho: true,
@@ -151,12 +137,13 @@ eq("nhan vien nhap kho", quyenCua("NHAP_KHO"), {
   ghiXuat: false,
   doanhThu: false,
   napFile: false,
-  lapPhieuXuong: false,
+  lapPhieuXuong: true,
   duyetXuong: false,
   duyetKhoTong: true,
   xemKeHoachDashboard: false,
   quanTri: false,
 });
+eq("ma cu NHAP_KHO y het SAN_XUAT", quyenCua("NHAP_KHO"), quyenCua("SAN_XUAT"));
 eq("nhan vien xuat kho", quyenCua("XUAT_KHO"), {
   xemXuat: false,
   xemAnh: true,
@@ -309,9 +296,9 @@ eq(
 eq(
   "ai duyet rao 2 kho tong",
   MOI_VAI_TRO.filter((r) => quyenCua(r).duyetKhoTong),
-  ["OWNER", "KE_TOAN", "NHAP_KHO"],
+  ["OWNER", "KE_TOAN", "SAN_XUAT", "NHAP_KHO"],
 );
-dung("SAN_XUAT khong tu duyet duoc rao 1 hay rao 2", !quyenCua("SAN_XUAT").duyetXuong && !quyenCua("SAN_XUAT").duyetKhoTong);
+dung("SAN_XUAT khong duyet duoc rao 1", !quyenCua("SAN_XUAT").duyetXuong);
 dung("QUAN_LY_XUONG khong tu duyet duoc rao 2 kho tong", !quyenCua("QUAN_LY_XUONG").duyetKhoTong);
 dung("NHAP_KHO khong duyet duoc rao 1 xuat xuong", !quyenCua("NHAP_KHO").duyetXuong);
 eq(
@@ -399,7 +386,9 @@ dung(
 eq("xuat kho xem duoc thu vien anh", quyenCua("XUAT_KHO").xemAnh, true);
 eq("xuat kho van KHONG thay cong no / don BNC", quyenCua("XUAT_KHO").xemXuat, false);
 
-eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên nhập kho (Kho tổng)");
+eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên xưởng · nhập kho (mã cũ)");
+eq("o chon bo ma cu", vaiTroDeChon().some((v) => v.ma === "NHAP_KHO"), false);
+eq("o chon giu ma cu cho tai khoan dang mang", vaiTroDeChon("NHAP_KHO").some((v) => v.ma === "NHAP_KHO"), true);
 eq("ten vai tro la thi tra ve nguyen chuoi", tenVaiTro("ABC"), "ABC");
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

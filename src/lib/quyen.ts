@@ -197,20 +197,23 @@ export function quyenCua(role: UserRole | string): Quyen {
         duyetXuong: true,
         xemKeHoachDashboard: true,
       };
+    /*
+     * NHÂN VIÊN XƯỞNG = NHÂN VIÊN NHẬP KHO (anh Khoa 20/11/2026): cùng một
+     * nhóm người, cùng một bộ quyền — lập phiếu giao bia, ghi chiều nhập,
+     * ký nhận Rào 2 vào kho tổng, xem ảnh. Mã cũ `NHAP_KHO` giữ lại cho tài
+     * khoản đang mang nó, quyền y hệt `SAN_XUAT`.
+     *
+     * Tách nhiệm KHÔNG mất: một người không ký hai ô trên cùng phiếu (giao
+     * diện chặn theo tài khoản) — người trình phiếu không tự ký nhận Rào 2.
+     */
     case "SAN_XUAT":
-      return {
-        ...KHONG,
-        xemKho: true,
-        ghiNhap: true,
-        lapPhieuXuong: true,
-      };
-    // Kho tổng (bên nhận bia từ xưởng, duyệt Rào 2).
     case "NHAP_KHO":
       return {
         ...KHONG,
         xemKho: true,
         xemAnh: true,
         ghiNhap: true,
+        lapPhieuXuong: true,
         duyetKhoTong: true,
       };
     // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
@@ -260,8 +263,8 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
   },
   {
     ma: "SAN_XUAT",
-    ten: "Nhân viên sản xuất (Xưởng SKB)",
-    moTa: "Lập phiếu giao bia sang kho tổng (kèm mã lô và ảnh hiện trạng Keg), đánh giá sản lượng ngày và kiểm kê bồn FST/BBT hàng tháng. Không tự duyệt phiếu và không thấy phần tiền.",
+    ten: "Nhân viên xưởng · nhập kho",
+    moTa: "Lập phiếu giao bia (kèm mã lô và ảnh hiện trạng keg), ghi chiều nhập, ký nhận Rào 2 vào kho tổng, đánh giá sản lượng ngày, kiểm kê Keg & Lít và bồn FST/BBT. Không duyệt Rào 1, không tự ký nhận phiếu chính mình trình, không thấy phần tiền.",
   },
   {
     ma: "QUAN_LY_XUONG",
@@ -270,8 +273,8 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
   },
   {
     ma: "NHAP_KHO",
-    ten: "Nhân viên nhập kho (Kho tổng)",
-    moTa: "Duyệt Rào 2 (xác nhận nhận đủ bia vào tồn kho tổng) và xem Sổ Nhập · Xuất · Tồn theo lô. KHÔNG thấy công nợ, hóa đơn, Đơn BNC và doanh thu.",
+    ten: "Nhân viên xưởng · nhập kho (mã cũ)",
+    moTa: "Mã vai trò cũ — quyền Y HỆT \"Nhân viên xưởng · nhập kho\". Nên đổi tài khoản sang vai trò đó cho gọn.",
   },
   {
     ma: "XUAT_KHO",
@@ -294,6 +297,14 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
     moTa: "Toàn quyền, kể cả duyệt người dùng và xoá dữ liệu.",
   },
 ];
+
+/**
+ * Vai trò bày ra để CHỌN (cấp quyền, xem như): bỏ mã cũ `NHAP_KHO` — trừ khi
+ * tài khoản đang mang đúng mã đó (để ô chọn không hiện sai vai trò hiện tại).
+ */
+export function vaiTroDeChon(hienTai?: UserRole | string): NhanVaiTro[] {
+  return DANH_SACH_VAI_TRO.filter((v) => v.ma !== "NHAP_KHO" || hienTai === "NHAP_KHO");
+}
 
 /** Tên vai trò để hiện lên màn hình. */
 export function tenVaiTro(role: UserRole | string): string {

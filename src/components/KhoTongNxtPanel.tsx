@@ -20,6 +20,8 @@ import OAnhLuoi from "../anh/OAnhLuoi";
 import { quaTrungChuyen } from "../anh/duongDan";
 import KiemKeKegLitSection from "./KiemKeKegLitSection";
 import KiemKeVoKegThuVeSection from "./KiemKeVoKegThuVeSection";
+import CanDoiKegSection from "./CanDoiKegSection";
+import type { DongSoKeg } from "../lib/soKeg";
 import { dungBangTonKy } from "../lib/tonKho";
 import { quyDoiHienTrang, tinhTonTheoLo } from "../lib/loBia";
 import { pendingSlipTransactions } from "../lib/slip";
@@ -56,6 +58,12 @@ interface Props {
   }) => Promise<boolean>;
   onDuyetKiemKeKeg?: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
   onXoaKiemKeKeg?: (id: string) => Promise<void>;
+  /** Sổ keg (tồn đầu sở hữu / ĐVTV, mua thêm, hỏng) — để cân đối keg rỗng. */
+  soKeg: DongSoKeg[];
+  /** Ghi sổ keg: admin, kế toán. */
+  canGhiSoKeg: boolean;
+  onThemSoKeg: (d: Omit<DongSoKeg, "id" | "createdBy" | "createdAt" | "uid">) => Promise<boolean>;
+  onXoaSoKeg: (id: string) => Promise<void>;
 }
 
 export default function KhoTongNxtPanel({
@@ -78,6 +86,10 @@ export default function KhoTongNxtPanel({
   onLuuKiemKeKegLit,
   onDuyetKiemKeKeg,
   onXoaKiemKeKeg,
+  soKeg,
+  canGhiSoKeg,
+  onThemSoKeg,
+  onXoaSoKeg,
 }: Props) {
   const [subTab, setSubTab] = useState<
     "nxt" | "nhan-bia" | "kiem-ke" | "thu-ve-keg"
@@ -632,7 +644,20 @@ export default function KhoTongNxtPanel({
 
       {/* ================= TAB 4: KIỂM KÊ VỎ KEG THU VỀ ================= */}
       {subTab === "thu-ve-keg" && (
-        <div className="anim-view-enter">
+        <div className="anim-view-enter space-y-6">
+          <CanDoiKegSection
+            soKeg={soKeg}
+            transactions={transactions}
+            products={products}
+            partners={partners}
+            slips={slips}
+            kiemKeKeg={kiemKeKeg}
+            canGhi={canGhiSoKeg}
+            canXoa={isAdmin}
+            busy={busy}
+            onThem={onThemSoKeg}
+            onXoa={onXoaSoKeg}
+          />
           <KiemKeVoKegThuVeSection
             transactions={transactions}
             products={products}

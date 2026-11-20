@@ -574,7 +574,7 @@ export function soKegLamTronLen(liters: number, litMoiKeg: number): number {
   return Math.max(1, Math.ceil(n / chuan - 1e-4));
 }
 
-function maNhomDonVi(
+export function maNhomDonVi(
   partnerId: string,
   partnerName: string,
 ): { id: string; name: string; isStandard206: boolean } {
