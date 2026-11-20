@@ -588,39 +588,84 @@ service cloud.firestore {
         && optStr(data, 'rejectedReason', 500);
     }
 
-    function canCreateApprovalFields(data) {
-      return duyetXuong()
-        || (
-          (
-            data.get('approvalStatus', null) == null
-            || data.get('approvalStatus', null) == 'pending'
-          )
-          && data.get('approvedBy', null) == null
-          && data.get('approvedAt', null) == null
-          && data.get('rejectedReason', null) == null
+    // THU TU QUAN TRONG: xet phan khong can vai tro TRUOC, duyetXuong() SAU.
+    // Moi lan goi vai tro ton them mot loat phep tinh (exists + get), ma
+    // Firestore chan cung o 1.000 phep tinh moi lan ghi. Ban dau dat
+    // duyetXuong() len truoc thi MOI lan sua phieu (ke ca sua ghi chu) vuot
+    // nguong va bi tu choi - do bang Rules test API 20/11/2026.
+    function chuaDungTruongDuyetKhiTao(data) {
+      return (
+          data.get('approvalStatus', null) == null
+          || data.get('approvalStatus', null) == 'pending'
+        )
+        && data.get('approvedBy', null) == null
+        && data.get('approvedAt', null) == null
+        && data.get('rejectedReason', null) == null;
+    }
+
+    // QUYEN THEO VAI TRO DA TRA SAN — y het isToanQuyenKho / ghiNhapKho /
+    // ghiXuatKho / duyetXuong, nhung nhan vai tro `r` truyen vao thay vi tra
+    // lai ho so nguoi dung moi lan. Ba bang dot nay (danh_gia_sx, kiem_ke_bon,
+    // kiem_ke_keg) kiem nhieu dieu kien mot luc; tra vai tro chuc lan la vuot
+    // nguong 1.000 phep tinh cua Firestore (do 20/11/2026).
+    function toanQuyenR(r) {
+      return isBootstrapOwner() || (isSignedIn() && emailVerified() && r == 'OWNER') || r == 'KE_TOAN';
+    }
+    function ghiNhapR(r) {
+      return toanQuyenR(r) || r in ['NHAP_KHO', 'QUAN_LY_XUONG', 'SAN_XUAT'];
+    }
+    function ghiXuatR(r) {
+      return toanQuyenR(r) || r == 'XUAT_KHO';
+    }
+    function duyetXuongR(r) {
+      return toanQuyenR(r) || r == 'QUAN_LY_XUONG';
+    }
+
+    // Ghi ba bang Rao xuong: vai tro `r` tra mot lan o `allow`, truyen xuong.
+    function coQuyenRaoXuong(r, viec) {
+      let d = request.resource.data;
+      return (viec == 'tao-dg' && ghiNhapR(r) && isValidDanhGiaSXCreate(d, r))
+        || (viec == 'sua-dg' && ghiNhapR(r) && isValidDanhGiaSXUpdate(d, r))
+        || (viec == 'tao-bon' && ghiNhapR(r) && isValidKiemKeBonCreate(d, r))
+        || (viec == 'sua-bon' && ghiNhapR(r) && isValidKiemKeBonUpdate(d, r))
+        || (viec == 'tao-keg' && isValidKiemKeKegCreate(d, r)
+          && ((d.location == 'XUONG' && ghiNhapR(r))
+            || (d.location == 'KHO_TONG' && (ghiNhapR(r) || ghiXuatR(r)))))
+        || (viec == 'sua-keg' && isValidKiemKeKegUpdate(d, r)
+          && (
+            toanQuyenR(r)
+            || (resource.data.get('location', '') == 'XUONG' && d.location == 'XUONG' && ghiNhapR(r))
+            || (resource.data.get('location', '') == 'KHO_TONG' && d.location == 'KHO_TONG'
+              && (ghiNhapR(r) || ghiXuatR(r)))
+          ));
+    }
+
+    function canCreateApprovalFields(data, r) {
+      return chuaDungTruongDuyetKhiTao(data) || duyetXuongR(r);
+    }
+
+    // Giu nguyen ket qua duyet, hoac chi dua ve 'pending' (gui lai sau khi sua).
+    function giuNguyenTruongDuyet(data) {
+      return (
+          data.get('approvalStatus', null) == resource.data.get('approvalStatus', null)
+          || data.get('approvalStatus', null) == 'pending'
+        )
+        && (
+          data.get('approvedBy', null) == resource.data.get('approvedBy', null)
+          || data.get('approvedBy', null) == null
+        )
+        && (
+          data.get('approvedAt', null) == resource.data.get('approvedAt', null)
+          || data.get('approvedAt', null) == null
+        )
+        && (
+          data.get('rejectedReason', null) == resource.data.get('rejectedReason', null)
+          || data.get('rejectedReason', null) == null
         );
     }
 
-    function canUpdateApprovalFields(data) {
-      return duyetXuong()
-        || (
-          (
-            data.get('approvalStatus', null) == resource.data.get('approvalStatus', null)
-            || data.get('approvalStatus', null) == 'pending'
-          )
-          && (
-            data.get('approvedBy', null) == resource.data.get('approvedBy', null)
-            || data.get('approvedBy', null) == null
-          )
-          && (
-            data.get('approvedAt', null) == resource.data.get('approvedAt', null)
-            || data.get('approvedAt', null) == null
-          )
-          && (
-            data.get('rejectedReason', null) == resource.data.get('rejectedReason', null)
-            || data.get('rejectedReason', null) == null
-          )
-        );
+    function canUpdateApprovalFields(data, r) {
+      return giuNguyenTruongDuyet(data) || duyetXuongR(r);
     }
 
     function danhGiaAllowedKeys() {
@@ -655,17 +700,17 @@ service cloud.firestore {
         && isValidApprovalFields(data);
     }
 
-    function isValidDanhGiaSXCreate(data) {
+    function isValidDanhGiaSXCreate(data, r) {
       return data.keys().hasOnly(danhGiaAllowedKeys())
         && isValidDanhGiaSXCommon(data)
-        && canCreateApprovalFields(data);
+        && canCreateApprovalFields(data, r);
     }
 
-    function isValidDanhGiaSXUpdate(data) {
+    function isValidDanhGiaSXUpdate(data, r) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(danhGiaAllowedKeys())
         && isValidDanhGiaSXCommon(data)
         && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
-        && canUpdateApprovalFields(data);
+        && canUpdateApprovalFields(data, r);
     }
 
     function kiemKeBonAllowedKeys() {
@@ -699,17 +744,17 @@ service cloud.firestore {
         && isValidApprovalFields(data);
     }
 
-    function isValidKiemKeBonCreate(data) {
+    function isValidKiemKeBonCreate(data, r) {
       return data.keys().hasOnly(kiemKeBonAllowedKeys())
         && isValidKiemKeBonCommon(data)
-        && canCreateApprovalFields(data);
+        && canCreateApprovalFields(data, r);
     }
 
-    function isValidKiemKeBonUpdate(data) {
+    function isValidKiemKeBonUpdate(data, r) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeBonAllowedKeys())
         && isValidKiemKeBonCommon(data)
         && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
-        && canUpdateApprovalFields(data);
+        && canUpdateApprovalFields(data, r);
     }
 
     function kiemKeKegAllowedKeys() {
@@ -740,17 +785,17 @@ service cloud.firestore {
         && isValidApprovalFields(data);
     }
 
-    function isValidKiemKeKegCreate(data) {
+    function isValidKiemKeKegCreate(data, r) {
       return data.keys().hasOnly(kiemKeKegAllowedKeys())
         && isValidKiemKeKegCommon(data)
-        && canCreateApprovalFields(data);
+        && canCreateApprovalFields(data, r);
     }
 
-    function isValidKiemKeKegUpdate(data) {
+    function isValidKiemKeKegUpdate(data, r) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeKegAllowedKeys())
         && isValidKiemKeKegCommon(data)
         && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
-        && canUpdateApprovalFields(data);
+        && canUpdateApprovalFields(data, r);
     }
 
     // -------------------------------------------------------------------------
@@ -1159,8 +1204,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /danh_gia_sx/{evalId} {
       allow read: if xemKho();
-      allow create: if ghiNhapKho() && isValidDanhGiaSXCreate(request.resource.data);
-      allow update: if ghiNhapKho() && isValidDanhGiaSXUpdate(request.resource.data);
+      allow create: if coQuyenRaoXuong(role(), 'tao-dg');
+      allow update: if coQuyenRaoXuong(role(), 'sua-dg');
       allow delete: if isOwner() || duyetXuong();
     }
 
@@ -1169,8 +1214,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /kiem_ke_bon/{invId} {
       allow read: if xemKho();
-      allow create: if ghiNhapKho() && isValidKiemKeBonCreate(request.resource.data);
-      allow update: if ghiNhapKho() && isValidKiemKeBonUpdate(request.resource.data);
+      allow create: if coQuyenRaoXuong(role(), 'tao-bon');
+      allow update: if coQuyenRaoXuong(role(), 'sua-bon');
       allow delete: if isOwner() || duyetXuong();
     }
 
@@ -1179,19 +1224,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /kiem_ke_keg/{invId} {
       allow read: if xemKho();
-      allow create: if isValidKiemKeKegCreate(request.resource.data)
-        && ((request.resource.data.location == 'XUONG' && ghiNhapKho())
-          || (request.resource.data.location == 'KHO_TONG' && (ghiNhapKho() || ghiXuatKho())));
-      allow update: if isValidKiemKeKegUpdate(request.resource.data)
-        && (
-          isToanQuyenKho()
-          || (resource.data.get('location', '') == 'XUONG'
-            && request.resource.data.location == 'XUONG'
-            && ghiNhapKho())
-          || (resource.data.get('location', '') == 'KHO_TONG'
-            && request.resource.data.location == 'KHO_TONG'
-            && (ghiNhapKho() || ghiXuatKho()))
-        );
+      allow create: if coQuyenRaoXuong(role(), 'tao-keg');
+      allow update: if coQuyenRaoXuong(role(), 'sua-keg');
       allow delete: if isOwner()
         || (resource.data.get('location', '') == 'XUONG' && duyetXuong());
     }
