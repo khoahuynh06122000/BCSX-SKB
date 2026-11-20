@@ -6825,7 +6825,6 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     [goiHomNay],
   );
 
-  const isAuthorizedFull = daDuocDuyet;
   /** Ghi được ít nhất một chiều — dùng để bày nhóm menu Nhập · Xuất. */
   const canWrite = quyen.ghiNhap || quyen.ghiXuat;
 
@@ -7700,10 +7699,15 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     </div>
   );
 
+  /*
+   * TỒN ĐẦU KỲ & NẠP EXCEL — CHỈ ADMIN (anh Khoa 20/11/2026): lúc đưa kho vào
+   * dùng, admin nạp tồn đầu cho các bộ phận; từ đó bộ phận thao tác theo các
+   * luồng của mình (Xưởng gửi phiếu, Kho tổng nhận / xuất), không tự khai tồn.
+   */
   const renderTonDauVaNapLe = () =>
-    quyen.ghiNhap ? (
+    isOwner ? (
       <div className="space-y-4">
-        {isAuthorizedFull && quyen.napFile && quyen.ghiNhap && (
+        {quyen.napFile && (
           <div className="flex justify-end">
             <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all cursor-pointer border border-primary/20">
               <FileUp className="w-3.5 h-3.5" /> Nạp Excel Tồn Kho
