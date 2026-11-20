@@ -53,9 +53,9 @@ const daCo = [
 ];
 const v1 = lapViecGhiKeHoach(
   [
-    { date: "2026-11-20", productId: "p1", targetQty: 200, batchHint: "", note: "" },
-    { date: "2026-11-20", productId: "p2", targetQty: 60, batchHint: "L2", note: "" },
-    { date: "2026-11-20", productId: "p3", targetQty: 0, batchHint: "", note: "" },
+    { date: "2026-11-20", productId: "p1", targetQty: 200, note: "" },
+    { date: "2026-11-20", productId: "p2", targetQty: 60, note: "" },
+    { date: "2026-11-20", productId: "p3", targetQty: 0, note: "" },
   ],
   daCo,
 );
@@ -63,14 +63,14 @@ eq("dong y nguyen khong ghi lai", v1.giuNguyen, 1);
 eq("ghi dong sua", v1.ghi.map((d) => d.productId), ["p2"]);
 eq("xoa ban cu kieu Date.now + dong so luong 0", v1.xoa.sort(), ["kh-2026-11-20-p2-1763600000000", "kh-2026-11-20-p3"]);
 const v2 = lapViecGhiKeHoach(
-  [{ date: "2026-11-21", productId: "p1", targetQty: 10, batchHint: "", note: "" }],
+  [{ date: "2026-11-21", productId: "p1", targetQty: 10, note: "" }],
   daCo,
 );
 eq("ngay khac khong dung ke hoach ngay 20", v2.xoa, []);
 const v3 = lapViecGhiKeHoach(
   [
-    { date: "2026-11-21", productId: "p1", targetQty: 10, batchHint: "", note: "" },
-    { date: "2026-11-21", productId: "p1", targetQty: 15, batchHint: "", note: "" },
+    { date: "2026-11-21", productId: "p1", targetQty: 10, note: "" },
+    { date: "2026-11-21", productId: "p1", targetQty: 15, note: "" },
   ],
   [],
 );
@@ -79,7 +79,7 @@ eq("dong lap trong file: dong sau thang", v3.ghi.map((d) => d.targetQty), [15]);
 // --- vòng tròn: dựng mẫu → ghi .xlsx thật → đọc lại → parse
 const hang = hangMauKeHoach(products, "2026-11-20", daCo);
 hang[0][4] = 250; // p1 sửa sản lượng
-hang[0][5] = "LO-2611";
+hang[0][5] = "Uu tien le hoi";
 hang[1][4] = ""; // p2 để trống → bỏ qua
 hang[2][4] = "1.234,5"; // p3 số kiểu VN
 const wb = XLSXDep.utils.book_new();
@@ -101,12 +101,13 @@ eq("vong tron: khong loi", kq.loi, []);
 eq("vong tron: bo dong trong", kq.boTrong, 1);
 eq(
   "vong tron: doc dung dong",
-  kq.dong.map((d) => [d.date, d.productId, d.targetQty, d.batchHint]),
+  kq.dong.map((d) => [d.date, d.productId, d.targetQty, d.note]),
   [
-    ["2026-11-20", "p1", 250, "LO-2611"],
+    ["2026-11-20", "p1", 250, "Uu tien le hoi"],
     ["2026-11-20", "p3", 1234.5, ""],
   ],
 );
+eq("mau khong con cot ma lo", aoa.some((r) => r.includes("Mã lô dự kiến")), false);
 eq("ma SAP giu so 0 dau", String(aoa.find((r) => r[2] === "Bia Wings Dark Lager")?.[1]), "010168107");
 
 // --- khớp khắt khe + lỗi

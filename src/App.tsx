@@ -446,6 +446,13 @@ export default function App() {
   const [user, setUser] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<UserRole>("PENDING");
   /**
+   * XEM NHƯ VAI TRÒ (chỉ admin thật): đổi GIAO DIỆN sang góc nhìn một vai trò
+   * để thử từng phân hệ. Chỉ đổi menu, nút, quyền hiện trên màn hình — máy chủ
+   * vẫn coi là admin (luật Firestore theo tài khoản thật), dữ liệu tải như admin.
+   */
+  const [vaiTroThu, setVaiTroThu] = useState<UserRole | null>(null);
+  const vaiTroXem: UserRole = userRole === "OWNER" && vaiTroThu ? vaiTroThu : userRole;
+  /**
    * Đọc hồ sơ hỏng — KHÁC hẳn với "chưa được duyệt".
    *
    * Giữ riêng một trạng thái để không bao giờ lẫn hai việc: không biết vai trò
@@ -475,7 +482,7 @@ export default function App() {
       if (truoc[kho] === loi) return truoc;
       return { ...truoc, [kho]: loi };
     });
-  const isOwner = userRole === "OWNER";
+  const isOwner = vaiTroXem === "OWNER";
   /** Da dang nhap Google nhung chu so huu chua duyet. */
   const isPending = !!user && userRole === "PENDING";
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(
@@ -3575,7 +3582,7 @@ export default function App() {
         ("NHAP_KHO"), và câu "lẽ ra ghi được" thì suy từ `role !== PENDING` nên
         nói sai với DNC — vai trò vốn KHÔNG được ghi gì.
       */
-      const q = quyenCua(userRole);
+      const q = quyenCua(vaiTroXem);
       const daDuyet = q.xemKho || q.xemXuat;
       const laViecGhi = viec.includes("ghi") || viec.includes("lưu");
 
@@ -6186,7 +6193,6 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
             date: d.date,
             productId: d.productId,
             targetQty: d.targetQty,
-            batchHint: d.batchHint,
             note: d.note,
             source: nguon,
             createdBy: cu?.createdBy || nguoi,
@@ -6729,7 +6735,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
    * Trước đây `canWrite` chỉ là "đã được duyệt", vì mọi vai trò đều ghi được cả
    * hai chiều. Nay có hai vai trò một chiều nên phải hỏi riêng từng chiều.
    */
-  const quyen = useMemo(() => quyenCua(userRole), [userRole]);
+  const quyen = useMemo(() => quyenCua(vaiTroXem), [vaiTroXem]);
 
 
   /* ---------------- Bo do luot goi Firebase ---------------- */
@@ -6847,7 +6853,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
    *   4. Tư liệu & Hệ thống (Thư viện ảnh, Cài đặt)
    */
   const navGroups = useMemo(() => {
-    const isOwnerRole = userRole === "OWNER";
+    const isOwnerRole = vaiTroXem === "OWNER";
     const groups = [
       ...(quyen.xemKho
         ? [
@@ -7013,7 +7019,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     ];
 
     return groups.filter((g) => g.items.length > 0);
-  }, [userRole, quyen, pendingSlipStats]);
+  }, [vaiTroXem, quyen, pendingSlipStats]);
 
   // Danh sách phẳng — dùng cho kiểm tra quyền vào tab và tra tên tab + ban bệ đang mở
   const navItems = useMemo(
@@ -8324,6 +8330,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                     <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-emerald-500" />
                     <p className="text-[11px] font-semibold text-slate-400 truncate">
                       {tenVaiTro(userRole)}
+                      {vaiTroXem !== userRole ? ` · xem như ${tenVaiTro(vaiTroXem)}` : ""}
                     </p>
                   </div>
                 </div>
@@ -8405,6 +8412,33 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
               </button>
             )}
 
+            {userRole === "OWNER" && (
+              <label
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-extrabold",
+                  vaiTroThu
+                    ? "bg-amber-400 text-slate-950 border-amber-300"
+                    : "bg-white/10 text-slate-200 border-white/10",
+                )}
+                title="Admin: xem app như một vai trò để thử từng phân hệ (chỉ đổi giao diện)"
+              >
+                <span className="hidden sm:inline">Xem như</span>
+                <select
+                  value={vaiTroThu || "OWNER"}
+                  onChange={(e) =>
+                    setVaiTroThu(e.target.value === "OWNER" ? null : (e.target.value as UserRole))
+                  }
+                  className="bg-transparent outline-none font-extrabold max-w-[150px] sm:max-w-none cursor-pointer"
+                >
+                  {DANH_SACH_VAI_TRO.filter((v) => v.ma !== "PENDING").map((v) => (
+                    <option key={v.ma} value={v.ma} className="text-slate-900">
+                      {v.ma === "OWNER" ? "Admin (thật)" : v.ten}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl border border-white/10">
               <Calendar className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-[11px] font-bold text-slate-200">
@@ -8425,6 +8459,22 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
             </button>
           </div>
         </header>
+
+        {vaiTroThu && userRole === "OWNER" && (
+          <div className="px-4 sm:px-8 py-2 bg-amber-400 text-slate-950 text-[11px] font-extrabold flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Đang xem như: {tenVaiTro(vaiTroThu)} — chỉ đổi giao diện; máy chủ vẫn coi anh là admin (lưu / xoá
+              vẫn đi theo quyền admin). Một tài khoản không ký được hai ô trên cùng phiếu, thử trọn luồng ký cần tài khoản thật.
+            </span>
+            <button
+              type="button"
+              onClick={() => setVaiTroThu(null)}
+              className="px-3 py-1 rounded-lg bg-slate-950 text-amber-300"
+            >
+              Về admin
+            </button>
+          </div>
+        )}
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar bg-[#F4F1EA] dark:bg-bg-main">
@@ -11116,7 +11166,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 kiemKeBon={kiemKeBon}
                 kiemKeKeg={kiemKeKeg}
                 isAdmin={isOwner}
-                laGiamSatXuong={userRole === "QUAN_LY_XUONG" || isOwner}
+                laGiamSatXuong={vaiTroXem === "QUAN_LY_XUONG" || isOwner}
                 busy={loading}
                 onDuyetRao1={handleDuyetRao1}
                 onKyNhay={isOwner ? handleKyNhayPhieu : undefined}
@@ -11145,7 +11195,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 anhTheoChungTu={anhTheoChungTu}
                 kiemKeKeg={kiemKeKeg}
                 canApproveGate2={quyen.duyetKhoTong || isOwner}
-                canApproveKiemKe={userRole === "KE_TOAN" || isOwner}
+                canApproveKiemKe={vaiTroXem === "KE_TOAN" || isOwner}
                 canWriteInventory={quyen.ghiNhap || quyen.ghiXuat || isOwner}
                 isAdmin={isOwner}
                 busy={loading}

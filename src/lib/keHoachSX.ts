@@ -7,7 +7,9 @@
  * KẾ HOẠCH SẢN XUẤT THEO TỪNG MÃ BIA — phần tính thuần.
  *
  * Giám sát xưởng lập kế hoạch cho một ngày: mỗi mã bia một dòng (sản lượng,
- * mã lô dự kiến, ghi chú). Bộ phận sản xuất chiết bia theo đúng các dòng đó.
+ * ghi chú). Bộ phận sản xuất chiết bia theo đúng các dòng đó. KHÔNG có mã lô:
+ * kế hoạch chỉ nói bia nào, bao nhiêu — mã lô chỉ có khi chiết thực tế (ghi
+ * trên phiếu bàn giao), vì chiết theo nhu cầu (anh Khoa 20/11/2026).
  * Lập bằng lưới trên app hoặc nạp file Excel theo mẫu tải từ app.
  *
  * CHỐNG TRÙNG BẰNG KHOÁ NỘI DUNG: mỗi (ngày × mặt hàng) đúng MỘT bản ghi, id
@@ -30,7 +32,6 @@ export interface DongKeHoach {
   date: string;
   productId: string;
   targetQty: number;
-  batchHint: string;
   note: string;
 }
 
@@ -50,7 +51,6 @@ export interface ViecGhiKeHoach {
 const giong = (a: KeHoachSanXuat, b: DongKeHoach) =>
   a.id === idKeHoach(b.date, b.productId) &&
   Number(a.targetQty) === Number(b.targetQty) &&
-  (a.batchHint || "") === b.batchHint &&
   (a.note || "") === b.note;
 
 /**
@@ -95,7 +95,6 @@ export const COT_MAU_KE_HOACH = [
   "Tên bia",
   "ĐVT",
   "Sản lượng KH",
-  "Mã lô dự kiến",
   "Ghi chú",
 ] as const;
 
@@ -117,7 +116,6 @@ export function hangMauKeHoach(
       p.name,
       p.unit,
       k ? Number(k.targetQty) || 0 : "",
-      k?.batchHint || "",
       k?.note || "",
     ];
   });
@@ -159,7 +157,6 @@ const BIEN_THE: Record<string, string[]> = {
   ma: ["Mã SAP", "Mã vật tư", "Mã VT", "Material Code"],
   ten: ["Tên bia", "Mặt hàng", "Mặt hàng bia", "Sản phẩm", "Tên hàng"],
   sl: ["Sản lượng KH", "Sản lượng", "Kế hoạch", "Số lượng", "SL kế hoạch"],
-  lo: ["Mã lô dự kiến", "Mã lô", "Số lô"],
   ghiChu: ["Ghi chú", "Note"],
 };
 
@@ -192,7 +189,6 @@ export function docBangKeHoach(
     ma: cot("ma"),
     ten: cot("ten"),
     sl: cot("sl"),
-    lo: cot("lo"),
     ghiChu: cot("ghiChu"),
   };
   if (c.sl < 0) {
@@ -234,7 +230,6 @@ export function docBangKeHoach(
       date: ngay,
       productId: p.id,
       targetQty: sl,
-      batchHint: String(lay(dong, c.lo) ?? "").trim().slice(0, 128),
       note: String(lay(dong, c.ghiChu) ?? "").trim().slice(0, 2000),
     });
   });

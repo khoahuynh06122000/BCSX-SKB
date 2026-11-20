@@ -177,8 +177,8 @@ export default function QuanLyXuongPanel({
 
   /* ---------- Tab 2: Kế hoạch sản xuất theo từng mã bia ---------- */
   const [planDate, setPlanDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  /** Lưới đang điền: mã bia → ô sản lượng / mã lô / ghi chú (chuỗi gõ dở). */
-  const [luoi, setLuoi] = useState<Record<string, { sl: string; lo: string; ghiChu: string }>>({});
+  /** Lưới đang điền: mã bia → ô sản lượng / ghi chú (chuỗi gõ dở). Không có mã lô — lô chỉ có khi chiết thực tế. */
+  const [luoi, setLuoi] = useState<Record<string, { sl: string; ghiChu: string }>>({});
   const oFile = useRef<HTMLInputElement>(null);
 
   const keHoachNgay = useMemo(
@@ -195,11 +195,11 @@ export default function QuanLyXuongPanel({
   }, [keHoachNgay]);
 
   // Đổi ngày, hoặc kế hoạch đã lưu đổi (vừa phát hành) → lưới nạp lại từ bản lưu.
-  const khoaDaLuu = JSON.stringify([...daLuuTheoMa.values()].map((k) => [k.id, k.targetQty, k.batchHint, k.note]));
+  const khoaDaLuu = JSON.stringify([...daLuuTheoMa.values()].map((k) => [k.id, k.targetQty, k.note]));
   useEffect(() => {
-    const m: Record<string, { sl: string; lo: string; ghiChu: string }> = {};
+    const m: Record<string, { sl: string; ghiChu: string }> = {};
     daLuuTheoMa.forEach((k, pid) => {
-      m[pid] = { sl: String(k.targetQty ?? ""), lo: k.batchHint || "", ghiChu: k.note || "" };
+      m[pid] = { sl: String(k.targetQty ?? ""), ghiChu: k.note || "" };
     });
     setLuoi(m);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -229,19 +229,18 @@ export default function QuanLyXuongPanel({
       const o = luoi[p.id];
       const cu = daLuuTheoMa.get(p.id);
       const sl = o && o.sl.trim() !== "" ? Math.max(0, Number(o.sl.replace(",", ".")) || 0) : 0;
-      const lo = (o?.lo || "").trim();
       const ghiChu = (o?.ghiChu || "").trim();
       if (!cu && sl <= 0) return;
-      if (cu && Number(cu.targetQty) === sl && (cu.batchHint || "") === lo && (cu.note || "") === ghiChu) return;
-      ra.push({ date: planDate, productId: p.id, targetQty: sl, batchHint: lo, note: ghiChu });
+      if (cu && Number(cu.targetQty) === sl && (cu.note || "") === ghiChu) return;
+      ra.push({ date: planDate, productId: p.id, targetQty: sl, note: ghiChu });
     });
     return ra;
   }, [products, luoi, daLuuTheoMa, planDate]);
 
-  const doiO = (pid: string, truong: "sl" | "lo" | "ghiChu", v: string) =>
+  const doiO = (pid: string, truong: "sl" | "ghiChu", v: string) =>
     setLuoi((cu) => ({
       ...cu,
-      [pid]: { sl: "", lo: "", ghiChu: "", ...cu[pid], [truong]: v },
+      [pid]: { sl: "", ghiChu: "", ...cu[pid], [truong]: v },
     }));
 
   const handlePhatHanh = async () => {
@@ -257,7 +256,7 @@ export default function QuanLyXuongPanel({
       taoSheetDep({
         tieuDeTren: ["KẾ HOẠCH SẢN XUẤT THEO MÃ BIA", `Ngày ${isoSangVn(planDate)} · Sun KraftBeer`],
         tieuDe: [...COT_MAU_KE_HOACH],
-        cot: [{ rong: 12 }, { rong: 13 }, { rong: 38 }, { rong: 7 }, { rong: 14, kieu: "so" }, { rong: 16 }, { rong: 30 }],
+        cot: [{ rong: 12 }, { rong: 13 }, { rong: 38 }, { rong: 7 }, { rong: 14, kieu: "so" }, { rong: 30 }],
         hang: hangMauKeHoach(products, planDate, keHoach),
       }),
       "KeHoach",
@@ -267,7 +266,7 @@ export default function QuanLyXuongPanel({
       XLSXDep.utils.aoa_to_sheet([
         ["HƯỚNG DẪN ĐIỀN KẾ HOẠCH SẢN XUẤT"],
         [""],
-        ["1. Mỗi dòng là MỘT mã bia của MỘT ngày. Điền cột \"Sản lượng KH\" (theo ĐVT), mã lô dự kiến, ghi chú nếu có."],
+        ["1. Mỗi dòng là MỘT mã bia của MỘT ngày. Điền cột \"Sản lượng KH\" (theo ĐVT) và ghi chú nếu có. Không có mã lô — mã lô ghi khi chiết thực tế."],
         ["2. KHÔNG sửa cột Mã SAP / Tên bia — app khớp mã bia theo hai cột này."],
         ["3. Muốn lập nhiều ngày: chép thêm dòng, đổi cột Ngày (dd/MM/yyyy)."],
         ["4. Để TRỐNG sản lượng = không đụng kế hoạch đã có của dòng đó. Ghi 0 = bỏ kế hoạch dòng đó."],
@@ -754,7 +753,6 @@ export default function QuanLyXuongPanel({
                       <th className="py-3 px-4">Mã bia</th>
                       <th className="py-3 px-2">ĐVT</th>
                       <th className="py-3 px-2 text-right">Sản lượng KH</th>
-                      <th className="py-3 px-2">Mã lô dự kiến</th>
                       <th className="py-3 px-2">Ghi chú</th>
                       <th className="py-3 px-3 text-right">Xưởng đã giao</th>
                       <th className="py-3 px-3 text-right">Kho đã nhận</th>
@@ -763,7 +761,7 @@ export default function QuanLyXuongPanel({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {products.map((p) => {
-                      const o = luoi[p.id] || { sl: "", lo: "", ghiChu: "" };
+                      const o = luoi[p.id] || { sl: "", ghiChu: "" };
                       const td = tienDoTheoMa.get(p.id);
                       const doi = dongThayDoi.some((d) => d.productId === p.id);
                       const coKH = (Number(o.sl) || 0) > 0;
@@ -790,21 +788,11 @@ export default function QuanLyXuongPanel({
                           <td className="py-2 px-2">
                             <input
                               type="text"
-                              value={o.lo}
-                              maxLength={128}
-                              onChange={(e) => doiO(p.id, "lo", e.target.value)}
-                              placeholder="LO-..."
-                              className="w-28 px-2 py-1.5 rounded-lg border border-slate-200 font-mono text-xs font-bold outline-none bg-white text-slate-900"
-                            />
-                          </td>
-                          <td className="py-2 px-2">
-                            <input
-                              type="text"
                               value={o.ghiChu}
                               maxLength={2000}
                               onChange={(e) => doiO(p.id, "ghiChu", e.target.value)}
                               placeholder="Ghi chú"
-                              className="w-44 px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold outline-none bg-white text-slate-900"
+                              className="w-60 px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold outline-none bg-white text-slate-900"
                             />
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 tabular-nums">
