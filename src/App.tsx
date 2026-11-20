@@ -10817,17 +10817,12 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 kiemKeKeg={kiemKeKeg}
                 canApproveGate2={quyen.duyetKhoTong || isOwner}
                 canApproveKiemKe={userRole === "KE_TOAN" || isOwner}
-                canExport={quyen.ghiXuat || isOwner}
                 canWriteInventory={quyen.ghiNhap || quyen.ghiXuat || isOwner}
                 isAdmin={isOwner}
                 busy={loading}
                 onDuyetRao2={handleDuyetRao2}
                 onTraLaiPhieu={handleTraLaiPhieu}
                 onMoBieuMau={(code) => setBieuMauCode(code)}
-                onDiToiXuatKho={() => {
-                  setNewTransaction((prev) => ({ ...prev, isInTransit: true }));
-                  setActiveTab("export");
-                }}
                 onLuuKiemKeKegLit={handleLuuKiemKeKegLit}
                 onDuyetKiemKeKeg={handleDuyetKiemKeKeg}
                 onXoaKiemKeKeg={handleXoaKiemKeKeg}

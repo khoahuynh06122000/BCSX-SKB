@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
 import {
-  ArrowRight,
   CheckCircle2,
   FileText,
   Layers,
@@ -24,7 +23,7 @@ import KiemKeVoKegThuVeSection from "./KiemKeVoKegThuVeSection";
 import { dungBangTonKy } from "../lib/tonKho";
 import { quyDoiHienTrang, tinhTonTheoLo } from "../lib/loBia";
 import { pendingSlipTransactions } from "../lib/slip";
-import { cn, formatNumber } from "../lib/utils";
+import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
 import ONgay from "./ONgay";
 
 interface Props {
@@ -37,7 +36,6 @@ interface Props {
   anhTheoChungTu: Map<string, AnhChungTu[]>;
   kiemKeKeg: KiemKeKegLit[];
   canApproveGate2: boolean;
-  canExport: boolean;
   canWriteInventory: boolean;
   isAdmin?: boolean;
   /** Ký duyệt & chốt kiểm kê tháng ở Kho tổng: KẾ TOÁN (và admin). */
@@ -46,7 +44,6 @@ interface Props {
   onDuyetRao2: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
   onMoBieuMau: (slipCode: string) => void;
-  onDiToiXuatKho: () => void;
   onLuuKiemKeKegLit: (input: {
     date: string;
     shiftOrPeriod: string;
@@ -71,7 +68,6 @@ export default function KhoTongNxtPanel({
   anhTheoChungTu,
   kiemKeKeg,
   canApproveGate2,
-  canExport,
   canWriteInventory,
   isAdmin = false,
   canApproveKiemKe,
@@ -79,7 +75,6 @@ export default function KhoTongNxtPanel({
   onDuyetRao2,
   onTraLaiPhieu,
   onMoBieuMau,
-  onDiToiXuatKho,
   onLuuKiemKeKegLit,
   onDuyetKiemKeKeg,
   onXoaKiemKeKeg,
@@ -90,6 +85,21 @@ export default function KhoTongNxtPanel({
   const [tuNgay, setTuNgay] = useState("");
   const [denNgay, setDenNgay] = useState("");
   const [tuKhoa, setTuKhoa] = useState("");
+  // Chọn nhanh kỳ sổ NXT: tháng này / tháng trước / năm nay / toàn bộ.
+  const kyNhanh = useMemo(() => {
+    const homNay = homNayDiaPhuong();
+    const [y, m] = homNay.split("-").map(Number);
+    const hai = (n: number) => String(n).padStart(2, "0");
+    const cuoiThang = (yy: number, mm: number) => new Date(yy, mm, 0).getDate();
+    const py = m === 1 ? y - 1 : y;
+    const pm = m === 1 ? 12 : m - 1;
+    return [
+      { ma: "thang", nhan: "Tháng này", tu: `${y}-${hai(m)}-01`, den: `${y}-${hai(m)}-${hai(cuoiThang(y, m))}` },
+      { ma: "truoc", nhan: "Tháng trước", tu: `${py}-${hai(pm)}-01`, den: `${py}-${hai(pm)}-${hai(cuoiThang(py, pm))}` },
+      { ma: "nam", nhan: "Năm nay", tu: `${y}-01-01`, den: `${y}-12-31` },
+      { ma: "het", nhan: "Toàn bộ", tu: "", den: "" },
+    ];
+  }, []);
   const [lotSearch, setLotSearch] = useState("");
 
   /* ---------- Phiếu chờ Kho tổng nhận (Rào 2) ---------- */
@@ -287,7 +297,7 @@ export default function KhoTongNxtPanel({
 
           {/* Bộ lọc kỳ NXT */}
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="px-6 py-4 border-b border-slate-100 space-y-3">
               <div>
                 <h2 className="text-sm font-extrabold text-slate-900">
                   Sổ Nhập · Xuất · Tồn Kho Tổng
@@ -296,38 +306,67 @@ export default function KhoTongNxtPanel({
                   Cột Chờ duyệt tách riêng những phiếu chưa qua đủ 2 rào (không cộng vào Tồn cuối kỳ).
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <ONgay
-                  aria-label="Từ ngày"
-                  value={tuNgay}
-                  max={denNgay || undefined}
-                  onChange={setTuNgay}
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
-                />
-                <span className="text-slate-400 font-bold">—</span>
-                <ONgay
-                  aria-label="Đến ngày"
-                  value={denNgay}
-                  min={tuNgay || undefined}
-                  onChange={setDenNgay}
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50"
-                />
-                <input
-                  type="text"
-                  value={tuKhoa}
-                  onChange={(e) => setTuKhoa(e.target.value)}
-                  placeholder="Tìm tên hoặc mã SAP..."
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 outline-none focus:border-amber-600"
-                />
-                {canExport && (
-                  <button
-                    type="button"
-                    onClick={onDiToiXuatKho}
-                    className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold flex items-center gap-1.5 transition"
-                  >
-                    Xuất kho FIFO <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                )}
+              <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Kỳ</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {kyNhanh.map((k) => {
+                      const dangChon = tuNgay === k.tu && denNgay === k.den;
+                      return (
+                        <button
+                          key={k.ma}
+                          type="button"
+                          onClick={() => {
+                            setTuNgay(k.tu);
+                            setDenNgay(k.den);
+                          }}
+                          className={cn(
+                            "px-3 py-2 rounded-xl text-xs font-extrabold border transition",
+                            dangChon
+                              ? "bg-slate-900 text-white border-slate-900"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-slate-400",
+                          )}
+                        >
+                          {k.nhan}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Từ ngày — Đến ngày</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-40">
+                      <ONgay
+                        aria-label="Từ ngày"
+                        value={tuNgay}
+                        max={denNgay || undefined}
+                        onChange={setTuNgay}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white outline-none focus:border-amber-600"
+                      />
+                    </div>
+                    <span className="text-slate-400 font-bold">—</span>
+                    <div className="w-40">
+                      <ONgay
+                        aria-label="Đến ngày"
+                        value={denNgay}
+                        min={tuNgay || undefined}
+                        onChange={setDenNgay}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white outline-none focus:border-amber-600"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1 flex-1 min-w-[12rem]">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mặt hàng</p>
+                  <input
+                    type="text"
+                    value={tuKhoa}
+                    onChange={(e) => setTuKhoa(e.target.value)}
+                    placeholder="Tìm tên hoặc mã SAP..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white outline-none focus:border-amber-600"
+                  />
+                </div>
               </div>
             </div>
 
