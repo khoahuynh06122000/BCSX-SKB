@@ -6,6 +6,8 @@ import {
   maBamNgan,
   mauMoiNhat,
   netTuDiem,
+  noiDungKiemKeBon,
+  noiDungKiemKeKeg,
   noiDungPhieuNhap,
   type ChuKyMau,
 } from "../chuKy";
@@ -83,6 +85,28 @@ const eq = (name: string, a: unknown, b: unknown) => {
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
   );
   eq("ma bam ngan", maBamNgan("ba7816bf8f01cfea41"), "BA78-16BF-8F01-CFEA");
+
+  // --- biên bản kiểm kê
+  const kk = {
+    id: "kk-keg-kho_tong-2026-11-20-1", date: "2026-11-20", location: "KHO_TONG",
+    shiftOrPeriod: "CHỐT THÁNG · Tại Kho tổng", totalKegs: 21,
+    items: [{ productId: "p2", quantity: 48, kienDem: 2 }, { productId: "p1", quantity: 422.9, leDem: 10.9 }],
+  };
+  eq(
+    "noi dung kiem ke keg (bo truong phu, xep mat hang)",
+    noiDungKiemKeKeg(kk),
+    "KIEM_KE_KEG|kk-keg-kho_tong-2026-11-20-1|2026-11-20|KHO_TONG|CHỐT THÁNG · Tại Kho tổng|21|p1=422.9;p2=48",
+  );
+  eq(
+    "sua so keg thi doi noi dung",
+    noiDungKiemKeKeg({ ...kk, totalKegs: 20 }) === noiDungKiemKeKeg(kk),
+    false,
+  );
+  eq(
+    "noi dung kiem ke bon",
+    noiDungKiemKeBon({ id: "kk-2026-11-FST01-1", month: "2026-11", tankId: "FST01", productId: "p1", batchNumber: " L1 ", liters: 1200 }),
+    "KIEM_KE_BON|kk-2026-11-FST01-1|2026-11|FST01|p1|L1|1200",
+  );
 
   console.log(`=========== ${pass} DUNG / ${fail} SAI ===========`);
   if (fail) process.exit(1);

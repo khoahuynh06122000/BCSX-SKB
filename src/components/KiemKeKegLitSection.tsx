@@ -25,6 +25,8 @@ import {
   soLuongTuKien,
 } from "../lib/loBia";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
+import { KhoiKyBienBan } from "./ChuKy";
+import { noiDungKiemKeKeg } from "../lib/chuKy";
 
 interface Props {
   location: "XUONG" | "KHO_TONG";
@@ -803,6 +805,16 @@ export default function KiemKeKegLitSection({
                       )}
                     </div>
                   </div>
+
+                  <KhoiKyBienBan
+                    noiDung={noiDungKiemKeKeg(rec)}
+                    cot={[
+                      { nhan: "Người kiểm kê", sig: rec.nguoiLapSig },
+                      ...(laKiemKeDotXuat(rec)
+                        ? []
+                        : [{ nhan: `${tenNguoiDuyet} ký duyệt`, sig: rec.approvalStatus === "approved" ? rec.duyetSig : null }]),
+                    ]}
+                  />
 
                   {rec.note && (
                     <p className="text-xs font-semibold text-slate-600">

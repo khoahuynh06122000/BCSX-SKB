@@ -1004,7 +1004,15 @@ function SlipPreview({
                   { title: "Quản lý xưởng (Rào 1)", sig: managerSig },
                   { title: "Kho tổng nhận (Rào 2)", sig: warehouseSig },
                 ].map((cell) => (
-                  <OKy key={cell.title} title={cell.title} sig={cell.sig} mau={cell.sig?.chuKyId ? chuKyMau.get(cell.sig.chuKyId) : undefined} bamHienTai={bamHienTai} />
+                  <OKy
+                    key={cell.title}
+                    title={cell.title}
+                    sig={cell.sig}
+                    mau={cell.sig?.chuKyId ? chuKyMau.get(cell.sig.chuKyId) : undefined}
+                    bamHienTai={bamHienTai}
+                    nhay={cell.title.startsWith("Quản lý xưởng") ? slip.meta?.nhaySig : undefined}
+                    mauNhay={slip.meta?.nhaySig?.chuKyId ? chuKyMau.get(slip.meta.nhaySig.chuKyId) : undefined}
+                  />
                 ))}
               </div>
               <p className="text-[9px] leading-relaxed text-slate-500">
@@ -1035,17 +1043,38 @@ function OKy({
   sig,
   mau,
   bamHienTai,
+  nhay,
+  mauNhay,
 }: {
   title: string;
   sig?: ChuKyDienTu;
   mau?: ChuKyMau;
   bamHienTai: string;
+  /** Ký nháy của admin (chỉ ở ô Quản lý xưởng). */
+  nhay?: ChuKyDienTu;
+  mauNhay?: ChuKyMau;
 }) {
+  const oNhay = nhay ? (
+    <div
+      className={cn(
+        "mt-1 pt-1 border-t border-dashed text-[9px] text-slate-600 flex items-center justify-center gap-1.5",
+        nhay.bamNoiDung && bamHienTai && nhay.bamNoiDung !== bamHienTai ? "border-rose-400 text-rose-700" : "border-slate-300",
+      )}
+      title="Ký nháy: admin đã xác nhận số trên phiếu"
+    >
+      <span className="font-bold uppercase">Ký nháy</span>
+      {mauNhay && <HinhChuKy mau={mauNhay} className="h-6 w-16" />}
+      <span className="font-bold">{nhay.name}</span>
+      <span className="font-mono">{new Date(nhay.signedAt).toLocaleString("vi-VN", { hour12: false })}</span>
+      {nhay.bamNoiDung && bamHienTai && nhay.bamNoiDung !== bamHienTai && <span className="font-black">⚠ số đã đổi</span>}
+    </div>
+  ) : null;
   if (!sig) {
     return (
       <div className="p-3 rounded-lg border border-dashed border-slate-400 text-center flex flex-col justify-center min-h-[130px]">
         <p className="font-bold uppercase text-[10px] text-slate-600">{title}</p>
         <p className="text-[10px] text-slate-400 mt-2">Chưa ký</p>
+        {oNhay}
       </div>
     );
   }
@@ -1080,6 +1109,7 @@ function OKy({
           <ShieldAlert className="w-3 h-3" /> Nội dung ĐÃ ĐỔI sau khi ký
         </p>
       )}
+      {oNhay}
     </div>
   );
 }

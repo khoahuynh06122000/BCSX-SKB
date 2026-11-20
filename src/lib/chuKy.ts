@@ -140,3 +140,53 @@ export async function bamSha256(s: string): Promise<string> {
 export function maBamNgan(bam: string): string {
   return (bam || "").slice(0, 16).toUpperCase().replace(/(.{4})(?=.)/g, "$1-");
 }
+
+/* ------------------------------------------------------------------ */
+/* Biên bản kiểm kê → nội dung đem băm                                 */
+/* ------------------------------------------------------------------ */
+
+const so = (n: unknown) => Math.round((Number(n) || 0) * 1000) / 1000;
+
+/**
+ * Nội dung BIÊN BẢN KIỂM KÊ KEG & LÍT: mã, ngày, nơi kiểm, loại kỳ, tổng keg,
+ * và từng mặt hàng × số lượng đếm (xếp theo mặt hàng).
+ */
+export function noiDungKiemKeKeg(r: {
+  id: string;
+  date: string;
+  location: string;
+  shiftOrPeriod?: string;
+  totalKegs: number;
+  items: readonly { productId: string; quantity: number }[];
+}): string {
+  const ds = r.items.map((i) => `${String(i.productId).trim()}=${so(i.quantity)}`).sort();
+  return [
+    "KIEM_KE_KEG",
+    r.id,
+    r.date.slice(0, 10),
+    r.location,
+    (r.shiftOrPeriod || "").trim(),
+    so(r.totalKegs),
+    ds.join(";"),
+  ].join("|");
+}
+
+/** Nội dung BIÊN BẢN KIỂM KÊ BỒN: mã, tháng, bồn, mặt hàng, lô, số lít. */
+export function noiDungKiemKeBon(r: {
+  id: string;
+  month: string;
+  tankId: string;
+  productId: string;
+  batchNumber?: string;
+  liters: number;
+}): string {
+  return [
+    "KIEM_KE_BON",
+    r.id,
+    r.month.slice(0, 7),
+    r.tankId,
+    r.productId,
+    (r.batchNumber || "").trim(),
+    so(r.liters),
+  ].join("|");
+}

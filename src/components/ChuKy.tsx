@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eraser, Loader2, PenLine, ShieldCheck, X } from "lucide-react";
-import { chuKyDuNet, netTuDiem, type ChuKyMau, type Diem } from "../lib/chuKy";
+import { bamSha256, chuKyDuNet, netTuDiem, XAC_THUC_KY, type ChuKyMau, type Diem } from "../lib/chuKy";
+import type { ChuKyDienTu } from "../types";
 import { cn } from "../lib/utils";
 
 /**
@@ -312,5 +313,73 @@ export function HopKy({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * Bảng chữ ký mẫu theo id — App cấp một lần, mọi biên bản đọc ra để vẽ chữ
+ * ký (khỏi truyền qua từng tầng component).
+ */
+export const NguonChuKyMau = createContext<Map<string, ChuKyMau>>(new Map());
+
+/**
+ * KHỐI KÝ CỦA MỘT BIÊN BẢN (kiểm kê...): mỗi ô một người ký — chữ ký vẽ tay,
+ * họ tên, giờ ký, và dấu soát nội dung (băm lại `noiDung` hiện tại, so với mã
+ * băm lúc ký). Ô chưa ký hiện "Chưa ký".
+ */
+export function KhoiKyBienBan({
+  cot,
+  noiDung,
+}: {
+  cot: { nhan: string; sig?: ChuKyDienTu | null }[];
+  noiDung: string;
+}) {
+  const mauTheoId = useContext(NguonChuKyMau);
+  const [bam, setBam] = useState("");
+  useEffect(() => {
+    let huy = false;
+    void bamSha256(noiDung).then((b) => !huy && setBam(b));
+    return () => {
+      huy = true;
+    };
+  }, [noiDung]);
+  return (
+    <div className="grid grid-cols-2 gap-2 text-[11px]">
+      {cot.map(({ nhan, sig }) => {
+        if (!sig) {
+          return (
+            <div key={nhan} className="rounded-xl border border-dashed border-slate-300 bg-white p-2 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{nhan}</p>
+              <p className="py-3 text-[10px] font-bold text-slate-300">Chưa ký</p>
+            </div>
+          );
+        }
+        const mau = sig.chuKyId ? mauTheoId.get(sig.chuKyId) : undefined;
+        const khop = !sig.bamNoiDung || !bam ? null : sig.bamNoiDung === bam;
+        return (
+          <div
+            key={nhan}
+            className={cn(
+              "rounded-xl border bg-white p-2 text-center",
+              khop === false ? "border-rose-400 bg-rose-50/50" : "border-emerald-300",
+            )}
+          >
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">{nhan}</p>
+            {mau ? (
+              <HinhChuKy mau={mau} className="mx-auto h-12 w-full max-w-[200px]" />
+            ) : (
+              <p className="py-3 font-black text-emerald-700">✓ Đã ký</p>
+            )}
+            <p className="font-black text-slate-900">{sig.name}</p>
+            <p className="font-mono text-[9px] text-slate-500">
+              {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
+              {sig.xacThuc === XAC_THUC_KY ? " · Google + PIN" : ""}
+            </p>
+            {khop === true && <p className="text-[9px] font-bold text-emerald-700">✓ Nội dung nguyên vẹn từ lúc ký</p>}
+            {khop === false && <p className="text-[9px] font-black text-rose-700">⚠ Nội dung ĐÃ ĐỔI sau khi ký</p>}
+          </div>
+        );
+      })}
+    </div>
   );
 }

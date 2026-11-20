@@ -41,6 +41,8 @@ import {
   type DongKeHoach,
 } from "../lib/keHoachSX";
 import { isoSangVn } from "../lib/oNgay";
+import { KhoiKyBienBan } from "./ChuKy";
+import { noiDungKiemKeBon } from "../lib/chuKy";
 import ONgay from "./ONgay";
 
 export type QuanLyXuongSubTab =
@@ -61,6 +63,8 @@ interface Props {
   isAdmin?: boolean;
   busy: boolean;
   onDuyetRao1: (slipCode: string) => Promise<void>;
+  /** Admin ký nháy xác nhận số trên phiếu (trước Rào 1). Không truyền = không phải admin. */
+  onKyNhay?: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
   onMoBieuMau: (slipCode: string) => void;
   /** Phát hành kế hoạch nhiều mã bia (lưới / file Excel). Sản lượng 0 = bỏ dòng. */
@@ -99,6 +103,7 @@ export default function QuanLyXuongPanel({
   isAdmin = false,
   busy,
   onDuyetRao1,
+  onKyNhay,
   onTraLaiPhieu,
   onMoBieuMau,
   onLuuKeHoach,
@@ -388,6 +393,15 @@ export default function QuanLyXuongPanel({
                           <span className="text-xs font-bold text-slate-500">
                             Người lập: {slip?.creatorSig?.name || txs[0]?.createdBy}
                           </span>
+                          {slip?.nhaySig ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                              ✓ {slip.nhaySig.name} đã ký nháy xác nhận số
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                              Chưa có ký nháy của admin
+                            </span>
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           {txs.map((t) => {
@@ -415,6 +429,17 @@ export default function QuanLyXuongPanel({
                           })}
                         </div>
                         <div className="pt-1 flex flex-wrap gap-2">
+                          {onKyNhay && !slip?.nhaySig && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void onKyNhay(code)}
+                              className="px-4 py-2 rounded-xl border border-emerald-400 bg-white text-emerald-700 hover:bg-emerald-50 text-xs font-extrabold flex items-center gap-1.5"
+                              title="Admin ký nháy: đã đối chiếu số trên phiếu"
+                            >
+                              ✍ Ký nháy xác nhận số
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={busy}
@@ -592,6 +617,22 @@ export default function QuanLyXuongPanel({
                         <td className="py-3 px-3">{stBadge}</td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {slip?.nhaySig && (
+                              <span className="px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-black" title={`Ký nháy: ${slip.nhaySig.name}`}>
+                                ✓ Đã ký nháy
+                              </span>
+                            )}
+                            {onKyNhay && !slip?.nhaySig && !vaoTon && slip?.status === "cho_ql_xuong" && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void onKyNhay(code)}
+                                className="px-2.5 py-1.5 rounded-lg border border-emerald-400 text-emerald-700 hover:bg-emerald-50 text-[11px] font-extrabold"
+                                title="Admin ký nháy xác nhận số"
+                              >
+                                ✍ Ký nháy
+                              </button>
+                            )}
                             {!vaoTon && slip?.status !== "cho_kho_tong" && (
                               <>
                                 <button
@@ -1043,6 +1084,13 @@ export default function QuanLyXuongPanel({
                         </p>
                       </div>
                     </div>
+                    <KhoiKyBienBan
+                      noiDung={noiDungKiemKeBon(kk)}
+                      cot={[
+                        { nhan: "Người kiểm kê", sig: kk.nguoiLapSig },
+                        { nhan: "Giám sát xưởng ký duyệt", sig: kk.approvalStatus === "approved" ? kk.duyetSig : null },
+                      ]}
+                    />
                     <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] font-semibold text-slate-400">
                         Người nhập: {kk.createdBy || "—"}

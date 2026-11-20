@@ -461,7 +461,7 @@ service cloud.firestore {
         'id', 'code', 'date', 'dateKey', 'seq', 'status',
         'printedAt', 'signedAt', 'signedBy', 'note',
         'createdAt', 'createdBy', 'updatedAt', 'updatedBy',
-        'creatorSig', 'managerSig', 'warehouseSig',
+        'creatorSig', 'managerSig', 'warehouseSig', 'nhaySig',
         'rejectedBy', 'rejectedReason', 'rejectedAt'
       ];
     }
@@ -491,7 +491,8 @@ service cloud.firestore {
         && (!('rejectedAt' in ch) || chuoiTuyChon(data, 'rejectedAt', 64))
         && (!('creatorSig' in ch) || data.get('creatorSig', null) == null || chuKyMoiHopLe(data.creatorSig))
         && (!('managerSig' in ch) || data.get('managerSig', null) == null || chuKyMoiHopLe(data.managerSig))
-        && (!('warehouseSig' in ch) || data.get('warehouseSig', null) == null || chuKyMoiHopLe(data.warehouseSig));
+        && (!('warehouseSig' in ch) || data.get('warehouseSig', null) == null || chuKyMoiHopLe(data.warehouseSig))
+        && (!('nhaySig' in ch) || data.get('nhaySig', null) == null || chuKyMoiHopLe(data.nhaySig));
     }
 
     function isValidSlipCreate(data, slipId, r) {
@@ -499,6 +500,8 @@ service cloud.firestore {
         && data.get('code', '') == slipId
         && data.get('date', '') is string && data.date.size() >= 1
         && phieuHopLe(data, data.keys(), slipId)
+        // Ky nhay (admin xac nhan so): chi chu so huu ghi.
+        && (data.get('nhaySig', null) == null || isOwnerR(r))
         && (
           toanQuyenR(r)
           || (
@@ -512,6 +515,8 @@ service cloud.firestore {
       let ch = data.diff(resource.data).affectedKeys();
       return ch.hasOnly(slipAllowedKeys())
         && phieuHopLe(data, ch, slipId)
+        // Ky nhay: chi chu so huu dat; ai sua / tra lai phieu thi duoc go (so doi).
+        && (!('nhaySig' in ch) || data.get('nhaySig', null) == null || isOwnerR(r))
         && (!('id' in resource.data) || data.get('id', '') == resource.data.id)
         && (!('code' in resource.data) || data.get('code', '') == resource.data.code)
         && (
@@ -768,8 +773,22 @@ service cloud.firestore {
         'id', 'month', 'tankId', 'tankGroup', 'productId',
         'batchNumber', 'liters', 'statusLabel', 'createdBy', 'createdAt',
         'updatedAt', 'updatedBy', 'uid', 'note', 'productName', 'tankName',
-        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'
+        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason',
+        'nguoiLapSig', 'duyetSig'
       ];
+    }
+
+    // CHU KY BIEN BAN KIEM KE: nguoi kiem ke (nguoiLapSig) va nguoi ky duyet
+    // (duyetSig). Chu ky moi phai la cua chinh nguoi ghi (chuKyMoiHopLe); o ky
+    // duyet chi nguoi co quyen duyet ghi / go. Khi sua chi kiem o DOI.
+    function kyKiemKeKhiTao(data, r) {
+      return (data.get('nguoiLapSig', null) == null || chuKyMoiHopLe(data.nguoiLapSig))
+        && (data.get('duyetSig', null) == null || (duyetXuongR(r) && chuKyMoiHopLe(data.duyetSig)));
+    }
+    function kyKiemKeKhiSua(data, ch, r) {
+      return (!('nguoiLapSig' in ch) || chuKyMoiHopLe(data.get('nguoiLapSig', null)))
+        && (!('duyetSig' in ch)
+          || (duyetXuongR(r) && (data.get('duyetSig', null) == null || chuKyMoiHopLe(data.duyetSig))));
     }
 
     function isValidKiemKeBonCommon(data) {
@@ -797,14 +816,48 @@ service cloud.firestore {
     function isValidKiemKeBonCreate(data, r) {
       return data.keys().hasOnly(kiemKeBonAllowedKeys())
         && isValidKiemKeBonCommon(data)
-        && canCreateApprovalFields(data, r);
+        && canCreateApprovalFields(data, r)
+        && kyKiemKeKhiTao(data, r);
+    }
+
+    // SUA (ky duyet / tra lai / gui lai): CHI kiem truong DOI. Kiem lai ca bien
+    // ban moi lan sua cong voi chu ky la vuot nguong 1.000 phep tinh (do bang
+    // Rules test API 20/11/2026).
+    function duyetDoiHopLe(data, ch, r) {
+      return !ch.hasAny(['approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'])
+        || (
+          (!('approvalStatus' in ch) || data.get('approvalStatus', null) in [null, 'pending', 'approved', 'returned'])
+          && (!('approvedBy' in ch) || chuoiTuyChon(data, 'approvedBy', 150))
+          && (!('approvedAt' in ch) || chuoiTuyChon(data, 'approvedAt', 64))
+          && (!('rejectedReason' in ch) || chuoiTuyChon(data, 'rejectedReason', 500))
+          && canUpdateApprovalFields(data, r)
+        );
+    }
+    function sotChungDoiHopLe(data, ch) {
+      return !('id' in ch)
+        && (!('createdBy' in ch) || chuoiTuyChon(data, 'createdBy', 150))
+        && (!('createdAt' in ch) || (data.get('createdAt', '') is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64))
+        && (!('updatedAt' in ch) || chuoiTuyChon(data, 'updatedAt', 64))
+        && (!('updatedBy' in ch) || chuoiTuyChon(data, 'updatedBy', 150))
+        && (!('uid' in ch) || chuoiTuyChon(data, 'uid', 128))
+        && (!('note' in ch) || chuoiTuyChon(data, 'note', 2000));
     }
 
     function isValidKiemKeBonUpdate(data, r) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeBonAllowedKeys())
-        && isValidKiemKeBonCommon(data)
-        && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
-        && canUpdateApprovalFields(data, r);
+      let ch = data.diff(resource.data).affectedKeys();
+      return ch.hasOnly(kiemKeBonAllowedKeys())
+        && sotChungDoiHopLe(data, ch)
+        && (!('month' in ch) || (data.month is string && data.month.matches('^\\d{4}-\\d{2}.*')))
+        && (!('tankId' in ch) || (data.tankId is string && data.tankId.size() >= 1 && data.tankId.size() <= 64))
+        && (!('tankGroup' in ch) || data.tankGroup in ['FST', 'BBT'])
+        && (!('productId' in ch) || (data.productId is string && data.productId.size() >= 1 && data.productId.size() <= 64))
+        && (!('batchNumber' in ch) || (data.batchNumber is string && data.batchNumber.size() <= 128))
+        && (!('liters' in ch) || (data.liters is number && data.liters >= 0 && data.liters <= 1000000))
+        && (!('statusLabel' in ch) || chuoiTuyChon(data, 'statusLabel', 200))
+        && (!('productName' in ch) || chuoiTuyChon(data, 'productName', 200))
+        && (!('tankName' in ch) || chuoiTuyChon(data, 'tankName', 150))
+        && duyetDoiHopLe(data, ch, r)
+        && kyKiemKeKhiSua(data, ch, r);
     }
 
     function kiemKeKegAllowedKeys() {
@@ -812,7 +865,8 @@ service cloud.firestore {
         'id', 'date', 'shiftOrPeriod', 'location', 'items',
         'totalKegs', 'totalLiters', 'note', 'createdBy', 'createdAt',
         'updatedAt', 'updatedBy', 'uid',
-        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason'
+        'approvalStatus', 'approvedBy', 'approvedAt', 'rejectedReason',
+        'nguoiLapSig', 'duyetSig'
       ];
     }
 
@@ -838,14 +892,22 @@ service cloud.firestore {
     function isValidKiemKeKegCreate(data, r) {
       return data.keys().hasOnly(kiemKeKegAllowedKeys())
         && isValidKiemKeKegCommon(data)
-        && canCreateApprovalFields(data, r);
+        && canCreateApprovalFields(data, r)
+        && kyKiemKeKhiTao(data, r);
     }
 
     function isValidKiemKeKegUpdate(data, r) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(kiemKeKegAllowedKeys())
-        && isValidKiemKeKegCommon(data)
-        && (!('id' in resource.data) || resource.data.id == null || data.get('id', null) == resource.data.id)
-        && canUpdateApprovalFields(data, r);
+      let ch = data.diff(resource.data).affectedKeys();
+      return ch.hasOnly(kiemKeKegAllowedKeys())
+        && sotChungDoiHopLe(data, ch)
+        && (!('date' in ch) || (data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}.*')))
+        && (!('shiftOrPeriod' in ch) || chuoiTuyChon(data, 'shiftOrPeriod', 100))
+        && (!('location' in ch) || data.location in ['XUONG', 'KHO_TONG'])
+        && (!('items' in ch) || (data.items is list && data.items.size() >= 1 && data.items.size() <= 100))
+        && (!('totalKegs' in ch) || (data.totalKegs is number && data.totalKegs >= 0 && data.totalKegs <= 1000000))
+        && (!('totalLiters' in ch) || (data.totalLiters is number && data.totalLiters >= 0 && data.totalLiters <= 10000000))
+        && duyetDoiHopLe(data, ch, r)
+        && kyKiemKeKhiSua(data, ch, r);
     }
 
     // -------------------------------------------------------------------------

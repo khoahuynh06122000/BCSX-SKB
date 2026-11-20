@@ -170,11 +170,13 @@ import {
 } from "./anh/kho";
 import ThuVienAnh from "./anh/ThuVienAnh";
 import ChonAnh, { taoTepCho, type TepCho } from "./anh/ChonAnh";
-import { DangKyChuKy, HinhChuKy, HopKy, type YeuCauKy } from "./components/ChuKy";
+import { DangKyChuKy, HinhChuKy, HopKy, NguonChuKyMau, type YeuCauKy } from "./components/ChuKy";
 import {
   bamSha256,
   idChuKyMau,
   mauMoiNhat,
+  noiDungKiemKeBon,
+  noiDungKiemKeKeg,
   noiDungPhieuNhap,
   XAC_THUC_KY,
   type ChuKyMau,
@@ -5974,6 +5976,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           ),
           managerSig: deleteField(),
           warehouseSig: deleteField(),
+          nhaySig: deleteField(),
           rejectedBy: deleteField(),
           rejectedReason: deleteField(),
           rejectedAt: deleteField(),
@@ -6026,7 +6029,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     const dong = dongCuaPhieuNhap(code);
     const ngay = sl?.date || code;
     const bam = await bamSha256(noiDungPhieuNhap(code, ngay, dong));
-    const lech = [sl?.creatorSig, sl?.managerSig].filter(
+    const lech = [sl?.creatorSig, sl?.nhaySig, sl?.managerSig].filter(
       (k) => k?.bamNoiDung && k.bamNoiDung !== bam,
     );
     const tong = dong.reduce((t, d) => t + d.quantity, 0);
@@ -6049,6 +6052,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         }),
         `Tổng ${formatNumber(tong)} · ${dong.length} dòng`,
         ...(sl?.creatorSig ? [`Người trình: ${sl.creatorSig.name}`] : []),
+        ...(sl?.nhaySig ? [`Admin đã ký nháy xác nhận số: ${sl.nhaySig.name}`] : []),
       ],
       chan: lech.length
         ? `Nội dung phiếu đã THAY ĐỔI sau khi ${lech.map((k) => k!.name).join(", ")} ký — không ký được. Trả lại phiếu để người trình kiểm tra và ký lại.`
@@ -6057,6 +6061,29 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           : undefined,
     });
     return mau ? { mau, bam } : null;
+  };
+
+  /**
+   * KÝ NHÁY (admin): xác nhận số trên phiếu trước khi Giám sát xưởng duyệt
+   * Rào 1 — để họ biết admin đã đối chiếu số rồi. Không đổi trạng thái phiếu,
+   * không thay ô ký nào. Nội dung đổi sau ký nháy thì Rào 1 bị chặn.
+   */
+  const handleKyNhayPhieu = async (code: string) => {
+    if (!isOwner) return;
+    const ky = await kyPhieuNhap(code, `Ký nháy xác nhận số · ${code}`, "Ký nháy (admin xác nhận số)");
+    if (!ky) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, "slips", code), {
+        nhaySig: taoChuKy(code, "KY_NHAY", ky.mau, ky.bam),
+        updatedAt: new Date().toISOString(),
+      });
+      showNotification(`Đã ký nháy phiếu ${code} — Giám sát xưởng thấy anh đã xác nhận số`);
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.UPDATE, "slips"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDuyetRao1 = async (code: string) => {
@@ -6114,6 +6141,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         rejectedAt: nowIso,
         managerSig: deleteField(),
         warehouseSig: deleteField(),
+        nhaySig: deleteField(),
         updatedAt: nowIso,
       });
       showNotification(`Đã trả lại phiếu ${code} cho Xưởng sửa lại`);
@@ -6221,6 +6249,17 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     photos: TepCho[];
   }): Promise<boolean> => {
     if (!input.photos.length) return false;
+    const pBon = products.find((x) => x.id === input.productId);
+    const mau = await xinKy({
+      tieuDe: `Ký biên bản kiểm kê bồn ${input.tankId}`,
+      vaiTro: "Người kiểm kê",
+      noiDung: [
+        `Kiểm kê bồn ${input.tankId} (${input.tankGroup}) · tháng ${input.month}`,
+        `${pBon?.name || input.productId} · lô ${input.batchNumber || "—"}`,
+        `${formatNumber(Number(input.liters) || 0)} Lít · ${input.photos.length} ảnh`,
+      ],
+    });
+    if (!mau) return false;
     setLoading(true);
     let anhMoi: AnhChungTu[] = [];
     try {
@@ -6249,6 +6288,21 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         statusLabel: input.statusLabel,
         createdBy: currentUserProfile?.name || user || "",
         createdAt: new Date().toISOString(),
+        nguoiLapSig: taoChuKy(
+          id,
+          "KIEM_KE",
+          mau,
+          await bamSha256(
+            noiDungKiemKeBon({
+              id,
+              month: input.month,
+              tankId: input.tankId,
+              productId: input.productId,
+              batchNumber: input.batchNumber,
+              liters: Number(input.liters),
+            }),
+          ),
+        ),
       } as KiemKeBon);
       await batch.commit();
       showNotification(`Đã lưu kiểm kê bồn ${input.tankId} kèm ảnh minh chứng`);
@@ -6273,6 +6327,18 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     photos: TepCho[];
   }): Promise<boolean> => {
     if (!input.photos.length) return false;
+    const mau = await xinKy({
+      tieuDe: `Ký biên bản kiểm kê Keg & Lít · ${input.location === "XUONG" ? "Xưởng" : "Kho tổng"}`,
+      vaiTro: "Người kiểm kê",
+      noiDung: [
+        `Kiểm kê ngày ${isoSangVn(input.date.slice(0, 10))} · ${input.shiftOrPeriod}`,
+        ...input.items
+          .filter((i) => i.quantity > 0)
+          .map((i) => `${i.productName}: ${formatNumber(i.quantity)} ${i.unit}`),
+        `Tổng ${formatNumber(input.totalKegs)} keg · ${formatNumber(input.totalLiters)} L · ${input.photos.length} ảnh`,
+      ],
+    });
+    if (!mau) return false;
     setLoading(true);
     let anhMoi: AnhChungTu[] = [];
     try {
@@ -6308,6 +6374,21 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         note: input.note,
         createdBy: currentUserProfile?.name || user || "",
         createdAt: new Date().toISOString(),
+        nguoiLapSig: taoChuKy(
+          id,
+          "KIEM_KE",
+          mau,
+          await bamSha256(
+            noiDungKiemKeKeg({
+              id,
+              date: input.date,
+              location: input.location,
+              shiftOrPeriod: input.shiftOrPeriod,
+              totalKegs: Number(input.totalKegs),
+              items: input.items,
+            }),
+          ),
+        ),
       } as KiemKeKegLit);
       await batch.commit();
       showNotification(
@@ -6323,12 +6404,68 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     }
   };
 
+  /**
+   * KÝ DUYỆT BIÊN BẢN KIỂM KÊ (= chốt tháng): chữ ký người duyệt + PIN. Chặn
+   * khi người duyệt chính là người kiểm kê, hoặc số liệu đã đổi sau khi người
+   * kiểm kê ký.
+   */
+  const kyDuyetKiemKe = async (
+    bang: "kiem_ke_bon" | "kiem_ke_keg",
+    id: string,
+  ): Promise<ChuKyDienTu | null> => {
+    const rec: KiemKeBon | KiemKeKegLit | undefined =
+      bang === "kiem_ke_bon" ? kiemKeBon.find((x) => x.id === id) : kiemKeKeg.find((x) => x.id === id);
+    if (!rec) return null;
+    const noiDung =
+      bang === "kiem_ke_bon"
+        ? noiDungKiemKeBon(rec as KiemKeBon)
+        : noiDungKiemKeKeg(rec as KiemKeKegLit);
+    const bam = await bamSha256(noiDung);
+    const lap = rec.nguoiLapSig;
+    const tomTat =
+      bang === "kiem_ke_bon"
+        ? (() => {
+            const b = rec as KiemKeBon;
+            const p = products.find((x) => x.id === b.productId);
+            return [
+              `Kiểm kê bồn ${b.tankId} · tháng ${b.month}`,
+              `${p?.name || b.productId} · lô ${b.batchNumber || "—"}`,
+              `${formatNumber(b.liters)} Lít`,
+            ];
+          })()
+        : (() => {
+            const k = rec as KiemKeKegLit;
+            return [
+              `Kiểm kê ${k.location === "XUONG" ? "Xưởng" : "Kho tổng"} ngày ${isoSangVn(k.date.slice(0, 10))}`,
+              ...k.items
+                .filter((i) => i.quantity > 0)
+                .map((i) => `${i.productName}: ${formatNumber(i.quantity)} ${i.unit}`),
+              `Tổng ${formatNumber(k.totalKegs)} keg · ${formatNumber(k.totalLiters)} L`,
+            ];
+          })();
+    const mau = await xinKy({
+      tieuDe: "Ký duyệt & chốt biên bản kiểm kê",
+      vaiTro: "Người ký duyệt",
+      noiDung: [...tomTat, `Người kiểm kê: ${lap?.name || rec.createdBy || "—"}`],
+      chan:
+        lap?.bamNoiDung && lap.bamNoiDung !== bam
+          ? `Số liệu biên bản đã THAY ĐỔI sau khi ${lap.name} ký — không ký duyệt được. Trả lại để kiểm lại.`
+          : lap?.uid && lap.uid === auth.currentUser?.uid
+            ? "Anh/chị là người kiểm kê biên bản này — người kiểm kê không tự ký duyệt. Nhờ người khác có quyền ký duyệt."
+            : undefined,
+    });
+    return mau ? taoChuKy(id, "DUYET_KIEM_KE", mau, bam) : null;
+  };
+
   const capNhatDuyetGiamSat = async (
     bang: "danh_gia_sx" | "kiem_ke_bon" | "kiem_ke_keg",
     id: string,
     status: "approved" | "returned",
     reason?: string,
   ) => {
+    const duyetSig =
+      status === "approved" && bang !== "danh_gia_sx" ? await kyDuyetKiemKe(bang, id) : null;
+    if (status === "approved" && bang !== "danh_gia_sx" && !duyetSig) return;
     setLoading(true);
     try {
       const nowIso = new Date().toISOString();
@@ -6340,6 +6477,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         rejectedReason: status === "returned" ? reason || "" : "",
         updatedAt: nowIso,
         updatedBy: actor,
+        ...(bang === "danh_gia_sx" ? {} : { duyetSig: duyetSig ?? deleteField() }),
       });
       showNotification(
         status === "approved"
@@ -8208,6 +8346,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
       </aside>
 
       {/* Main Content */}
+      <NguonChuKyMau.Provider value={chuKyMauTheoId}>
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top Command Header (Craft Brewery & Paperless) */}
         <header className="topbar-vao min-h-16 bg-[#141A23] text-white border-b border-amber-500/30 flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5 sticky top-0 z-30 shrink-0 shadow-lg">
@@ -10969,6 +11108,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 laGiamSatXuong={userRole === "QUAN_LY_XUONG" || isOwner}
                 busy={loading}
                 onDuyetRao1={handleDuyetRao1}
+                onKyNhay={isOwner ? handleKyNhayPhieu : undefined}
                 onTraLaiPhieu={handleTraLaiPhieu}
                 onMoBieuMau={(code) => setBieuMauCode(code)}
                 onLuuKeHoach={handleLuuKeHoach}
@@ -11280,6 +11420,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
           </div>
         </div>
       </main>
+      </NguonChuKyMau.Provider>
 
       {bieuMauCode && (
         <BieuMauDienTuModal

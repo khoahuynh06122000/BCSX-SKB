@@ -35,6 +35,8 @@ import {
   tongHopKeHoachVaThucXuat,
 } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
+import { KhoiKyBienBan } from "./ChuKy";
+import { noiDungKiemKeBon } from "../lib/chuKy";
 
 export type XuongSanXuatSubTab =
   | "lap-phieu"
@@ -1276,6 +1278,15 @@ export default function XuongSanXuatPanel({
                     </div>
                     <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
                       <div className="h-full bg-sky-500 rounded-full bar-fill" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="pt-2">
+                      <KhoiKyBienBan
+                        noiDung={noiDungKiemKeBon(kk)}
+                        cot={[
+                          { nhan: "Người kiểm kê", sig: kk.nguoiLapSig },
+                          { nhan: "Giám sát xưởng ký duyệt", sig: kk.approvalStatus === "approved" ? kk.duyetSig : null },
+                        ]}
+                      />
                     </div>
                   </div>
                 </div>

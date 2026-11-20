@@ -220,6 +220,11 @@ export interface ImportSlip {
   creatorSig?: ChuKyDienTu;
   managerSig?: ChuKyDienTu;
   warehouseSig?: ChuKyDienTu;
+  /**
+   * KÝ NHÁY của admin: đã xác nhận số trên phiếu, để Giám sát xưởng biết
+   * trước khi duyệt Rào 1. Không thay ô ký nào.
+   */
+  nhaySig?: ChuKyDienTu;
   /** Thông tin trả lại khi rào 1 hoặc rào 2 phát hiện lệch thực tế / thiếu ảnh */
   rejectedBy?: string;
   rejectedReason?: string;
@@ -275,6 +280,10 @@ export interface KiemKeBon {
   approvalStatus?: SupervisionApprovalStatus;
   approvedBy?: string;
   approvedAt?: string;
+  /** Chữ ký điện tử người kiểm kê (lập biên bản) — ký lúc lưu. */
+  nguoiLapSig?: ChuKyDienTu;
+  /** Chữ ký điện tử người ký duyệt (chốt) — ký lúc duyệt. */
+  duyetSig?: ChuKyDienTu;
   rejectedReason?: string;
 }
 
@@ -306,6 +315,10 @@ export interface KiemKeKegLit {
   approvalStatus?: SupervisionApprovalStatus;
   approvedBy?: string;
   approvedAt?: string;
+  /** Chữ ký điện tử người kiểm kê (lập biên bản) — ký lúc lưu. */
+  nguoiLapSig?: ChuKyDienTu;
+  /** Chữ ký điện tử người ký duyệt (chốt) — ký lúc duyệt. */
+  duyetSig?: ChuKyDienTu;
   rejectedReason?: string;
 }
 
