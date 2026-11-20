@@ -49,7 +49,13 @@ rules_version = '2';
 //   - note: string|null (<= 2000)
 //   - rejectedReason: string|null (<= 2000)
 //   - creatorSig, managerSig, warehouseSig: map|null (ChuKyDienTu:
-//     { name, email, uid?, signedAt, token, note? })
+//     { name, email, uid?, signedAt, token, note?, chuKyId?, bamNoiDung?,
+//       xacThuc? }) — chuKyId phai la mau chu ky CUA CHINH nguoi ky
+//
+// Collection: chu_ky_mau/{id}   (id = `${uid}_${yyyyMMddHHmmss}`)
+// Chu ky mau ve tay, dang ky theo tai khoan. BAT BIEN: khong sua, khong xoa
+// — doi chu ky la them mau moi, chung tu cu van tro dung mau luc ky.
+//   - uid, email, ten, net, rong, cao, bam, taoLuc
 //   - FORBIDDEN: signedPhotoUrls (images live only in anh_chung_tu)
 //
 // Collection: ke_hoach_sx/{planId}
@@ -258,10 +264,6 @@ service cloud.firestore {
       return isToanQuyenKho() || (isSignedIn() && role() == 'QUAN_LY_XUONG');
     }
 
-    // Duyet Rao 2 (kho tong xac nhan nhan bia vao ton kho).
-    function duyetKhoTong() {
-      return isToanQuyenKho() || (isSignedIn() && role() == 'NHAP_KHO');
-    }
 
     // Ghi duoc chieu NHAP: nhap kho, ton dau ky, phieu nhap, danh gia san
     // xuat, kiem ke bon, va anh chung tu chieu nhap.
@@ -425,38 +427,33 @@ service cloud.firestore {
         && optBool(data, 'pinMustChange');
     }
 
-    // Chu ky dien tu (ChuKyDienTu) tren phieu nhap Paperless.
-    function isValidChuKy(sig) {
+    // CHU KY DIEN TU (ChuKyDienTu) tren phieu nhap.
+    //
+    // Chu ky MOI ghi (tao / doi) phai du: mau chu ky ve tay (`chuKyId`), ma
+    // bam noi dung luc ky (`bamNoiDung`), cach xac thuc (`xacThuc`), va la
+    // cua CHINH nguoi dang ghi — `uid` == nguoi ghi, mau chu ky la mau cua ho
+    // (id `${uid}_${14 so}`). Ap cho MOI vai tro, ke ca admin: khong ai ky
+    // thay ten nguoi khac duoc. Chu ky da co tren phieu ma khong doi thi
+    // khong kiem lai.
+    function chuKyMoiHopLe(sig) {
       return sig is map
-        && sig.keys().hasOnly(['name', 'email', 'uid', 'signedAt', 'token', 'note'])
-        && sig.keys().hasAll(['name', 'email', 'signedAt', 'token'])
+        && sig.keys().hasOnly(['name', 'email', 'uid', 'signedAt', 'token', 'note', 'chuKyId', 'bamNoiDung', 'xacThuc'])
+        && sig.keys().hasAll(['name', 'email', 'uid', 'signedAt', 'token', 'chuKyId', 'bamNoiDung', 'xacThuc'])
+        && sig.uid == request.auth.uid
+        && sig.chuKyId is string
+        && sig.chuKyId.matches(request.auth.uid + '_[0-9]{14}')
         && sig.name is string && sig.name.size() <= 150
         && sig.email is string && sig.email.size() <= 254
-        && (!('uid' in sig) || sig.uid == null || (sig.uid is string && sig.uid.size() <= 128))
-        && sig.signedAt is string && sig.signedAt.size() > 0 && sig.signedAt.size() <= 64
-        && sig.token is string && sig.token.size() > 0 && sig.token.size() <= 64
-        && (!('note' in sig) || sig.note == null || (sig.note is string && sig.note.size() <= 1000));
+        && sig.signedAt is string && sig.signedAt.size() <= 64
+        && sig.token is string && sig.token.size() <= 64
+        && sig.bamNoiDung is string && sig.bamNoiDung.size() == 64
+        && sig.xacThuc is string && sig.xacThuc.size() <= 32
+        && sig.get('note', '') is string && sig.get('note', '').size() <= 1000;
     }
 
-    function optChuKy(data, field) {
-      return !(field in data) || data[field] == null || isValidChuKy(data[field]);
-    }
-
-    function sigUidMatchesOnCreate(field) {
-      return !(field in request.resource.data)
-        || request.resource.data[field] == null
-        || !('uid' in request.resource.data[field])
-        || request.resource.data[field].uid == null
-        || request.resource.data[field].uid == request.auth.uid;
-    }
-
-    function sigUidMatchesIfChanged(field) {
-      return !(field in request.resource.data)
-        || request.resource.data[field] == null
-        || request.resource.data[field] == resource.data.get(field, null)
-        || !('uid' in request.resource.data[field])
-        || request.resource.data[field].uid == null
-        || request.resource.data[field].uid == request.auth.uid;
+    // Truong chuoi tuy chon: vang / null / chuoi <= max.
+    function chuoiTuyChon(data, f, max) {
+      return data.get(f, null) == null || (data[f] is string && data[f].size() <= max);
     }
 
     function slipAllowedKeys() {
@@ -469,70 +466,66 @@ service cloud.firestore {
       ];
     }
 
-    function isValidSlipCommon(data, slipId) {
-      return optStr(data, 'id', 64)
-        && (!('id' in data) || data.id == null || data.id == slipId)
-        && optStr(data, 'code', 64)
-        && (!('code' in data) || data.code == null || data.code == slipId)
-        && optStr(data, 'date', 32)
-        && optStr(data, 'dateKey', 32)
-        && optNum(data, 'seq', 0, 100000)
-        && reqStr(data, 'status', 1, 32)
-        && data.status in ['draft', 'printed', 'cho_ql_xuong', 'cho_kho_tong', 'tra_lai', 'signed']
-        && optStr(data, 'printedAt', 64)
-        && optStr(data, 'signedAt', 64)
-        && optStr(data, 'signedBy', 254)
-        && optStr(data, 'note', 2000)
-        && optStr(data, 'createdAt', 64)
-        && optStr(data, 'createdBy', 150)
-        && optStr(data, 'updatedAt', 64)
-        && optStr(data, 'updatedBy', 150)
-        && optChuKy(data, 'creatorSig')
-        && optChuKy(data, 'managerSig')
-        && optChuKy(data, 'warehouseSig')
-        && optStr(data, 'rejectedBy', 254)
-        && optStr(data, 'rejectedReason', 2000)
-        && optStr(data, 'rejectedAt', 64);
+    // Kiem hop le CHI nhung truong trong `ch` — khi tao la moi truong co mat,
+    // khi sua la nhung truong DOI (affectedKeys). Phieu co ~20 truong va 3 o
+    // chu ky; kiem lai het moi lan sua (ke ca o khong doi) la vuot nguong
+    // 1.000 phep tinh cua Firestore — do bang Rules test API 20/11/2026.
+    function phieuHopLe(data, ch, slipId) {
+      return data.status in ['draft', 'printed', 'cho_ql_xuong', 'cho_kho_tong', 'tra_lai', 'signed']
+        && (!('id' in ch) || data.get('id', slipId) == slipId)
+        && (!('code' in ch) || data.get('code', slipId) == slipId)
+        && (!('date' in ch) || chuoiTuyChon(data, 'date', 32))
+        && (!('dateKey' in ch) || chuoiTuyChon(data, 'dateKey', 32))
+        && (!('seq' in ch) || data.get('seq', null) == null
+          || (data.seq is number && data.seq >= 0 && data.seq <= 100000))
+        && (!('printedAt' in ch) || chuoiTuyChon(data, 'printedAt', 64))
+        && (!('signedAt' in ch) || chuoiTuyChon(data, 'signedAt', 64))
+        && (!('signedBy' in ch) || chuoiTuyChon(data, 'signedBy', 254))
+        && (!('note' in ch) || chuoiTuyChon(data, 'note', 2000))
+        && (!('createdAt' in ch) || chuoiTuyChon(data, 'createdAt', 64))
+        && (!('createdBy' in ch) || chuoiTuyChon(data, 'createdBy', 150))
+        && (!('updatedAt' in ch) || chuoiTuyChon(data, 'updatedAt', 64))
+        && (!('updatedBy' in ch) || chuoiTuyChon(data, 'updatedBy', 150))
+        && (!('rejectedBy' in ch) || chuoiTuyChon(data, 'rejectedBy', 254))
+        && (!('rejectedReason' in ch) || chuoiTuyChon(data, 'rejectedReason', 2000))
+        && (!('rejectedAt' in ch) || chuoiTuyChon(data, 'rejectedAt', 64))
+        && (!('creatorSig' in ch) || data.get('creatorSig', null) == null || chuKyMoiHopLe(data.creatorSig))
+        && (!('managerSig' in ch) || data.get('managerSig', null) == null || chuKyMoiHopLe(data.managerSig))
+        && (!('warehouseSig' in ch) || data.get('warehouseSig', null) == null || chuKyMoiHopLe(data.warehouseSig));
     }
 
-    function isValidSlipCreate(data, slipId) {
+    function isValidSlipCreate(data, slipId, r) {
       return data.keys().hasOnly(slipAllowedKeys())
-        && reqStr(data, 'code', 1, 64)
-        && data.code == slipId
-        && reqStr(data, 'date', 1, 32)
-        && isValidSlipCommon(data, slipId)
+        && data.get('code', '') == slipId
+        && data.get('date', '') is string && data.date.size() >= 1
+        && phieuHopLe(data, data.keys(), slipId)
         && (
-          isToanQuyenKho()
+          toanQuyenR(r)
           || (
-            (duyetXuong() || data.get('managerSig', null) == null)
-            && (duyetKhoTong() || data.get('warehouseSig', null) == null)
-            && sigUidMatchesOnCreate('creatorSig')
-            && sigUidMatchesOnCreate('managerSig')
-            && sigUidMatchesOnCreate('warehouseSig')
+            (duyetXuongR(r) || data.get('managerSig', null) == null)
+            && (duyetKhoTongR(r) || data.get('warehouseSig', null) == null)
           )
         );
     }
 
-    function isValidSlipUpdate(data, slipId) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(slipAllowedKeys())
-        && isValidSlipCommon(data, slipId)
+    function isValidSlipUpdate(data, slipId, r) {
+      let ch = data.diff(resource.data).affectedKeys();
+      return ch.hasOnly(slipAllowedKeys())
+        && phieuHopLe(data, ch, slipId)
         && (!('id' in resource.data) || data.get('id', '') == resource.data.id)
         && (!('code' in resource.data) || data.get('code', '') == resource.data.code)
         && (
-          isToanQuyenKho()
+          toanQuyenR(r)
           || (
-            (duyetXuong()
+            (duyetXuongR(r)
               || (!(data.status in ['cho_kho_tong', 'signed']) && data.get('managerSig', null) == null)
-              || data.get('managerSig', null) == resource.data.get('managerSig', null))
-            && (duyetKhoTong()
+              || !('managerSig' in ch))
+            && (duyetKhoTongR(r)
               || (data.status != 'signed' && data.get('warehouseSig', null) == null)
-              || data.get('warehouseSig', null) == resource.data.get('warehouseSig', null))
+              || !('warehouseSig' in ch))
             && (!(data.status in ['cho_kho_tong', 'signed'])
               || resource.data.get('creatorSig', null) == null
-              || data.get('creatorSig', null) == resource.data.get('creatorSig', null))
-            && sigUidMatchesIfChanged('creatorSig')
-            && sigUidMatchesIfChanged('managerSig')
-            && sigUidMatchesIfChanged('warehouseSig')
+              || !('creatorSig' in ch))
           )
         );
     }
@@ -619,6 +612,63 @@ service cloud.firestore {
     }
     function duyetXuongR(r) {
       return toanQuyenR(r) || r == 'QUAN_LY_XUONG';
+    }
+    function duyetKhoTongR(r) {
+      return toanQuyenR(r) || r == 'NHAP_KHO';
+    }
+    function isOwnerR(r) {
+      return isBootstrapOwner() || (isSignedIn() && emailVerified() && r == 'OWNER');
+    }
+
+    // PHIEU NHAP — vai tro `r` tra MOT lan o `allow`, truyen xuong (cung ly do
+    // ba bang Rao xuong: tra lai vai tro moi dieu kien la vuot nguong 1.000
+    // phep tinh — do bang Rules test API 20/11/2026, ca ban dang chay cung
+    // vuot: moi lan tao phieu deu bi tu choi).
+    //
+    // Phieu moi KY DIEN TU tu dau (bo luong in giay 20/11/2026): tao phieu o
+    // trang thai cho_ql_xuong (nguoi trinh ky). 'draft' / 'printed' chi con o
+    // phieu cu, khong tao moi.
+    function quyenTaoPhieu(r, slipId) {
+      let d = request.resource.data;
+      return khongCoAnhTrenPhieu()
+        && isValidSlipCreate(d, slipId, r)
+        && (
+          toanQuyenR(r)
+          || (duyetXuongR(r) && d.status in ['cho_ql_xuong', 'cho_kho_tong'])
+          || (duyetKhoTongR(r) && d.status in ['cho_ql_xuong', 'signed'])
+          || (ghiNhapR(r) && d.status == 'cho_ql_xuong')
+        );
+    }
+
+    function quyenSuaPhieu(r, slipId) {
+      let d = request.resource.data;
+      let cu = resource.data.get('status', '');
+      let moi = d.get('status', '');
+      return khongCoAnhTrenPhieu()
+        && isValidSlipUpdate(d, slipId, r)
+        && !(cu == 'signed' && moi != 'signed' && !isOwnerR(r))
+        && (
+          toanQuyenR(r)
+          || (
+            duyetXuongR(r)
+            && (
+              (cu in ['cho_ql_xuong', 'draft', 'printed', 'tra_lai'] && moi == 'cho_kho_tong')
+              || (cu in ['cho_ql_xuong', 'draft', 'printed', 'cho_kho_tong'] && moi == 'tra_lai')
+            )
+          )
+          || (
+            duyetKhoTongR(r)
+            && (
+              (cu in ['cho_kho_tong', 'draft', 'printed'] && moi in ['signed', 'tra_lai'])
+              || (cu == 'signed' && moi == 'signed')
+            )
+          )
+          || (
+            ghiNhapR(r)
+            && cu in ['draft', 'printed', 'tra_lai', 'cho_ql_xuong']
+            && moi == 'cho_ql_xuong'
+          )
+        );
     }
 
     // Ghi ba bang Rao xuong: vai tro `r` tra mot lan o `allow`, truyen xuong.
@@ -1126,62 +1176,8 @@ service cloud.firestore {
       // Phieu nhap la chuyen cua kho va xuong, DNC khong doc.
       allow read: if xemKho();
 
-      allow create: if khongCoAnhTrenPhieu()
-        && isValidSlipCreate(request.resource.data, slipId)
-        && (
-          isToanQuyenKho()
-          || (duyetXuong() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong', 'cho_kho_tong'])
-          || (duyetKhoTong() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong', 'signed'])
-          || (ghiNhapKho() && request.resource.data.status in ['draft', 'printed', 'cho_ql_xuong'])
-        );
-
-      allow update: if khongCoAnhTrenPhieu()
-        && isValidSlipUpdate(request.resource.data, slipId)
-        && !(resource.data.get('status', '') == 'signed'
-             && request.resource.data.get('status', '') != 'signed'
-             && !isOwner())
-        && (
-          isToanQuyenKho()
-          || (
-            duyetXuong()
-            && (
-              (
-                resource.data.get('status', '') in ['cho_ql_xuong', 'draft', 'printed', 'tra_lai']
-                && request.resource.data.get('status', '') == 'cho_kho_tong'
-              )
-              || (
-                resource.data.get('status', '') in ['cho_ql_xuong', 'draft', 'printed', 'cho_kho_tong']
-                && request.resource.data.get('status', '') == 'tra_lai'
-              )
-            )
-          )
-          || (
-            duyetKhoTong()
-            && (
-              (
-                resource.data.get('status', '') in ['cho_kho_tong', 'draft', 'printed']
-                && request.resource.data.get('status', '') in ['signed', 'tra_lai']
-              )
-              || (
-                resource.data.get('status', '') == 'signed'
-                && request.resource.data.get('status', '') == 'signed'
-              )
-            )
-          )
-          || (
-            ghiNhapKho()
-            && (
-              (
-                resource.data.get('status', '') in ['draft', 'printed', 'tra_lai', 'cho_ql_xuong']
-                && request.resource.data.get('status', '') == 'cho_ql_xuong'
-              )
-              || (
-                resource.data.get('status', '') in ['draft', 'printed']
-                && request.resource.data.get('status', '') == 'printed'
-              )
-            )
-          )
-        );
+      allow create: if quyenTaoPhieu(role(), slipId);
+      allow update: if quyenSuaPhieu(role(), slipId);
 
       // Phieu chua ky: nguoi ghi nhap kho xoa duoc (xem luat transactions).
       allow delete: if isOwner()
@@ -1279,6 +1275,27 @@ service cloud.firestore {
      * Phai ghi duoc trong cung giao dich voi lan cap so, nen ai ghi duoc kho
      * thi ghi duoc day. Xoa: chi chu so huu (phuc vu lenh don sach he thong).
      */
+    // Chu ky mau: tao cho CHINH MINH (id bat dau bang uid, dung email dang
+    // nhap), khong ai sua / xoa duoc — ke ca admin. Ai xem duoc chung tu kho
+    // thi doc duoc mau de hien chu ky tren phieu.
+    match /chu_ky_mau/{id} {
+      allow read: if xemKho() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn()
+        && emailVerified()
+        && id.matches(request.auth.uid + '_[0-9]{14}')
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'ten', 'net', 'rong', 'cao', 'bam', 'taoLuc'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && reqStr(request.resource.data, 'ten', 1, 150)
+        && reqStr(request.resource.data, 'net', 10, 60000)
+        && reqNum(request.resource.data, 'rong', 1, 4000)
+        && reqNum(request.resource.data, 'cao', 1, 4000)
+        && request.resource.data.bam is string
+        && request.resource.data.bam.matches('^[0-9a-f]{64}$')
+        && reqStr(request.resource.data, 'taoLuc', 1, 64);
+      allow update, delete: if false;
+    }
+
     match /bo_dem/{khoa} {
       allow read: if xemKho();
       allow create, update: if ghiNhapKho() || ghiXuatKho();

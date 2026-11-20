@@ -196,6 +196,12 @@ export interface ChuKyDienTu {
   signedAt: string;
   token: string;
   note?: string;
+  /** Mẫu chữ ký vẽ tay đã dùng (bảng `chu_ky_mau`, bất biến). */
+  chuKyId?: string;
+  /** SHA-256 nội dung chứng từ lúc ký — xem `lib/chuKy.ts`. */
+  bamNoiDung?: string;
+  /** Cách xác thực người ký lúc ký, ví dụ "GOOGLE+PIN". */
+  xacThuc?: string;
 }
 
 export interface ImportSlip {

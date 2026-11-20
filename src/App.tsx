@@ -68,6 +68,7 @@ import {
   UserRole,
   UserProfile,
   ImportSlip,
+  ChuKyDienTu,
   KeHoachSanXuat,
   DanhGiaSanXuat,
   KiemKeBon,
@@ -169,6 +170,18 @@ import {
 } from "./anh/kho";
 import ThuVienAnh from "./anh/ThuVienAnh";
 import ChonAnh, { taoTepCho, type TepCho } from "./anh/ChonAnh";
+import { DangKyChuKy, HinhChuKy, HopKy, type YeuCauKy } from "./components/ChuKy";
+import {
+  bamSha256,
+  idChuKyMau,
+  mauMoiNhat,
+  noiDungPhieuNhap,
+  XAC_THUC_KY,
+  type ChuKyMau,
+  type DongPhieuNhap,
+} from "./lib/chuKy";
+import { idKeHoach, lapViecGhiKeHoach, type DongKeHoach } from "./lib/keHoachSX";
+import { isoSangVn } from "./lib/oNgay";
 import type { OAnh } from "./anh/thuVien";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
@@ -517,9 +530,6 @@ export default function App() {
       conSong,
     );
   };
-  const [uploadingSlipCode, setUploadingSlipCode] = useState<string | null>(
-    null,
-  );
   /**
    * Hóa đơn ĐÃ PHÁT HÀNH, do người dùng điền lại số và ngày thật.
    *
@@ -538,6 +548,13 @@ export default function App() {
    */
   const [soPhieu, setSoPhieu] = useState<GhiSoPhieu[]>([]);
   const [keHoach, setKeHoach] = useState<KeHoachSanXuat[]>([]);
+  /** Chữ ký mẫu vẽ tay của mọi người (bảng `chu_ky_mau`, bất biến). */
+  const [chuKyMau, setChuKyMau] = useState<ChuKyMau[]>([]);
+  const [daTaiChuKyMau, setDaTaiChuKyMau] = useState(false);
+  /** Mở màn đổi chữ ký mẫu (từ Cài đặt, hoặc khi ký mà chưa có mẫu). */
+  const [moDoiChuKy, setMoDoiChuKy] = useState(false);
+  /** Yêu cầu ký đang chờ người dùng nhập PIN. */
+  const [choKy, setChoKy] = useState<(YeuCauKy & { xong: (m: ChuKyMau | null) => void }) | null>(null);
   const [danhGia, setDanhGia] = useState<DanhGiaSanXuat[]>([]);
   const [kiemKeBon, setKiemKeBon] = useState<KiemKeBon[]>([]);
   const [kiemKeKeg, setKiemKeKeg] = useState<KiemKeKegLit[]>([]);
@@ -1042,10 +1059,25 @@ export default function App() {
     }
 
     let unsubKeHoach = () => {};
+    let unsubChuKyMau = () => {};
     let unsubDanhGia = () => {};
     let unsubKiemKeBon = () => {};
     let unsubKiemKeKeg = () => {};
     if (!chiXemChieuXuat) {
+      unsubChuKyMau = onSnapshot(
+        collection(db, "chu_ky_mau"),
+        (snapshot) => {
+          setChuKyMau(snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as ChuKyMau));
+          setDaTaiChuKyMau(true);
+          ghiNhanLoiDoc("chu_ky_mau", null);
+        },
+        (error) => {
+          ghiNhanLoiDoc(
+            "chu_ky_mau",
+            handleFirestoreError(error, OperationType.GET, "chu_ky_mau"),
+          );
+        },
+      );
       unsubKeHoach = onSnapshot(
         collection(db, "ke_hoach_sx"),
         (snapshot) => {
@@ -1133,6 +1165,7 @@ export default function App() {
       unsubAnh();
       unsubUsers();
       unsubKeHoach();
+      unsubChuKyMau();
       unsubDanhGia();
       unsubKiemKeBon();
       unsubKiemKeKeg();
@@ -3130,107 +3163,6 @@ export default function App() {
 
   /* ---------------- Phieu nhap kho ---------------- */
 
-  /** Danh dau phieu da duoc in (de biet phieu nao dang cho ky). */
-  const handleMarkSlipPrinted = async (code: string, dateKey: string) => {
-    try {
-      await setDoc(
-        doc(db, "slips", code),
-        {
-          id: code,
-          code,
-          date: dateKey,
-          // Da co anh ky roi thi giu nguyen trang thai, in lai khong ha cap
-          status: anhTheoChungTu.get(code)?.length ? "signed" : "printed",
-          printedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
-    } catch (e) {
-      /*
-       * KHÔNG chặn việc in — giấy vẫn phải ra để hai bên ký. Nhưng PHẢI nói.
-       *
-       * Bản trước chỉ ghi vào console rồi thôi. Người dùng in xong, tưởng hệ
-       * thống đã biết phiếu này đang chờ ký, trong khi Firestore chưa nhận gì
-       * cả. Việc âm thầm không lưu được mà vẫn để người ta đi tiếp là kiểu sai
-       * khó lần ra nhất.
-       */
-      showNotification(
-        `In được nhưng CHƯA ghi được trạng thái phiếu ${code}. ` +
-          handleFirestoreError(e, OperationType.WRITE, "slips"),
-        "error",
-      );
-    }
-  };
-
-  /** Tai anh to phieu da ky tuoi len Cloudinary roi gan vao phieu. */
-  const handleUploadSignedSlip = async (
-    code: string,
-    dateKey: string,
-    files: FileList,
-  ) => {
-    if (uploadingSlipCode) return;
-    setUploadingSlipCode(code);
-
-    /*
-     * HAI BƯỚC, HAI NHÁNH BẮT LỖI RIÊNG.
-     *
-     * Bước 1 tải ảnh lên Cloudinary. Bước 2 ghi CÙNG MỘT LÔ: bản ghi ảnh chứng
-     * từ (gắn mã phiếu) và trạng thái `signed` của phiếu — có ảnh ký là hàng
-     * vào tồn, nên hai thứ không được lệch nhau. Lô hỏng thì xoá ngay tệp vừa
-     * tải, không để tệp nằm lại mà không phiếu nào trỏ tới.
-     */
-    const dau = transactions.find((t) => t.slipCode === code);
-    let anhMoi: AnhChungTu[];
-    try {
-      anhMoi = await taiAnhChoChungTu(Array.from(files), {
-        chungTu: [code],
-        loai: "NHAP",
-        ngay: dateKey,
-        maDoiTac: dau?.partnerId || "",
-        doiTac: dau?.partnerName || "",
-        taiBoi: currentUserProfile?.email || user || "",
-      });
-    } catch (e: any) {
-      setUploadingSlipCode(null);
-      alert(
-        "Không tải được ảnh lên kho ảnh (Cloudinary): " +
-          (e?.message || "lỗi không rõ"),
-      );
-      return;
-    }
-
-    try {
-      const lo = writeBatch(db);
-      ghiAnhVaoLo(lo, anhMoi);
-      lo.set(
-        doc(db, "slips", code),
-        {
-          id: code,
-          code,
-          date: dateKey,
-          status: "signed",
-          signedAt: new Date().toISOString(),
-          signedBy: currentUserProfile?.email || user || "",
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
-      await lo.commit();
-      showNotification(`Đã lưu ảnh phiếu ${code} — hàng đã vào tồn kho`);
-    } catch (e: any) {
-      void boTepVuaTai(anhMoi);
-      alert(
-        `CHƯA ghi được ảnh vào phiếu ${code}, nên hàng chưa vào tồn kho. Ảnh vừa tải đã được gỡ khỏi kho ảnh — tải lại sau.
-
-` +
-          handleFirestoreError(e, OperationType.WRITE, "slips"),
-      );
-    } finally {
-      setUploadingSlipCode(null);
-    }
-  };
-
   /**
    * XOÁ CẢ MỘT PHIẾU NHẬP — nhập sai số lượng, xoá đi làm lại.
    *
@@ -3349,6 +3281,15 @@ export default function App() {
     if (!isOwner) return;
     const existing = slips.find((s) => s.code === code);
     const conLai = (anhTheoChungTu.get(code) || []).filter((a) => a.id !== anh.id);
+    // Phiếu ký giấy cũ (chưa có chữ ký điện tử): ảnh tờ đã ký là chứng từ duy
+    // nhất — luồng in giấy đã bỏ, gỡ nốt tấm cuối thì phiếu không còn cách nào
+    // ký lại. Muốn bỏ thì xoá cả phiếu.
+    if (!conLai.length && !existing?.warehouseSig) {
+      alert(
+        `Đây là ảnh ký DUY NHẤT của phiếu giấy ${code}.\n\nLuồng in giấy đã bỏ, gỡ tấm này thì phiếu không ký lại được. Nhập sai thì xoá cả phiếu rồi nhập lại (phiếu mới ký điện tử).`,
+      );
+      return;
+    }
     const conChungTuKhac = anh.chungTu.filter((c) => c !== code);
     try {
       const kqAnh = await lamViecAnhKhiXoa(
@@ -3356,16 +3297,8 @@ export default function App() {
           ? { xoa: [], go: [{ anh, conLai: conChungTuKhac }] }
           : { xoa: [anh], go: [] },
       );
-      if (!conLai.length && existing) {
-        await updateDoc(doc(db, "slips", code), {
-          status: existing.printedAt ? "printed" : "draft",
-          updatedAt: new Date().toISOString(),
-        });
-      }
       showNotification(
-        (conLai.length
-          ? `Đã gỡ 1 ảnh khỏi phiếu ${code}`
-          : `Phiếu ${code} không còn ảnh ký — hàng trên phiếu đã ra khỏi tồn kho`) +
+        `Đã gỡ 1 ảnh khỏi phiếu ${code}` +
           (kqAnh.daXoa > 0 ? " · đã xoá tệp trên Cloudinary" : ""),
       );
       baoAnhChuaXoa(kqAnh);
@@ -5157,18 +5090,23 @@ export default function App() {
   const xoaMotAnhThuVien = async (o: OAnh): Promise<boolean> => {
     if (!isOwner) return false;
     const a = o.anh;
+    // Phiếu giấy cũ (chưa ký điện tử) mà tấm này là ảnh ký duy nhất: không cho
+    // xoá — luồng in giấy đã bỏ, phiếu sẽ không còn cách nào ký lại.
     const phieuMatKy = a.chungTu.filter(
       (c) =>
-        slips.some((sl) => sl.code === c) &&
+        slips.some((sl) => sl.code === c && !sl.warehouseSig) &&
         (anhTheoChungTu.get(c) || []).every((x) => x.id === a.id),
     );
+    if (phieuMatKy.length) {
+      alert(
+        `Không xoá được: đây là ảnh ký DUY NHẤT của phiếu giấy ${phieuMatKy.join(", ")}.\n\nNhập sai thì xoá cả phiếu rồi nhập lại (phiếu mới ký điện tử).`,
+      );
+      return false;
+    }
     if (
       !window.confirm(
         `XOÁ VĨNH VIỄN tấm ảnh này?\n\nChứng từ: ${a.chungTu.join(", ")}\n` +
           `Tệp sẽ bị xoá thật trên Cloudinary.\n\n` +
-          (phieuMatKy.length
-            ? `CẢNH BÁO: ${phieuMatKy.join(", ")} sẽ KHÔNG CÒN ẢNH KÝ — phiếu quay về chưa duyệt và hàng trên phiếu RA KHỎI TỒN KHO ngay.\n\n`
-            : "") +
           `Không khôi phục lại được.`,
       )
     )
@@ -5177,20 +5115,6 @@ export default function App() {
     if (kq.daXoa < kq.tong || kq.loi) {
       alert(`CHƯA XOÁ XONG — ảnh vẫn còn.\n\n${kq.loi || "Cloudinary không xác nhận đã xoá."}`);
       return false;
-    }
-    try {
-      for (const code of phieuMatKy) {
-        const sl = slips.find((x) => x.code === code);
-        await updateDoc(doc(db, "slips", code), {
-          status: sl?.printedAt ? "printed" : "draft",
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    } catch (e) {
-      alert(
-        "Ảnh đã xoá nhưng chưa đổi được trạng thái phiếu.\n\n" +
-          handleFirestoreError(e, OperationType.WRITE, "slips"),
-      );
     }
     showNotification("Đã xoá ảnh vĩnh viễn — cả tệp trên Cloudinary lẫn bản ghi");
     return true;
@@ -5499,6 +5423,29 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
       }
     }
 
+    /*
+     * PHIẾU NHẬP KÝ ĐIỆN TỬ (bỏ in giấy 20/11/2026): người nhập là NGƯỜI TRÌNH
+     * — ký ngay lúc lưu (chữ ký mẫu + PIN). Phiếu đi tiếp Quản lý xưởng (Rào 1)
+     * rồi Kho tổng (Rào 2) ký; Kho tổng ký xong hàng mới vào tồn.
+     */
+    let mauTrinh: ChuKyMau | null = null;
+    if (type === "IN") {
+      const tongNhap = validItems.reduce((t, it) => t + (Number(it.quantity) || 0), 0);
+      mauTrinh = await xinKy({
+        tieuDe: "Trình phiếu nhập kho",
+        vaiTro: "Người trình",
+        noiDung: [
+          `Phiếu nhập ngày ${isoSangVn((newTransaction.date || "").slice(0, 10))} · ${par?.name || ""}`,
+          ...validItems.map((it) => {
+            const p = products.find((x) => x.id === it.productId);
+            return `${p?.name || it.productId}: ${formatNumber(Number(it.quantity) || 0)} ${p?.unit || ""}`;
+          }),
+          `Tổng ${formatNumber(tongNhap)} · ${validItems.length} dòng`,
+        ],
+      });
+      if (!mauTrinh) return;
+    }
+
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -5662,6 +5609,27 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         }
       }
 
+      if (type === "IN" && slipCode && mauTrinh) {
+        const ngayPhieu = transactionDate.slice(0, 10);
+        const bam = await bamSha256(
+          noiDungPhieuNhap(
+            slipCode,
+            ngayPhieu,
+            validItems.map((it) => ({ productId: it.productId, quantity: Number(it.quantity) })),
+          ),
+        );
+        batch.set(doc(db, "slips", slipCode), {
+          id: slipCode,
+          code: slipCode,
+          date: ngayPhieu,
+          status: "cho_ql_xuong",
+          note: newTransaction.notes || "",
+          creatorSig: taoChuKy(slipCode, "NGUOI_TRINH", mauTrinh, bam),
+          createdAt: new Date().toISOString(),
+          createdBy: mauTrinh.ten,
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       await batch.commit();
 
@@ -5684,7 +5652,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           const g = await capSoPhieu(db, {
             loai: "NHAP",
             documentDate: transactionDate.slice(0, 10),
-            // Sổ ghi ĐÚNG mã phiếu đã in ra giấy, không cấp thêm số thứ hai.
+            // Sổ ghi ĐÚNG mã phiếu, không cấp thêm số thứ hai.
             soPhieu: slipCode,
             nguon: slipCode,
             donVi: par?.name || "",
@@ -5763,7 +5731,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
       setLoading(false);
       showNotification(
         slipCode
-          ? `Phiếu ${soPhieuVuaCap || slipCode} — in ra cho hai bên ký, có ảnh ký thì hàng mới vào tồn`
+          ? `Đã ký trình phiếu ${soPhieuVuaCap || slipCode} — chờ Quản lý xưởng (Rào 1) rồi Kho tổng (Rào 2) ký, Kho tổng ký xong hàng mới vào tồn`
           : soPhieuVuaCap
             ? `Đã lưu, số phiếu ${soPhieuVuaCap}`
             : "Hệ thống cập nhật data thành công",
@@ -5777,6 +5745,120 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     }
   };
 
+  /* ---------------- Chữ ký điện tử ---------------- */
+
+  const mauCuaToi = useMemo(
+    () => mauMoiNhat(chuKyMau, auth.currentUser?.uid || ""),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chuKyMau, user],
+  );
+  const chuKyMauTheoId = useMemo(
+    () => new Map(chuKyMau.map((m) => [m.id, m])),
+    [chuKyMau],
+  );
+
+  /** Lưu chữ ký mẫu MỚI (bất biến — đổi chữ ký là thêm mẫu). */
+  const handleLuuChuKyMau = async (net: string, rong: number, cao: number): Promise<boolean> => {
+    const u = auth.currentUser;
+    if (!u) return false;
+    const ten = (currentUserProfile?.name || u.displayName || "").trim();
+    try {
+      await setDoc(doc(db, "chu_ky_mau", idChuKyMau(u.uid)), {
+        uid: u.uid,
+        email: u.email || "",
+        ten,
+        net,
+        rong,
+        cao,
+        bam: await bamSha256(`${ten}|${net}`),
+        taoLuc: new Date().toISOString(),
+      });
+      showNotification("Đã lưu chữ ký — dùng cho các lần ký từ giờ");
+      return true;
+    } catch (e) {
+      alert(handleFirestoreError(e, OperationType.WRITE, "chu_ky_mau"));
+      return false;
+    }
+  };
+
+  /**
+   * Nhập lại PIN lúc ký. Đọc hồ sơ trên máy chủ (bộ đếm sai, khoá) như màn
+   * khoá PIN: sai thì cộng bộ đếm, sai 5 lần là khoá PIN và đăng xuất.
+   * Trả về câu lỗi, hoặc null khi đúng.
+   */
+  const xacMinhPinKhiKy = async (pin: string): Promise<string | null> => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return "Phiên đăng nhập đã hết — đăng nhập lại.";
+    try {
+      const ref = doc(db, "users", uid);
+      const snap = await getDocFromServer(ref);
+      const hs = snap.data() as UserProfile | undefined;
+      if (!hs?.pinHash) return "Tài khoản chưa đặt mã PIN.";
+      if (hs.pinLocked) return "Mã PIN đang bị khoá sau 5 lần sai — đăng nhập lại Google để đặt lại.";
+      if (await verifyPin(pin, uid, hs.pinHash, hs.pinSalt)) {
+        if (Number(hs.pinFailCount || 0) > 0) {
+          try {
+            await updateDoc(ref, { pinFailCount: 0, pinLocked: false });
+          } catch {
+            /* không chặn việc ký */
+          }
+        }
+        return null;
+      }
+      const sai = Math.min(PIN_MAX_ATTEMPTS, Math.max(0, Number(hs.pinFailCount || 0)) + 1);
+      const khoa = sai >= PIN_MAX_ATTEMPTS;
+      try {
+        await updateDoc(ref, { pinFailCount: sai, pinLocked: khoa });
+      } catch (err) {
+        console.error("Khong cap nhat duoc pinFailCount:", err);
+      }
+      setCurrentUserProfile((p) => (p ? { ...p, pinFailCount: sai, pinLocked: khoa } : p));
+      if (khoa) {
+        savePinResetIntent(uid, hs.email || auth.currentUser?.email || "");
+        window.setTimeout(() => void handleLogout(), 1800);
+        return "Sai mã PIN 5 lần — mã PIN đã bị khoá, app sẽ đăng xuất để đặt lại.";
+      }
+      return `Mã PIN không đúng. Còn ${PIN_MAX_ATTEMPTS - sai} lần thử.`;
+    } catch (e: any) {
+      return "Không kiểm tra được mã PIN: " + (e?.message || "lỗi mạng");
+    }
+  };
+
+  /**
+   * Xin ký: mở hộp ký (nội dung + chữ ký mẫu + PIN). Trả về mẫu chữ ký khi
+   * người dùng nhập đúng PIN, null khi huỷ. Chưa có mẫu thì mở màn đăng ký.
+   */
+  const xinKy = (yc: YeuCauKy): Promise<ChuKyMau | null> => {
+    if (!mauCuaToi) {
+      alert("Anh/chị chưa đăng ký chữ ký điện tử. Vẽ chữ ký trước, rồi bấm ký lại.");
+      setMoDoiChuKy(true);
+      return Promise.resolve(null);
+    }
+    return new Promise((xong) => setChoKy({ ...yc, xong }));
+  };
+
+  /** Dựng chữ ký điện tử ghi lên chứng từ. */
+  const taoChuKy = (code: string, vaiTro: string, mau: ChuKyMau, bam: string): ChuKyDienTu => {
+    const signedAt = new Date().toISOString();
+    const email = currentUserProfile?.email || auth.currentUser?.email || "";
+    return {
+      name: mau.ten,
+      email,
+      uid: auth.currentUser?.uid || "",
+      signedAt,
+      token: taoTokenChuKy(code, vaiTro, email, signedAt),
+      chuKyId: mau.id,
+      bamNoiDung: bam,
+      xacThuc: XAC_THUC_KY,
+    };
+  };
+
+  /** Các dòng mặt hàng × số lượng của một phiếu nhập — để băm nội dung. */
+  const dongCuaPhieuNhap = (code: string): DongPhieuNhap[] =>
+    transactions
+      .filter((t) => t.type === "IN" && t.slipCode === code)
+      .map((t) => ({ productId: t.productId, quantity: Number(t.quantity) || 0 }));
+
   /* ---------------- Quy trình Paperless 2 Bước Rào · Kế Hoạch · Kiểm Kê FST/BBT ---------------- */
 
   const handleGuiPhieuXuong = async (input: {
@@ -5787,6 +5869,20 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     editSlipCode?: string;
   }): Promise<boolean> => {
     if (!input.items.length || !input.photos.length) return false;
+    const tongGui = input.items.reduce((t, it) => t + (Number(it.quantity) || 0), 0);
+    const mau = await xinKy({
+      tieuDe: input.editSlipCode ? `Trình lại phiếu ${input.editSlipCode}` : "Trình phiếu bàn giao Xưởng → Kho tổng",
+      vaiTro: "Người trình (Sản xuất)",
+      noiDung: [
+        `Phiếu ngày ${isoSangVn(input.date.slice(0, 10))} · ${input.photos.length} ảnh hiện trạng`,
+        ...input.items.map((it) => {
+          const p = products.find((x) => x.id === it.productId);
+          return `${p?.name || it.productId}: ${formatNumber(Number(it.quantity) || 0)} ${p?.unit || ""}`;
+        }),
+        `Tổng ${formatNumber(tongGui)} · ${input.items.length} dòng`,
+      ],
+    });
+    if (!mau) return false;
     const skb =
       donVi.find((p) => p.id === "SKB-BNC" || p.name === "SKB-BNC") ||
       INITIAL_PARTNERS[0];
@@ -5864,13 +5960,18 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           date: ngayPhieu,
           status: "cho_ql_xuong",
           note: input.notes || "",
-          creatorSig: {
-            name: signerName,
-            email,
-            uid: auth.currentUser?.uid || "",
-            signedAt: nowIso,
-            token: taoTokenChuKy(slipCode, "SAN_XUAT", email, nowIso),
-          },
+          creatorSig: taoChuKy(
+            slipCode,
+            "SAN_XUAT",
+            mau,
+            await bamSha256(
+              noiDungPhieuNhap(
+                slipCode,
+                ngayPhieu,
+                input.items.map((it) => ({ productId: it.productId, quantity: Number(it.quantity) })),
+              ),
+            ),
+          ),
           managerSig: deleteField(),
           warehouseSig: deleteField(),
           rejectedBy: deleteField(),
@@ -5911,21 +6012,62 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     }
   };
 
+  /**
+   * Chuẩn bị ký một phiếu nhập đã có: băm nội dung HIỆN TẠI, soát chữ ký đã có
+   * trên phiếu còn khớp nội dung không (khác = có người sửa sau khi ký → chặn,
+   * trả lại cho người trình ký lại), rồi mở hộp ký.
+   */
+  const kyPhieuNhap = async (
+    code: string,
+    tieuDe: string,
+    vaiTro: string,
+  ): Promise<{ mau: ChuKyMau; bam: string } | null> => {
+    const sl = slips.find((x) => x.code === code);
+    const dong = dongCuaPhieuNhap(code);
+    const ngay = sl?.date || code;
+    const bam = await bamSha256(noiDungPhieuNhap(code, ngay, dong));
+    const lech = [sl?.creatorSig, sl?.managerSig].filter(
+      (k) => k?.bamNoiDung && k.bamNoiDung !== bam,
+    );
+    const tong = dong.reduce((t, d) => t + d.quantity, 0);
+    // Tách nhiệm: một người không ký hai ô trên cùng một phiếu.
+    const toi = auth.currentUser?.uid || "";
+    const daKyO =
+      toi && sl?.creatorSig?.uid === toi
+        ? "Người trình"
+        : toi && sl?.managerSig?.uid === toi
+          ? "Quản lý xưởng (Rào 1)"
+          : "";
+    const mau = await xinKy({
+      tieuDe,
+      vaiTro,
+      noiDung: [
+        `Phiếu ${code} · ngày ${isoSangVn(String(ngay).slice(0, 10))}`,
+        ...dong.map((d) => {
+          const p = products.find((x) => x.id === d.productId);
+          return `${p?.name || d.productId}: ${formatNumber(d.quantity)} ${p?.unit || ""}`;
+        }),
+        `Tổng ${formatNumber(tong)} · ${dong.length} dòng`,
+        ...(sl?.creatorSig ? [`Người trình: ${sl.creatorSig.name}`] : []),
+      ],
+      chan: lech.length
+        ? `Nội dung phiếu đã THAY ĐỔI sau khi ${lech.map((k) => k!.name).join(", ")} ký — không ký được. Trả lại phiếu để người trình kiểm tra và ký lại.`
+        : daKyO
+          ? `Anh/chị đã ký ô "${daKyO}" của phiếu này. Mỗi người chỉ ký MỘT ô — người trình không tự duyệt, người duyệt không tự ký nhận. Nhờ người khác có quyền ký.`
+          : undefined,
+    });
+    return mau ? { mau, bam } : null;
+  };
+
   const handleDuyetRao1 = async (code: string) => {
+    const ky = await kyPhieuNhap(code, `Duyệt Rào 1 · ${code}`, "Quản lý xưởng (Rào 1)");
+    if (!ky) return;
     setLoading(true);
     try {
       const nowIso = new Date().toISOString();
-      const email = currentUserProfile?.email || user || "";
-      const name = currentUserProfile?.name || user || "Quản lý xưởng";
       await updateDoc(doc(db, "slips", code), {
         status: "cho_kho_tong",
-        managerSig: {
-          name,
-          email,
-          uid: auth.currentUser?.uid || "",
-          signedAt: nowIso,
-          token: taoTokenChuKy(code, "QUAN_LY_XUONG", email, nowIso),
-        },
+        managerSig: taoChuKy(code, "QUAN_LY_XUONG", ky.mau, ky.bam),
         rejectedBy: deleteField(),
         rejectedReason: deleteField(),
         rejectedAt: deleteField(),
@@ -5940,22 +6082,16 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
   };
 
   const handleDuyetRao2 = async (code: string) => {
+    const ky = await kyPhieuNhap(code, `Ký nhận Rào 2 · ${code}`, "Kho tổng nhận (Rào 2)");
+    if (!ky) return;
     setLoading(true);
     try {
       const nowIso = new Date().toISOString();
-      const email = currentUserProfile?.email || user || "";
-      const name = currentUserProfile?.name || user || "Kho tổng";
       await updateDoc(doc(db, "slips", code), {
         status: "signed",
         signedAt: nowIso,
-        signedBy: email || name,
-        warehouseSig: {
-          name,
-          email,
-          uid: auth.currentUser?.uid || "",
-          signedAt: nowIso,
-          token: taoTokenChuKy(code, "NHAP_KHO", email, nowIso),
-        },
+        signedBy: currentUserProfile?.email || user || ky.mau.ten,
+        warehouseSig: taoChuKy(code, "NHAP_KHO", ky.mau, ky.bam),
         updatedAt: nowIso,
       });
       showNotification(`Kho tổng đã ký nhận Rào 2 phiếu ${code} — hàng chính thức vào tồn`);
@@ -5988,47 +6124,67 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     }
   };
 
-  const handleLuuKeHoach = async (input: {
-    date: string;
-    productId: string;
-    targetQty: number;
-    batchHint: string;
-    note: string;
-    source: string;
-  }): Promise<boolean> => {
+  /**
+   * PHÁT HÀNH KẾ HOẠCH SẢN XUẤT — nhiều mã bia, có thể nhiều ngày (lưới hoặc
+   * file Excel). Mỗi (ngày × mã bia) một bản ghi id cố định → phát hành lại /
+   * nạp lại là ghi đè, không ra dòng trùng. Sản lượng 0 = bỏ kế hoạch dòng đó.
+   */
+  const handleLuuKeHoach = async (dong: DongKeHoach[], nguon: string): Promise<boolean> => {
+    const viec = lapViecGhiKeHoach(dong, keHoach);
+    if (!viec.ghi.length && !viec.xoa.length) {
+      showNotification(`Kế hoạch không đổi — ${viec.giuNguyen} dòng đã có y nguyên`);
+      return true;
+    }
+    const ngay = [...new Set(dong.map((d) => d.date))].sort();
+    if (
+      !window.confirm(
+        `Phát hành kế hoạch sản xuất ngày ${ngay.map(isoSangVn).join(", ")}:\n\n` +
+          `• Ghi ${viec.ghi.length} dòng mã bia\n` +
+          `• Bỏ ${viec.xoa.length} dòng (sản lượng 0 hoặc bản cũ trùng)\n` +
+          `• Giữ nguyên ${viec.giuNguyen} dòng\n\nTiếp tục?`,
+      )
+    )
+      return false;
     setLoading(true);
     try {
-      const id = `kh-${input.date}-${input.productId}-${Date.now()}`;
       const nowIso = new Date().toISOString();
-      await setDoc(doc(db, "ke_hoach_sx", id), {
-        id,
-        date: input.date,
-        productId: input.productId,
-        targetQty: Number(input.targetQty),
-        batchHint: input.batchHint,
-        source: input.source,
-        note: input.note,
-        createdBy: currentUserProfile?.name || user || "",
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      } as KeHoachSanXuat);
-      showNotification("Đã phát hành Kế hoạch sản xuất xuống Xưởng");
+      const nguoi = currentUserProfile?.name || user || "";
+      const viecGhi: ((lo: ReturnType<typeof writeBatch>) => void)[] = [
+        ...viec.ghi.map((d) => (lo: ReturnType<typeof writeBatch>) => {
+          const id = idKeHoach(d.date, d.productId);
+          const cu = keHoach.find((k) => k.id === id);
+          lo.set(doc(db, "ke_hoach_sx", id), {
+            id,
+            date: d.date,
+            productId: d.productId,
+            targetQty: d.targetQty,
+            batchHint: d.batchHint,
+            note: d.note,
+            source: nguon,
+            createdBy: cu?.createdBy || nguoi,
+            createdAt: cu?.createdAt || nowIso,
+            updatedAt: nowIso,
+            updatedBy: nguoi,
+          } as KeHoachSanXuat);
+        }),
+        ...viec.xoa.map((id) => (lo: ReturnType<typeof writeBatch>) =>
+          lo.delete(doc(db, "ke_hoach_sx", id)),
+        ),
+      ];
+      for (let i = 0; i < viecGhi.length; i += 400) {
+        const lo = writeBatch(db);
+        viecGhi.slice(i, i + 400).forEach((f) => f(lo));
+        await lo.commit();
+      }
+      showNotification(
+        `Đã phát hành kế hoạch: ghi ${viec.ghi.length}, bỏ ${viec.xoa.length}, giữ nguyên ${viec.giuNguyen} dòng`,
+      );
       return true;
     } catch (e) {
       alert(handleFirestoreError(e, OperationType.WRITE, "ke_hoach_sx"));
       return false;
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleXoaKeHoach = async (planId: string) => {
-    if (!window.confirm("Xoá dòng kế hoạch sản xuất này?")) return;
-    try {
-      await deleteDoc(doc(db, "ke_hoach_sx", planId));
-      showNotification("Đã xoá dòng kế hoạch");
-    } catch (e) {
-      alert(handleFirestoreError(e, OperationType.DELETE, "ke_hoach_sx"));
     }
   };
 
@@ -7433,11 +7589,10 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           <FileText className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
             Bao gồm toàn bộ <strong>phiếu giấy cũ</strong> và{" "}
-            <strong>phiếu điện tử mới</strong>. Với phiếu chưa ký: bấm{" "}
-            <strong>Xem &amp; in</strong>, hai bên ký tươi lên bản in, rồi đưa
-            ảnh tờ đã ký vào đúng phiếu đó — <strong>Chụp ảnh</strong> hoặc{" "}
-            <strong>Tải ảnh lên</strong>.{" "}
-            <strong>Có ảnh ký hoặc đã duyệt Rào 1-2 thì hàng mới vào tồn kho</strong>.
+            <strong>phiếu ký điện tử</strong>. Phiếu mới: người nhập ký trình
+            lúc lưu → Quản lý xưởng ký duyệt (Rào 1) → Kho tổng ký nhận (Rào 2).{" "}
+            <strong>Kho tổng ký nhận xong thì hàng mới vào tồn kho</strong>. Bấm{" "}
+            <strong>BM-SKB-01</strong> để xem biểu mẫu có chữ ký và xuất PDF.
           </p>
         </div>
 
@@ -7447,13 +7602,10 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
           partners={partners}
           slips={slips}
           canWrite={canWrite}
-          currentUserName={currentUserProfile?.name || user || ""}
-          onMarkPrinted={handleMarkSlipPrinted}
-          onUploadSigned={handleUploadSignedSlip}
+          chuKyMau={chuKyMauTheoId}
           onRemoveSigned={
             isOwner ? handleRemoveSignedSlipPhoto : undefined
           }
-          uploadingCode={uploadingSlipCode}
           onXoaPhieu={quyen.ghiNhap ? handleXoaPhieuNhap : undefined}
           xoaDuocPhieuDaKy={isOwner}
           onLuuMaLo={quyen.ghiNhap ? handleLuuMaLo : undefined}
@@ -7779,6 +7931,33 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                     </div>
                   </div>
                 </div>
+
+                {/* Chữ ký điện tử của chính người dùng */}
+                {quyen.xemKho && (
+                  <div className="p-5 rounded-3xl border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Chữ ký điện tử</p>
+                      <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
+                        Đóng lên chứng từ khi anh/chị trình, duyệt, ký nhận (kèm họ tên, giờ ký, nhập PIN mỗi lần ký).
+                        Đổi chữ ký không làm đổi chứng từ đã ký trước đó.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {mauCuaToi && (
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-2">
+                          <HinhChuKy mau={mauCuaToi} className="h-14 w-40" />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setMoDoiChuKy(true)}
+                        className="px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-[11px] font-extrabold hover:bg-amber-50"
+                      >
+                        {mauCuaToi ? "Đổi chữ ký" : "Đăng ký chữ ký"}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Đổi mã PIN khóa màn hình của chính người dùng đang đăng nhập */}
                 <DoiPinCaNhanCard
@@ -10793,7 +10972,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                 onTraLaiPhieu={handleTraLaiPhieu}
                 onMoBieuMau={(code) => setBieuMauCode(code)}
                 onLuuKeHoach={handleLuuKeHoach}
-                onXoaKeHoach={handleXoaKeHoach}
                 onDuyetDanhGia={handleDuyetDanhGia}
                 onXoaDanhGia={handleXoaDanhGia}
                 onDuyetKiemKeBon={handleDuyetKiemKeBon}
@@ -11111,9 +11289,46 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
           partners={donVi}
           slips={slips}
           anhTheoPhieu={anhTheoChungTu}
-          currentUserName={currentUserProfile?.name || user || ""}
+          chuKyMau={chuKyMauTheoId}
           onClose={() => setBieuMauCode(null)}
-          onMarkPrinted={handleMarkSlipPrinted}
+        />
+      )}
+
+      {/* Đăng ký chữ ký mẫu: bắt buộc lần đầu (không đóng được), hoặc đổi mẫu. */}
+      {pinUnlocked &&
+        canSyncData &&
+        quyen.xemKho &&
+        daTaiChuKyMau &&
+        (!mauCuaToi || moDoiChuKy) && (
+          <DangKyChuKy
+            ten={(currentUserProfile?.name || auth.currentUser?.displayName || "").trim()}
+            email={currentUserProfile?.email || auth.currentUser?.email || ""}
+            laDoiMau={!!mauCuaToi}
+            onLuu={async (net, rong, cao) => {
+              const ok = await handleLuuChuKyMau(net, rong, cao);
+              if (ok) setMoDoiChuKy(false);
+              return ok;
+            }}
+            onDong={mauCuaToi ? () => setMoDoiChuKy(false) : undefined}
+          />
+        )}
+
+      {choKy && mauCuaToi && (
+        <HopKy
+          yeuCau={choKy}
+          mau={mauCuaToi}
+          ten={mauCuaToi.ten}
+          onKy={async (pin) => {
+            const loi = await xacMinhPinKhiKy(pin);
+            if (loi) return loi;
+            choKy.xong(mauCuaToi);
+            setChoKy(null);
+            return null;
+          }}
+          onHuy={() => {
+            choKy.xong(null);
+            setChoKy(null);
+          }}
         />
       )}
     </div>

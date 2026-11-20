@@ -61,8 +61,22 @@ chọn vai trò trong mục Người dùng. Bảng quyền đầy đủ ở
 ## Những luật nghiệp vụ không được phá
 
 **Nhập kho có chữ ký mới vào tồn.** Mỗi lượt giao có một mã phiếu
-`PN-YYMMDD-NN`. Số đã điền chỉ cộng vào tồn khi phiếu có ảnh ký; trước đó nằm ở
-cột *Chờ ký*. Xem [`src/lib/slip.ts`](src/lib/slip.ts).
+`PN-YYMMDD-NN`, ký điện tử ba bước: người nhập ký trình lúc lưu → Quản lý
+xưởng ký duyệt (Rào 1) → Kho tổng ký nhận (Rào 2). Số đã điền chỉ cộng vào tồn
+khi Kho tổng ký nhận; trước đó nằm ở cột *Chờ duyệt*. Phiếu giấy cũ (trước
+20/11/2026) vẫn tính theo ảnh tờ đã ký. Xem [`src/lib/slip.ts`](src/lib/slip.ts).
+
+**Chữ ký điện tử.** Mỗi người vẽ chữ ký mẫu một lần khi vào app (bảng
+`chu_ky_mau`, không sửa / xoá được — đổi chữ ký là thêm mẫu mới). Mỗi lần ký
+phải nhập lại PIN; chữ ký trên chứng từ mang mã mẫu, họ tên, giờ ký và mã băm
+SHA-256 của nội dung lúc ký — mở biểu mẫu là soát lại, nội dung đổi sau khi ký
+thì báo đỏ và không cho ký tiếp. Luật máy chủ buộc chữ ký là của chính người
+ghi (mọi vai trò, kể cả admin); giao diện chặn một người ký hai ô trên cùng
+phiếu. Xem [`src/lib/chuKy.ts`](src/lib/chuKy.ts).
+
+**Kế hoạch sản xuất theo mã bia.** Giám sát xưởng lập lưới đủ mã bia cho một
+ngày, hoặc nạp file Excel theo mẫu tải từ app. Mỗi (ngày × mã bia) một bản ghi
+id cố định — nạp lại không trùng. Xem [`src/lib/keHoachSX.ts`](src/lib/keHoachSX.ts).
 
 **Nạp tệp không bao giờ nhân đôi.** Mã tài liệu suy từ nội dung dòng; nạp lại
 cùng tệp là ghi đè lên chính nó. Dòng lệch với dữ liệu cũ thì hỏi một lần.

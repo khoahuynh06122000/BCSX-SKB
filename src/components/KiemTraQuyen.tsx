@@ -152,6 +152,8 @@ export default function KiemTraQuyen({ vaiTroTrongApp }: Props) {
       "diem_ban",
       // Ảnh chứng từ: Thư viện ảnh đọc từ đây, nên nghẽn ở đây là "ảnh biến mất".
       "anh_chung_tu",
+      // Chữ ký mẫu: nghẽn ở đây thì không ký được chứng từ nào.
+      "chu_ky_mau",
     ] as const) {
       const batDau = performance.now();
       try {

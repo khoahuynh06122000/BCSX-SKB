@@ -1,6 +1,8 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarPlus,
+  Download,
+  FileSpreadsheet,
   CheckCircle2,
   ClipboardList,
   Database,
@@ -31,6 +33,15 @@ import {
   tongHopKeHoachVaThucXuat,
 } from "../lib/loBia";
 import { cn, formatNumber } from "../lib/utils";
+import { taoSheetDep, XLSXDep } from "../lib/excelDep";
+import {
+  COT_MAU_KE_HOACH,
+  docBangKeHoach,
+  hangMauKeHoach,
+  type DongKeHoach,
+} from "../lib/keHoachSX";
+import { isoSangVn } from "../lib/oNgay";
+import ONgay from "./ONgay";
 
 export type QuanLyXuongSubTab =
   | "duyet-nhat-ky"
@@ -52,15 +63,8 @@ interface Props {
   onDuyetRao1: (slipCode: string) => Promise<void>;
   onTraLaiPhieu: (slipCode: string, reason: string) => Promise<void>;
   onMoBieuMau: (slipCode: string) => void;
-  onLuuKeHoach: (input: {
-    date: string;
-    productId: string;
-    targetQty: number;
-    batchHint: string;
-    note: string;
-    source: string;
-  }) => Promise<boolean>;
-  onXoaKeHoach: (planId: string) => Promise<void>;
+  /** Phát hành kế hoạch nhiều mã bia (lưới / file Excel). Sản lượng 0 = bỏ dòng. */
+  onLuuKeHoach: (dong: DongKeHoach[], nguon: string) => Promise<boolean>;
   onDuyetDanhGia: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
   onXoaDanhGia: (id: string) => Promise<void>;
   onDuyetKiemKeBon: (id: string, status: "approved" | "returned", reason?: string) => Promise<void>;
@@ -98,7 +102,6 @@ export default function QuanLyXuongPanel({
   onTraLaiPhieu,
   onMoBieuMau,
   onLuuKeHoach,
-  onXoaKeHoach,
   onDuyetDanhGia,
   onXoaDanhGia,
   onDuyetKiemKeBon,
@@ -167,12 +170,35 @@ export default function QuanLyXuongPanel({
     return { approvedL, pendingL };
   }, [slipsWithRows, products, approvedSlips]);
 
-  /* ---------- Tab 2: Kế hoạch sản xuất ---------- */
+  /* ---------- Tab 2: Kế hoạch sản xuất theo từng mã bia ---------- */
   const [planDate, setPlanDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [planProduct, setPlanProduct] = useState(products[0]?.id || "");
-  const [planQty, setPlanQty] = useState<number>(200);
-  const [planBatch, setPlanBatch] = useState("");
-  const [planNote, setPlanNote] = useState("");
+  /** Lưới đang điền: mã bia → ô sản lượng / mã lô / ghi chú (chuỗi gõ dở). */
+  const [luoi, setLuoi] = useState<Record<string, { sl: string; lo: string; ghiChu: string }>>({});
+  const oFile = useRef<HTMLInputElement>(null);
+
+  const keHoachNgay = useMemo(
+    () => keHoach.filter((k) => k.date.slice(0, 10) === planDate),
+    [keHoach, planDate],
+  );
+  /** Kế hoạch đã lưu của ngày đang chọn, theo mã bia (bản sửa sau cùng). */
+  const daLuuTheoMa = useMemo(() => {
+    const m = new Map<string, KeHoachSanXuat>();
+    [...keHoachNgay]
+      .sort((a, b) => (a.updatedAt || a.createdAt).localeCompare(b.updatedAt || b.createdAt))
+      .forEach((k) => m.set(k.productId, k));
+    return m;
+  }, [keHoachNgay]);
+
+  // Đổi ngày, hoặc kế hoạch đã lưu đổi (vừa phát hành) → lưới nạp lại từ bản lưu.
+  const khoaDaLuu = JSON.stringify([...daLuuTheoMa.values()].map((k) => [k.id, k.targetQty, k.batchHint, k.note]));
+  useEffect(() => {
+    const m: Record<string, { sl: string; lo: string; ghiChu: string }> = {};
+    daLuuTheoMa.forEach((k, pid) => {
+      m[pid] = { sl: String(k.targetQty ?? ""), lo: k.batchHint || "", ghiChu: k.note || "" };
+    });
+    setLuoi(m);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planDate, khoaDaLuu]);
 
   const planProgress = useMemo(
     () =>
@@ -186,21 +212,87 @@ export default function QuanLyXuongPanel({
       ),
     [keHoach, transactions, slips, products, approvedSlips, planDate],
   );
+  const tienDoTheoMa = useMemo(
+    () => new Map(planProgress.map((r) => [r.productId, r])),
+    [planProgress],
+  );
 
-  const handleAddPlan = async () => {
-    if (!planProduct || planQty <= 0 || busy) return;
-    const ok = await onLuuKeHoach({
-      date: planDate,
-      productId: planProduct,
-      targetQty: planQty,
-      batchHint: planBatch.trim(),
-      note: planNote.trim(),
-      source: "Quản lý xưởng nạp",
+  /** Các dòng lưới khác bản đã lưu — chỉ những dòng này được gửi đi. */
+  const dongThayDoi = useMemo<DongKeHoach[]>(() => {
+    const ra: DongKeHoach[] = [];
+    products.forEach((p) => {
+      const o = luoi[p.id];
+      const cu = daLuuTheoMa.get(p.id);
+      const sl = o && o.sl.trim() !== "" ? Math.max(0, Number(o.sl.replace(",", ".")) || 0) : 0;
+      const lo = (o?.lo || "").trim();
+      const ghiChu = (o?.ghiChu || "").trim();
+      if (!cu && sl <= 0) return;
+      if (cu && Number(cu.targetQty) === sl && (cu.batchHint || "") === lo && (cu.note || "") === ghiChu) return;
+      ra.push({ date: planDate, productId: p.id, targetQty: sl, batchHint: lo, note: ghiChu });
     });
-    if (ok) {
-      setPlanQty(0);
-      setPlanBatch("");
-      setPlanNote("");
+    return ra;
+  }, [products, luoi, daLuuTheoMa, planDate]);
+
+  const doiO = (pid: string, truong: "sl" | "lo" | "ghiChu", v: string) =>
+    setLuoi((cu) => ({
+      ...cu,
+      [pid]: { sl: "", lo: "", ghiChu: "", ...cu[pid], [truong]: v },
+    }));
+
+  const handlePhatHanh = async () => {
+    if (!dongThayDoi.length || busy) return;
+    await onLuuKeHoach(dongThayDoi, "Giám sát xưởng lập trên app");
+  };
+
+  /** File mẫu: đủ mọi mã bia của ngày đang chọn, điền sẵn kế hoạch đã có. */
+  const taiFileMau = () => {
+    const wb = XLSXDep.utils.book_new();
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      taoSheetDep({
+        tieuDeTren: ["KẾ HOẠCH SẢN XUẤT THEO MÃ BIA", `Ngày ${isoSangVn(planDate)} · Sun KraftBeer`],
+        tieuDe: [...COT_MAU_KE_HOACH],
+        cot: [{ rong: 12 }, { rong: 13 }, { rong: 38 }, { rong: 7 }, { rong: 14, kieu: "so" }, { rong: 16 }, { rong: 30 }],
+        hang: hangMauKeHoach(products, planDate, keHoach),
+      }),
+      "KeHoach",
+    );
+    XLSXDep.utils.book_append_sheet(
+      wb,
+      XLSXDep.utils.aoa_to_sheet([
+        ["HƯỚNG DẪN ĐIỀN KẾ HOẠCH SẢN XUẤT"],
+        [""],
+        ["1. Mỗi dòng là MỘT mã bia của MỘT ngày. Điền cột \"Sản lượng KH\" (theo ĐVT), mã lô dự kiến, ghi chú nếu có."],
+        ["2. KHÔNG sửa cột Mã SAP / Tên bia — app khớp mã bia theo hai cột này."],
+        ["3. Muốn lập nhiều ngày: chép thêm dòng, đổi cột Ngày (dd/MM/yyyy)."],
+        ["4. Để TRỐNG sản lượng = không đụng kế hoạch đã có của dòng đó. Ghi 0 = bỏ kế hoạch dòng đó."],
+        ["5. Nạp lại file nhiều lần không bị trùng: mỗi ngày × mã bia chỉ một dòng kế hoạch, nạp lại là ghi đè."],
+      ]),
+      "HuongDan",
+    );
+    XLSXDep.writeFile(wb, `Ke-hoach-SX-${planDate}.xlsx`);
+  };
+
+  const napFile = async (f: File) => {
+    try {
+      const wb = XLSXDep.read(await f.arrayBuffer(), { type: "array", cellDates: true });
+      const ten = wb.SheetNames.includes("KeHoach") ? "KeHoach" : wb.SheetNames[0];
+      const aoa = XLSXDep.utils.sheet_to_json<unknown[]>(wb.Sheets[ten], { header: 1, raw: true });
+      const kq = docBangKeHoach(aoa, products, planDate);
+      if (!kq.dong.length) {
+        alert(`Không đọc được dòng kế hoạch nào từ "${f.name}".\n\n${kq.loi.slice(0, 10).join("\n") || "File không có dòng nào điền sản lượng."}`);
+        return;
+      }
+      if (
+        kq.loi.length &&
+        !window.confirm(
+          `File có ${kq.loi.length} dòng KHÔNG nạp được:\n${kq.loi.slice(0, 10).join("\n")}${kq.loi.length > 10 ? `\n… và ${kq.loi.length - 10} dòng nữa` : ""}\n\nVẫn nạp ${kq.dong.length} dòng đọc được?`,
+        )
+      )
+        return;
+      await onLuuKeHoach(kq.dong, `Nạp file ${f.name}`.slice(0, 128));
+    } catch (e) {
+      alert("Không đọc được file Excel: " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -558,186 +650,156 @@ export default function QuanLyXuongPanel({
                 <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
                   KẾ THỪA TỰ ĐỘNG SANG NV SẢN XUẤT & DASHBOARD KẾ TOÁN
                 </span>
-                <h2 className="text-base font-extrabold">Nạp Kế Hoạch Sản Xuất Theo Ngày</h2>
+                <h2 className="text-base font-extrabold">Kế Hoạch Sản Xuất Theo Mã Bia</h2>
               </div>
               <CalendarPlus className="w-5 h-5 text-amber-400" />
             </div>
 
-            <div className="p-6 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end p-4 rounded-2xl bg-amber-50/40 border border-amber-200">
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    Ngày kế hoạch
-                  </label>
-                  <input
-                    type="date"
-                    value={planDate}
-                    onChange={(e) => setPlanDate(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-bold bg-white"
-                  />
+            <div className="p-6 space-y-4">
+              <div className="flex flex-wrap items-end gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ngày kế hoạch</p>
+                  <div className="w-44">
+                    <ONgay
+                      aria-label="Ngày kế hoạch"
+                      value={planDate}
+                      onChange={(v) => v && setPlanDate(v)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white outline-none focus:border-amber-600"
+                    />
+                  </div>
                 </div>
-                <div className="sm:col-span-4">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    Mặt hàng bia
-                  </label>
-                  <select
-                    value={planProduct}
-                    onChange={(e) => setPlanProduct(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold bg-white"
-                  >
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.unit})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    Sản lượng KH *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={planQty || ""}
-                    onChange={(e) => setPlanQty(Number(e.target.value) || 0)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-sm font-black bg-white"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">
-                    Mã lô dự kiến
-                  </label>
-                  <input
-                    type="text"
-                    value={planBatch}
-                    onChange={(e) => setPlanBatch(e.target.value)}
-                    placeholder="LO-..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 font-mono text-xs font-bold bg-white"
-                  />
-                </div>
-                <div className="sm:col-span-2">
+                <div className="flex flex-wrap gap-2 ml-auto">
                   <button
                     type="button"
-                    disabled={busy || planQty <= 0}
-                    onClick={() => void handleAddPlan()}
-                    className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-extrabold transition shadow"
+                    onClick={taiFileMau}
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-700 hover:border-slate-400 flex items-center gap-1.5"
                   >
-                    + Phát hành
+                    <Download className="w-3.5 h-3.5" /> Tải file mẫu
                   </button>
-                </div>
-                <div className="sm:col-span-12">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => oFile.current?.click()}
+                    className="px-3.5 py-2 rounded-xl border border-emerald-300 bg-white text-xs font-extrabold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 flex items-center gap-1.5"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" /> Nạp file Excel
+                  </button>
                   <input
-                    type="text"
-                    value={planNote}
-                    onChange={(e) => setPlanNote(e.target.value)}
-                    placeholder="Ghi chú kế hoạch (VD: Ưu tiên cấp cho Lễ Hội Bia / 1901)..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                    ref={oFile}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) void napFile(f);
+                    }}
                   />
+                  <button
+                    type="button"
+                    disabled={busy || !dongThayDoi.length}
+                    onClick={() => void handlePhatHanh()}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-extrabold shadow"
+                  >
+                    Phát hành kế hoạch{dongThayDoi.length ? ` (${dongThayDoi.length} dòng)` : ""}
+                  </button>
                 </div>
               </div>
 
-              {/* Tiến độ thực hiện kế hoạch ngày đang chọn */}
-              <div className="rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="rounded-2xl border border-slate-200 overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase text-[10px]">
                     <tr>
-                      <th className="py-3 px-4">Mặt hàng bia</th>
-                      <th className="py-3 px-3 text-right">Kế hoạch</th>
+                      <th className="py-3 px-4">Mã bia</th>
+                      <th className="py-3 px-2">ĐVT</th>
+                      <th className="py-3 px-2 text-right">Sản lượng KH</th>
+                      <th className="py-3 px-2">Mã lô dự kiến</th>
+                      <th className="py-3 px-2">Ghi chú</th>
                       <th className="py-3 px-3 text-right">Xưởng đã giao</th>
-                      <th className="py-3 px-3 text-right">Kho đã nhận (2 rào)</th>
+                      <th className="py-3 px-3 text-right">Kho đã nhận</th>
                       <th className="py-3 px-4">Tiến độ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {planProgress.map((r) => (
-                      <tr key={r.productId} className="hover:bg-slate-50">
-                        <td className="py-3 px-4">
-                          <span className="font-bold text-slate-900">{r.productName}</span>
-                          {r.notes[0] && (
-                            <span className="block text-[11px] text-slate-400">{r.notes[0]}</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-black text-slate-900 tabular-nums">
-                          {formatNumber(r.plannedQty)} {r.unit}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-amber-700 tabular-nums">
-                          {formatNumber(r.sentFromBrewery)} {r.unit}
-                        </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
-                          {formatNumber(r.receivedByWarehouse)} {r.unit}
-                        </td>
-                        <td className="py-3 px-4 w-44">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full bar-fill",
-                                  r.pctBrewery >= 100 ? "bg-emerald-500" : "bg-amber-500",
-                                )}
-                                style={{ width: `${Math.min(100, r.pctBrewery)}%` }}
-                              />
-                            </div>
-                            <span className="font-mono text-[11px] font-bold w-10 text-right">
-                              {r.pctBrewery}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {planProgress.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400 font-bold">
-                          Chưa có kế hoạch sản xuất cho ngày {planDate}.
-                        </td>
-                      </tr>
-                    )}
+                    {products.map((p) => {
+                      const o = luoi[p.id] || { sl: "", lo: "", ghiChu: "" };
+                      const td = tienDoTheoMa.get(p.id);
+                      const doi = dongThayDoi.some((d) => d.productId === p.id);
+                      const coKH = (Number(o.sl) || 0) > 0;
+                      return (
+                        <tr key={p.id} className={cn(doi ? "bg-amber-50/60" : coKH ? "" : "text-slate-400")}>
+                          <td className="py-2 px-4">
+                            <p className={cn("font-bold", coKH ? "text-slate-900" : "text-slate-500")}>{p.name}</p>
+                            {p.materialCode && (
+                              <p className="text-[10px] font-mono text-slate-400">{p.materialCode}</p>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 font-bold">{p.unit}</td>
+                          <td className="py-2 px-2 text-right">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={o.sl}
+                              onChange={(e) => doiO(p.id, "sl", e.target.value)}
+                              placeholder="—"
+                              className="w-24 px-2 py-1.5 rounded-lg border border-slate-300 focus:border-amber-500 text-right font-mono font-black tabular-nums outline-none bg-white text-slate-900"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={o.lo}
+                              maxLength={128}
+                              onChange={(e) => doiO(p.id, "lo", e.target.value)}
+                              placeholder="LO-..."
+                              className="w-28 px-2 py-1.5 rounded-lg border border-slate-200 font-mono text-xs font-bold outline-none bg-white text-slate-900"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={o.ghiChu}
+                              maxLength={2000}
+                              onChange={(e) => doiO(p.id, "ghiChu", e.target.value)}
+                              placeholder="Ghi chú"
+                              className="w-44 px-2 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold outline-none bg-white text-slate-900"
+                            />
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-amber-700 tabular-nums">
+                            {td ? formatNumber(td.sentFromBrewery) : "—"}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
+                            {td ? formatNumber(td.receivedByWarehouse) : "—"}
+                          </td>
+                          <td className="py-2 px-4 w-40">
+                            {td && td.plannedQty > 0 ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full bar-fill",
+                                      td.pctBrewery >= 100 ? "bg-emerald-500" : "bg-amber-500",
+                                    )}
+                                    style={{ width: `${Math.min(100, td.pctBrewery)}%` }}
+                                  />
+                                </div>
+                                <span className="font-mono text-[11px] font-bold w-10 text-right">{td.pctBrewery}%</span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-
-              {/* Danh sách bản ghi kế hoạch để xoá nếu nhập nhầm */}
-              {keHoach.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                    Các dòng kế hoạch đã lưu ({keHoach.length})
-                  </p>
-                  <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
-                    {keHoach.map((pl) => {
-                      const p = products.find((x) => x.id === pl.productId);
-                      return (
-                        <div
-                          key={pl.id}
-                          className="px-4 py-2.5 flex items-center justify-between gap-2 text-xs bg-white"
-                        >
-                          <div>
-                            <span className="font-mono font-bold text-slate-500 mr-2">
-                              {pl.date}
-                            </span>
-                            <span className="font-bold text-slate-900">{p?.name || pl.productId}</span>
-                            <span className="ml-2 font-mono font-black text-amber-700">
-                              {formatNumber(pl.targetQty)} {p?.unit}
-                            </span>
-                            {pl.batchHint && (
-                              <span className="ml-2 font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100">
-                                {pl.batchHint}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void onXoaKeHoach(pl.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                            title="Xoá dòng kế hoạch này"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <p className="text-[11px] font-semibold text-slate-500">
+                Điền sản lượng cho mã bia cần sản xuất ngày {isoSangVn(planDate)} (dòng đổi tô vàng), rồi bấm Phát hành.
+                Xoá trống / ghi 0 một dòng đã phát hành = bỏ kế hoạch mã bia đó. Nhiều ngày một lúc: tải file mẫu, điền, nạp lại.
+              </p>
             </div>
           </div>
 

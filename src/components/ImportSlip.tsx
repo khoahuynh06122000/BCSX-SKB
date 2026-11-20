@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Printer,
-  Camera,
   CheckCircle2,
   AlertTriangle,
   FileText,
   Loader2,
-  Upload,
+  ShieldAlert,
+  ShieldCheck,
   X,
   ImageOff,
   RotateCcw,
@@ -18,11 +18,14 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type {
+  ChuKyDienTu,
   Transaction,
   Product,
   Partner,
   ImportSlip as ImportSlipType,
 } from "../types";
+import { bamSha256, maBamNgan, noiDungPhieuNhap, type ChuKyMau } from "../lib/chuKy";
+import { HinhChuKy } from "./ChuKy";
 import { cn, formatNumber } from "../lib/utils";
 import { parseSlipCode, phieuDaVaoTon } from "../lib/slip";
 import { quyDoiHienTrang } from "../lib/loBia";
@@ -35,12 +38,14 @@ import { quaTrungChuyen } from "../anh/duongDan";
  *
  * Cách làm việc:
  *
- *   Sản xuất điền số vào app → kho đếm và đối chiếu → in phiếu ra giấy → hai
- *   bên ký tươi → chụp ảnh tờ đã ký đưa vào đây → HÀNG MỚI VÀO TỒN KHO.
+ *   Người nhập điền số và KÝ ĐIỆN TỬ trình phiếu → Quản lý xưởng ký duyệt
+ *   (Rào 1) → Kho tổng ký nhận (Rào 2) → HÀNG MỚI VÀO TỒN KHO.
  *
- * Chưa có ảnh ký thì số lượng chỉ nằm chờ: không cộng vào tồn, không lên báo
- * cáo, không xuất bán được. Chữ ký giấy vì vậy là cái khoá thật chứ không phải
- * thủ tục lưu trữ.
+ * Chưa có chữ ký Kho tổng thì số lượng chỉ nằm chờ: không cộng vào tồn, không
+ * lên báo cáo, không xuất bán được. Mỗi chữ ký mang chữ ký mẫu vẽ tay, họ tên,
+ * giờ ký (nhập PIN lúc ký) và mã băm nội dung — xem `lib/chuKy.ts`.
+ *
+ * Phiếu cũ trước 20/11/2026 ký giấy: ảnh tờ đã ký vẫn giữ làm chứng từ.
  *
  * Nội dung phiếu KHÔNG lưu riêng mà tính từ các `transactions` có cùng
  * `slipCode`, nên sửa giao dịch thì phiếu tự khớp theo. Trạng thái lưu ở
@@ -57,7 +62,7 @@ interface HandoverSlip {
   totalQuantity: number;
   totalLiters: number;
   meta?: ImportSlipType;
-  /** Đã có ảnh ký = đã vào tồn kho. */
+  /** Kho tổng đã ký nhận (hoặc phiếu giấy cũ có ảnh ký) = đã vào tồn kho. */
   approved: boolean;
 }
 
@@ -67,14 +72,12 @@ interface Props {
   partners: Partner[];
   slips: ImportSlipType[];
   canWrite: boolean;
-  currentUserName: string;
-  onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
-  onUploadSigned: (code: string, dateKey: string, files: FileList) => Promise<void>;
+  /** Chữ ký mẫu theo id — để vẽ chữ ký lên phiếu. */
+  chuKyMau: Map<string, ChuKyMau>;
   /** Gỡ một ảnh đã tải nhầm khỏi phiếu. Không truyền thì không hiện nút gỡ. */
   onRemoveSigned?: (code: string, anh: AnhChungTu) => Promise<void>;
-  /** Ảnh ký theo mã phiếu — từ bảng ảnh chứng từ. Có ảnh = đã duyệt, hàng vào tồn. */
+  /** Ảnh theo mã phiếu — ảnh hiện trạng, và ảnh tờ ký giấy của phiếu cũ. */
   anhTheoPhieu: Map<string, AnhChungTu[]>;
-  uploadingCode: string | null;
   /**
    * Xoá cả phiếu (nhập sai số lượng). Không truyền thì không có nút xoá.
    * Phiếu đã có ảnh ký chỉ hiện nút khi `xoaDuocPhieuDaKy` (admin).
@@ -98,12 +101,9 @@ export default function ImportSlipPanel({
   partners,
   slips,
   canWrite,
-  currentUserName,
-  onMarkPrinted,
-  onUploadSigned,
+  chuKyMau,
   onRemoveSigned,
   anhTheoPhieu,
-  uploadingCode,
   onXoaPhieu,
   xoaDuocPhieuDaKy = false,
   onLuuMaLo,
@@ -217,7 +217,7 @@ export default function ImportSlipPanel({
 
   return (
     <div className="space-y-6">
-      {/* ---------- Cảnh báo: phiếu chưa có ảnh ký = hàng chưa vào tồn ---------- */}
+      {/* ---------- Cảnh báo: phiếu chưa đủ chữ ký = hàng chưa vào tồn ---------- */}
       {pending.length > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl border border-amber-300 bg-amber-50 flex gap-3 print:hidden">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -228,8 +228,8 @@ export default function ImportSlipPanel({
             </p>
             <p className="text-[11px] font-bold text-amber-700/80 leading-relaxed">
               Số lượng trên các phiếu này <strong>chưa cộng vào tồn kho</strong>{" "}
-              và chưa xuất bán được. In phiếu ra, hai bên ký, rồi đưa ảnh tờ đã
-              ký vào đúng phiếu đó.
+              và chưa xuất bán được. Quản lý xưởng ký duyệt (Rào 1), rồi Kho
+              tổng ký nhận (Rào 2) thì hàng mới vào tồn.
             </p>
             <p className="text-[11px] font-black text-amber-700/70 font-mono tracking-wide">
               {pending
@@ -253,7 +253,6 @@ export default function ImportSlipPanel({
           handoverSlips.map((d) => {
             const anhKy = anhTheoPhieu.get(d.code) || [];
             const photos = anhKy.map((a) => a.url);
-            const printed = !!d.meta?.printedAt;
             return (
               <div key={d.code} className="space-y-0">
                 <div
@@ -332,9 +331,7 @@ export default function ImportSlipPanel({
                               ? "bg-sky-100 text-sky-800"
                               : d.meta?.status === "tra_lai"
                                 ? "bg-rose-100 text-rose-800"
-                                : printed
-                                  ? "bg-blue-100 text-blue-700"
-                                  : "bg-amber-100 text-amber-700",
+                                : "bg-amber-100 text-amber-700",
                       )}
                     >
                       {d.approved
@@ -345,9 +342,7 @@ export default function ImportSlipPanel({
                             ? "2/2 · Chờ Kho Tổng"
                             : d.meta?.status === "tra_lai"
                               ? "Bị trả lại"
-                              : printed
-                                ? "Đã in · chờ ký"
-                                : "Chờ in"}
+                              : "Chờ ký trình"}
                     </span>
 
                     <button
@@ -356,84 +351,6 @@ export default function ImportSlipPanel({
                     >
                       <Printer className="w-3.5 h-3.5" /> BM-SKB-01
                     </button>
-
-                    {/*
-                      Hai lối đưa ảnh vào, cố ý tách riêng: thuộc tính `capture`
-                      trên điện thoại BẮT BUỘC mở camera, không cho chọn ảnh có
-                      sẵn. Người dùng máy bàn quét phiếu bằng máy scan hoặc đã
-                      chụp sẵn thì cần lối thứ hai không có `capture`.
-                    */}
-                    {canWrite && (
-                      <>
-                        <label
-                          className={cn(
-                            "px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest cursor-pointer transition-all flex items-center gap-1.5",
-                            d.approved
-                              ? "border-slate-200 hover:border-primary"
-                              : "border-primary bg-primary text-white hover:brightness-110",
-                            uploadingCode === d.code &&
-                              "opacity-60 pointer-events-none",
-                          )}
-                        >
-                          {uploadingCode === d.code ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Camera className="w-3.5 h-3.5" />
-                          )}
-                          Chụp ảnh
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            multiple
-                            className="hidden"
-                            disabled={uploadingCode === d.code}
-                            onChange={(e) => {
-                              if (e.target.files?.length) {
-                                onUploadSigned(
-                                  d.code,
-                                  d.dateKey,
-                                  e.target.files,
-                                );
-                              }
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-
-                        <label
-                          className={cn(
-                            "px-4 py-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-primary transition-all flex items-center gap-1.5",
-                            uploadingCode === d.code &&
-                              "opacity-60 pointer-events-none",
-                          )}
-                        >
-                          {uploadingCode === d.code ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Upload className="w-3.5 h-3.5" />
-                          )}
-                          Tải ảnh lên
-                          <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            disabled={uploadingCode === d.code}
-                            onChange={(e) => {
-                              if (e.target.files?.length) {
-                                onUploadSigned(
-                                  d.code,
-                                  d.dateKey,
-                                  e.target.files,
-                                );
-                              }
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                      </>
-                    )}
 
                     {canWrite && onLuuMaLo && (
                       <button
@@ -501,9 +418,7 @@ export default function ImportSlipPanel({
                               if (
                                 window.confirm(
                                   `Gỡ ảnh này khỏi phiếu ${d.code}?\n\n` +
-                                    (photos.length === 1
-                                      ? `Đây là ảnh ký duy nhất — gỡ nó thì ${formatNumber(d.totalLiters)} lít trên phiếu sẽ RA KHỎI TỒN KHO.`
-                                      : "Ảnh là chứng từ đã ký — chỉ gỡ khi tải nhầm."),
+                                    "Ảnh là chứng từ của phiếu — chỉ gỡ khi tải nhầm.",
                                 )
                               ) {
                                 onRemoveSigned(d.code, anhKy[i]);
@@ -549,14 +464,10 @@ export default function ImportSlipPanel({
           products={products}
           partners={partners}
           photos={anhTheoPhieu.get(openSlip.code) || []}
-          currentUserName={currentUserName}
+          chuKyMau={chuKyMau}
           onClose={() => {
             setOpenCode(null);
             onCloseExternal?.();
-          }}
-          onPrint={async () => {
-            await onMarkPrinted(openSlip.code, openSlip.dateKey);
-            window.print();
           }}
         />
       )}
@@ -821,9 +732,8 @@ export function BieuMauDienTuModal({
   partners,
   slips,
   anhTheoPhieu,
-  currentUserName,
+  chuKyMau,
   onClose,
-  onMarkPrinted,
 }: {
   code: string;
   transactions: Transaction[];
@@ -831,9 +741,8 @@ export function BieuMauDienTuModal({
   partners: Partner[];
   slips: ImportSlipType[];
   anhTheoPhieu: Map<string, AnhChungTu[]>;
-  currentUserName: string;
+  chuKyMau: Map<string, ChuKyMau>;
   onClose: () => void;
-  onMarkPrinted: (code: string, dateKey: string) => Promise<void>;
 }) {
   const txs = transactions.filter((t) => t.type === "IN" && t.slipCode === code);
   if (!txs.length) return null;
@@ -861,12 +770,8 @@ export function BieuMauDienTuModal({
       products={products}
       partners={partners}
       photos={anhTheoPhieu.get(code) || []}
-      currentUserName={currentUserName}
+      chuKyMau={chuKyMau}
       onClose={onClose}
-      onPrint={async () => {
-        await onMarkPrinted(code, dateKey);
-        window.print();
-      }}
     />
   );
 }
@@ -876,17 +781,15 @@ function SlipPreview({
   products,
   partners,
   photos,
-  currentUserName,
+  chuKyMau,
   onClose,
-  onPrint,
 }: {
   slip: HandoverSlip;
   products: Product[];
   partners: Partner[];
   photos: AnhChungTu[];
-  currentUserName: string;
+  chuKyMau: Map<string, ChuKyMau>;
   onClose: () => void;
-  onPrint: () => void;
 }) {
   const rows = slip.transactions.map((t) => {
     const p = products.find((x) => x.id === t.productId);
@@ -917,6 +820,25 @@ function SlipPreview({
     slip.meta?.status === "tra_lai"
   );
 
+  /*
+   * Băm lại nội dung HIỆN TẠI của phiếu để so với mã băm lúc từng người ký:
+   * khác là có người sửa số liệu sau khi ký.
+   */
+  const [bamHienTai, setBamHienTai] = useState("");
+  const ngayPhieu = slip.meta?.date || slip.dateKey;
+  const noiDung = noiDungPhieuNhap(
+    slip.code,
+    ngayPhieu,
+    slip.transactions.map((t) => ({ productId: t.productId, quantity: Number(t.quantity) || 0 })),
+  );
+  useEffect(() => {
+    let huy = false;
+    void bamSha256(noiDung).then((b) => !huy && setBamHienTai(b));
+    return () => {
+      huy = true;
+    };
+  }, [noiDung]);
+
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center p-0 sm:p-6 overflow-y-auto print:p-0 print:overflow-visible print:static">
       {/* Nền mờ - ẩn khi in */}
@@ -938,7 +860,7 @@ function SlipPreview({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onPrint}
+              onClick={() => window.print()}
               className="px-4 py-2 rounded-xl bg-white text-slate-900 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-colors flex items-center gap-1.5"
             >
               <Printer className="w-3.5 h-3.5" /> Xuất PDF / In
@@ -1073,61 +995,91 @@ function SlipPreview({
             </div>
           )}
 
-          {/* Khối chữ ký điện tử Paperless (3 ô / hàng) hoặc chân ký giấy cũ */}
+          {/* Khối chữ ký điện tử (3 ô), hoặc ghi chú phiếu ký giấy cũ */}
           {laPaperless ? (
-            <div className="grid grid-cols-3 gap-3 text-[11px]" style={{ breakInside: "avoid" }}>
-              {[
-                { title: "1. NGƯỜI TRÌNH (SẢN XUẤT)", sig: creatorSig },
-                { title: "2. QUẢN LÝ XƯỞNG (RÀO 1)", sig: managerSig },
-                { title: "3. KHO TỔNG NHẬN (RÀO 2)", sig: warehouseSig },
-              ].map((cell) =>
-                cell.sig ? (
-                  <div
-                    key={cell.title}
-                    className="p-3 rounded-lg border-2 border-emerald-600 bg-emerald-50/40 text-center space-y-1"
-                  >
-                    <p className="font-bold uppercase text-[10px]">{cell.title}</p>
-                    <p className="font-black text-emerald-700">✓ Đã ký điện tử</p>
-                    <p className="font-mono text-[10px] text-slate-600">
-                      {cell.sig.signedAt.slice(0, 16).replace("T", " ")}
-                    </p>
-                    <p className="font-mono text-[10px] font-bold bg-emerald-100 text-emerald-900 rounded px-1.5 py-0.5 inline-block">
-                      TOKEN: {cell.sig.token}
-                    </p>
-                    <p className="font-bold text-slate-900">{cell.sig.name}</p>
-                  </div>
-                ) : (
-                  <div
-                    key={cell.title}
-                    className="p-3 rounded-lg border border-dashed border-slate-400 text-center flex flex-col justify-center min-h-[110px]"
-                  >
-                    <p className="font-bold uppercase text-[10px] text-slate-600">
-                      {cell.title}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-2">Chưa ký điện tử</p>
-                  </div>
-                ),
-              )}
+            <div className="space-y-2" style={{ breakInside: "avoid" }}>
+              <div className="grid grid-cols-3 gap-3 text-[11px]">
+                {[
+                  { title: "Người trình (Sản xuất)", sig: creatorSig },
+                  { title: "Quản lý xưởng (Rào 1)", sig: managerSig },
+                  { title: "Kho tổng nhận (Rào 2)", sig: warehouseSig },
+                ].map((cell) => (
+                  <OKy key={cell.title} title={cell.title} sig={cell.sig} mau={cell.sig?.chuKyId ? chuKyMau.get(cell.sig.chuKyId) : undefined} bamHienTai={bamHienTai} />
+                ))}
+              </div>
+              <p className="text-[9px] leading-relaxed text-slate-500">
+                Chứng từ điện tử ký trên hệ thống BCSX-SKB. Mỗi chữ ký: người ký đăng nhập Google
+                (email đã xác minh) và nhập lại mã PIN cá nhân lúc ký; chữ ký mẫu do chính người ký
+                đăng ký, không sửa / xoá được. Mã băm SHA-256 ghi nhận nội dung lúc ký — nội dung
+                hiện tại {bamHienTai ? <span className="font-mono font-bold">{maBamNgan(bamHienTai)}</span> : "…"}.
+              </p>
             </div>
           ) : (
-            <div className="grid grid-cols-4 gap-4 text-[11px] text-center pt-4">
-              {[
-                "Bên giao (Sản xuất)",
-                "Bên nhận (Thủ kho)",
-                "Kế toán",
-                "Trưởng bộ phận",
-              ].map((role, i) => (
-                <div key={role}>
-                  <p className="font-bold uppercase">{role}</p>
-                  <p className="italic text-[10px]">(Ký, ghi rõ họ tên)</p>
-                  <div className="h-20" />
-                  {i === 0 && <p>{currentUserName}</p>}
-                </div>
-              ))}
+            <div className="p-3 rounded-lg border border-slate-400 text-[11px] text-center text-slate-600" style={{ breakInside: "avoid" }}>
+              Phiếu ký giấy (trước khi app dùng chữ ký điện tử) — chứng từ gốc là ảnh tờ phiếu đã ký
+              đính kèm ở trên và bản giấy lưu tại kho.
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * MỘT Ô CHỮ KÝ trên biểu mẫu: chữ ký mẫu vẽ tay + họ tên + giờ ký + cách xác
+ * thực, và dấu soát nội dung (băm lúc ký so với nội dung hiện tại).
+ */
+function OKy({
+  title,
+  sig,
+  mau,
+  bamHienTai,
+}: {
+  title: string;
+  sig?: ChuKyDienTu;
+  mau?: ChuKyMau;
+  bamHienTai: string;
+}) {
+  if (!sig) {
+    return (
+      <div className="p-3 rounded-lg border border-dashed border-slate-400 text-center flex flex-col justify-center min-h-[130px]">
+        <p className="font-bold uppercase text-[10px] text-slate-600">{title}</p>
+        <p className="text-[10px] text-slate-400 mt-2">Chưa ký</p>
+      </div>
+    );
+  }
+  const khop = !sig.bamNoiDung || !bamHienTai ? null : sig.bamNoiDung === bamHienTai;
+  return (
+    <div
+      className={cn(
+        "p-3 rounded-lg border-2 text-center space-y-0.5",
+        khop === false ? "border-rose-600 bg-rose-50/50" : "border-emerald-600 bg-emerald-50/30",
+      )}
+    >
+      <p className="font-bold uppercase text-[10px]">{title}</p>
+      {mau ? (
+        <HinhChuKy mau={mau} className="mx-auto h-16 w-full" />
+      ) : (
+        <p className="py-4 font-black text-emerald-700">✓ Đã ký điện tử</p>
+      )}
+      <p className="font-black text-slate-900">{sig.name}</p>
+      <p className="font-mono text-[10px] text-slate-600">
+        {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
+      </p>
+      <p className="font-mono text-[9px] text-slate-500">
+        {sig.xacThuc ? `Xác thực: ${sig.xacThuc === "GOOGLE+PIN" ? "Google + PIN" : sig.xacThuc}` : "Ký điện tử"} · Mã {sig.token}
+      </p>
+      {khop === true && (
+        <p className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700">
+          <ShieldCheck className="w-3 h-3" /> Nội dung nguyên vẹn từ lúc ký
+        </p>
+      )}
+      {khop === false && (
+        <p className="inline-flex items-center gap-1 text-[9px] font-black text-rose-700">
+          <ShieldAlert className="w-3 h-3" /> Nội dung ĐÃ ĐỔI sau khi ký
+        </p>
+      )}
     </div>
   );
 }
