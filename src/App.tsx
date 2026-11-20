@@ -7969,9 +7969,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
       id="app"
       className={cn(
         "app-vao flex h-screen bg-bg-main text-slate-900 font-sans overflow-hidden transition-all duration-150",
-        (loading || isAccountModalOpen) && user
-          ? "blur-[1px] brightness-95"
-          : "",
+        loading && user && !isAccountModalOpen ? "blur-[1px] brightness-95" : "",
       )}
     >
       {/* Vach vang tren dinh man hinh - dau nhan dien cua thuong hieu bia */}
@@ -7984,13 +7982,19 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
 
       {/* Account Profile Modal */}
       {isAccountModalOpen && currentUserProfile && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[200] flex items-stretch sm:items-center justify-center sm:p-6">
           <div
             onClick={() => setIsAccountModalOpen(false)}
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-md pointer-events-auto"
+            className="absolute inset-0 bg-slate-900/50 pointer-events-auto"
           />
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-white overflow-hidden relative z-10 pointer-events-auto">
-            <div className="p-8 sm:p-10 space-y-8">
+          {/*
+            Điện thoại: phủ KÍN màn hình, cuộn bên trong. Máy tính: khung rộng
+            vừa phải, cao tối đa bằng màn hình, cuộn bên trong. Bản trước khung
+            hẹp 448px, nằm giữa, và bị phủ hiệu ứng làm mờ của nền app (khung
+            nằm trong #app nên mờ theo) — chữ nhoè, thẻ chữ ký bị bóp dọc.
+          */}
+          <div className="w-full sm:max-w-xl h-full sm:h-auto sm:max-h-[92vh] overflow-y-auto bg-white sm:rounded-3xl shadow-2xl relative z-10 pointer-events-auto">
+            <div className="p-5 sm:p-8 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -8072,28 +8076,27 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
 
                 {/* Chữ ký điện tử của chính người dùng */}
                 {quyen.xemKho && (
-                  <div className="p-5 rounded-3xl border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-                    <div className="space-y-1">
+                  <div className="p-5 rounded-3xl border border-slate-200 bg-white space-y-3">
+                    <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Chữ ký điện tử</p>
-                      <p className="text-[11px] font-bold text-slate-500 leading-relaxed">
-                        Đóng lên chứng từ khi anh/chị trình, duyệt, ký nhận (kèm họ tên, giờ ký, nhập PIN mỗi lần ký).
-                        Đổi chữ ký không làm đổi chứng từ đã ký trước đó.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {mauCuaToi && (
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-2">
-                          <HinhChuKy mau={mauCuaToi} className="h-14 w-40" />
-                        </div>
-                      )}
                       <button
                         type="button"
                         onClick={() => setMoDoiChuKy(true)}
-                        className="px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-[11px] font-extrabold hover:bg-amber-50"
+                        className="shrink-0 px-4 py-2 rounded-xl border border-amber-300 text-amber-700 text-[11px] font-extrabold hover:bg-amber-50"
                       >
                         {mauCuaToi ? "Đổi chữ ký" : "Đăng ký chữ ký"}
                       </button>
                     </div>
+                    {mauCuaToi && (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center">
+                        <HinhChuKy mau={mauCuaToi} className="mx-auto h-24 w-full max-w-sm" />
+                        <p className="text-xs font-black text-slate-900">{mauCuaToi.ten}</p>
+                      </div>
+                    )}
+                    <p className="text-[11px] font-semibold text-slate-500 leading-relaxed">
+                      Đóng lên chứng từ khi anh/chị trình, duyệt, ký nhận — kèm họ tên, giờ ký, nhập PIN mỗi lần ký.
+                      Đổi chữ ký không làm đổi chứng từ đã ký trước đó.
+                    </p>
                   </div>
                 )}
 
@@ -9761,6 +9764,98 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                         </div>
 
                         <div className="px-4 py-3 sm:p-8 sm:pt-4 space-y-3 sm:space-y-6 overflow-y-auto">
+                          {/* ẢNH MINH CHỨNG LÊN ĐẦU (20/11/2026): trên điện thoại
+                              nằm dưới danh sách mặt hàng thì phải cuộn tận đáy
+                              mới thấy chỗ chụp — mà đó là việc bắt buộc. */}
+                          <div className="space-y-3">
+                            {/* Nhãn ngắn lại: bản trước dài quá nên trên điện
+                                thoại vắt xuống dòng thứ hai còn trơ mỗi chữ
+                                "BUỘC)". */}
+                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1 block">
+                              Ảnh minh chứng
+                              <span className="text-rose-500"> *</span>
+                            </label>
+
+                            {/*
+                              HAI NÚT NHỎ, XẾP NGANG. (Nút quét phiếu bằng AI đã
+                              bỏ 19/11/2026: nay chụp HIỆN TRƯỜNG, không chụp giấy.)
+                              Chúng chỉ là chỗ bấm một lần rồi thôi; chiếm ba
+                              khối lớn chồng lên nhau thì đẩy ảnh minh chứng
+                              xuống tận đáy, phải cuộn mới thấy. Chỗ cần rộng
+                              là ẢNH, để đối chiếu chữ viết tay với số lượng ở
+                              trên.
+                            */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
+                                <Camera className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
+                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-primary text-center leading-tight tracking-tight">
+                                  Chụp thêm
+                                </span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  capture="environment"
+                                  multiple
+                                  onChange={async (e) => {
+                                    const o = e.target;
+                                    const { ds: moi, hong } = await taoTepCho(o.files);
+                                    o.value = "";
+                                    if (hong) baoAnhKhongDoc(hong);
+                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
+                                  }}
+                                />
+                              </label>
+                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
+                                <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-emerald-500 text-center leading-tight tracking-tight">
+                                  Chọn từ máy
+                                </span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  multiple
+                                  onChange={async (e) => {
+                                    const o = e.target;
+                                    const { ds: moi, hong } = await taoTepCho(o.files);
+                                    o.value = "";
+                                    if (hong) baoAnhKhongDoc(hong);
+                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
+                                  }}
+                                />
+                              </label>
+                            </div>
+
+                            {/*
+                              ẢNH TO, KHÔNG CẮT, MỖI TẤM MỘT HÀNG.
+                              Đây là tờ biên bản viết tay: người dùng phải đọc
+                              được con số trên đó rồi dò với số lượng ở phần
+                              trên. Bản trước cắt vuông và xếp bốn tấm một hàng
+                              — thành ra chỉ thấy giữa tờ giấy, chữ số nằm ở mép
+                              bị cắt mất.
+
+                              `object-contain` giữ nguyên tỉ lệ nên không mất
+                              góc nào của tờ phiếu.
+                            */}
+                            {/*
+                              Ảnh đang chọn (chưa lưu) và ảnh đã có của chuyến.
+                              Xác nhận lần hai (từng phần) thì ảnh lần trước
+                              vẫn còn — ảnh mới được THÊM vào, không thay.
+                            */}
+                            {(() => {
+                              const daCo = [
+                                ...new Set(selectedInTransitGroup.map(maChungTuCuaDong)),
+                              ].flatMap((c) => anhTheoChungTu.get(c) || []);
+                              return daCo.length > 0 ? (
+                                <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-emerald-600">
+                                  Chuyến này đã có {daCo.length} ảnh biên bản —
+                                  ảnh chọn thêm sẽ được cộng vào, không thay.
+                                </p>
+                              ) : null;
+                            })()}
+                            <ChonAnh ds={anhCho} onDoi={setAnhCho} />
+                          </div>
                           <div className="space-y-4">
                             {(() => {
                               const groupedItems =
@@ -10046,95 +10141,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                             </div>
                           )}
 
-                          <div className="space-y-3">
-                            {/* Nhãn ngắn lại: bản trước dài quá nên trên điện
-                                thoại vắt xuống dòng thứ hai còn trơ mỗi chữ
-                                "BUỘC)". */}
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest ml-1 block">
-                              Ảnh minh chứng
-                              <span className="text-rose-500"> *</span>
-                            </label>
 
-                            {/*
-                              HAI NÚT NHỎ, XẾP NGANG. (Nút quét phiếu bằng AI đã
-                              bỏ 19/11/2026: nay chụp HIỆN TRƯỜNG, không chụp giấy.)
-                              Chúng chỉ là chỗ bấm một lần rồi thôi; chiếm ba
-                              khối lớn chồng lên nhau thì đẩy ảnh minh chứng
-                              xuống tận đáy, phải cuộn mới thấy. Chỗ cần rộng
-                              là ẢNH, để đối chiếu chữ viết tay với số lượng ở
-                              trên.
-                            */}
-                            <div className="grid grid-cols-2 gap-2">
-                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
-                                <Camera className="w-5 h-5 text-slate-400 group-hover:text-primary transition-colors" />
-                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-primary text-center leading-tight tracking-tight">
-                                  Chụp thêm
-                                </span>
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  capture="environment"
-                                  multiple
-                                  onChange={async (e) => {
-                                    const o = e.target;
-                                    const { ds: moi, hong } = await taoTepCho(o.files);
-                                    o.value = "";
-                                    if (hong) baoAnhKhongDoc(hong);
-                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
-                                  }}
-                                />
-                              </label>
-                              <label className="flex flex-col items-center justify-center gap-1 p-2 sm:p-3 border-2 border-dashed border-slate-200 rounded-2xl hover:border-emerald-500 hover:bg-emerald-50 transition-all cursor-pointer group min-h-[58px] sm:min-h-[76px]">
-                                <ImageIcon className="w-5 h-5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
-                                <span className="text-[9px] font-black text-slate-400 uppercase group-hover:text-emerald-500 text-center leading-tight tracking-tight">
-                                  Chọn từ máy
-                                </span>
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  multiple
-                                  onChange={async (e) => {
-                                    const o = e.target;
-                                    const { ds: moi, hong } = await taoTepCho(o.files);
-                                    o.value = "";
-                                    if (hong) baoAnhKhongDoc(hong);
-                                    if (moi.length) setAnhCho((cu) => [...cu, ...moi]);
-                                  }}
-                                />
-                              </label>
-                            </div>
-
-                            {/*
-                              ẢNH TO, KHÔNG CẮT, MỖI TẤM MỘT HÀNG.
-                              Đây là tờ biên bản viết tay: người dùng phải đọc
-                              được con số trên đó rồi dò với số lượng ở phần
-                              trên. Bản trước cắt vuông và xếp bốn tấm một hàng
-                              — thành ra chỉ thấy giữa tờ giấy, chữ số nằm ở mép
-                              bị cắt mất.
-
-                              `object-contain` giữ nguyên tỉ lệ nên không mất
-                              góc nào của tờ phiếu.
-                            */}
-                            {/*
-                              Ảnh đang chọn (chưa lưu) và ảnh đã có của chuyến.
-                              Xác nhận lần hai (từng phần) thì ảnh lần trước
-                              vẫn còn — ảnh mới được THÊM vào, không thay.
-                            */}
-                            {(() => {
-                              const daCo = [
-                                ...new Set(selectedInTransitGroup.map(maChungTuCuaDong)),
-                              ].flatMap((c) => anhTheoChungTu.get(c) || []);
-                              return daCo.length > 0 ? (
-                                <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-emerald-600">
-                                  Chuyến này đã có {daCo.length} ảnh biên bản —
-                                  ảnh chọn thêm sẽ được cộng vào, không thay.
-                                </p>
-                              ) : null;
-                            })()}
-                            <ChonAnh ds={anhCho} onDoi={setAnhCho} />
-                          </div>
                         </div>
 
                         {/* Chân hộp thoại: chừa thêm đệm dưới cho thanh điều hướng của điện
