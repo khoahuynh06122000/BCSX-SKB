@@ -149,7 +149,21 @@ export function soLuongTuKien(
   return Math.round((k + l) * 100) / 100;
 }
 
-/** Số keg vật lý của một dòng bia Lít: keg đầy + 1 keg lẻ nếu có phần lẻ. */
+/**
+ * Phần lẻ đã đủ một kiện (≥ 20,6 L với bia Lít, ≥ 24 lon với bia Lon) — tức
+ * là đếm nhầm: kiện đầy phải ghi vào ô keg / thùng, ô lẻ chỉ cho keg vơi.
+ */
+export function leDuMotKien(category: string | undefined, le: number): boolean {
+  const l = Number(le) || 0;
+  if (category === "Lít") return l >= LIT_KEG_CHUAN;
+  if (category === "Lon") return l >= 24;
+  return false;
+}
+
+/**
+ * Số keg vật lý của một dòng bia Lít: keg đầy + 1 keg lẻ nếu có phần lẻ.
+ * Lít lẻ nằm trong MỘT keg vơi riêng — 20 keg đầy + 10,9 L lẻ = 21 keg.
+ */
 export function soKegCuaDong(category: string | undefined, kien: number, le: number): number {
   if (category !== "Lít") return 0;
   return Math.max(0, Math.trunc(Number(kien) || 0)) + ((Number(le) || 0) > 0 ? 1 : 0);

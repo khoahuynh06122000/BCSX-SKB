@@ -20,6 +20,7 @@ import {
   KIEM_KE_DOT_XUAT,
   laBanGhiThuVeVoKeg,
   laKiemKeDotXuat,
+  leDuMotKien,
   soKegCuaDong,
   soLuongTuKien,
 } from "../lib/loBia";
@@ -218,12 +219,17 @@ export default function KiemKeKegLitSection({
   };
 
   const hasValidNumbers = totals.nonZeroCount > 0 || allowZeroConfirm;
+  // Ô lẻ chỉ dành cho keg vơi / lon lẻ — lẻ đủ một kiện là đếm nhầm, chặn lưu.
+  const dongLeDuKien = isKho
+    ? computedRows.filter((r) => leDuMotKien(r.product.category, r.le))
+    : [];
   const canSave =
     canWrite &&
     !busy &&
     Boolean(date) &&
     photos.length > 0 &&
     hasValidNumbers &&
+    dongLeDuKien.length === 0 &&
     (!laDotXuat || canKiemDotXuat);
 
   const handleSubmit = async () => {
@@ -510,7 +516,32 @@ export default function KiemKeKegLitSection({
                                 = {formatNumber(row.qty)} {row.product.unit}
                               </span>
                             </div>
-                          ) : (
+                          ) : null}
+                          {isKho && row.product.category === "Lít" && (row.kien > 0 || row.le > 0) && (
+                            <p className="mt-1 text-[10px] font-bold text-slate-500 tabular-nums">
+                              {leDuMotKien(row.product.category, row.le) ? (
+                                <span className="text-rose-600">
+                                  Lẻ từ 20,6 L trở lên là keg đầy — ghi vào ô keg
+                                </span>
+                              ) : (
+                                <>
+                                  ={" "}
+                                  <strong className="text-slate-900">
+                                    {formatNumber(soKegCuaDong(row.product.category, row.kien, row.le))} keg
+                                  </strong>
+                                  {row.le > 0
+                                    ? ` (${formatNumber(row.kien)} đầy + 1 keg vơi ${formatNumber(row.le)} L)`
+                                    : " đầy"}
+                                </>
+                              )}
+                            </p>
+                          )}
+                          {isKho && row.product.category === "Lon" && leDuMotKien(row.product.category, row.le) && (
+                            <p className="mt-1 text-[10px] font-bold text-rose-600">
+                              Lẻ từ 24 lon trở lên là thùng đầy — ghi vào ô thùng
+                            </p>
+                          )}
+                          {isKho ? null : (
                           <input
                             type="number"
                             min="0"
@@ -611,6 +642,11 @@ export default function KiemKeKegLitSection({
                   </label>
                 </div>
               </div>
+              {dongLeDuKien.length > 0 && (
+                <div className="mb-3 py-3 px-4 text-xs font-bold text-rose-600 bg-rose-50 rounded-xl border border-rose-200">
+                  Ô lẻ chỉ ghi keg vơi / lon lẻ. Sửa lại: {dongLeDuKien.map((r) => r.product.name).join(", ")}
+                </div>
+              )}
               {photos.length === 0 ? (
                 <div className="py-3 text-center text-xs font-bold text-rose-600 bg-rose-50 rounded-xl border border-rose-200">
                   Chưa có ảnh hiện trường — cần ít nhất 1 ảnh (có dấu ngày giờ) để lưu phiếu kiểm kê
@@ -790,8 +826,11 @@ export default function KiemKeKegLitSection({
                           </span>
                           {typeof it.kienDem === "number" && (it.kienDem > 0 || (it.leDem || 0) > 0) && (
                             <span className="text-slate-500 font-mono tabular-nums">
-                              [{formatNumber(it.kienDem)} {it.unit === "Lít" || it.unit === "L" ? "keg" : "thùng"}
-                              {(it.leDem || 0) > 0 ? ` + ${formatNumber(it.leDem || 0)} lẻ` : ""}]
+                              {it.unit === "Lít" || it.unit === "L"
+                                ? (it.leDem || 0) > 0
+                                  ? `[${formatNumber(soKegCuaDong("Lít", it.kienDem, it.leDem || 0))} keg: ${formatNumber(it.kienDem)} đầy + 1 vơi ${formatNumber(it.leDem || 0)} L]`
+                                  : `[${formatNumber(it.kienDem)} keg đầy]`
+                                : `[${formatNumber(it.kienDem)} thùng${(it.leDem || 0) > 0 ? ` + ${formatNumber(it.leDem || 0)} lon lẻ` : ""}]`}
                             </span>
                           )}
                           <span className="text-slate-400 font-mono tabular-nums">

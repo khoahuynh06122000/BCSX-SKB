@@ -97,3 +97,7 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - **Xưởng chú trọng kiểm kê bồn**: ảnh bắt buộc đổi theo loại bồn — **FST: ảnh bảng hệ thống theo dõi trên bồn nấu**; **BBT: ảnh chụp rõ bia trong bồn**. Giám sát xưởng ký duyệt = chốt tháng (đã làm trước).
   - Chưa thử trên giao diện thật (khoá PIN). Còn: nhóm C; mục Thu hồi keg + đánh giá thời gian thu hồi.
 
+
+### 20/11/2026 (Claude Code)
+- `b529c5a` — Luật Rào xưởng (danh_gia_sx / kiem_ke_bon / kiem_ke_keg): bản `8a6e798` vượt ngưỡng 1.000 phép tính, mọi lần SỬA bị từ chối. Tra vai trò một lần (`coQuyenRaoXuong`), quyền giữ nguyên. Thử 53/53 ca bằng Rules test API, **đã đẩy lên af5bc7f8** (khớp repo).
+- Kiểm kê Kho tổng: lít lẻ nằm trong 1 keg vơi riêng → 20 keg đầy + 10,9 L = **21 keg**. Dòng mặt hàng hiện "= 21 keg (20 đầy + 1 keg vơi 10,9 L)", danh sách đã lưu cũng vậy. Ô lẻ ≥ 20,6 L (hoặc ≥ 24 lon) là đếm nhầm → báo đỏ, chặn lưu (`leDuMotKien` trong `lib/loBia.ts`). Tổng "Keg đếm" vốn đã tính đúng (`soKegCuaDong`).

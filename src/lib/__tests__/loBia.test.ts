@@ -17,6 +17,7 @@ import {
   KIEM_KE_DOT_XUAT,
   kiemKeBonCuaThang,
   soBonChoDuyet,
+  leDuMotKien,
   soKegCuaDong,
   soLuongTuKien,
 } from "../loBia";
@@ -209,6 +210,12 @@ eq("All thuc xuat noi bo = 206L", kqDvtv.totals.allInternalLiters, 206);
   eq("2 thung + 7 lon", soLuongTuKien("Lon", 2, 7), 55);
   eq("so keg: 10 day + 1 le", soKegCuaDong("Lít", 10, 5.4), 11);
   eq("so keg: lon khong tinh", soKegCuaDong("Lon", 40, 0), 0);
+  eq("so keg: 20 day + 10,9 L le = 21", soKegCuaDong("Lít", 20, 10.9), 21);
+  eq("so keg: khong le", soKegCuaDong("Lít", 20, 0), 20);
+  eq("le 10,9 L chua du keg", leDuMotKien("Lít", 10.9), false);
+  eq("le 20,6 L du mot keg", leDuMotKien("Lít", 20.6), true);
+  eq("le 24 lon du mot thung", leDuMotKien("Lon", 24), true);
+  eq("le 23 lon chua du thung", leDuMotKien("Lon", 23), false);
 }
 
 // Bản ĐỘT XUẤT đã duyệt không được thành bản chốt tháng.
