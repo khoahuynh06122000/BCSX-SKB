@@ -32,28 +32,28 @@ export function anhCuaHoaDon(
   anhTheoChungTu: ReadonlyMap<string, readonly AnhChungTu[]>,
 ): AnhChungTu[] {
   /*
-   * HÓA ĐƠN THAY THẾ: dòng điều chỉnh mang `chungTuGoc` = chuyến bị ghi nhầm
-   * đơn vị. Dòng +SL (đơn vị đúng) kéo ảnh chuyến đó về tờ của mình; dòng −SL
-   * (đơn vị nhầm) gỡ ảnh chuyến đó khỏi tờ kia — ảnh vẫn đúng, chỉ sai tên.
+   * Gom số lượng THEO CHUYẾN, cộng cả dòng điều chỉnh của hóa đơn thay thế
+   * (mang `chungTuGoc` = chuyến gốc). Chuyến còn hàng trong tờ thì lấy ảnh;
+   * chuyến đã dời hết sang đơn vị khác (cộng lại bằng 0) thì ảnh đi theo nó
+   * sang tờ kia — ảnh vẫn đúng, chỉ sai tên. Dòng điều chỉnh kiểu cũ (không
+   * có chuyến gốc) không kéo ảnh nào.
    */
-  const chungTu = new Set<string>();
-  const them = new Set<string>();
-  const bo = new Set<string>();
+  const slChuyen = new Map<string, number>();
+  const daXet = new Set<string>();
   dong.forEach((d) =>
     (d.nguon || []).forEach((id) => {
+      if (daXet.has(id)) return;
+      daXet.add(id);
       const t = giaoDichTheoId.get(id);
       if (!t) return;
-      const goc = t.dieuChinh?.chungTuGoc;
-      if (goc) {
-        if (Number(t.quantity) > 0) them.add(goc);
-        else bo.add(goc);
-        return;
-      }
-      chungTu.add(maChungTuCuaDong(t));
+      const ma = t.dieuChinh ? t.dieuChinh.chungTuGoc : maChungTuCuaDong(t);
+      if (!ma) return;
+      slChuyen.set(ma, (slChuyen.get(ma) || 0) + (Number(t.quantity) || 0));
     }),
   );
-  bo.forEach((c) => chungTu.delete(c));
-  them.forEach((c) => chungTu.add(c));
+  const chungTu = new Set(
+    [...slChuyen.entries()].filter(([, sl]) => Math.abs(sl) > 1e-9).map(([ma]) => ma),
+  );
   const theoId = new Map<string, AnhChungTu>();
   chungTu.forEach((c) =>
     (anhTheoChungTu.get(c) || []).forEach((a) => {

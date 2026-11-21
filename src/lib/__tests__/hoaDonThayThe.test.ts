@@ -4,9 +4,9 @@
  */
 
 /**
- * HÓA ĐƠN THAY THẾ: đi trọn vòng — sổ xuất kho thật → tra cứu → lập thay thế →
- * ghi (giả lập merge của Firestore) → tra cứu lại. Kiểm số lượng, tờ đỏ, lọc,
- * tổng không cộng tờ bị thay thế, và ảnh đi theo chuyến.
+ * HÓA ĐƠN THAY THẾ: đi trọn vòng — sổ xuất kho thật → tra cứu → sửa chuyến →
+ * lập thay thế → ghi (giả lập merge của Firestore) → tra cứu lại. Kiểm số
+ * lượng, đơn vị, mặt hàng, tồn kho, tờ đỏ, lọc, tổng, và ảnh đi theo chuyến.
  */
 
 import { anhCuaHoaDon, tenGocHoaDon } from "../../anh/anhHoaDon";
@@ -17,9 +17,12 @@ import { stableHash } from "../hash";
 import { khoaHoaDon, type HoaDonGhiNhan } from "../hoaDon";
 import {
   chuyenCuaHoaDon,
+  chuyenSuaTu,
   kiemTraThayThe,
   lapThayThe,
-  oCanDien,
+  tomTatSua,
+  type ChuyenSua,
+  type DonViDot,
   type ToHoaDon,
   type YeuCauThayThe,
 } from "../hoaDonThayThe";
@@ -39,12 +42,14 @@ const eq = (ten: string, a: unknown, b: unknown) => {
 
 const partners: Partner[] = [
   { id: "bnc-ng", name: "BNC · Ngoại giao", sapCode: "AD0103", type: "AGENT" },
+  { id: "bnc-1901", name: "BNC · NH 1901", sapCode: "AD0103", type: "AGENT" },
   { id: "spa", name: "SPA", sapCode: "AC0200", type: "AGENT" },
   { id: "fv", name: "FV", sapCode: "AF0100", type: "AGENT" },
 ];
 const products: Product[] = [
   { id: "lon", name: "Bia Lunar 330ml", category: "Lon", materialCode: "10174039" } as unknown as Product,
   { id: "keg", name: "Bia Lager Keg", category: "Lít", materialCode: "10170001" } as unknown as Product,
+  { id: "lon2", name: "Bia Helles 330ml", category: "Lon", materialCode: "10174040" } as unknown as Product,
 ];
 const gd = (p: Partial<Transaction>): Transaction =>
   ({ type: "OUT", status: "completed", createdBy: "x", category: "Lon", ...p }) as Transaction;
@@ -75,51 +80,61 @@ const ghi = (ds: HoaDonGhiNhan[], moi: HoaDonGhiNhan[]) => {
   moi.forEach((h) => m.set(h.id, { ...(m.get(h.id) || ({} as HoaDonGhiNhan)), ...h }));
   return [...m.values()];
 };
+type Nen = ReturnType<typeof nenTraCuu>;
 const traCuu = (tx: Transaction[], hd: HoaDonGhiNhan[], loai: "" | "thayThe" | "biThayThe" = "") => {
   const nen = nenTraCuu({ hoaDon: hd, transactions: tx, products, partners });
   return { nen, kq: locTraCuu(nen, { loai }) };
 };
-const toCua = (nen: ReturnType<typeof nenTraCuu>, maBp: string): ToHoaDon | undefined => {
+const toCua = (nen: Nen, maBp: string): ToHoaDon | undefined => {
   const ban = nen.daCoSo.find((h) => h.maBp === maBp);
   return ban ? { ban, dong: nen.theoKhoa.get(`${nhanNgayGiao(TU, DEN)}|${maBp}`) || [] } : undefined;
 };
+const donViCua = (nen: Nen) => (id: string): DonViDot | undefined => {
+  const p = partners.find((x) => x.id === id);
+  return p ? { maBp: p.sapCode, donVi: p.name.split("·")[0].trim(), khoa: khoa(p.sapCode), to: toCua(nen, p.sapCode) } : undefined;
+};
 const sl = (h?: HoaDonDaXuat) => (h ? Math.round(h.dong.reduce((s, d) => s + d.soLuong, 0) * 10) / 10 : -1);
 const soDaCo = (hd: HoaDonGhiNhan[]) => new Set(hd.map((h) => h.soHoaDon.toUpperCase()).filter(Boolean));
-const yc0 = (hd: HoaDonGhiNhan[], nen: ReturnType<typeof nenTraCuu>, them: Partial<YeuCauThayThe>): YeuCauThayThe => ({
+const NGAY = "2026-11-21";
+const yc0 = (hd: HoaDonGhiNhan[], nen: Nen, chuyen: ChuyenSua[], them: Partial<YeuCauThayThe> = {}): YeuCauThayThe => ({
   goc: toCua(nen, "AD0103")!,
-  chuyen: [],
-  soMoiGoc: "",
-  ngayMoiGoc: "2026-11-21",
-  soMoiSang: "",
-  ngayMoiSang: "2026-11-21",
-  lyDo: "VINACS của SPA ghi nhầm BNC",
+  chuyen,
+  donViCua: donViCua(nen),
+  soMoiGoc: { so: "", ngay: NGAY },
+  soMoiDich: {},
+  lyDo: "Sửa hóa đơn",
   soDaCo: soDaCo(hd),
   luc: "2026-11-21T09:00:00.000Z",
   boi: "ketoan@x",
   bam: stableHash,
-  tenDoiTac: (id) => partners.find((p) => p.id === id)?.name || id,
   ngayCham,
   ...them,
 });
-const sangSpa = (nen: ReturnType<typeof nenTraCuu>) => ({
-  partnerId: "spa", maBp: "AC0200", donVi: "SPA", khoa: khoa("AC0200"), to: toCua(nen, "AC0200"),
+const chuyenBNC = (tx: Transaction[], nen: Nen) =>
+  chuyenCuaHoaDon(toCua(nen, "AD0103")!.dong, new Map(tx.map((t) => [t.id, t]))).map(chuyenSuaTu);
+const apDung = (tx: Transaction[], hd: HoaDonGhiNhan[], kq: ReturnType<typeof lapThayThe>) => ({
+  tx: [...tx, ...kq.giaoDich.map((d) => gd({ ...d }))],
+  hd: ghi(hd, kq.hoaDon),
 });
+const tonXuat = (tx: Transaction[], sp: string) =>
+  Math.round(tx.filter((t) => t.productId === sp).reduce((s, t) => s + t.quantity, 0) * 10) / 10;
 
-/* ---------------- Ca 1: chuyển một chuyến, cả hai bên đã có hóa đơn ---------------- */
+/* ---------------- Ca 1: dời một chuyến sang SPA, cả hai bên đã có hóa đơn ---------------- */
 {
   const { nen, kq } = traCuu(goc, hoaDon0);
   eq("truoc: BNC 01 co 361,2", sl(kq.hoaDon.find((h) => h.soHoaDon === "C26TKB#01")), 361.2);
-  const gid = new Map(goc.map((t) => [t.id, t]));
-  const chuyen = chuyenCuaHoaDon(toCua(nen, "AD0103")!.dong, gid);
-  eq("tach chuyen trong to BNC", chuyen.map((c) => [c.ma, c.tongSoLuong]), [["c1", 120], ["c2", 241.2]]);
-
-  const yc = yc0(hoaDon0, nen, { chuyen: [chuyen[0]], sang: sangSpa(nen) });
-  eq("o can dien: con hang goc, SPA bat buoc", oCanDien(yc), { conHangGoc: true, soGoc: true, soSang: "batBuoc" });
+  const ch = chuyenBNC(goc, nen);
+  eq("tach chuyen trong to BNC", ch.map((c) => c.ma), ["c1", "c2"]);
+  ch[0] = { ...ch[0], partnerIdMoi: "spa" };
+  const yc = yc0(hoaDon0, nen, ch, { lyDo: "VINACS của SPA ghi nhầm BNC" });
+  const tt = tomTatSua(yc);
+  eq("tom tat: con hang goc 241,2, SPA bat buoc, ton kho khong doi", [tt.conHangGoc, tt.tongGocMoi, tt.dich.map((d) => [d.maBp, d.batBuoc, d.tongSoLuong]), tt.chenhTonKho], [true, 241.2, [["AC0200", true, 120]], 0]);
   eq("thieu so -> chan", kiemTraThayThe(yc) !== "", true);
-  eq("so trung -> chan", kiemTraThayThe({ ...yc, soMoiGoc: "c26tkb#05", soMoiSang: "C26TKB#07" }) !== "", true);
-  eq("hai so moi trung nhau -> chan", kiemTraThayThe({ ...yc, soMoiGoc: "C26TKB#07", soMoiSang: "C26TKB#07" }) !== "", true);
-  eq("ngay moi truoc ngay cu -> chan", kiemTraThayThe({ ...yc, soMoiGoc: "A", soMoiSang: "B", ngayMoiGoc: "2026-10-01" }) !== "", true);
-  const du = { ...yc, soMoiGoc: "C26TKB#02", soMoiSang: "C26TKB#06" };
+  const voiSo = (a: string, b: string, ngayA = NGAY) => ({ ...yc, soMoiGoc: { so: a, ngay: ngayA }, soMoiDich: { AC0200: { so: b, ngay: NGAY } } });
+  eq("so trung -> chan", kiemTraThayThe(voiSo("c26tkb#05", "C26TKB#07")) !== "", true);
+  eq("hai so moi trung nhau -> chan", kiemTraThayThe(voiSo("C26TKB#07", "C26TKB#07")) !== "", true);
+  eq("ngay moi truoc ngay cu -> chan", kiemTraThayThe(voiSo("A", "B", "2026-10-01")) !== "", true);
+  const du = voiSo("C26TKB#02", "C26TKB#06");
   eq("du thong tin", kiemTraThayThe(du), "");
 
   const kqTT = lapThayThe(du);
@@ -128,8 +143,7 @@ const sangSpa = (nen: ReturnType<typeof nenTraCuu>) => ({
   eq("cap dong mang chuyen goc", kqTT.giaoDich.every((d) => d.dieuChinh.chungTuGoc === "c1"), true);
   eq("4 ban ghi hoa don (2 ban luu + 2 so moi)", kqTT.hoaDon.length, 4);
 
-  const tx1 = [...goc, ...kqTT.giaoDich.map((d) => gd({ ...d, productName: "Bia Lunar 330ml" }))];
-  const hd1 = ghi(hoaDon0, kqTT.hoaDon);
+  const { tx: tx1, hd: hd1 } = apDung(goc, hoaDon0, kqTT);
   const sau = traCuu(tx1, hd1).kq;
   const tim = (so: string) => sau.hoaDon.find((h) => h.soHoaDon === so);
   eq("BNC 02 con 241,2", sl(tim("C26TKB#02")), 241.2);
@@ -155,38 +169,64 @@ const sangSpa = (nen: ReturnType<typeof nenTraCuu>) => ({
   eq("anh SPA 06: them anh chuyen ghi nham", anhCuaHoaDon(tim("C26TKB#06")!.dong, gid1, theoCt).map((a) => a.id).sort(), ["a1", "a3"]);
   eq("ten tep to thay the", tenGocHoaDon("C26TKB#02", "BNC", ["C26TKB#01"]), "C26TKB-02_BNC_thay-the-C26TKB-01");
 
-  // Lần sau mở lại tờ 02: chuyến c1 đã chuyển, không hiện nữa.
+  // Mở lại: c1 đã sang SPA, không còn ở tờ BNC; ở tờ SPA thì hiện c1 thuộc SPA.
   const n1 = traCuu(tx1, hd1).nen;
-  eq("chuyen da chuyen khong hien lai", chuyenCuaHoaDon(toCua(n1, "AD0103")!.dong, gid1).map((c) => c.ma), ["c2"]);
+  eq("chuyen da doi khong hien o BNC", chuyenBNC(tx1, n1).map((c) => c.ma), ["c2"]);
+  eq("chuyen c1 hien o SPA", chuyenCuaHoaDon(toCua(n1, "AC0200")!.dong, gid1).map((c) => [c.ma, c.partnerId, c.tongSoLuong]), [["c1", "spa", 120], ["c3", "spa", 50]]);
   eq("so cu nam trong so da co", soDaCo(hd1).has("C26TKB#01"), true);
 }
 
-/* ---------------- Ca 2: chuyển hết hàng của tờ gốc, đơn vị đúng chưa có hóa đơn ---------------- */
+/* ---------------- Ca 2: sửa SỐ LƯỢNG và MẶT HÀNG, cùng đơn vị ---------------- */
+{
+  const hd = [banGhi("AD0103", "BNC", "C26TKB#01")];
+  const { nen } = traCuu(goc, hd);
+  const ch = chuyenBNC(goc, nen);
+  // c1: thực giao 100 lon chứ không phải 120. c2: keg đúng, nhưng 200 lon thật ra là Helles.
+  ch[0] = { ...ch[0], dongMoi: [{ productId: "lon", soLuong: 100 }] };
+  ch[1] = { ...ch[1], dongMoi: [{ productId: "lon2", soLuong: 200 }, { productId: "keg", soLuong: 41.2 }] };
+  const yc = yc0(hd, nen, ch, { soMoiGoc: { so: "C26TKB#03", ngay: NGAY }, lyDo: "Sai số lượng và tên bia" });
+  const tt = tomTatSua(yc);
+  eq("sua SL: con 341,2, khong don vi khac, xuat kho giam 20", [tt.tongGocMoi, tt.dich.length, tt.chenhTonKho], [341.2, 0, -20]);
+  eq("sua SL: du", kiemTraThayThe(yc), "");
+  const kqTT = lapThayThe(yc);
+  eq("dong chenh: c1 -20 lon, c2 -200 lon +200 Helles", kqTT.giaoDich.map((d) => [d.dieuChinh.chungTuGoc, d.productId, d.quantity]).sort(), [["c1", "lon", -20], ["c2", "lon", -200], ["c2", "lon2", 200]]);
+  eq("bao ton kho doi", kqTT.tomTat.includes("tồn kho đổi theo"), true);
+  const { tx: tx1, hd: hd1 } = apDung(goc, hd, kqTT);
+  eq("xuat kho Lunar giam 220", tonXuat(tx1, "lon") - tonXuat(goc, "lon"), -220);
+  const sau = traCuu(tx1, hd1).kq;
+  const moi = sau.hoaDon.find((h) => h.soHoaDon === "C26TKB#03");
+  eq("03: Lunar 100, Helles 200, keg 41,2", moi?.dong.map((d) => [d.tenHangHoa, Math.round(d.soLuong * 10) / 10]).sort(), [["Bia Helles 330ml", 200], ["Bia Lager Keg", 41.2], ["Bia Lunar 330ml", 100]]);
+  const gid1 = new Map(tx1.map((t) => [t.id, t]));
+  const theoCt = new Map<string, AnhChungTu[]>([["c1", [{ id: "a1", url: "u", publicId: "", chungTu: ["c1"], loai: "XUAT", ngay: "", maDoiTac: "", doiTac: "", taiLuc: "", taiBoi: "", uid: "" }]]]);
+  eq("sua SL cung don vi: anh van o lai", anhCuaHoaDon(moi!.dong, gid1, theoCt).map((a) => a.id), ["a1"]);
+  eq("mo lai: chuyen hien noi dung da sua", chuyenBNC(tx1, traCuu(tx1, hd1).nen).map((c) => c.dongCu.map((x) => [x.productId, x.soLuong])), [[["lon", 100]], [["keg", 41.2], ["lon2", 200]]]);
+}
+
+/* ---------------- Ca 3: dời hết hàng của tờ gốc, đơn vị đúng chưa có hóa đơn ---------------- */
 {
   const tx = goc.filter((t) => t.id === "t1" || t.id === "t4");
   const hd = [banGhi("AD0103", "BNC", "C26TKB#01")];
   const { nen } = traCuu(tx, hd);
-  const gid = new Map(tx.map((t) => [t.id, t]));
-  const chuyen = chuyenCuaHoaDon(toCua(nen, "AD0103")!.dong, gid);
-  const yc = yc0(hd, nen, { chuyen, sang: sangSpa(nen) });
-  eq("het hang: khong can so goc, SPA bat buoc", oCanDien(yc), { conHangGoc: false, soGoc: false, soSang: "batBuoc" });
-  const kqTT = lapThayThe({ ...yc, soMoiSang: "C26TKB#09" });
-  eq("het hang du thong tin", kiemTraThayThe({ ...yc, soMoiSang: "C26TKB#09" }), "");
-  const tx1 = [...tx, ...kqTT.giaoDich.map((d) => gd({ ...d }))];
-  const hd1 = ghi(hd, kqTT.hoaDon);
+  const ch = chuyenBNC(tx, nen).map((c) => ({ ...c, partnerIdMoi: "spa" }));
+  const yc = yc0(hd, nen, ch, { lyDo: "VINACS của SPA ghi nhầm BNC" });
+  const tt = tomTatSua(yc);
+  eq("het hang: SPA bat buoc", [tt.conHangGoc, tt.dich.map((d) => d.batBuoc)], [false, [true]]);
+  const du = { ...yc, soMoiDich: { AC0200: { so: "C26TKB#09", ngay: NGAY } } };
+  eq("het hang du thong tin", kiemTraThayThe(du), "");
+  const { tx: tx1, hd: hd1 } = apDung(tx, hd, lapThayThe(du));
   const sau = traCuu(tx1, hd1).kq;
   eq("01 bi thay the boi SPA 09", sau.hoaDon.find((h) => h.soHoaDon === "C26TKB#01")?.biThayTheBoi, {
-    soHoaDon: "C26TKB#09", ngayHoaDon: "2026-11-21", donVi: "SPA", maBp: "AC0200", luc: "2026-11-21T09:00:00.000Z", lyDo: "VINACS của SPA ghi nhầm BNC", boi: "ketoan@x",
+    soHoaDon: "C26TKB#09", ngayHoaDon: NGAY, donVi: "SPA", maBp: "AC0200", luc: "2026-11-21T09:00:00.000Z", lyDo: "VINACS của SPA ghi nhầm BNC", boi: "ketoan@x",
   });
   eq("SPA 09 thay the cho 01 (BNC)", sau.hoaDon.find((h) => h.soHoaDon === "C26TKB#09")?.thayTheCho?.map((x) => x.donVi), ["BNC"]);
   eq("khoa BNC dot do khong con to nao", hd1.find((h) => h.id === khoa("AD0103"))?.soHoaDon, "");
   eq("khong bao mo coi", sau.thieuDong.length, 0);
 }
 
-/* ---------------- Ca 3: chỉ cấp số mới (sai thông tin khác) ---------------- */
+/* ---------------- Ca 4: không sửa hàng — chỉ cấp số mới ---------------- */
 {
   const { nen } = traCuu(goc, hoaDon0);
-  const yc = yc0(hoaDon0, nen, { soMoiGoc: "C26TKB#03" });
+  const yc = yc0(hoaDon0, nen, chuyenBNC(goc, nen), { soMoiGoc: { so: "C26TKB#03", ngay: NGAY } });
   eq("cap so moi: du", kiemTraThayThe(yc), "");
   const kqTT = lapThayThe(yc);
   eq("cap so moi: khong co dong giao dich", kqTT.giaoDich.length, 0);
@@ -195,18 +235,31 @@ const sangSpa = (nen: ReturnType<typeof nenTraCuu>) => ({
   eq("thieu ly do -> chan", kiemTraThayThe({ ...yc, lyDo: " " }) !== "", true);
 }
 
-/* ---------------- Ca 4: đơn vị đúng chưa có hóa đơn, tờ gốc còn hàng → số SPA tùy chọn ---------------- */
+/* ---------------- Ca 5: đơn vị đúng chưa có hóa đơn, tờ gốc còn hàng → số tùy chọn ---------------- */
 {
   const hd = [banGhi("AD0103", "BNC", "C26TKB#01")];
   const { nen } = traCuu(goc, hd);
-  const gid = new Map(goc.map((t) => [t.id, t]));
-  const chuyen = chuyenCuaHoaDon(toCua(nen, "AD0103")!.dong, gid);
-  const yc = yc0(hd, nen, { chuyen: [chuyen[0]], sang: sangSpa(nen), soMoiGoc: "C26TKB#02" });
-  eq("SPA tuy chon", oCanDien(yc).soSang, "tuyChon");
+  const ch = chuyenBNC(goc, nen);
+  ch[0] = { ...ch[0], partnerIdMoi: "spa" };
+  const yc = yc0(hd, nen, ch, { soMoiGoc: { so: "C26TKB#02", ngay: NGAY } });
+  eq("SPA tuy chon", tomTatSua(yc).dich.map((d) => d.batBuoc), [false]);
   eq("de trong so SPA van duoc", kiemTraThayThe(yc), "");
   const kqTT = lapThayThe(yc);
   eq("de trong: chi ban luu 01 + so 02", kqTT.hoaDon.map((h) => h.soHoaDon), ["C26TKB#01", "C26TKB#02"]);
   eq("bao hang ve Chua xuat", kqTT.tomTat.includes("Chưa xuất hóa đơn"), true);
+}
+
+/* ---------------- Ca 6: chặn ---------------- */
+{
+  const hd = [banGhi("AD0103", "BNC", "C26TKB#01")];
+  const { nen } = traCuu(goc, hd);
+  const ch = chuyenBNC(goc, nen);
+  const co = (c: ChuyenSua[]) => kiemTraThayThe(yc0(hd, nen, c, { soMoiGoc: { so: "X1", ngay: NGAY } }));
+  eq("so luong 0 -> chan", co([{ ...ch[0], dongMoi: [{ productId: "lon", soLuong: 0 }] }, ch[1]]) !== "", true);
+  eq("chua chon mat hang -> chan", co([{ ...ch[0], dongMoi: [{ productId: "", soLuong: 5 }] }, ch[1]]) !== "", true);
+  eq("mat hang lap -> chan", co([{ ...ch[0], dongMoi: [{ productId: "lon", soLuong: 5 }, { productId: "lon", soLuong: 1 }] }, ch[1]]) !== "", true);
+  eq("bo het hang -> la huy, chan", co(ch.map((c) => ({ ...c, dongMoi: [] }))).includes("HỦY"), true);
+  eq("doi sang bo phan BNC khac cung ma BP: van o to goc", tomTatSua(yc0(hd, nen, [{ ...ch[0], partnerIdMoi: "bnc-1901" }, ch[1]])).dich.length, 0);
 }
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);

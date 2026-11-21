@@ -206,11 +206,11 @@ eq("ma 0 khong hoi duoc", nhomCuaMa(0), "khong-hoi-duoc");
 {
   const gd = new Map(
     [
-      { id: "o1", type: "OUT", referenceGroupId: "G1" },
-      { id: "o2", type: "OUT", referenceGroupId: "G1" },
-      { id: "o3", type: "OUT", referenceGroupId: "G2" },
-      { id: "o4", type: "OUT" }, // dòng lẻ không nhóm
-      { id: "t9", type: "OUT", referenceGroupId: "G9" }, // chuyến khác (trả nhà máy) — không thuộc hóa đơn
+      { id: "o1", type: "OUT", quantity: 1, referenceGroupId: "G1" },
+      { id: "o2", type: "OUT", quantity: 1, referenceGroupId: "G1" },
+      { id: "o3", type: "OUT", quantity: 1, referenceGroupId: "G2" },
+      { id: "o4", type: "OUT", quantity: 1 }, // dòng lẻ không nhóm
+      { id: "t9", type: "OUT", quantity: 1, referenceGroupId: "G9" }, // chuyến khác (trả nhà máy) — không thuộc hóa đơn
     ].map((t) => [t.id, t]),
   );
   const ds = chiMuc([

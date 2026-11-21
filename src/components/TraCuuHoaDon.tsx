@@ -488,6 +488,7 @@ export default function TraCuuHoaDon({
               toCua={toCua}
               giaoDichTheoId={giaoDichTheoId}
               partners={partners}
+              products={products}
               soDaCo={soDaCo}
               nguoi={nguoi}
               onLuu={onThayThe}

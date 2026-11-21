@@ -62,8 +62,6 @@ export interface YeuCauDieuChinh {
   sangDoiTac: string;
   lyDo: string;
   dong: DongDieuChinhVao[];
-  /** Hóa đơn thay thế: chuyến gốc — vào khoá để hai chuyến giống hệt không đè nhau. */
-  chungTuGoc?: string;
 }
 
 /** Đợt chứa một ngày; `null` = chưa thuộc đợt nào (sẽ vào đợt khai sau). */
@@ -129,9 +127,7 @@ export function khoaDieuChinh(
     .sort((a, b) => a.productId.localeCompare(b.productId))
     .map((d) => `${d.productId}:${Number(d.soLuong)}`)
     .join(",");
-  const phan = [yc.ngayGoc, yc.ngayGhi, yc.tuDoiTac, yc.sangDoiTac, dong];
-  if (yc.chungTuGoc) phan.push(yc.chungTuGoc);
-  return "dc-" + bam(phan.join("|"));
+  return "dc-" + bam([yc.ngayGoc, yc.ngayGhi, yc.tuDoiTac, yc.sangDoiTac, dong].join("|"));
 }
 
 export interface DongGhiDieuChinh {

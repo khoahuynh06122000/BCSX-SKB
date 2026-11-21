@@ -5,23 +5,28 @@
 
 /**
  * KHUNG LẬP HÓA ĐƠN THAY THẾ — mở từ nút "Thay thế" của một tờ ở Tra cứu
- * hóa đơn đã xuất. Phép tính nằm ở `src/lib/hoaDonThayThe.ts`.
+ * hóa đơn đã xuất. Mỗi chuyến trong tờ sửa được đơn vị nhận, mặt hàng, số
+ * lượng. Phép tính nằm ở `src/lib/hoaDonThayThe.ts`.
  */
 
 import { useMemo, useState } from "react";
-import { Replace, X } from "lucide-react";
-import type { Partner } from "../types";
+import { Plus, Replace, RotateCcw, X } from "lucide-react";
+import type { Partner, Product } from "../types";
 import { tenTrenHoaDon } from "../lib/congNo";
 import { khoaHoaDon } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
 import { ngayCham } from "../lib/oNgay";
 import {
   chuyenCuaHoaDon,
+  chuyenSuaTu,
   kiemTraThayThe,
   lapThayThe,
-  oCanDien,
+  tomTatSua,
+  type ChuyenSua,
+  type DonViDot,
   type GiaoDichChuyen,
   type KetQuaThayThe,
+  type SoMoi,
   type ToHoaDon,
 } from "../lib/hoaDonThayThe";
 import { cn, formatNumber, homNayDiaPhuong } from "../lib/utils";
@@ -29,10 +34,11 @@ import ONgay from "./ONgay";
 
 interface Props {
   goc: ToHoaDon;
-  /** Tờ đang hiệu lực của (đợt × mã BP) — để biết đơn vị đúng đã có hóa đơn chưa. */
+  /** Tờ đang hiệu lực của (đợt × mã BP) — để biết đơn vị nhận đã có hóa đơn chưa. */
   toCua: (tuNgay: string, denNgay: string, maBp: string) => ToHoaDon | undefined;
   giaoDichTheoId: ReadonlyMap<string, GiaoDichChuyen>;
   partners: Partner[];
+  products: Product[];
   soDaCo: ReadonlySet<string>;
   nguoi: string;
   onLuu: (kq: KetQuaThayThe) => Promise<boolean>;
@@ -40,14 +46,22 @@ interface Props {
 }
 
 const O =
-  "w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary";
+  "w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-[13px] font-bold outline-none focus:border-primary";
 const NHAN = "text-[11px] font-black uppercase tracking-widest text-slate-400";
+
+const giongNhau = (c: ChuyenSua) =>
+  c.partnerIdCu === c.partnerIdMoi &&
+  c.dongCu.length === c.dongMoi.length &&
+  c.dongCu.every((x) =>
+    c.dongMoi.some((y) => y.productId === x.productId && Number(y.soLuong) === Number(x.soLuong)),
+  );
 
 export default function LapHoaDonThayThe({
   goc,
   toCua,
   giaoDichTheoId,
   partners,
+  products,
   soDaCo,
   nguoi,
   onLuu,
@@ -55,63 +69,59 @@ export default function LapHoaDonThayThe({
 }: Props) {
   const g = goc.ban;
   const homNay = homNayDiaPhuong();
-  const chuyen = useMemo(
+  const banDau = useMemo(
     () => chuyenCuaHoaDon(goc.dong, giaoDichTheoId),
     [goc.dong, giaoDichTheoId],
   );
-  const [chon, setChon] = useState<Set<string>>(new Set());
-  const [sangId, setSangId] = useState("");
-  const [soGoc, setSoGoc] = useState("");
-  const [ngayGoc, setNgayGoc] = useState(homNay);
-  const [soSang, setSoSang] = useState("");
-  const [ngaySang, setNgaySang] = useState(homNay);
+  const [chuyen, setChuyen] = useState<ChuyenSua[]>(() => banDau.map(chuyenSuaTu));
+  const [soGoc, setSoGoc] = useState<SoMoi>({ so: "", ngay: homNay });
+  const [soDich, setSoDich] = useState<Record<string, SoMoi>>({});
   const [lyDo, setLyDo] = useState("");
   const [dangLuu, setDangLuu] = useState(false);
 
-  const khoaChuyen = (c: { ma: string; partnerId: string }) => `${c.ma}|${c.partnerId}`;
-  const chuyenChon = chuyen.filter((c) => chon.has(khoaChuyen(c)));
-
-  /* Đơn vị đúng: có mã BP, không phải nhà cung cấp, khác mã BP tờ gốc. */
   const donViDung = useMemo(
     () =>
       partners
-        .filter((p) => p.type !== "SUPPLIER" && p.sapCode && p.sapCode !== g.maBp)
+        .filter((p) => p.type !== "SUPPLIER" && p.sapCode)
         .sort((a, b) => a.name.localeCompare(b.name, "vi")),
-    [partners, g.maBp],
+    [partners],
   );
-  const pSang = donViDung.find((p) => p.id === sangId);
-  const sang = pSang
-    ? {
-        partnerId: pSang.id,
-        maBp: pSang.sapCode,
-        donVi: tenTrenHoaDon(pSang.name),
-        khoa: khoaHoaDon(g.tuNgay, g.denNgay, pSang.sapCode, stableHash),
-        to: toCua(g.tuNgay, g.denNgay, pSang.sapCode),
-      }
-    : undefined;
+  const matHang = useMemo(
+    () => [...products].sort((a, b) => a.name.localeCompare(b.name, "vi")),
+    [products],
+  );
+  const tenSp = (id: string) => products.find((p) => p.id === id)?.name || id;
+  const dvtSp = (id: string) => (products.find((p) => p.id === id)?.category === "Lon" ? "lon" : "lít");
+
+  const donViCua = (partnerId: string): DonViDot | undefined => {
+    const p = donViDung.find((x) => x.id === partnerId);
+    if (!p) return undefined;
+    return {
+      maBp: p.sapCode,
+      donVi: tenTrenHoaDon(p.name),
+      khoa: khoaHoaDon(g.tuNgay, g.denNgay, p.sapCode, stableHash),
+      to: toCua(g.tuNgay, g.denNgay, p.sapCode),
+    };
+  };
 
   const yc = {
     goc,
-    chuyen: chuyenChon,
-    sang,
+    chuyen,
+    donViCua,
     soMoiGoc: soGoc,
-    ngayMoiGoc: ngayGoc,
-    soMoiSang: soSang,
-    ngayMoiSang: ngaySang,
+    soMoiDich: soDich,
     lyDo,
     soDaCo,
     luc: new Date().toISOString(),
     boi: nguoi,
     bam: stableHash,
-    tenDoiTac: (id: string) =>
-      tenTrenHoaDon(partners.find((p) => p.id === id)?.name || id),
     ngayCham,
   };
-  const can = oCanDien(yc);
+  const tt = tomTatSua(yc);
   const loi = kiemTraThayThe(yc);
-  const tongGoc = goc.dong.reduce((s, d) => s + d.soLuong, 0);
-  const tongChuyen = chuyenChon.reduce((s, c) => s + c.tongSoLuong, 0);
-  const tongSangCu = sang?.to ? sang.to.dong.reduce((s, d) => s + d.soLuong, 0) : 0;
+
+  const sua = (i: number, f: (c: ChuyenSua) => ChuyenSua) =>
+    setChuyen((ds) => ds.map((c, j) => (j === i ? f(c) : c)));
 
   const luu = async () => {
     if (loi || dangLuu) return;
@@ -141,7 +151,7 @@ export default function LapHoaDonThayThe({
           </p>
           <p className="text-[12px] font-bold text-slate-500 mt-1">
             {g.donVi} · {g.maBp} · đợt {ngayCham(g.tuNgay)} – {ngayCham(g.denNgay)} · ngày HĐ{" "}
-            {ngayCham(g.ngayHoaDon)} · {formatNumber(tongGoc)} SL
+            {ngayCham(g.ngayHoaDon)} · {formatNumber(tt.tongCu)} SL
           </p>
         </div>
         <button
@@ -153,111 +163,199 @@ export default function LapHoaDonThayThe({
         </button>
       </div>
 
-      {/* --------------------------------------------- chuyến ghi nhầm */}
+      {/* --------------------------------------------- nội dung đúng */}
       <div className="space-y-2">
-        <p className={NHAN}>Chuyến ghi nhầm đơn vị (nếu có)</p>
+        <p className={NHAN}>Nội dung đúng của từng chuyến</p>
         <p className="text-[12px] font-medium text-slate-500 leading-snug">
-          Tích chuyến bị ghi sai tên đơn vị: hàng và ảnh của chuyến sẽ chuyển sang đơn vị
-          đúng. Sai chỗ khác (ngày, thông tin) thì để trống — chỉ cấp số mới.
+          Sửa thẳng chỗ sai: đơn vị nhận, mặt hàng, số lượng (đơn giá theo bảng giá chung).
+          Đổi đơn vị thì hàng và ảnh chuyến sang tờ của đơn vị đó; đổi số lượng / mặt hàng thì
+          số xuất kho sửa theo, tồn kho đổi theo. Không sai gì về hàng thì để nguyên — chỉ cấp
+          số mới.
         </p>
-        <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
-          {chuyen.length === 0 && (
-            <p className="px-3 py-3 text-[12px] font-bold text-slate-400">
-              Không dựng được chuyến nào từ tờ này.
-            </p>
-          )}
-          {chuyen.map((c) => {
-            const k = khoaChuyen(c);
-            return (
-              <label
-                key={k}
-                className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50"
+        {chuyen.length === 0 && (
+          <p className="px-3 py-3 rounded-xl border border-slate-200 bg-white text-[12px] font-bold text-slate-400">
+            Không dựng được chuyến nào từ tờ này.
+          </p>
+        )}
+        {chuyen.map((c, i) => {
+          const doi = !giongNhau(c);
+          return (
+            <div
+              key={`${c.ma}|${c.partnerIdCu}`}
+              className={cn(
+                "rounded-xl border bg-white p-3 space-y-2",
+                doi ? "border-amber-400" : "border-slate-200",
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[12px] font-black text-slate-900">{ngayCham(c.ngay)}</span>
+                <span className="font-mono text-[11px] text-slate-400">{c.ma}</span>
+                {doi && (
+                  <>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-[10px] font-black text-amber-800 uppercase">
+                      đã sửa
+                    </span>
+                    <button
+                      onClick={() => sua(i, (x) => ({ ...x, partnerIdMoi: x.partnerIdCu, dongMoi: x.dongCu.map((d) => ({ ...d })) }))}
+                      title="Trả chuyến này về như cũ"
+                      className="p-1 rounded text-slate-400 hover:text-slate-700"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+                <select
+                  value={c.partnerIdMoi}
+                  onChange={(e) => sua(i, (x) => ({ ...x, partnerIdMoi: e.target.value }))}
+                  className={cn(O, "sm:w-80 sm:ml-auto", c.partnerIdMoi !== c.partnerIdCu && "border-emerald-400 text-emerald-700")}
+                  aria-label="Đơn vị nhận"
+                >
+                  {!donViDung.some((p) => p.id === c.partnerIdMoi) && (
+                    <option value={c.partnerIdMoi}>— Chọn đơn vị —</option>
+                  )}
+                  {donViDung.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {p.sapCode}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {c.dongMoi.map((x, k) => {
+                const cu = c.dongCu.find((d) => d.productId === x.productId);
+                return (
+                  <div key={k} className="flex items-center gap-2">
+                    <select
+                      value={x.productId}
+                      onChange={(e) =>
+                        sua(i, (y) => ({
+                          ...y,
+                          dongMoi: y.dongMoi.map((d, j) => (j === k ? { ...d, productId: e.target.value } : d)),
+                        }))
+                      }
+                      className={O}
+                      aria-label="Mặt hàng"
+                    >
+                      <option value="">— Mặt hàng —</option>
+                      {matHang.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={Number.isFinite(x.soLuong) && x.soLuong !== 0 ? x.soLuong : ""}
+                      onChange={(e) =>
+                        sua(i, (y) => ({
+                          ...y,
+                          dongMoi: y.dongMoi.map((d, j) =>
+                            j === k ? { ...d, soLuong: parseFloat(e.target.value) || 0 } : d,
+                          ),
+                        }))
+                      }
+                      className={cn(
+                        O,
+                        "w-32 text-right tabular-nums",
+                        cu && Number(cu.soLuong) !== Number(x.soLuong) && "border-amber-400 text-amber-800",
+                      )}
+                      aria-label="Số lượng"
+                    />
+                    <span className="w-24 text-[11px] font-bold text-slate-400 shrink-0">
+                      {x.productId ? dvtSp(x.productId) : ""}
+                      {cu && Number(cu.soLuong) !== Number(x.soLuong) && ` (cũ ${formatNumber(cu.soLuong)})`}
+                      {x.productId && !cu && " (mới)"}
+                    </span>
+                    <button
+                      onClick={() => sua(i, (y) => ({ ...y, dongMoi: y.dongMoi.filter((_, j) => j !== k) }))}
+                      aria-label="Bỏ dòng"
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+              {c.dongCu
+                .filter((d) => !c.dongMoi.some((x) => x.productId === d.productId))
+                .map((d) => (
+                  <p key={d.productId} className="text-[11px] font-bold text-rose-600 line-through">
+                    {tenSp(d.productId)} × {formatNumber(d.soLuong)}
+                  </p>
+                ))}
+              <button
+                onClick={() => sua(i, (y) => ({ ...y, dongMoi: [...y.dongMoi, { productId: "", soLuong: 0 }] }))}
+                className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
               >
+                <Plus className="w-3.5 h-3.5" /> Thêm mặt hàng
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* --------------------------------------------- tờ bị ảnh hưởng + số mới */}
+      <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-3">
+        <p className="text-[12px] font-bold text-slate-600">
+          Tờ {g.donVi}: {formatNumber(tt.tongCu)} → {formatNumber(tt.tongGocMoi)} SL
+          {!tt.conHangGoc && " — hết hàng: tờ của đơn vị nhận chính là tờ thay thế."}
+          {Math.abs(tt.chenhTonKho) > 1e-9 && (
+            <span className="text-amber-700">
+              {" "}· Xuất kho {tt.chenhTonKho > 0 ? "tăng" : "giảm"} {formatNumber(Math.abs(tt.chenhTonKho))} — tồn kho đổi theo
+            </span>
+          )}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {tt.conHangGoc && (
+            <div className="space-y-1.5">
+              <p className={NHAN}>Số HĐ thay thế · {g.donVi}</p>
+              <div className="flex gap-2">
                 <input
-                  type="checkbox"
-                  checked={chon.has(k)}
-                  onChange={() =>
-                    setChon((cu) => {
-                      const m = new Set(cu);
-                      if (m.has(k)) m.delete(k);
-                      else m.add(k);
-                      return m;
-                    })
-                  }
-                  className="mt-1"
+                  value={soGoc.so}
+                  onChange={(e) => setSoGoc({ ...soGoc, so: e.target.value })}
+                  placeholder="C26TKB#…"
+                  className={cn(O, "font-mono")}
                 />
-                <span className="min-w-0 text-[12px] font-bold text-slate-700">
-                  <span className="font-mono text-slate-900">{ngayCham(c.ngay)}</span> ·{" "}
-                  {c.tenDoiTac}{" "}
-                  <span className="font-mono text-[11px] text-slate-400">{c.ma}</span>
-                  <span className="block text-slate-500 font-medium">
-                    {c.dong.map((x) => `${x.ten} × ${formatNumber(x.soLuong)}`).join(" · ")}
-                  </span>
-                </span>
-              </label>
+                <ONgay
+                  value={soGoc.ngay}
+                  onChange={(v: string) => setSoGoc({ ...soGoc, ngay: v })}
+                  className={cn(O, "w-44")}
+                />
+              </div>
+            </div>
+          )}
+          {tt.dich.map((d) => {
+            const sm = soDich[d.maBp] || { so: "", ngay: homNay };
+            const dat = (v: SoMoi) => setSoDich((cu) => ({ ...cu, [d.maBp]: v }));
+            return (
+              <div key={d.maBp} className="space-y-1.5">
+                <p className={NHAN}>
+                  Số HĐ · {d.donVi}
+                  {d.to
+                    ? ` (thay thế ${d.to.ban.soHoaDon})`
+                    : d.batBuoc
+                      ? ""
+                      : " (để trống = về Chưa xuất hóa đơn)"}
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    value={sm.so}
+                    onChange={(e) => dat({ ...sm, so: e.target.value })}
+                    placeholder="C26TKB#…"
+                    className={cn(O, "font-mono")}
+                  />
+                  <ONgay value={sm.ngay} onChange={(v: string) => dat({ ...sm, ngay: v })} className={cn(O, "w-44")} />
+                </div>
+                <p className="text-[11px] font-bold text-slate-400">
+                  {d.to
+                    ? `Đợt này đã có ${d.to.ban.soHoaDon} — nhận thêm ${formatNumber(d.tongSoLuong)} SL nên phải thay thế.`
+                    : `Đợt này chưa có hóa đơn — nhận ${formatNumber(d.tongSoLuong)} SL.`}
+                </p>
+              </div>
             );
           })}
         </div>
-      </div>
-
-      {chuyenChon.length > 0 && (
-        <div className="space-y-1.5">
-          <p className={cn(NHAN, "text-emerald-600")}>Đơn vị đúng</p>
-          <select value={sangId} onChange={(e) => setSangId(e.target.value)} className={O}>
-            <option value="">— Chọn —</option>
-            {donViDung.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {p.sapCode}
-              </option>
-            ))}
-          </select>
-          {sang && (
-            <p className="text-[12px] font-bold text-slate-500">
-              {sang.to
-                ? `Đợt này ${sang.donVi} đã có hóa đơn ${sang.to.ban.soHoaDon} (${formatNumber(tongSangCu)} SL) — tờ đó cũng phải thay thế: ${formatNumber(tongSangCu)} → ${formatNumber(tongSangCu + tongChuyen)} SL.`
-                : `Đợt này ${sang.donVi} chưa có hóa đơn — ${formatNumber(tongChuyen)} SL chuyển sang.`}
-            </p>
-          )}
-          <p className="text-[12px] font-bold text-slate-500">
-            Tờ {g.donVi}: {formatNumber(tongGoc)} → {formatNumber(tongGoc - tongChuyen)} SL
-            {!can.conHangGoc && " — hết hàng: tờ của đơn vị đúng chính là tờ thay thế."}
-          </p>
-        </div>
-      )}
-
-      {/* --------------------------------------------- số hóa đơn mới */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {can.soGoc && (
-          <div className="space-y-1.5">
-            <p className={NHAN}>Số HĐ thay thế · {g.donVi}</p>
-            <div className="flex gap-2">
-              <input
-                value={soGoc}
-                onChange={(e) => setSoGoc(e.target.value)}
-                placeholder="C26TKB#…"
-                className={cn(O, "font-mono")}
-              />
-              <ONgay value={ngayGoc} onChange={(v: string) => setNgayGoc(v)} className={cn(O, "w-44")} />
-            </div>
-          </div>
-        )}
-        {can.soSang !== "khong" && sang && (
-          <div className="space-y-1.5">
-            <p className={NHAN}>
-              Số HĐ · {sang.donVi}
-              {can.soSang === "tuyChon" ? " (để trống = về Chưa xuất hóa đơn)" : ""}
-            </p>
-            <div className="flex gap-2">
-              <input
-                value={soSang}
-                onChange={(e) => setSoSang(e.target.value)}
-                placeholder="C26TKB#…"
-                className={cn(O, "font-mono")}
-              />
-              <ONgay value={ngaySang} onChange={(v: string) => setNgaySang(v)} className={cn(O, "w-44")} />
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="space-y-1.5">
@@ -265,7 +363,7 @@ export default function LapHoaDonThayThe({
         <input
           value={lyDo}
           onChange={(e) => setLyDo(e.target.value)}
-          placeholder="VD: Chuyến VINACS 30.09 của SPA, ghi nhầm BNC Ngoại giao"
+          placeholder="VD: Chuyến 05.11 giao 100 lon, ghi nhầm 120; chuyến VINACS của SPA ghi nhầm BNG"
           className={O}
         />
       </div>
