@@ -19,7 +19,7 @@ import {
   nenTraCuu,
   tenTepTraCuu,
 } from "../lib/traCuuHoaDon";
-import { formatNumber } from "../lib/utils";
+import { formatNumber, homNayDiaPhuong } from "../lib/utils";
 import BangChotHoaDon from "./BangChotHoaDon";
 import type { AnhChungTu } from "../anh/moHinh";
 import { anhCuaHoaDon, boTepNhieuHoaDon, tenAnhTrongBo, tenGocHoaDon } from "../anh/anhHoaDon";
@@ -63,6 +63,15 @@ interface Props {
   bao?: (chu: string, kieu?: "success" | "error") => void;
 }
 
+/** Ngày đầu và ngày cuối của tháng hiện tại, giờ Việt Nam (yyyy-MM-dd). */
+function thangHienTai(): { tu: string; den: string } {
+  const homNay = homNayDiaPhuong();
+  const [n, t] = homNay.split("-").map(Number);
+  const cuoi = new Date(Date.UTC(n, t, 0)).getUTCDate();
+  const thang = homNay.slice(0, 7);
+  return { tu: `${thang}-01`, den: `${thang}-${String(cuoi).padStart(2, "0")}` };
+}
+
 export default function TraCuuHoaDon({
   onXoaMoCoi,
   anhTheoChungTu,
@@ -72,8 +81,10 @@ export default function TraCuuHoaDon({
   partners,
   hoaDon,
 }: Props) {
-  const [tuNgay, setTuNgay] = useState("");
-  const [denNgay, setDenNgay] = useState("");
+  /* Mặc định THÁNG HIỆN TẠI (01 → ngày cuối tháng), không mở toàn bộ — anh
+     Khoa 21/11/2026. Muốn xem hết thì bấm "Tất cả". */
+  const [tuNgay, setTuNgay] = useState(() => thangHienTai().tu);
+  const [denNgay, setDenNgay] = useState(() => thangHienTai().den);
   const [tuKhoa, setTuKhoa] = useState("");
 
   /*
