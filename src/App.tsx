@@ -168,7 +168,6 @@ import {
   lamViecAnhKhiXoa,
   taiAnhChoChungTu,
 } from "./anh/kho";
-import ThuVienAnh from "./anh/ThuVienAnh";
 import ChonAnh, { taoTepCho, type TepCho } from "./anh/ChonAnh";
 import { DangKyChuKy, HinhChuKy, HopKy, NguonChuKyMau, type YeuCauKy } from "./components/ChuKy";
 import {
@@ -185,7 +184,6 @@ import {
 import { idKeHoach, lapViecGhiKeHoach, type DongKeHoach } from "./lib/keHoachSX";
 import type { DongSoKeg } from "./lib/soKeg";
 import { isoSangVn } from "./lib/oNgay";
-import type { OAnh } from "./anh/thuVien";
 import { taoSheetDep, XLSXDep, type BangDep } from "./lib/excelDep";
 import TkhoImport from "./components/TkhoImport";
 import { normalizeDiemBan, type DiemBanEntry } from "./lib/diemBan";
@@ -202,7 +200,7 @@ import {
   lapKeHoachDongBo,
   TEN_LOAI,
 } from "./lib/napTonKho";
-import { DANH_SACH_VAI_TRO, quyenCua, tenVaiTro, vaiTroDeChon } from "./lib/quyen";
+import { DANH_SACH_VAI_TRO, canChuKy, quyenCua, tenVaiTro, vaiTroDeChon } from "./lib/quyen";
 import { dauCuaLoai } from "./lib/tonKho";
 import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
@@ -5106,44 +5104,6 @@ export default function App() {
     }
   };
 
-  /**
-   * XOÁ VĨNH VIỄN MỘT TẤM Ở THƯ VIỆN — chỉ admin, xoá cả tệp trên Cloudinary
-   * lẫn bản ghi ảnh chứng từ. Tấm cuối cùng của một phiếu nhập thì phiếu quay
-   * về chưa ký và hàng trên phiếu RA KHỎI TỒN KHO — nói trước khi xoá.
-   */
-  const xoaMotAnhThuVien = async (o: OAnh): Promise<boolean> => {
-    if (!isOwner) return false;
-    const a = o.anh;
-    // Phiếu giấy cũ (chưa ký điện tử) mà tấm này là ảnh ký duy nhất: không cho
-    // xoá — luồng in giấy đã bỏ, phiếu sẽ không còn cách nào ký lại.
-    const phieuMatKy = a.chungTu.filter(
-      (c) =>
-        slips.some((sl) => sl.code === c && !sl.warehouseSig) &&
-        (anhTheoChungTu.get(c) || []).every((x) => x.id === a.id),
-    );
-    if (phieuMatKy.length) {
-      alert(
-        `Không xoá được: đây là ảnh ký DUY NHẤT của phiếu giấy ${phieuMatKy.join(", ")}.\n\nNhập sai thì xoá cả phiếu rồi nhập lại (phiếu mới ký điện tử).`,
-      );
-      return false;
-    }
-    if (
-      !window.confirm(
-        `XOÁ VĨNH VIỄN tấm ảnh này?\n\nChứng từ: ${a.chungTu.join(", ")}\n` +
-          `Tệp sẽ bị xoá thật trên Cloudinary.\n\n` +
-          `Không khôi phục lại được.`,
-      )
-    )
-      return false;
-    const kq = await lamViecAnhKhiXoa({ xoa: [a], go: [] });
-    if (kq.daXoa < kq.tong || kq.loi) {
-      alert(`CHƯA XOÁ XONG — ảnh vẫn còn.\n\n${kq.loi || "Cloudinary không xác nhận đã xoá."}`);
-      return false;
-    }
-    showNotification("Đã xoá ảnh vĩnh viễn — cả tệp trên Cloudinary lẫn bản ghi");
-    return true;
-  };
-
   // Derived State: Import/Export Flow Summary
   const flowSummary = useMemo(() => {
     const summaryMap = new Map<
@@ -6899,7 +6859,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
    *   1. Xưởng sản xuất (QL Xưởng + Xưởng sản xuất — đã tích hợp Nhập lẻ & Phiếu giấy cũ bên trong)
    *   2. Kho tổng (NXT & Rào 2, Xuất kho, Đơn đi đường, Sổ kho SAP)
    *   3. Công nợ & Hóa đơn (Dashboard Kế toán, Công nợ·Hóa đơn, Đơn BNC, Đối tác)
-   *   4. Tư liệu & Hệ thống (Thư viện ảnh, Cài đặt)
+   *   4. Tư liệu & Hệ thống (Cài đặt)
    */
   const navGroups = useMemo(() => {
     const isOwnerRole = vaiTroXem === "OWNER";
@@ -7041,17 +7001,6 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         id: "system",
         title: "4. Tư liệu & Hệ thống",
         items: [
-          ...(quyen.xemAnh
-            ? [
-                {
-                  id: "gallery",
-                  label: "Thư viện ảnh",
-                  icon: ImageIcon,
-                  color: "#ec4899",
-                  badge: 0,
-                },
-              ]
-            : []),
           ...(isOwnerRole
             ? [
                 {
@@ -8133,8 +8082,8 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                   </div>
                 </div>
 
-                {/* Chữ ký điện tử của chính người dùng */}
-                {quyen.xemKho && (
+                {/* Chữ ký điện tử của chính người dùng — chỉ vai trò cần ký. */}
+                {canChuKy(userRole) && (
                   <div className="p-5 rounded-3xl border border-slate-200 bg-white space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-black text-slate-900 uppercase tracking-wider">Chữ ký điện tử</p>
@@ -11169,6 +11118,13 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                         /* Nút xoá chỉ hiện với chủ sở hữu, và chỉ ở những hóa
                            đơn mồ côi. */
                         onXoaMoCoi={isOwner ? handleXoaHoaDon : undefined}
+                        /* Tải ảnh phiếu xuất theo hóa đơn: kế toán, DNC, admin. */
+                        anhTheoChungTu={
+                          isOwner || vaiTroXem === "KE_TOAN" || vaiTroXem === "DNC"
+                            ? anhTheoChungTu
+                            : undefined
+                        }
+                        bao={showNotification}
                       />
                     )}
                   </div>
@@ -11410,16 +11366,6 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
               </div>
             )}
 
-            {activeTab === "gallery" && quyen.xemAnh && (
-              <ThuVienAnh
-                anh={anhChungTu}
-                giaoDich={transactions}
-                laAdmin={isOwner}
-                onXoa={xoaMotAnhThuVien}
-                bao={showNotification}
-              />
-            )}
-
             {/* Add Partner Modal */}
             {showAddPartner && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -11552,7 +11498,7 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
       {/* Đăng ký chữ ký mẫu: bắt buộc lần đầu (không đóng được), hoặc đổi mẫu. */}
       {pinUnlocked &&
         canSyncData &&
-        quyen.xemKho &&
+        canChuKy(userRole) &&
         daTaiChuKyMau &&
         (!mauCuaToi || moDoiChuKy) && (
           <DangKyChuKy

@@ -219,7 +219,7 @@ export function quyenCua(role: UserRole | string): Quyen {
     // Cung khong co `xemXuat` nhu NHAP_KHO: hai vai tro mot chieu deu chi lam
     // viec trong kho, khong dinh toi phan tien.
     case "XUAT_KHO":
-      // Xem Thư viện ảnh: họ là người tải ảnh biên bản lên (14/10/2026).
+      // Xem ảnh chứng từ: họ là người tải ảnh biên bản lên (14/10/2026).
       return { ...KHONG, xemKho: true, ghiXuat: true, napFile: true, xemAnh: true };
     // Khối cung ứng: CHỈ XEM, và chỉ xem chiều xuất.
     case "DNC":
@@ -304,6 +304,25 @@ export const DANH_SACH_VAI_TRO: NhanVaiTro[] = [
  */
 export function vaiTroDeChon(hienTai?: UserRole | string): NhanVaiTro[] {
   return DANH_SACH_VAI_TRO.filter((v) => v.ma !== "NHAP_KHO" || hienTai === "NHAP_KHO");
+}
+
+/**
+ * Vai trò PHẢI có chữ ký điện tử (anh Khoa 21/11/2026): giám sát xưởng, nhân
+ * viên xưởng · nhập kho, xuất kho, kế toán, admin — những người ký phiếu và
+ * biên bản. DNC (chỉ xem) và tài khoản chờ duyệt không cần đăng ký chữ ký.
+ * Ghi thẳng danh sách, không suy từ quyền xem kho, để đổi quyền xem về sau
+ * không âm thầm bắt / bỏ bắt ai ký.
+ */
+export const VAI_TRO_CAN_CHU_KY: readonly UserRole[] = [
+  "OWNER",
+  "KE_TOAN",
+  "QUAN_LY_XUONG",
+  "SAN_XUAT",
+  "NHAP_KHO",
+  "XUAT_KHO",
+];
+export function canChuKy(role: UserRole | string): boolean {
+  return (VAI_TRO_CAN_CHU_KY as readonly string[]).includes(String(role));
 }
 
 /** Tên vai trò để hiện lên màn hình. */

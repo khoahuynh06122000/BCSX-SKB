@@ -22,7 +22,7 @@ import {
   quyenCua,
   tenVaiTro,
   vaiTroDeChon,
-} from "../quyen";
+  canChuKy, } from "../quyen";
 import type { UserRole } from "../../types";
 
 let pass = 0;
@@ -390,6 +390,13 @@ eq("ten vai tro", tenVaiTro("NHAP_KHO"), "Nhân viên xưởng · nhập kho (m�
 eq("o chon bo ma cu", vaiTroDeChon().some((v) => v.ma === "NHAP_KHO"), false);
 eq("o chon giu ma cu cho tai khoan dang mang", vaiTroDeChon("NHAP_KHO").some((v) => v.ma === "NHAP_KHO"), true);
 eq("ten vai tro la thi tra ve nguyen chuoi", tenVaiTro("ABC"), "ABC");
+
+// Chữ ký điện tử (21/11/2026): chỉ người ký phiếu / biên bản.
+eq(
+  "vai tro can chu ky",
+  ["OWNER", "KE_TOAN", "QUAN_LY_XUONG", "SAN_XUAT", "NHAP_KHO", "XUAT_KHO", "DNC", "PENDING", ""].filter(canChuKy),
+  ["OWNER", "KE_TOAN", "QUAN_LY_XUONG", "SAN_XUAT", "NHAP_KHO", "XUAT_KHO"],
+);
 
 console.log(`\n${pass} DUNG / ${fail} SAI`);
 process.exit(fail > 0 ? 1 : 0);

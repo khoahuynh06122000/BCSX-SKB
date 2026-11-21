@@ -27,7 +27,7 @@
  * hai chỗ, và quên một chỗ là hai bảng lệch nhau mà không có gì báo.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight, Trash2 } from "lucide-react";
 import type { DongCongNo } from "../lib/congNo";
 import { ngayCham } from "../lib/oNgay";
@@ -64,6 +64,10 @@ interface Props {
    * Không truyền thì không có cột nút.
    */
   onBo?: (khoa: string) => void;
+  /**
+   * Ô ảnh chứng từ của từng tờ (nút tải ảnh). Không truyền thì không có cột.
+   */
+  oAnh?: (k: KhoiChot) => ReactNode;
   /** Chiều cao tối đa trước khi cuộn dọc. */
   cao?: string;
 }
@@ -82,6 +86,7 @@ export default function BangChotHoaDon({
   onSua,
   goiYSo,
   onBo,
+  oAnh,
   cao = "max-h-[600px]",
 }: Props) {
   /*
@@ -119,6 +124,7 @@ export default function BangChotHoaDon({
             <th className={TH}>Đơn vị</th>
             <th className={cn(TH, "text-right")}>Sau thuế SKB → DNC</th>
             <th className={cn(TH, "text-right")}>Sau thuế DNC → ĐVTV</th>
+            {oAnh && <th className={cn(TH, "text-center")}>Ảnh</th>}
             {onBo && <th className={TH} />}
           </tr>
         </thead>
@@ -203,6 +209,7 @@ export default function BangChotHoaDon({
                 <td className="px-3 py-2 text-right tabular-nums font-black text-slate-900 whitespace-nowrap">
                   {tien(cong(k.dong, (d) => d.sauThueDnc))}
                 </td>
+                {oAnh && <td className="px-2 py-2 text-center whitespace-nowrap">{oAnh(k)}</td>}
                 {onBo && (
                   <td className="pl-1 pr-3 py-2 w-10 text-right">
                     <button
@@ -220,7 +227,7 @@ export default function BangChotHoaDon({
               mo && (
                 <tr key={`${k.khoa}-ct`} className="bg-slate-50/60">
                   <td />
-                  <td colSpan={onBo ? 7 : 6} className="px-3 pb-3">
+                  <td colSpan={6 + (onBo ? 1 : 0) + (oAnh ? 1 : 0)} className="px-3 pb-3">
                     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
                       <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[900px]">
                         <thead className="bg-slate-50">

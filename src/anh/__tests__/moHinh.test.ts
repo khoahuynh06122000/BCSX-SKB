@@ -23,7 +23,8 @@ import { HAN_VUA_TAI_MS, lyDoGiuTepVuaTai } from "../mayChu";
 import { anhThuNho, chuanHoaUrlAnh, GOC_TRUNG_CHUYEN, quaTrungChuyen } from "../duongDan";
 import { tenCaBo, tenGoc, taoZip } from "../taiVe";
 import { nhanDinh, nhanDinhLuong, nhomCuaMa, tomTatSoat } from "../soat";
-import { danhSachDonVi, diemBanCuaPhan, dungOAnh, locTheoDonVi, locTheoNgay } from "../thuVien";
+import { anhCuaHoaDon, boTepNhieuHoaDon, tenAnhTrongBo, tenGocHoaDon } from "../anhHoaDon";
+import { chiMucTheoChungTu as chiMuc } from "../moHinh";
 import { datLaiHangDoi, SUC_CHUA, traLuot, trangThaiHangDoi, xinLuot } from "../hangDoi";
 
 let pass = 0;
@@ -201,33 +202,40 @@ eq("ma 0 khong hoi duoc", nhomCuaMa(0), "khong-hoi-duoc");
   eq("nhan dinh mat", nhanDinh(t).includes("ĐÃ BỊ XOÁ"), true);
 }
 
-// ------------------------------------------------------------ thư viện
+// ------------------------------------------------------------ ảnh theo hóa đơn
 {
-  const gd = [
-    { id: "o1", type: "OUT", date: "2026-11-02T08:00:00Z", productName: "Bia A", partnerId: "AD0103-1901", partnerName: "BNC · 1901", notes: "", referenceGroupId: "G1" },
-    { id: "o2", type: "OUT", date: "2026-11-02T08:00:00Z", productName: "Bia B", partnerId: "AD0103-1901", partnerName: "BNC · 1901", notes: "", referenceGroupId: "G1" },
-    { id: "o3", type: "LOSS", date: "2026-11-02T08:00:00Z", productName: "Bia A", partnerId: "AD0103-1901", partnerName: "BNC · 1901", referenceGroupId: "G1" },
-    { id: "f1", type: "OUT", date: "2026-10-01T08:00:00Z", productName: "Bia A", partnerId: "FV", partnerName: "FV", notes: "Điểm nhận: Cổng · x", referenceGroupId: "G2" },
-    { id: "n1", type: "IN", date: "2026-11-01T07:00:00Z", productName: "Bia A", partnerId: "SX", partnerName: "SX", slipCode: "PN-1" },
-  ];
-  const ds = [
-    anh("x1", ["G1"]),
-    anh("x2", ["G2"]),
-    anh("x3", ["G-mat"], "XUAT", { doiTac: "OHL", ngay: "2026-09-01" }),
-    anh("p1", ["PN-1"], "NHAP"),
-  ];
-  const xuat = dungOAnh({ anh: ds, giaoDich: gd, loai: "XUAT" });
-  eq("moi tam mot o, moi nhat truoc", xuat.map((o) => o.id), ["x1", "x2", "x3"]);
-  eq("tieu de chuyen nhieu mat hang (khong tinh hao hut)", xuat[0].tieuDe, "Bia A · 2 mặt hàng");
-  eq("diem nhan tu ghi chu", xuat[1].diemNhan, "Cổng");
-  eq("chung tu da xoa", [xuat[2].chungTuDaXoa, xuat[2].tieuDe, xuat[2].donVi], [true, "Chứng từ đã xoá", "OHL"]);
-  const nhap = dungOAnh({ anh: ds, giaoDich: gd, loai: "NHAP" });
-  eq("anh phieu", [nhap.length, nhap[0].tieuDe, nhap[0].phu], [1, "Phiếu PN-1", "1 mặt hàng · Bia A"]);
-  eq("loc ngay", locTheoNgay(xuat, "2026-10-01", "2026-10-31").map((o) => o.id), ["x2"]);
-  const dv = danhSachDonVi(xuat);
-  eq("bnc gop thanh phan, dat dau", dv.map((d) => d.gia), ["BNC:NB", "FV", "OHL"]);
-  eq("loc phan bnc", locTheoDonVi(xuat, ["BNC:NB"]).map((o) => o.id), ["x1"]);
-  eq("diem ban chi khi >=2", diemBanCuaPhan(locTheoDonVi(xuat, ["BNC:NB"]), ["BNC:NB"]), []);
+  const gd = new Map(
+    [
+      { id: "o1", type: "OUT", referenceGroupId: "G1" },
+      { id: "o2", type: "OUT", referenceGroupId: "G1" },
+      { id: "o3", type: "OUT", referenceGroupId: "G2" },
+      { id: "o4", type: "OUT" }, // dòng lẻ không nhóm
+      { id: "t9", type: "OUT", referenceGroupId: "G9" }, // chuyến khác (trả nhà máy) — không thuộc hóa đơn
+    ].map((t) => [t.id, t]),
+  );
+  const ds = chiMuc([
+    anh("a2", ["G1"], "XUAT", { ngay: "2026-11-03" }),
+    anh("a1", ["G1", "G2"], "XUAT", { ngay: "2026-11-02" }), // một tấm hai chuyến: không lặp
+    anh("a3", ["gd:o4"], "XUAT", { ngay: "2026-11-05" }),
+    anh("a9", ["G9"]),
+    anh("n1", ["G2"], "NHAP"), // ảnh nhập lỡ trùng mã: bỏ
+  ]);
+  const hd = [{ nguon: ["o1", "o2"] }, { nguon: ["o3", "o4", "khong-con"] }];
+  eq("anh hoa don: theo giao dich, khong trung, theo ngay", anhCuaHoaDon(hd, gd, ds).map((a) => a.id), ["a1", "a2", "a3"]);
+  eq("hoa don khong co anh", anhCuaHoaDon([{ nguon: ["o9"] }], gd, ds), []);
+  eq("ten goc: # thanh -, bo dau, cat sau ·", tenGocHoaDon("C26TKB#00000295", "FV"), "C26TKB-00000295_FV");
+  eq("ten goc don vi co diem nhan", tenGocHoaDon("C26TKB#1", "BNC · Lễ Hội"), "C26TKB-1_BNC");
+  eq("mot tam khong danh so", tenAnhTrongBo("X_FV", [`${B}/v1/a.png`]), ["X_FV.png"]);
+  eq("nhieu tam danh so", tenAnhTrongBo("X_FV", [`${B}/v1/a.jpg`, `${B}/v1/b.jpeg`]), ["X_FV_01.jpg", "X_FV_02.jpg"]);
+  eq(
+    "tai tat ca: moi to mot thu muc, bo to khong anh, trung ten them -2",
+    boTepNhieuHoaDon([
+      { soHoaDon: "H#1", donVi: "FV", anh: [{ url: `${B}/v1/a.jpg` }] },
+      { soHoaDon: "H#2", donVi: "BNC", anh: [] },
+      { soHoaDon: "H#1", donVi: "FV", anh: [{ url: `${B}/v1/b.jpg` }, { url: `${B}/v1/c.jpg` }] },
+    ]).map((t) => t.ten),
+    ["H-1_FV/H-1_FV.jpg", "H-1_FV-2/H-1_FV-2_01.jpg", "H-1_FV-2/H-1_FV-2_02.jpg"],
+  );
 }
 
 // ------------------------------------------------------------ hàng đợi

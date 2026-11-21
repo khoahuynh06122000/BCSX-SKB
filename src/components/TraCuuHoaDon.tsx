@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Download,
   FileSearch,
+  ImageDown,
   Search,
   Trash2,
   X,
@@ -20,6 +21,9 @@ import {
 } from "../lib/traCuuHoaDon";
 import { formatNumber } from "../lib/utils";
 import BangChotHoaDon from "./BangChotHoaDon";
+import type { AnhChungTu } from "../anh/moHinh";
+import { anhCuaHoaDon, boTepNhieuHoaDon, tenAnhTrongBo, tenGocHoaDon } from "../anh/anhHoaDon";
+import { taiBoAnh } from "../anh/taiBoAnh";
 
 import ONgay from "./ONgay";
 
@@ -51,10 +55,18 @@ interface Props {
    * Chỉ chủ sở hữu mới được truyền vào — xem `handleXoaHoaDon` ở `App.tsx`.
    */
   onXoaMoCoi?: (h: HoaDonGhiNhan) => void;
+  /**
+   * Ảnh chứng từ theo mã chứng từ — truyền vào thì mỗi tờ có nút tải ảnh phiếu
+   * xuất (kế toán, DNC, admin). Không truyền thì không có cột ảnh.
+   */
+  anhTheoChungTu?: ReadonlyMap<string, readonly AnhChungTu[]>;
+  bao?: (chu: string, kieu?: "success" | "error") => void;
 }
 
 export default function TraCuuHoaDon({
   onXoaMoCoi,
+  anhTheoChungTu,
+  bao,
   transactions,
   products,
   partners,
@@ -80,6 +92,74 @@ export default function TraCuuHoaDon({
   );
 
   const daLoc = Boolean(tuNgay || denNgay || tuKhoa);
+
+  /* ------------------------------------------- ảnh chứng từ của từng tờ */
+  const khoaCua = (h: { soHoaDon: string; maBp: string; nhanDot: string }) =>
+    `${h.soHoaDon}|${h.maBp}|${h.nhanDot}`;
+  const giaoDichTheoId = useMemo(
+    () => new Map(transactions.map((t) => [t.id, t])),
+    [transactions],
+  );
+  const anhTheoKhoa = useMemo(() => {
+    const m = new Map<string, AnhChungTu[]>();
+    if (!anhTheoChungTu) return m;
+    kq.hoaDon.forEach((h) =>
+      m.set(khoaCua(h), anhCuaHoaDon(h.dong, giaoDichTheoId, anhTheoChungTu)),
+    );
+    return m;
+  }, [kq.hoaDon, giaoDichTheoId, anhTheoChungTu]);
+  const tongAnh = useMemo(
+    () => [...anhTheoKhoa.values()].reduce((n, ds) => n + ds.length, 0),
+    [anhTheoKhoa],
+  );
+  const [dangTai, setDangTai] = useState<{ khoa: string; xong: number; tong: number } | null>(null);
+
+  const chayTai = async (
+    khoa: string,
+    tep: { ten: string; url: string }[],
+    tenZip: string,
+    luonZip = false,
+  ) => {
+    if (dangTai || !tep.length) return;
+    setDangTai({ khoa, xong: 0, tong: tep.length });
+    try {
+      const kqTai = await taiBoAnh(
+        tep,
+        tenZip,
+        (xong, tong) => setDangTai({ khoa, xong, tong }),
+        luonZip,
+      );
+      if (!kqTai.daTai) bao?.("Không tải được tấm ảnh nào. Kiểm tra lại mạng.", "error");
+      else if (kqTai.hong.length)
+        bao?.(
+          `Đã tải ${kqTai.daTai} ảnh — ${kqTai.hong.length} tấm KHÔNG lấy được: ${kqTai.hong.join(", ")}`,
+          "error",
+        );
+      else bao?.(`Đã tải ${kqTai.daTai} ảnh`);
+    } catch (e) {
+      bao?.(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setDangTai(null);
+    }
+  };
+
+  const taiAnhMotTo = (h: { soHoaDon: string; donVi: string; maBp: string; nhanDot: string }) => {
+    const anh = anhTheoKhoa.get(khoaCua(h)) || [];
+    const goc = tenGocHoaDon(h.soHoaDon, h.donVi);
+    const urls = anh.map((a) => a.url);
+    const ten = tenAnhTrongBo(goc, urls);
+    return chayTai(khoaCua(h), urls.map((url, i) => ({ ten: ten[i], url })), `${goc}.zip`);
+  };
+
+  const taiAnhTatCa = () => {
+    const tep = boTepNhieuHoaDon(
+      kq.hoaDon.map((h) => ({ soHoaDon: h.soHoaDon, donVi: h.donVi, anh: anhTheoKhoa.get(khoaCua(h)) || [] })),
+    );
+    if (tep.length > 300 && !window.confirm(`Sắp tải ${tep.length} ảnh vào một tệp ZIP, có thể mất vài phút. Tiếp tục?`)) return;
+    const ngay = kq.hoaDon.map((h) => h.ngayHoaDon).filter(Boolean).sort();
+    const ten = tenTepTraCuu(ngay[0] || tuNgay, ngay[ngay.length - 1] || denNgay).replace(/\.xlsx$/i, "");
+    return chayTai("*", tep, `Anh ${ten}.zip`, true);
+  };
 
   const handleDownload = () => {
     if (!kq.bang.dong.length) return;
@@ -197,6 +277,20 @@ export default function TraCuuHoaDon({
           <Download className="w-4 h-4" />
           Xuất mẫu Chốt
         </button>
+
+        {anhTheoChungTu && (
+          <button
+            onClick={taiAnhTatCa}
+            disabled={!tongAnh || !!dangTai}
+            title="Tải ảnh phiếu xuất của mọi hóa đơn đang hiện — mỗi hóa đơn một thư mục"
+            className="px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-[12px] uppercase tracking-[0.2em] hover:border-primary hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2.5 shrink-0"
+          >
+            <ImageDown className="w-4 h-4" />
+            {dangTai?.khoa === "*"
+              ? `Đang tải ${dangTai.xong}/${dangTai.tong}`
+              : `Tải ảnh (${formatNumber(tongAnh)})`}
+          </button>
+        )}
       </div>
 
       {/* ---------------------------------------------------- tổng quan */}
@@ -304,11 +398,36 @@ export default function TraCuuHoaDon({
             </div>
             <BangChotHoaDon
               khoi={kq.hoaDon.map((h) => ({
-                khoa: `${h.soHoaDon}|${h.maBp}|${h.nhanDot}`,
+                khoa: khoaCua(h),
                 soHoaDon: h.soHoaDon,
                 ngayHoaDon: h.ngayHoaDon,
                 dong: h.dong,
               }))}
+              oAnh={
+                anhTheoChungTu
+                  ? (k) => {
+                      const h = kq.hoaDon.find((x) => khoaCua(x) === k.khoa);
+                      const n = anhTheoKhoa.get(k.khoa)?.length || 0;
+                      if (!h) return null;
+                      const dang = dangTai?.khoa === k.khoa;
+                      return (
+                        <button
+                          onClick={() => taiAnhMotTo(h)}
+                          disabled={!n || !!dangTai}
+                          title={
+                            n
+                              ? `Tải ${n} ảnh phiếu xuất — lưu tên ${tenGocHoaDon(h.soHoaDon, h.donVi)}`
+                              : "Chưa có ảnh phiếu xuất cho hóa đơn này"
+                          }
+                          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-black text-slate-500 hover:text-primary hover:bg-primary/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ImageDown className="w-4 h-4" />
+                          {dang ? `${dangTai!.xong}/${dangTai!.tong}` : n}
+                        </button>
+                      );
+                    }
+                  : undefined
+              }
             />
           </div>
 
