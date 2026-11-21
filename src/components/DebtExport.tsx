@@ -3,7 +3,6 @@ import {
   Download,
   Receipt,
   AlertTriangle,
-  Calculator,
   Plus,
   Trash2,
   CalendarRange,
@@ -12,7 +11,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Transaction, Product, Partner } from "../types";
-import { PRICE_TABLE, invoiceUnitOf } from "../lib/invoice";
+import { invoiceUnitOf } from "../lib/invoice";
 import {
   dungBangCongNo,
   nhanNgayGiao,
@@ -95,16 +94,6 @@ interface Props {
   /** Xoá một lần điều chỉnh (cả cặp). Chỉ admin. */
   onXoaDieuChinh?: (nhom: string) => Promise<void>;
 }
-
-/*
- * Cột nào canh phải, theo chỉ số của bảng 13 cột TRÊN MÀN HÌNH (không phải 18
- * cột của tệp):
- *
- *   0 STT · 1 Mã vật tư · 2 Tên hàng hóa · 3 ĐVT · 4 Số lượng
- *   5..8  Đơn giá / Thành tiền / VAT / Sau thuế — chặng SKB → DNC
- *   9..12 Đơn giá / Thành tiền / VAT / Sau thuế — chặng DNC → ĐVTV
- */
-const COT_SO = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const KHOA_LUU = "bcsx.congno.dot";
 const KHOA_LUU_SO = "bcsx.congno.sohoadon";
@@ -1031,6 +1020,89 @@ export default function DebtExport({
             Bấm nhầm thì ở thẻ kia có nút <strong>Đưa về chưa xuất</strong> cho
             từng đơn, miễn là đơn đó chưa điền số hóa đơn.
           </p>
+          {/* Thông số tệp TEMPLATE nằm ngay cạnh nút tải — trước đây giấu trong
+              khung "Chi tiết số liệu" bên dưới nên dễ tải tệp với ngày chứng
+              từ mặc định. Khung đó (thống kê theo đơn vị, bảng giá, xem trước
+              18 cột, tóm tắt chứng từ) đã bỏ: bảng đơn ngay dưới đã đủ. */}
+          {tepSap.oDong.length > 0 && (
+          <div className="space-y-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Ngày chứng từ
+                </span>
+                <ONgay
+                  value={ngayChungTu}
+                  onChange={(v: string) => setNgayChungTu(v)}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900"
+                />
+                <span className="block text-[11px] font-bold text-slate-400 mt-1">
+                  Ngày hạch toán, không phải ngày giao bia
+                </span>
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Tiêu đề chứng từ
+                </span>
+                <input
+                  value={cauHinhSap.tieuDeChungTu}
+                  onChange={(e) => suaCauHinh("tieuDeChungTu", e.target.value)}
+                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900 font-mono"
+                />
+                <span className="block text-[11px] font-bold text-slate-400 mt-1">
+                  <strong>{"{T}"}</strong> tự đổi theo tháng giao của từng
+                  đợt. Ví dụ đơn giao tháng 10:{" "}
+                  {dienThang(cauHinhSap.tieuDeChungTu, 10)}BNC
+                </span>
+              </label>
+            </div>
+
+            <button
+              onClick={() => setMoCauHinh(!moCauHinh)}
+              className="text-[12px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
+            >
+              {moCauHinh ? "Ẩn" : "Sửa"} mã cố định (tài khoản, mã thuế, công ty)
+            </button>
+
+            {moCauHinh && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                {(
+                  [
+                    ["docType", "Doc. type"],
+                    ["compCode", "Comp. Code"],
+                    ["currency", "Currency"],
+                    ["businessPlace", "Business Place"],
+                    ["taxCode", "Tax Code"],
+                    ["paymentTerm", "Payment Term"],
+                    ["profitCenter", "Profit Center"],
+                    ["taiKhoanPhaiThu", "TK phải thu"],
+                    ["taiKhoanDoanhThu", "TK doanh thu"],
+                    ["taiKhoanThue", "TK thuế GTGT"],
+                  ] as [keyof CauHinhSap, string][]
+                ).map(([k, nhan]) => (
+                  <label key={k} className="block">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      {nhan}
+                    </span>
+                    <input
+                      value={cauHinhSap[k]}
+                      onChange={(e) => suaCauHinh(k, e.target.value)}
+                      className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold font-mono text-slate-900"
+                    />
+                  </label>
+                ))}
+                {/* Chú thích ở sheet 1 ghi TO2 còn tệp mẫu ghi O2 — nói ra chứ
+                    không tự chọn hộ. */}
+                <p className="col-span-2 sm:col-span-4 text-[12px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
+                  Mã thuế: tệp mẫu ghi <strong>O2</strong>, còn chú thích ở
+                  sheet 1 ghi <strong>TO2</strong>. Em để mặc định theo tệp mẫu
+                  vì đó là tệp đã dùng được — anh xem lại rồi sửa nếu cần.
+                </p>
+              </div>
+            )}
+
+          </div>
+          )}
         </div>
 
         {chuaXuat.length === 0 ? (
@@ -1185,494 +1257,6 @@ export default function DebtExport({
         onXoa={onXoaDieuChinh}
       />
 
-      {/*
-        KHỐI PHỤ THU GỌN LẠI, BUNG RA KHI CẦN.
-
-        Bảy khối số liệu xếp liền nhau thành một trang dài dằng dặc, và thứ
-        người dùng mở màn hình này ra để tìm — còn bao nhiêu đơn phải xuất hóa
-        đơn — thì lẫn vào giữa. Số liệu không bỏ đi đâu, chỉ thôi bày sẵn ra
-        cùng một lúc.
-      */}
-      <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
-        <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
-          <span className="text-[13px] font-black text-slate-700 tracking-tight">
-            Chi tiết số liệu · bảng giá · xem trước tệp
-          </span>
-          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-open:hidden">
-            Bung ra
-          </span>
-          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400 hidden group-open:inline">
-            Thu lại
-          </span>
-        </summary>
-        <div className="px-4 pb-4 space-y-4 border-t border-slate-100 pt-4">
-      {/* ----- Thống kê theo đơn vị ----- */}
-      {bang.theoDonVi.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-              Theo đơn vị · cả kỳ
-            </p>
-          </div>
-          <div className="overflow-x-auto max-h-64 overflow-y-auto">
-            <table className="w-full text-left whitespace-nowrap">
-              <tbody>
-                {bang.theoDonVi.map((u) => (
-                  <tr
-                    key={u.maBp || u.donVi}
-                    className="border-t border-slate-100 text-[13px] font-bold text-slate-600 first:border-t-0"
-                  >
-                    <td className="px-3.5 py-2.5 text-slate-900">{u.donVi}</td>
-                    <td className="px-3.5 py-2.5 font-mono text-slate-400">
-                      {u.maBp}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {u.soDong} dòng
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
-                      {formatNumber(u.soLuong)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {tien(u.thanhTienSkb)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {tien(u.sauThueSkb)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ----- Bảng giá ----- */}
-      <div className="p-4 rounded-2xl border border-slate-200 bg-white">
-        <div className="flex items-center gap-2 mb-2">
-          <Calculator className="w-4 h-4 text-slate-400" />
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-            Đơn giá đang áp dụng
-          </p>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-2 text-[13px] font-bold text-slate-600">
-          <p>
-            Bia hơi (LIT): SKB→DNC{" "}
-            <span className="text-slate-900">
-              {formatNumber(PRICE_TABLE.LIT.skbToDnc)}
-            </span>{" "}
-            · DNC→ĐVTV{" "}
-            <span className="text-slate-900">
-              {formatNumber(PRICE_TABLE.LIT.dncToMember)}
-            </span>
-          </p>
-          <p>
-            Bia lon (LON): SKB→DNC{" "}
-            <span className="text-slate-900">
-              {formatNumber(PRICE_TABLE.LON.skbToDnc)}
-            </span>{" "}
-            · DNC→ĐVTV{" "}
-            <span className="text-slate-900">
-              {formatNumber(PRICE_TABLE.LON.dncToMember)}
-            </span>
-          </p>
-        </div>
-        <p className="text-[12px] font-bold text-slate-400 mt-2 leading-relaxed">
-          VAT 10% cả hai chặng. Bảng đúng 18 cột của file bộ phận — không có
-          &quot;Đơn vị xuất&quot;, &quot;Thuế TTĐB&quot;, &quot;Doanh thu
-          511&quot;. Giá đổi thì báo tôi sửa trong src/lib/invoice.ts.
-        </p>
-      </div>
-
-      {/* ----- Xem trước ----- */}
-      {bang.dong.length === 0 ? (
-        <p className="text-center text-xs font-bold text-slate-400 py-10">
-          Không có giao dịch xuất kho nào trong các đợt đã khai.
-        </p>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          {/*
-            Cuộn CẢ HAI CHIỀU. Trước đây bảng vừa đúng bề ngang màn hình nên bỏ
-            cuộn ngang; nay chữ to lên, cột phải nới ra, nên phải mở lại — không
-            thì cột cuối bị cắt mất mà không có cách nào kéo tới.
-          */}
-          <div className="max-h-[520px] overflow-auto">
-            {/*
-              MÀN HÌNH GOM THEO HÓA ĐƠN, TỆP THÌ VẪN PHẲNG 18 CỘT.
-
-              Sheet "Chốt" lặp lại ngày giao, ngày hóa đơn, đơn vị, số hóa đơn
-              và mã BP trên TỪNG dòng — Excel không có cách nào khác. Nhưng năm
-              cột ấy chiếm gần nửa bề ngang, đẩy cả khối giá chặng DNC ra ngoài
-              màn hình, nên đọc một dòng phải kéo ngang rồi kéo ngược về.
-
-              Nay năm cột đó thành một dải đầu mỗi hóa đơn, bảng còn 13 cột và
-              vừa màn hình. Không mất thông tin nào — chỉ thôi lặp lại thứ vốn
-              giống hệt nhau trong cả một hóa đơn.
-
-              Hai khối giá vẫn tô hai màu như trong tệp: hai bộ cột Đơn giá /
-              Thành tiền / VAT / Sau thuế giống hệt nhau, mà hai chặng chỉ lệch
-              vài phần trăm nên đọc nhầm cũng không lộ ra.
-            */}
-            {/*
-              CHỮ TO LÊN THÌ CỘT PHẢI NỚI THEO, và bảng phải kéo ngang được.
-              `table-fixed` không cho ô phình ra: chữ không vừa thì nó xuống
-              dòng ngay trong ô, và một con tiền bị bẻ làm hai dòng còn khó đọc
-              hơn chữ nhỏ. Nới cột tiền rồi đặt bề ngang tối thiểu — thà kéo
-              ngang một cái còn hơn đọc không ra số.
-            */}
-            <table className="w-full text-left table-fixed min-w-[1240px]">
-              <colgroup>
-                <col className="w-12" />
-                <col className="w-[98px]" />
-                <col className="w-[190px]" />
-                <col className="w-14" />
-                <col className="w-24" />
-                <col className="w-[72px]" />
-                <col className="w-[106px]" />
-                <col className="w-[96px]" />
-                <col className="w-[112px]" />
-                <col className="w-[72px]" />
-                <col className="w-[106px]" />
-                <col className="w-[96px]" />
-                <col className="w-[112px]" />
-              </colgroup>
-              <thead className="bg-slate-50 sticky top-0 z-10">
-                <tr>
-                  <th colSpan={5} className="bg-slate-50" />
-                  <th
-                    colSpan={4}
-                    className="px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-white bg-[#1F4E5F] text-center"
-                  >
-                    SKB - DNC
-                  </th>
-                  <th
-                    colSpan={4}
-                    className="px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-white bg-[#6B4E71] text-center"
-                  >
-                    DNC xuất BNC và ĐVTV
-                  </th>
-                </tr>
-                <tr>
-                  {[
-                    "STT",
-                    "Mã vật tư",
-                    "Tên hàng hóa",
-                    "ĐVT",
-                    "Số lượng",
-                    "Đơn giá",
-                    "Thành tiền",
-                    "VAT",
-                    "Sau thuế",
-                    "Đơn giá",
-                    "Thành tiền",
-                    "VAT",
-                    "Sau thuế",
-                  ].map((h, i) => (
-                    <th
-                      key={i}
-                      className={cn(
-                        "px-3 py-3 text-[11px] font-black uppercase tracking-widest",
-                        COT_SO.includes(i) && "text-right",
-                        i >= 5 && i <= 8
-                          ? "bg-[#1F4E5F]/10 text-[#1F4E5F]"
-                          : i >= 9
-                            ? "bg-[#6B4E71]/10 text-[#6B4E71]"
-                            : "text-slate-400",
-                      )}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-
-              {khoiHoaDon.map((k) => (
-                <tbody key={k.khoa} className="border-t-2 border-slate-200">
-                  {/* Dải đầu hóa đơn: năm cột không lặp lại nữa. */}
-                  <tr className="bg-slate-100/70">
-                    <td
-                      colSpan={13}
-                      className="px-3 py-2.5 text-[12px] font-black text-slate-600"
-                    >
-                      <span className="text-slate-900">{k.dau.donVi}</span>
-                      <span className="text-slate-300 mx-1.5">·</span>
-                      <span className="font-mono text-slate-500">
-                        {k.dau.maBp || "chưa có mã BP"}
-                      </span>
-                      <span className="text-slate-300 mx-1.5">·</span>
-                      <span className="font-mono text-[12px] text-slate-700">
-                        {k.dau.soHoaDon}
-                      </span>
-                      <span className="text-slate-300 mx-1.5">·</span>
-                      <span className="font-normal text-slate-400">
-                        giao {k.dau.ngayGiaoBia} · HĐ {k.dau.ngayHoaDon}
-                      </span>
-                    </td>
-                  </tr>
-
-                  {k.dong.map((r) => (
-                    <tr
-                      key={r.stt}
-                      className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
-                    >
-                      <td className="px-3 py-2.5 text-slate-400">{r.stt}</td>
-                      <td className="px-3 py-2.5 font-mono text-[12px]">
-                        {r.maVatTu}
-                      </td>
-                      {/* Cột duy nhất co giãn, và là cột duy nhất được xuống
-                          dòng — tên bia dài nhất cũng chỉ ăn hai dòng. */}
-                      <td className="px-3 py-2.5 leading-tight">
-                        {r.tenHangHoa}
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-400">{r.dvt}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">
-                        {formatNumber(r.soLuong)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#1F4E5F]/5">
-                        {formatNumber(r.donGiaSkb)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
-                        {tien(r.thanhTienSkb)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#1F4E5F]/5">
-                        {tien(r.vatSkb)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#1F4E5F]/5">
-                        {tien(r.sauThueSkb)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#6B4E71]/5">
-                        {formatNumber(r.donGiaDnc)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
-                        {tien(r.thanhTienDnc)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums bg-[#6B4E71]/5">
-                        {tien(r.vatDnc)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-900 bg-[#6B4E71]/5">
-                        {tien(r.sauThueDnc)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              ))}
-
-              <tfoot className="sticky bottom-0">
-                <tr className="bg-slate-100 border-t-2 border-slate-300 text-[13px] font-black text-slate-900">
-                  <td colSpan={4} className="px-3 py-3">
-                    TỔNG CỘNG
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {formatNumber(bang.tong.soLuong)}
-                  </td>
-                  <td />
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.thanhTienSkb)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.vatSkb)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.sauThueSkb)}
-                  </td>
-                  <td />
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.thanhTienDnc)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.vatDnc)}
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {tien(bang.tong.sauThueDnc)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ----- Tệp TEMPLATE để xuất hóa đơn trên hệ thống khác ----- */}
-      {tepSap.oDong.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-1">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-              Tệp TEMPLATE xuất hóa đơn · {tepSap.tong.soChungTu} chứng từ ·{" "}
-              {tepSap.oDong.length} dòng
-            </p>
-            <p className="text-[12px] font-bold text-slate-400 leading-relaxed">
-              Tệp bút toán đúng khuôn mẫu bộ phận gửi, để nạp lên hệ thống kế
-              toán. Mỗi <strong>đợt × đơn vị</strong> là một chứng từ: một dòng
-              Nợ phải thu, mỗi mặt hàng một dòng doanh thu, và một dòng thuế
-              GTGT. Số lấy thẳng từ bảng Chốt ở trên nên hai tệp luôn khớp nhau.
-            </p>
-          </div>
-
-          <div className="p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <label className="block">
-                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-                  Ngày chứng từ
-                </span>
-                <ONgay
-                  value={ngayChungTu}
-                  onChange={(v: string) => setNgayChungTu(v)}
-                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900"
-                />
-                <span className="block text-[11px] font-bold text-slate-400 mt-1">
-                  Ngày hạch toán, không phải ngày giao bia
-                </span>
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-                  Tiêu đề chứng từ
-                </span>
-                <input
-                  value={cauHinhSap.tieuDeChungTu}
-                  onChange={(e) => suaCauHinh("tieuDeChungTu", e.target.value)}
-                  className="w-full mt-1 px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-[15px] font-bold text-slate-900 font-mono"
-                />
-                <span className="block text-[11px] font-bold text-slate-400 mt-1">
-                  <strong>{"{T}"}</strong> tự đổi theo tháng giao của từng
-                  đợt. Ví dụ đơn giao tháng 10:{" "}
-                  {dienThang(cauHinhSap.tieuDeChungTu, 10)}BNC
-                </span>
-              </label>
-            </div>
-
-            <button
-              onClick={() => setMoCauHinh(!moCauHinh)}
-              className="text-[12px] font-black uppercase tracking-widest text-slate-500 hover:text-primary"
-            >
-              {moCauHinh ? "Ẩn" : "Sửa"} mã cố định (tài khoản, mã thuế, công ty)
-            </button>
-
-            {moCauHinh && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                {(
-                  [
-                    ["docType", "Doc. type"],
-                    ["compCode", "Comp. Code"],
-                    ["currency", "Currency"],
-                    ["businessPlace", "Business Place"],
-                    ["taxCode", "Tax Code"],
-                    ["paymentTerm", "Payment Term"],
-                    ["profitCenter", "Profit Center"],
-                    ["taiKhoanPhaiThu", "TK phải thu"],
-                    ["taiKhoanDoanhThu", "TK doanh thu"],
-                    ["taiKhoanThue", "TK thuế GTGT"],
-                  ] as [keyof CauHinhSap, string][]
-                ).map(([k, nhan]) => (
-                  <label key={k} className="block">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      {nhan}
-                    </span>
-                    <input
-                      value={cauHinhSap[k]}
-                      onChange={(e) => suaCauHinh(k, e.target.value)}
-                      className="w-full mt-0.5 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-[14px] font-bold font-mono text-slate-900"
-                    />
-                  </label>
-                ))}
-                {/* Chú thích ở sheet 1 ghi TO2 còn tệp mẫu ghi O2 — nói ra chứ
-                    không tự chọn hộ. */}
-                <p className="col-span-2 sm:col-span-4 text-[12px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 leading-relaxed">
-                  Mã thuế: tệp mẫu ghi <strong>O2</strong>, còn chú thích ở
-                  sheet 1 ghi <strong>TO2</strong>. Em để mặc định theo tệp mẫu
-                  vì đó là tệp đã dùng được — anh xem lại rồi sửa nếu cần.
-                </p>
-              </div>
-            )}
-
-            {/* Bảng tóm tắt từng chứng từ để soát trước khi tải. */}
-            <div className="rounded-xl border border-slate-200 overflow-x-auto">
-              <table className="w-full text-left whitespace-nowrap">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {[
-                      "Chứng từ",
-                      "Mã BP",
-                      "Mặt hàng",
-                      "Trước thuế",
-                      "VAT",
-                      "Tổng cộng",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-3 text-[11px] font-black uppercase tracking-widest text-slate-400"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {tepSap.chungTu.map((x, i) => (
-                    <tr
-                      key={`${x.maBp}-${i}`}
-                      className="border-t border-slate-100 text-[13px] font-bold text-slate-600"
-                    >
-                      <td className="px-3.5 py-2.5 text-slate-900 font-mono text-[12px]">
-                        {x.tieuDe}
-                      </td>
-                      <td className="px-3.5 py-2.5 font-mono text-slate-400">
-                        {x.maBp}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums">
-                        {x.soDongHang}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums">
-                        {tien(x.truocThue)}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums">
-                        {tien(x.vat)}
-                      </td>
-                      <td className="px-3.5 py-2.5 text-right tabular-nums text-slate-900">
-                        {tien(x.tongCong)}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="border-t-2 border-slate-200 text-[13px] font-black text-slate-900 bg-slate-50">
-                    <td className="px-3.5 py-2.5" colSpan={3}>
-                      Tổng
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {tien(tepSap.tong.truocThue)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {tien(tepSap.tong.vat)}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-right tabular-nums">
-                      {tien(tepSap.tong.tongCong)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {tepSap.vuotDoDai.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-[13px] font-bold text-amber-800 leading-relaxed">
-                  {tepSap.vuotDoDai.length} tên hàng dài hơn 25 ký tự, mà cột
-                  Header Text khai C(25). Tệp mẫu của anh cũng vậy và vẫn dùng
-                  được nên em giữ nguyên, không cắt.
-                </p>
-              </div>
-            )}
-
-            <button
-              onClick={taiTepSap}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[12px] font-black uppercase tracking-widest hover:brightness-125 transition-all flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" /> Tải tệp TEMPLATE (
-              {tepSap.tong.soChungTu} chứng từ)
-            </button>
-          </div>
-        </div>
-      )}
-
-
-        </div>
-      </details>
       </>
       )}
 
