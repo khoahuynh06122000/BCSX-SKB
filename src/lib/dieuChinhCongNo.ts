@@ -39,6 +39,10 @@ export interface DauDieuChinh {
   /** partnerId của đơn vị đã xuất nhầm và đơn vị đúng. */
   tuDoiTac: string;
   sangDoiTac: string;
+  /** Hóa đơn thay thế: mã chuyến gốc bị ghi nhầm đơn vị. */
+  chungTuGoc?: string;
+  /** Hóa đơn thay thế: số hóa đơn bị thay thế. */
+  hoaDonBiThayThe?: string;
 }
 
 export function laDongDieuChinh(t: { dieuChinh?: unknown }): boolean {
@@ -58,6 +62,8 @@ export interface YeuCauDieuChinh {
   sangDoiTac: string;
   lyDo: string;
   dong: DongDieuChinhVao[];
+  /** Hóa đơn thay thế: chuyến gốc — vào khoá để hai chuyến giống hệt không đè nhau. */
+  chungTuGoc?: string;
 }
 
 /** Đợt chứa một ngày; `null` = chưa thuộc đợt nào (sẽ vào đợt khai sau). */
@@ -123,7 +129,9 @@ export function khoaDieuChinh(
     .sort((a, b) => a.productId.localeCompare(b.productId))
     .map((d) => `${d.productId}:${Number(d.soLuong)}`)
     .join(",");
-  return "dc-" + bam([yc.ngayGoc, yc.ngayGhi, yc.tuDoiTac, yc.sangDoiTac, dong].join("|"));
+  const phan = [yc.ngayGoc, yc.ngayGhi, yc.tuDoiTac, yc.sangDoiTac, dong];
+  if (yc.chungTuGoc) phan.push(yc.chungTuGoc);
+  return "dc-" + bam(phan.join("|"));
 }
 
 export interface DongGhiDieuChinh {

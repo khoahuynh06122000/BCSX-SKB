@@ -28,6 +28,15 @@
  * gán số cũ cho tập mới là gán bừa. Nơi gọi đếm số hóa đơn bị rời ra và báo.
  */
 
+/** Trỏ tới một tờ hóa đơn khác (thay thế / bị thay thế). */
+export interface ThamChieuHoaDon {
+  soHoaDon: string;
+  /** yyyy-MM-dd */
+  ngayHoaDon: string;
+  donVi: string;
+  maBp: string;
+}
+
 /** Một hóa đơn đã phát hành, do người dùng điền lại vào app. */
 export interface HoaDonGhiNhan {
   /** = khoaHoaDon(...). Cũng là khoá tài liệu trên Firestore. */
@@ -54,6 +63,19 @@ export interface HoaDonGhiNhan {
    * "chưa xuất", và lần kết xuất sau sẽ gom nó vào tệp lần nữa.
    */
   ngayKetXuat?: string;
+  /**
+   * HÓA ĐƠN THAY THẾ (anh Khoa 21/11/2026, đúng quy định hóa đơn điện tử):
+   * tờ này thay thế cho các tờ ghi ở đây. Xem `src/lib/hoaDonThayThe.ts`.
+   */
+  thayTheCho?: ThamChieuHoaDon[];
+  /**
+   * Có trường này = BẢN LƯU của một tờ ĐÃ BỊ THAY THẾ (tài liệu riêng, id
+   * `<khoá>-bt-<băm số>`). Không còn hiệu lực: không vào công nợ, không vào
+   * tệp Chốt; chỉ hiện ở tra cứu, tô đỏ.
+   */
+  biThayTheBoi?: ThamChieuHoaDon & { luc: string; lyDo: string; boi?: string };
+  /** Dòng hàng của tờ bị thay thế, chụp lúc thay thế (không còn dựng lại được). */
+  banChup?: import("./congNo").DongCongNo[];
   updatedAt?: string;
   updatedBy?: string;
 }

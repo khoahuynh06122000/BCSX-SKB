@@ -146,6 +146,10 @@ export interface Transaction {
     lyDo: string;
     tuDoiTac: string;
     sangDoiTac: string;
+    /** Hóa đơn thay thế: mã chuyến gốc bị ghi nhầm đơn vị — ảnh đi theo nó. */
+    chungTuGoc?: string;
+    /** Hóa đơn thay thế: số hóa đơn bị thay thế. */
+    hoaDonBiThayThe?: string;
   };
 }
 

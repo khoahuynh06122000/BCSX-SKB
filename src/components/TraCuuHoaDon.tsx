@@ -4,6 +4,7 @@ import {
   Download,
   FileSearch,
   ImageDown,
+  Replace,
   Search,
   Trash2,
   X,
@@ -18,7 +19,11 @@ import {
   locTraCuu,
   nenTraCuu,
   tenTepTraCuu,
+  type HoaDonDaXuat,
 } from "../lib/traCuuHoaDon";
+import { nhanNgayGiao } from "../lib/congNo";
+import type { KetQuaThayThe, ToHoaDon } from "../lib/hoaDonThayThe";
+import LapHoaDonThayThe from "./LapHoaDonThayThe";
 import { formatNumber, homNayDiaPhuong } from "../lib/utils";
 import BangChotHoaDon from "./BangChotHoaDon";
 import type { AnhChungTu } from "../anh/moHinh";
@@ -34,9 +39,10 @@ import ONgay from "./ONgay";
  * số và ngày vào app, giờ cần xem lại. Xem `src/lib/traCuuHoaDon.ts` để biết vì
  * sao màn hình này KHÔNG cần ai khai lại biên đợt.
  *
- * Mặc định KHÔNG lọc ngày — mở ra là thấy toàn bộ hóa đơn đã xuất, mới nhất
- * trước. Đặt sẵn tháng hiện tại thì đầu tháng mở ra thấy bảng trống, dễ tưởng
- * là mất dữ liệu.
+ * Mặc định lọc THÁNG HIỆN TẠI (anh Khoa 21/11/2026); "Tất cả" bỏ lọc.
+ *
+ * HÓA ĐƠN THAY THẾ: tờ bị thay thế tô đỏ, ô ảnh ghi "bị thay thế bởi …"; tờ
+ * thay thế ghi "thay thế cho …" và mang ảnh của tờ cũ. Lọc riêng được hai loại.
  *
  * Tệp tải về đi qua đúng `taoWorkbookCongNo()` mà lúc phát hành đã dùng, nên
  * mở lên giống hệt sheet "Chốt" của file tháng — kể cả hai dải màu hai chặng
@@ -61,6 +67,10 @@ interface Props {
    */
   anhTheoChungTu?: ReadonlyMap<string, readonly AnhChungTu[]>;
   bao?: (chu: string, kieu?: "success" | "error") => void;
+  /** Lập hóa đơn thay thế (kế toán, admin). Không truyền thì không có nút. */
+  onThayThe?: (kq: KetQuaThayThe) => Promise<boolean>;
+  /** Tên người đang dùng — ghi vào tờ bị thay thế. */
+  nguoi?: string;
 }
 
 /** Ngày đầu và ngày cuối của tháng hiện tại, giờ Việt Nam (yyyy-MM-dd). */
@@ -76,6 +86,8 @@ export default function TraCuuHoaDon({
   onXoaMoCoi,
   anhTheoChungTu,
   bao,
+  onThayThe,
+  nguoi = "",
   transactions,
   products,
   partners,
@@ -86,6 +98,9 @@ export default function TraCuuHoaDon({
   const [tuNgay, setTuNgay] = useState(() => thangHienTai().tu);
   const [denNgay, setDenNgay] = useState(() => thangHienTai().den);
   const [tuKhoa, setTuKhoa] = useState("");
+  const [loai, setLoai] = useState<"" | "thayThe" | "biThayThe">("");
+  /** Id bản ghi của tờ đang mở khung lập hóa đơn thay thế. */
+  const [dangThay, setDangThay] = useState("");
 
   /*
    * Hai bước, hai memo — CỐ Ý. Bước dựng lại dòng chi tiết phải đi qua toàn bộ
@@ -98,11 +113,56 @@ export default function TraCuuHoaDon({
   );
 
   const kq = useMemo(
-    () => locTraCuu(nen, { tuNgay, denNgay, tuKhoa }),
-    [nen, tuNgay, denNgay, tuKhoa],
+    () => locTraCuu(nen, { tuNgay, denNgay, tuKhoa, loai }),
+    [nen, tuNgay, denNgay, tuKhoa, loai],
   );
 
-  const daLoc = Boolean(tuNgay || denNgay || tuKhoa);
+  const daLoc = Boolean(tuNgay || denNgay || tuKhoa || loai);
+
+  /* ------------------------------------------- hóa đơn thay thế */
+  /** Tờ đang hiệu lực của (đợt × mã BP), kèm dòng hàng hiện tại. */
+  const toCua = (tu: string, den: string, maBp: string): ToHoaDon | undefined => {
+    const ban = nen.daCoSo.find(
+      (h) =>
+        String(h.tuNgay).slice(0, 10) === tu &&
+        String(h.denNgay).slice(0, 10) === den &&
+        (h.maBp || h.donVi) === maBp,
+    );
+    if (!ban) return undefined;
+    return { ban, dong: nen.theoKhoa.get(`${nhanNgayGiao(tu, den)}|${maBp}`) || [] };
+  };
+  const soDaCo = useMemo(
+    () =>
+      new Set(
+        hoaDon
+          .flatMap((h) => [h.soHoaDon, ...(h.thayTheCho || []).map((x) => x.soHoaDon)])
+          .map((x) => String(x || "").trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    [hoaDon],
+  );
+  const banDangThay = dangThay ? nen.daCoSo.find((h) => h.id === dangThay) : undefined;
+  const toDangThay = banDangThay
+    ? toCua(
+        String(banDangThay.tuNgay).slice(0, 10),
+        String(banDangThay.denNgay).slice(0, 10),
+        banDangThay.maBp || banDangThay.donVi,
+      )
+    : undefined;
+  const ghiChuThayThe = (h: HoaDonDaXuat) =>
+    h.biThayTheBoi ? (
+      <span className="text-[11px] font-black text-rose-600">
+        Bị thay thế bởi {h.biThayTheBoi.soHoaDon}
+        {h.biThayTheBoi.maBp !== h.maBp ? ` (${h.biThayTheBoi.donVi})` : ""}
+      </span>
+    ) : h.thayTheCho?.length ? (
+      <span className="text-[11px] font-black text-amber-700">
+        Thay thế cho{" "}
+        {h.thayTheCho
+          .map((x) => (x.maBp !== h.maBp ? `${x.soHoaDon} (${x.donVi})` : x.soHoaDon))
+          .join(", ")}
+      </span>
+    ) : null;
 
   /* ------------------------------------------- ảnh chứng từ của từng tờ */
   const khoaCua = (h: { soHoaDon: string; maBp: string; nhanDot: string }) =>
@@ -115,7 +175,10 @@ export default function TraCuuHoaDon({
     const m = new Map<string, AnhChungTu[]>();
     if (!anhTheoChungTu) return m;
     kq.hoaDon.forEach((h) =>
-      m.set(khoaCua(h), anhCuaHoaDon(h.dong, giaoDichTheoId, anhTheoChungTu)),
+      m.set(
+        khoaCua(h),
+        h.biThayTheBoi ? [] : anhCuaHoaDon(h.dong, giaoDichTheoId, anhTheoChungTu),
+      ),
     );
     return m;
   }, [kq.hoaDon, giaoDichTheoId, anhTheoChungTu]);
@@ -154,9 +217,10 @@ export default function TraCuuHoaDon({
     }
   };
 
-  const taiAnhMotTo = (h: { soHoaDon: string; donVi: string; maBp: string; nhanDot: string }) => {
+  const soCu = (h: HoaDonDaXuat) => (h.thayTheCho || []).map((x) => x.soHoaDon);
+  const taiAnhMotTo = (h: HoaDonDaXuat) => {
     const anh = anhTheoKhoa.get(khoaCua(h)) || [];
-    const goc = tenGocHoaDon(h.soHoaDon, h.donVi);
+    const goc = tenGocHoaDon(h.soHoaDon, h.donVi, soCu(h));
     const urls = anh.map((a) => a.url);
     const ten = tenAnhTrongBo(goc, urls);
     return chayTai(khoaCua(h), urls.map((url, i) => ({ ten: ten[i], url })), `${goc}.zip`);
@@ -164,7 +228,12 @@ export default function TraCuuHoaDon({
 
   const taiAnhTatCa = () => {
     const tep = boTepNhieuHoaDon(
-      kq.hoaDon.map((h) => ({ soHoaDon: h.soHoaDon, donVi: h.donVi, anh: anhTheoKhoa.get(khoaCua(h)) || [] })),
+      kq.hoaDon.map((h) => ({
+        soHoaDon: h.soHoaDon,
+        donVi: h.donVi,
+        thayTheCho: soCu(h),
+        anh: anhTheoKhoa.get(khoaCua(h)) || [],
+      })),
     );
     if (tep.length > 300 && !window.confirm(`Sắp tải ${tep.length} ảnh vào một tệp ZIP, có thể mất vài phút. Tiếp tục?`)) return;
     const ngay = kq.hoaDon.map((h) => h.ngayHoaDon).filter(Boolean).sort();
@@ -272,6 +341,7 @@ export default function TraCuuHoaDon({
                 setTuNgay("");
                 setDenNgay("");
                 setTuKhoa("");
+                setLoai("");
               }}
               className="px-3 py-3 rounded-2xl border border-slate-100 bg-white text-[11px] font-black uppercase tracking-widest text-slate-500 hover:border-primary hover:text-primary transition-all shrink-0 premium-shadow"
             >
@@ -279,6 +349,17 @@ export default function TraCuuHoaDon({
             </button>
           )}
         </div>
+
+        <select
+          aria-label="Loại hóa đơn"
+          value={loai}
+          onChange={(e) => setLoai(e.target.value as typeof loai)}
+          className="px-3 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-bold focus:border-primary focus:outline-none premium-shadow text-slate-700 shrink-0"
+        >
+          <option value="">Mọi hóa đơn</option>
+          <option value="thayThe">Hóa đơn thay thế</option>
+          <option value="biThayThe">Hóa đơn bị thay thế</option>
+        </select>
 
         <button
           onClick={handleDownload}
@@ -400,6 +481,19 @@ export default function TraCuuHoaDon({
             Dùng CHUNG component với thẻ "Đã xuất hóa đơn" nên hai màn hình
             không bao giờ lệch nhau.
           */}
+          {onThayThe && toDangThay && (
+            <LapHoaDonThayThe
+              key={toDangThay.ban.id}
+              goc={toDangThay}
+              toCua={toCua}
+              giaoDichTheoId={giaoDichTheoId}
+              partners={partners}
+              soDaCo={soDaCo}
+              nguoi={nguoi}
+              onLuu={onThayThe}
+              onDong={() => setDangThay("")}
+            />
+          )}
           <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
               <p className="text-[13px] font-black text-slate-700 tracking-tight">
@@ -413,13 +507,41 @@ export default function TraCuuHoaDon({
                 soHoaDon: h.soHoaDon,
                 ngayHoaDon: h.ngayHoaDon,
                 dong: h.dong,
+                biThayThe: !!h.biThayTheBoi,
+                ghiChu: ghiChuThayThe(h),
               }))}
+              oThaoTac={
+                onThayThe
+                  ? (k) => {
+                      const h = kq.hoaDon.find((x) => khoaCua(x) === k.khoa);
+                      if (!h || h.biThayTheBoi) return null;
+                      return (
+                        <button
+                          onClick={() => setDangThay(dangThay === h.id ? "" : h.id)}
+                          title="Lập hóa đơn thay thế cho tờ này"
+                          className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide text-amber-700 hover:bg-amber-50"
+                        >
+                          <Replace className="w-3.5 h-3.5" />
+                          Thay thế
+                        </button>
+                      );
+                    }
+                  : undefined
+              }
               oAnh={
                 anhTheoChungTu
                   ? (k) => {
                       const h = kq.hoaDon.find((x) => khoaCua(x) === k.khoa);
                       const n = anhTheoKhoa.get(k.khoa)?.length || 0;
                       if (!h) return null;
+                      if (h.biThayTheBoi)
+                        return (
+                          <span className="text-[11px] font-black text-rose-600 whitespace-normal">
+                            Hóa đơn bị thay thế
+                            <br />
+                            bởi {h.biThayTheBoi.soHoaDon}
+                          </span>
+                        );
                       const dang = dangTai?.khoa === k.khoa;
                       return (
                         <button
@@ -427,13 +549,18 @@ export default function TraCuuHoaDon({
                           disabled={!n || !!dangTai}
                           title={
                             n
-                              ? `Tải ${n} ảnh phiếu xuất — lưu tên ${tenGocHoaDon(h.soHoaDon, h.donVi)}`
+                              ? `Tải ${n} ảnh phiếu xuất — lưu tên ${tenGocHoaDon(h.soHoaDon, h.donVi, soCu(h))}`
                               : "Chưa có ảnh phiếu xuất cho hóa đơn này"
                           }
                           className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[12px] font-black text-slate-500 hover:text-primary hover:bg-primary/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         >
                           <ImageDown className="w-4 h-4" />
                           {dang ? `${dangTai!.xong}/${dangTai!.tong}` : n}
+                          {h.thayTheCho?.length ? (
+                            <span className="text-[10px] font-black text-amber-700">
+                              · ảnh của {soCu(h).join(", ")}
+                            </span>
+                          ) : null}
                         </button>
                       );
                     }

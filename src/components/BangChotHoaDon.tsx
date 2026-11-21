@@ -42,6 +42,10 @@ export interface KhoiChot {
   /** yyyy-MM-dd */
   ngayHoaDon: string;
   dong: DongCongNo[];
+  /** Tờ ĐÃ BỊ THAY THẾ — tô đỏ, gạch số. */
+  biThayThe?: boolean;
+  /** Ghi chú nhỏ dưới số hóa đơn (thay thế cho / bị thay thế bởi). */
+  ghiChu?: ReactNode;
 }
 
 interface Props {
@@ -68,6 +72,8 @@ interface Props {
    * Ô ảnh chứng từ của từng tờ (nút tải ảnh). Không truyền thì không có cột.
    */
   oAnh?: (k: KhoiChot) => ReactNode;
+  /** Nút thao tác cuối dòng (vd "Thay thế"). Không truyền thì không có cột. */
+  oThaoTac?: (k: KhoiChot) => ReactNode;
   /** Chiều cao tối đa trước khi cuộn dọc. */
   cao?: string;
 }
@@ -87,6 +93,7 @@ export default function BangChotHoaDon({
   goiYSo,
   onBo,
   oAnh,
+  oThaoTac,
   cao = "max-h-[600px]",
 }: Props) {
   /*
@@ -125,6 +132,7 @@ export default function BangChotHoaDon({
             <th className={cn(TH, "text-right")}>Sau thuế SKB → DNC</th>
             <th className={cn(TH, "text-right")}>Sau thuế DNC → ĐVTV</th>
             {oAnh && <th className={cn(TH, "text-center")}>Ảnh</th>}
+            {oThaoTac && <th className={TH} />}
             {onBo && <th className={TH} />}
           </tr>
         </thead>
@@ -138,6 +146,7 @@ export default function BangChotHoaDon({
                 className={cn(
                   "border-t border-slate-100 hover:bg-slate-50/70 transition-colors",
                   mo && "bg-slate-50",
+                  k.biThayThe && "bg-rose-50/70 hover:bg-rose-50 text-rose-700",
                 )}
               >
                 <td className="pl-3 pr-1 py-2 w-9">
@@ -171,10 +180,16 @@ export default function BangChotHoaDon({
                       )}
                     />
                   ) : (
-                    <span className="font-mono font-black text-slate-900">
+                    <span
+                      className={cn(
+                        "font-mono font-black",
+                        k.biThayThe ? "text-rose-600 line-through" : "text-slate-900",
+                      )}
+                    >
                       {k.soHoaDon || "—"}
                     </span>
                   )}
+                  {k.ghiChu && <div className="mt-0.5">{k.ghiChu}</div>}
                 </td>
 
                 <td className="px-3 py-2">
@@ -210,6 +225,7 @@ export default function BangChotHoaDon({
                   {tien(cong(k.dong, (d) => d.sauThueDnc))}
                 </td>
                 {oAnh && <td className="px-2 py-2 text-center whitespace-nowrap">{oAnh(k)}</td>}
+                {oThaoTac && <td className="px-2 py-2 text-right whitespace-nowrap">{oThaoTac(k)}</td>}
                 {onBo && (
                   <td className="pl-1 pr-3 py-2 w-10 text-right">
                     <button
@@ -227,7 +243,7 @@ export default function BangChotHoaDon({
               mo && (
                 <tr key={`${k.khoa}-ct`} className="bg-slate-50/60">
                   <td />
-                  <td colSpan={6 + (onBo ? 1 : 0) + (oAnh ? 1 : 0)} className="px-3 pb-3">
+                  <td colSpan={6 + (onBo ? 1 : 0) + (oAnh ? 1 : 0) + (oThaoTac ? 1 : 0)} className="px-3 pb-3">
                     <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
                       <table className="w-full text-left text-[12px] font-bold text-slate-600 min-w-[900px]">
                         <thead className="bg-slate-50">

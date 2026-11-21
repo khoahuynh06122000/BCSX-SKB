@@ -234,7 +234,7 @@ import {
 import ONgay from "./components/ONgay";
 import { DaiSucKhoe } from "./components/DaiSucKhoe";
 import { nguonMoCoi, soPhieuMoCoi } from "./lib/nguonMoCoi";
-import type { DongGhiDieuChinh } from "./lib/dieuChinhCongNo";
+import type { KetQuaThayThe } from "./lib/hoaDonThayThe";
 
 import {
   laDongHaoHut,
@@ -3064,17 +3064,14 @@ export default function App() {
   };
 
   /**
-   * ĐIỀU CHỈNH CÔNG NỢ — ghi cả cặp âm / dương trong MỘT lô: lô hỏng thì
-   * không có nửa cặp nào nằm lại (nửa cặp là tồn kho lệch). Mã dòng suy từ
-   * nội dung nên bấm hai lần không sinh cặp thứ hai. Xem
-   * `src/lib/dieuChinhCongNo.ts`.
+   * HÓA ĐƠN THAY THẾ — một lô: cặp dòng chuyển chuyến ghi nhầm (nếu có), bản
+   * lưu tờ bị thay thế, và số mới. Lô hỏng thì không có nửa nào nằm lại.
+   * Xem `src/lib/hoaDonThayThe.ts`.
    */
-  const handleGhiDieuChinh = async (
-    dong: DongGhiDieuChinh[],
-  ): Promise<boolean> => {
+  const handleThayTheHoaDon = async (kq: KetQuaThayThe): Promise<boolean> => {
     try {
       const batch = writeBatch(db);
-      for (const d of dong) {
+      for (const d of kq.giaoDich) {
         const sp = products.find((p) => p.id === d.productId);
         const dt = donVi.find((p) => p.id === d.partnerId);
         if (!sp || !dt) throw new Error("Không tìm thấy mặt hàng hoặc đơn vị.");
@@ -3096,11 +3093,19 @@ export default function App() {
         };
         batch.set(doc(db, "transactions", d.id), t);
       }
+      const luc = new Date().toISOString();
+      kq.hoaDon.forEach((h) =>
+        batch.set(
+          doc(db, "hoa_don", h.id),
+          { ...h, updatedAt: luc, updatedBy: currentUserProfile?.email || user || "" },
+          { merge: true },
+        ),
+      );
       await batch.commit();
-      showNotification("Đã ghi điều chỉnh công nợ — vào lượt hóa đơn kế tiếp");
+      showNotification(kq.tomTat);
       return true;
     } catch (e) {
-      alert(handleFirestoreError(e, OperationType.WRITE, "transactions"));
+      alert(handleFirestoreError(e, OperationType.WRITE, "hoa_don"));
       return false;
     }
   };
@@ -11080,13 +11085,12 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                       /* Danh mục ghep: Firestore co the con thieu bo phan BNC,
                          ma thieu ma BP la hoa don sai khach. */
                       partners={donVi}
-                      hoaDon={hoaDon}
+                      /* Tờ đã bị thay thế (bản lưu) không thuộc công nợ. */
+                      hoaDon={hoaDon.filter((h) => !h.biThayTheBoi)}
                       onSaveHoaDon={handleSaveHoaDon}
-                      onGhiDieuChinh={
-                        quyen.doanhThu && quyen.ghiXuat
-                          ? handleGhiDieuChinh
-                          : undefined
-                      }
+                      /* Không truyền onGhiDieuChinh: điều chỉnh vào lượt kế
+                         tiếp đã thay bằng HÓA ĐƠN THAY THẾ (21/11/2026) — khung
+                         cũ chỉ còn xem lại lần đã ghi. */
                       onXoaDieuChinh={isOwner ? handleXoaDieuChinh : undefined}
                     />
 
@@ -11125,6 +11129,10 @@ QUAN TRỌNG: phân quyền Firestore phải là bản mới nhất. Nếu chưa
                             : undefined
                         }
                         bao={showNotification}
+                        onThayThe={
+                          quyen.doanhThu && quyen.ghiXuat ? handleThayTheHoaDon : undefined
+                        }
+                        nguoi={currentUserProfile?.email || user || ""}
                       />
                     )}
                   </div>

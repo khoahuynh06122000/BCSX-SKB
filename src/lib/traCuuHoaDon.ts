@@ -42,10 +42,12 @@ import {
   type DotChot,
 } from "./congNo";
 import { ngayCham } from "./oNgay";
-import type { HoaDonGhiNhan } from "./hoaDon";
+import type { HoaDonGhiNhan, ThamChieuHoaDon } from "./hoaDon";
 
 /** Một hóa đơn đã phát hành, kèm các dòng hàng hóa dựng lại được. */
 export interface HoaDonDaXuat {
+  /** Id bản ghi `hoa_don` (khoá đợt × mã BP; tờ bị thay thế: `<khoá>-bt-…`). */
+  id: string;
   soHoaDon: string;
   /** yyyy-MM-dd, ngày ghi trên tờ hóa đơn. */
   ngayHoaDon: string;
@@ -67,6 +69,10 @@ export interface HoaDonDaXuat {
   /** Ai điền số vào app và điền lúc nào — để truy khi số bị sai. */
   ghiLuc?: string;
   ghiBoi?: string;
+  /** Tờ này là hóa đơn thay thế cho các tờ ghi ở đây. */
+  thayTheCho?: ThamChieuHoaDon[];
+  /** Tờ này ĐÃ BỊ THAY THẾ — hết hiệu lực, không vào tổng, không vào tệp Chốt. */
+  biThayTheBoi?: HoaDonGhiNhan["biThayTheBoi"];
 }
 
 export interface KetQuaTraCuu {
@@ -114,6 +120,8 @@ export interface BoLocTraCuu {
   denNgay?: string;
   /** Tìm trong số hóa đơn, tên đơn vị, mã BP. Không phân biệt hoa thường. */
   tuKhoa?: string;
+  /** "" = mọi tờ; "thayThe" = chỉ hóa đơn thay thế; "biThayThe" = chỉ tờ bị thay thế. */
+  loai?: "" | "thayThe" | "biThayThe";
 }
 
 export type TraCuuInput = DuLieuTraCuu & BoLocTraCuu;
@@ -128,15 +136,22 @@ export type TraCuuInput = DuLieuTraCuu & BoLocTraCuu;
  */
 export interface NenTraCuu {
   daCoSo: HoaDonGhiNhan[];
+  /** Tờ đã bị thay thế (bản lưu, có `banChup`). */
+  biThayThe: HoaDonGhiNhan[];
   /** Dòng chi tiết, tra theo `<nhãn đợt>|<mã BP>`. */
   theoKhoa: Map<string, DongCongNo[]>;
   /** Thống kê theo đợt của bảng đầy đủ, để lọc lại về sau. */
   theoDot: BangCongNo["theoDot"];
 }
 
-/** Chỉ giữ hóa đơn đã có số thật. Hóa đơn chưa điền số không phải "đã xuất". */
+/**
+ * Chỉ giữ hóa đơn ĐANG HIỆU LỰC đã có số thật. Hóa đơn chưa điền số không
+ * phải "đã xuất"; tờ đã bị thay thế thì hết hiệu lực.
+ */
 export function hoaDonDaCoSo(ds: HoaDonGhiNhan[]): HoaDonGhiNhan[] {
-  return (ds || []).filter((h) => h && String(h.soHoaDon || "").trim() !== "");
+  return (ds || []).filter(
+    (h) => h && !h.biThayTheBoi && String(h.soHoaDon || "").trim() !== "",
+  );
 }
 
 /**
@@ -217,9 +232,12 @@ function ketQuaRong(): KetQuaTraCuu {
  */
 export function nenTraCuu(input: DuLieuTraCuu): NenTraCuu {
   const daCoSo = hoaDonDaCoSo(input.hoaDon);
+  const biThayThe = (input.hoaDon || []).filter(
+    (h) => h?.biThayTheBoi && String(h.soHoaDon || "").trim() !== "",
+  );
   const dot = dotTuHoaDon(daCoSo);
   if (dot.length === 0) {
-    return { daCoSo: [], theoKhoa: new Map(), theoDot: [] };
+    return { daCoSo: [], biThayThe, theoKhoa: new Map(), theoDot: [] };
   }
 
   /* Số thật để `dungBangCongNo` gán đúng số vào từng dòng. */
@@ -263,15 +281,16 @@ export function nenTraCuu(input: DuLieuTraCuu): NenTraCuu {
     else theoKhoa.set(k, [d]);
   });
 
-  return { daCoSo, theoKhoa, theoDot: dayDu.theoDot };
+  return { daCoSo, biThayThe, theoKhoa, theoDot: dayDu.theoDot };
 }
 
 /**
  * BƯỚC NHẸ: lọc và cộng tổng. Chạy lại theo từng ký tự người dùng gõ.
  */
 export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
-  const { daCoSo, theoKhoa } = nen;
-  if (daCoSo.length === 0) return ketQuaRong();
+  const { daCoSo, theoKhoa, biThayThe } = nen;
+  if (daCoSo.length === 0 && biThayThe.length === 0) return ketQuaRong();
+  const loai = loc.loai || "";
 
   const tu = loc.tuNgay ? loc.tuNgay.slice(0, 10) : "";
   const den = loc.denNgay ? loc.denNgay.slice(0, 10) : "";
@@ -279,6 +298,14 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
 
   const ra: HoaDonDaXuat[] = [];
   const thieuDong: HoaDonGhiNhan[] = [];
+  const khopTu = (h: HoaDonGhiNhan, donVi: string) =>
+    !q ||
+    trong(h.soHoaDon).includes(q) ||
+    trong(h.donVi).includes(q) ||
+    trong(h.maBp).includes(q) ||
+    trong(donVi).includes(q) ||
+    (h.thayTheCho || []).some((x) => trong(x.soHoaDon).includes(q)) ||
+    trong(h.biThayTheBoi?.soHoaDon).includes(q);
 
   daCoSo.forEach((h) => {
     const tuNgay = String(h.tuNgay || "").slice(0, 10);
@@ -302,20 +329,16 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
       return;
     }
 
-    if (
-      q &&
-      !trong(h.soHoaDon).includes(q) &&
-      !trong(h.donVi).includes(q) &&
-      !trong(h.maBp).includes(q) &&
-      !trong(dong[0].donVi).includes(q)
-    ) {
-      return;
-    }
+    if (loai === "biThayThe") return;
+    if (loai === "thayThe" && !(h.thayTheCho || []).length) return;
+    if (!khopTu(h, dong[0].donVi)) return;
 
     const cong = (f: (d: DongCongNo) => number) =>
       dong.reduce((s, d) => s + f(d), 0);
 
     ra.push({
+      id: h.id,
+      thayTheCho: h.thayTheCho?.length ? h.thayTheCho : undefined,
       soHoaDon: String(h.soHoaDon).trim(),
       ngayHoaDon,
       tuNgay,
@@ -337,6 +360,43 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
     });
   });
 
+  /* Tờ ĐÃ BỊ THAY THẾ: hiện để tra (tô đỏ), dòng hàng là bản chụp lúc thay thế. */
+  if (loai !== "thayThe") {
+    biThayThe.forEach((h) => {
+      const tuNgay = String(h.tuNgay || "").slice(0, 10);
+      const denNgay = String(h.denNgay || "").slice(0, 10);
+      const ngayHoaDon = String(h.ngayHoaDon || "").slice(0, 10);
+      if (tu && !(ngayHoaDon && ngayHoaDon >= tu)) return;
+      if (den && !(ngayHoaDon && ngayHoaDon <= den)) return;
+      const dong = (h.banChup || []).map((d) => ({ ...d, nguon: d.nguon || [] }));
+      if (!khopTu(h, dong[0]?.donVi || "")) return;
+      const cong = (f: (d: DongCongNo) => number) =>
+        dong.reduce((s, d) => s + (Number(f(d)) || 0), 0);
+      ra.push({
+        id: h.id,
+        soHoaDon: String(h.soHoaDon).trim(),
+        ngayHoaDon,
+        tuNgay,
+        denNgay,
+        nhanDot: nhanNgayGiao(tuNgay, denNgay),
+        maBp: h.maBp || "",
+        donVi: dong[0]?.donVi || h.donVi || "",
+        dong,
+        soLuong: cong((d) => d.soLuong),
+        thanhTienSkb: cong((d) => d.thanhTienSkb),
+        vatSkb: cong((d) => d.vatSkb),
+        sauThueSkb: cong((d) => d.sauThueSkb),
+        thanhTienDnc: cong((d) => d.thanhTienDnc),
+        vatDnc: cong((d) => d.vatDnc),
+        sauThueDnc: cong((d) => d.sauThueDnc),
+        ghiLuc: h.updatedAt,
+        ghiBoi: h.updatedBy,
+        thayTheCho: h.thayTheCho?.length ? h.thayTheCho : undefined,
+        biThayTheBoi: h.biThayTheBoi,
+      });
+    });
+  }
+
   /*
    * Xếp: ngày hóa đơn MỚI NHẤT TRƯỚC. Tra cứu gần như luôn là tìm tờ vừa xuất,
    * còn hóa đơn tháng trước thì đã có trong file tháng.
@@ -355,8 +415,9 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
    * STT từ 1. Giữ thứ tự "mới nhất trước" của màn hình thì tệp mở ra ngược so
    * với file tháng của bộ phận.
    */
+  /* Tờ bị thay thế hết hiệu lực: không vào tệp Chốt, không vào tổng. */
   const dongXuat = ra
-    .slice()
+    .filter((h) => !h.biThayTheBoi)
     .sort(
       (a, b) =>
         a.ngayHoaDon.localeCompare(b.ngayHoaDon) ||
@@ -369,7 +430,7 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
     dongXuat.reduce((s, d) => s + f(d), 0);
 
   const tong = {
-    soHoaDon: ra.length,
+    soHoaDon: ra.filter((h) => !h.biThayTheBoi).length,
     soDong: dongXuat.length,
     soLuong: congXuat((d) => d.soLuong),
     thanhTienSkb: congXuat((d) => d.thanhTienSkb),
@@ -411,7 +472,7 @@ export function locTraCuu(nen: NenTraCuu, loc: BoLocTraCuu): KetQuaTraCuu {
     bang: {
       dong: dongXuat,
       theoDot: nen.theoDot.filter((t) =>
-        ra.some((h) => h.nhanDot === t.nhanNgayGiao),
+        ra.some((h) => !h.biThayTheBoi && h.nhanDot === t.nhanNgayGiao),
       ),
       theoDonVi: Array.from(gomDonVi.values()).sort(
         (a, b) => b.thanhTienSkb - a.thanhTienSkb,

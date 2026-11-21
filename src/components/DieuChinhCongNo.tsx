@@ -137,6 +137,8 @@ export default function DieuChinhCongNo({
     const m = new Map<string, Transaction[]>();
     transactions.forEach((t) => {
       if (!laDongDieuChinh(t) || !t.referenceGroupId) return;
+      // Cặp của HÓA ĐƠN THAY THẾ không phải "điều chỉnh vào lượt kế tiếp".
+      if (t.dieuChinh?.hoaDonBiThayThe) return;
       m.set(t.referenceGroupId, [...(m.get(t.referenceGroupId) || []), t]);
     });
     return [...m.entries()]
@@ -179,6 +181,9 @@ export default function DieuChinhCongNo({
 
   const dsDoiTac = [...partners].sort((a, b) => a.name.localeCompare(b.name, "vi"));
 
+  // Không còn ghi mới (đã thay bằng hóa đơn thay thế) và chưa có lần cũ nào.
+  if (!onGhi && daGhi.length === 0) return null;
+
   return (
     <details className="rounded-2xl border border-slate-200 bg-white overflow-hidden group">
       <summary className="px-4 py-3.5 cursor-pointer list-none flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors">
@@ -200,6 +205,13 @@ export default function DieuChinhCongNo({
       </summary>
 
       <div className="px-4 pb-4 pt-3 border-t border-slate-100 space-y-4">
+        {!onGhi && (
+          <p className="text-[12px] font-bold text-amber-700 leading-relaxed">
+            Cách điều chỉnh vào lượt kế tiếp đã thôi dùng (21/11/2026). Hóa đơn
+            sai nay sửa bằng <strong>hóa đơn thay thế</strong>: thẻ Đã xuất hóa
+            đơn → nút "Thay thế" ở tờ bị sai. Dưới đây chỉ còn các lần đã ghi.
+          </p>
+        )}
         <p className="text-[12px] font-bold text-slate-500 leading-relaxed">
           Hóa đơn đã phát hành thì không sửa lại. Ghi điều chỉnh vào{" "}
           <strong>lượt hóa đơn kế tiếp</strong>: trừ số lượng ở đơn vị đã xuất

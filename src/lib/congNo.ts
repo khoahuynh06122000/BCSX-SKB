@@ -405,7 +405,11 @@ export function dungBangCongNo(input: DungBangInput): BangCongNo {
   });
 
   // Xếp: đợt → đơn vị (theo bảng chữ cái tiếng Việt) → khối Lít/Lon → bảng giá.
-  const xep = Array.from(nhom.values()).sort(
+  /*
+   * Nhóm cộng lại bằng 0 thì bỏ: hóa đơn thay thế chuyển cả chuyến sang đơn vị
+   * khác bằng cặp −SL/+SL, nên mặt hàng ấy ở đơn vị nhầm còn 0 — không lên tờ.
+   */
+  const xep = Array.from(nhom.values()).filter((g) => Math.abs(g.soLuong) > 1e-9).sort(
     (a, b) =>
       a.dotIndex - b.dotIndex ||
       a.donVi.localeCompare(b.donVi, "vi") ||

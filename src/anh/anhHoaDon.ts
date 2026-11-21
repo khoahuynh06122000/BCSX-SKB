@@ -25,16 +25,35 @@ import { duoiTep, tenAnToan } from "./taiVe";
 /** Ảnh chiều XUẤT của các giao dịch trong tờ hóa đơn — không trùng, theo ngày rồi giờ tải. */
 export function anhCuaHoaDon(
   dong: readonly Pick<DongCongNo, "nguon">[],
-  giaoDichTheoId: ReadonlyMap<string, DongChungTu>,
+  giaoDichTheoId: ReadonlyMap<
+    string,
+    DongChungTu & { quantity?: number; dieuChinh?: { chungTuGoc?: string } | null }
+  >,
   anhTheoChungTu: ReadonlyMap<string, readonly AnhChungTu[]>,
 ): AnhChungTu[] {
+  /*
+   * HÓA ĐƠN THAY THẾ: dòng điều chỉnh mang `chungTuGoc` = chuyến bị ghi nhầm
+   * đơn vị. Dòng +SL (đơn vị đúng) kéo ảnh chuyến đó về tờ của mình; dòng −SL
+   * (đơn vị nhầm) gỡ ảnh chuyến đó khỏi tờ kia — ảnh vẫn đúng, chỉ sai tên.
+   */
   const chungTu = new Set<string>();
+  const them = new Set<string>();
+  const bo = new Set<string>();
   dong.forEach((d) =>
     (d.nguon || []).forEach((id) => {
       const t = giaoDichTheoId.get(id);
-      if (t) chungTu.add(maChungTuCuaDong(t));
+      if (!t) return;
+      const goc = t.dieuChinh?.chungTuGoc;
+      if (goc) {
+        if (Number(t.quantity) > 0) them.add(goc);
+        else bo.add(goc);
+        return;
+      }
+      chungTu.add(maChungTuCuaDong(t));
     }),
   );
+  bo.forEach((c) => chungTu.delete(c));
+  them.forEach((c) => chungTu.add(c));
   const theoId = new Map<string, AnhChungTu>();
   chungTu.forEach((c) =>
     (anhTheoChungTu.get(c) || []).forEach((a) => {
@@ -48,11 +67,20 @@ export function anhCuaHoaDon(
   );
 }
 
-/** Tên gốc (chưa đuôi) của bộ ảnh một tờ: `C26TKB-00000295_FV`. */
-export function tenGocHoaDon(soHoaDon: string, donVi: string): string {
+/**
+ * Tên gốc (chưa đuôi) của bộ ảnh một tờ: `C26TKB-00000295_FV`. Tờ thay thế
+ * thêm `_thay-the-<số tờ cũ>`.
+ */
+export function tenGocHoaDon(
+  soHoaDon: string,
+  donVi: string,
+  thayTheCho: readonly string[] = [],
+): string {
   const so = tenAnToan(soHoaDon) || "chua-co-so";
   const dv = tenAnToan(String(donVi ?? "").split("·")[0]);
-  return dv ? `${so}_${dv}` : so;
+  const goc = dv ? `${so}_${dv}` : so;
+  const cu = thayTheCho.map((x) => tenAnToan(x)).filter(Boolean);
+  return cu.length ? `${goc}_thay-the-${cu.join("+")}` : goc;
 }
 
 /** Tên từng tấm trong bộ: một tấm thì không đánh số; nhiều tấm thì `_01`, `_02`… */
@@ -67,13 +95,18 @@ export function tenAnhTrongBo(goc: string, urls: readonly string[]): string[] {
  * số, cùng đơn vị — hiếm) thì thư mục sau thêm `-2` để ZIP không mất tấm.
  */
 export function boTepNhieuHoaDon(
-  ds: readonly { soHoaDon: string; donVi: string; anh: readonly Pick<AnhChungTu, "url">[] }[],
+  ds: readonly {
+    soHoaDon: string;
+    donVi: string;
+    thayTheCho?: readonly string[];
+    anh: readonly Pick<AnhChungTu, "url">[];
+  }[],
 ): { ten: string; url: string }[] {
   const dem = new Map<string, number>();
   const ra: { ten: string; url: string }[] = [];
   ds.forEach((h) => {
     if (!h.anh.length) return;
-    const g0 = tenGocHoaDon(h.soHoaDon, h.donVi);
+    const g0 = tenGocHoaDon(h.soHoaDon, h.donVi, h.thayTheCho);
     const n = (dem.get(g0) || 0) + 1;
     dem.set(g0, n);
     const g = n > 1 ? `${g0}-${n}` : g0;
