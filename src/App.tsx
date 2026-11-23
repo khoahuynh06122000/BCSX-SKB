@@ -10318,12 +10318,25 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                 email={currentUserProfile?.email || user || ""}
                 taiKhoan={
                   isOwner
-                    ? allUserProfiles.map((u) => ({
-                        uid: u.uid,
-                        email: u.email,
-                        name: u.name,
-                        role: u.role,
-                      }))
+                    ? (() => {
+                        const ds = allUserProfiles.map((u) => ({
+                          uid: u.uid,
+                          email: u.email,
+                          name: u.name,
+                          role: u.role,
+                        }));
+                        /* Admin nhận diện theo email cố định, không có hồ sơ trong
+                           bảng users → tự thêm để admin gắn được danh bạ (ký số). */
+                        const me = auth.currentUser;
+                        if (me && userRole === "OWNER" && !ds.some((t) => t.uid === me.uid))
+                          ds.unshift({
+                            uid: me.uid,
+                            email: me.email || "",
+                            name: me.displayName || me.email || "Admin",
+                            role: "OWNER",
+                          });
+                        return ds;
+                      })()
                     : []
                 }
                 bao={showNotification}

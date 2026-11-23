@@ -152,3 +152,4 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Danh bạ: khung "Tài khoản chưa gắn" nay gồm cả admin (admin cũng ký).
   - Luật `chuKyMoiHopLe` nhận thêm 2 khoá tuỳ chọn, kiểm bằng `size()` (bản `is string` làm ca "trình lại phiếu bị trả" vượt ngưỡng 1.000). Thử 21/21 + 59/59 + 53/53, **đã đẩy luật TRƯỚC code** (code mới + luật cũ = mọi lần ký bị từ chối).
   - **Việc anh làm**: gắn mọi tài khoản cần ký (admin, kế toán, giám sát xưởng, SX/nhập kho, xuất kho) ở Danh bạ — chưa gắn thì người đó không ký được.
+  - Admin nhận diện theo email cố định, KHÔNG có hồ sơ trong bảng `users` → khung "Tài khoản chưa gắn" không hiện admin, admin không gắn được mình (và khai tay bị chặn vì admin chưa gắn). Sửa: Danh bạ tự thêm tài khoản admin đang đăng nhập vào danh sách. Hồ sơ anh Khoa trên danh bạ: mã 00028874 (Nhân viên Kế toán).
