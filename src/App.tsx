@@ -49,6 +49,7 @@ import {
   ClipboardList,
   BarChart3,
   PieChart,
+  Contact,
 } from "lucide-react";
 import {
   isValid,
@@ -206,6 +207,7 @@ import type { TkhoNhapDraft } from "./lib/tkhoXuat";
 import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import TraCuuHoaDon from "./components/TraCuuHoaDon";
+import DanhBa from "./components/DanhBa";
 import {
   bangSoPhieu,
   chungTuChuaCoSo,
@@ -7006,6 +7008,14 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
         id: "system",
         title: "4. Tư liệu & Hệ thống",
         items: [
+          /* Danh bạ nhân viên (MySun Vp Bà Nà) — mọi vai đã duyệt. */
+          {
+            id: "danhba",
+            label: "Danh bạ",
+            icon: Contact,
+            color: "#0e7490",
+            badge: 0,
+          },
           ...(isOwnerRole
             ? [
                 {
@@ -10259,6 +10269,25 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
             {activeTab === "export" &&
               quyen.ghiXuat &&
               renderNhapXuatForm("export")}
+
+            {activeTab === "danhba" && (
+              <DanhBa
+                laAdmin={isOwner}
+                uid={currentUserProfile?.uid || auth.currentUser?.uid || ""}
+                email={currentUserProfile?.email || user || ""}
+                taiKhoan={
+                  isOwner
+                    ? allUserProfiles.map((u) => ({
+                        uid: u.uid,
+                        email: u.email,
+                        name: u.name,
+                        role: u.role,
+                      }))
+                    : []
+                }
+                bao={showNotification}
+              />
+            )}
 
             {activeTab === "settings" && isOwner && (
               <div className="space-y-8 animate-in fade-in duration-500">

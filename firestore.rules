@@ -1157,6 +1157,31 @@ service cloud.firestore {
      * duoc so hoa don (viec hang ngay), con xoa la viec hiem va nang, phai
      * dung mot nguoi chiu trach nhiem.
      */
+    /*
+     * DANH BA NHAN VIEN (23/11/2026) - danh ba MySun, chi dia diem "Vp Ba Na".
+     * Agent danh_ba_mysun.py tren may anh Khoa ghi bang phien Firebase cua
+     * chu du an (quyen IAM, khong qua luat nay). Xem src/lib/danhBa.ts.
+     *
+     * Doc: admin doc het; nguoi da duyet chi doc nhan vien DA CO tai khoan app
+     *   (coTaiKhoan == true) - truy van phai loc where coTaiKhoan == true.
+     * Tao / xoa: chi admin, chi ho so KHAI TAY (nguon == 'app').
+     * Sua: admin; ho so MySun thi chi duoc doi cac truong gan tai khoan.
+     */
+    match /nhan_su/{ma} {
+      allow read: if isOwner()
+        || (isApproved() && resource.data.get('coTaiKhoan', false) == true);
+      allow create: if isOwner()
+        && request.resource.data.get('nguon', '') == 'app'
+        && request.resource.data.get('ho_ten', '') is string
+        && request.resource.data.get('ho_ten', '').size() > 0;
+      allow update: if isOwner() && (
+        (resource.data.get('nguon', '') == 'app' && request.resource.data.get('nguon', '') == 'app')
+        || request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['uid', 'emailTaiKhoan', 'coTaiKhoan', 'ganLuc', 'ganBoi'])
+      );
+      allow delete: if isOwner() && resource.data.get('nguon', '') == 'app';
+    }
+
     match /hoa_don/{key} {
       allow read: if isApproved();
       allow create, update: if isAccountant();
