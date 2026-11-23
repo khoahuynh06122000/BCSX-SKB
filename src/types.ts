@@ -206,6 +206,13 @@ export interface ChuKyDienTu {
   bamNoiDung?: string;
   /** Cách xác thực người ký lúc ký, ví dụ "GOOGLE+PIN". */
   xacThuc?: string;
+  /**
+   * Danh tính người ký theo DANH BẠ NHÂN VIÊN (anh Khoa 23/11/2026): mã CBNV
+   * và email công ty (MySun). `name` = họ tên theo danh bạ. Tài khoản chưa
+   * gắn danh bạ thì không ký được (`xinKy` chặn).
+   */
+  maNv?: string;
+  emailCty?: string;
 }
 
 export interface ImportSlip {

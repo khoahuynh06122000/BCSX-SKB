@@ -208,6 +208,7 @@ import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import TraCuuHoaDon from "./components/TraCuuHoaDon";
 import DanhBa from "./components/DanhBa";
+import type { NhanSu } from "./lib/danhBa";
 import {
   bangSoPhieu,
   chungTuChuaCoSo,
@@ -5738,6 +5739,35 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
 
   /* ---------------- Chữ ký điện tử ---------------- */
 
+  /*
+   * HỒ SƠ DANH BẠ CỦA TÔI — họ tên, email MySun, mã CBNV ghi vào mọi chữ ký
+   * điện tử (anh Khoa 23/11/2026). Gắn tài khoản do admin làm ở mục Danh bạ.
+   */
+  const [hoSoDanhBa, setHoSoDanhBa] = useState<NhanSu | null>(null);
+  const taiHoSoDanhBa = useCallback(async (): Promise<NhanSu | null> => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return null;
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "nhan_su"),
+          where("coTaiKhoan", "==", true),
+          where("uid", "==", uid),
+        ),
+      );
+      const d = snap.docs[0];
+      const r = d ? ({ ...(d.data() as NhanSu), ma_nv: d.id } as NhanSu) : null;
+      setHoSoDanhBa(r);
+      return r;
+    } catch (e) {
+      console.warn("ho so danh ba", e);
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    if (user && userRole && userRole !== "PENDING") void taiHoSoDanhBa();
+  }, [user, userRole, taiHoSoDanhBa]);
+
   const mauCuaToi = useMemo(
     () => mauMoiNhat(chuKyMau, auth.currentUser?.uid || ""),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5819,22 +5849,33 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
    * Xin ký: mở hộp ký (nội dung + chữ ký mẫu + PIN). Trả về mẫu chữ ký khi
    * người dùng nhập đúng PIN, null khi huỷ. Chưa có mẫu thì mở màn đăng ký.
    */
-  const xinKy = (yc: YeuCauKy): Promise<ChuKyMau | null> => {
+  const xinKy = async (yc: YeuCauKy): Promise<ChuKyMau | null> => {
+    /* Chữ ký phải mang họ tên, email MySun, mã CBNV theo danh bạ. */
+    const hs = hoSoDanhBa || (await taiHoSoDanhBa());
+    if (!hs) {
+      alert(
+        "Tài khoản của anh/chị chưa gắn với danh bạ nhân viên, nên chữ ký chưa có họ tên, email MySun và mã CBNV.\n\n" +
+          "Nhờ admin gắn ở mục Danh bạ, rồi bấm ký lại.",
+      );
+      return null;
+    }
     if (!mauCuaToi) {
       alert("Anh/chị chưa đăng ký chữ ký điện tử. Vẽ chữ ký trước, rồi bấm ký lại.");
       setMoDoiChuKy(true);
       return Promise.resolve(null);
     }
-    return new Promise((xong) => setChoKy({ ...yc, xong }));
+    return new Promise<ChuKyMau | null>((xong) => setChoKy({ ...yc, xong }));
   };
 
   /** Dựng chữ ký điện tử ghi lên chứng từ. */
   const taoChuKy = (code: string, vaiTro: string, mau: ChuKyMau, bam: string): ChuKyDienTu => {
     const signedAt = new Date().toISOString();
     const email = currentUserProfile?.email || auth.currentUser?.email || "";
+    const hs = hoSoDanhBa;
     return {
-      name: mau.ten,
+      name: hs?.ho_ten || mau.ten,
       email,
+      ...(hs ? { maNv: hs.ma_nv, emailCty: hs.email_cty || "" } : {}),
       uid: auth.currentUser?.uid || "",
       signedAt,
       token: taoTokenChuKy(code, vaiTro, email, signedAt),

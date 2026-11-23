@@ -437,7 +437,7 @@ service cloud.firestore {
     // khong kiem lai.
     function chuKyMoiHopLe(sig) {
       return sig is map
-        && sig.keys().hasOnly(['name', 'email', 'uid', 'signedAt', 'token', 'note', 'chuKyId', 'bamNoiDung', 'xacThuc'])
+        && sig.keys().hasOnly(['name', 'email', 'uid', 'signedAt', 'token', 'note', 'chuKyId', 'bamNoiDung', 'xacThuc', 'maNv', 'emailCty'])
         && sig.keys().hasAll(['name', 'email', 'uid', 'signedAt', 'token', 'chuKyId', 'bamNoiDung', 'xacThuc'])
         && sig.uid == request.auth.uid
         && sig.chuKyId is string
@@ -448,7 +448,12 @@ service cloud.firestore {
         && sig.token is string && sig.token.size() <= 64
         && sig.bamNoiDung is string && sig.bamNoiDung.size() == 64
         && sig.xacThuc is string && sig.xacThuc.size() <= 32
-        && sig.get('note', '') is string && sig.get('note', '').size() <= 1000;
+        && sig.get('note', '') is string && sig.get('note', '').size() <= 1000
+        // Danh tinh theo danh ba nhan vien (ma CBNV, email MySun) - 23/11/2026.
+        // (size() chi dung cho chuoi/mang/map - so thi loi = tu choi; gon de
+        // khong vuot nguong 1.000 phep tinh o lan trinh lai phieu.)
+        && sig.get('maNv', '').size() <= 32
+        && sig.get('emailCty', '').size() <= 254;
     }
 
     // Truong chuoi tuy chon: vang / null / chuoi <= max.

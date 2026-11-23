@@ -1093,6 +1093,13 @@ function OKy({
         <p className="py-4 font-black text-emerald-700">✓ Đã ký điện tử</p>
       )}
       <p className="font-black text-slate-900">{sig.name}</p>
+      {(sig.maNv || sig.emailCty) && (
+        <p className="text-[9px] text-slate-600 break-all">
+          {sig.maNv ? `Mã NV ${sig.maNv}` : ""}
+          {sig.maNv && sig.emailCty ? " · " : ""}
+          {sig.emailCty}
+        </p>
+      )}
       <p className="font-mono text-[10px] text-slate-600">
         {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
       </p>

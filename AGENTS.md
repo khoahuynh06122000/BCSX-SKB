@@ -146,3 +146,9 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Luật `nhan_su`: admin đọc hết; người đã duyệt chỉ đọc `coTaiKhoan == true`; admin tạo/xoá chỉ hồ sơ khai tay; hồ sơ MySun admin chỉ đổi trường gắn. Thử 17/17 ca.
   - `src/lib/danhBa.ts` (+ test 19 ca), `src/components/DanhBa.tsx`; agent thử giả không mạng 8/8 (scratchpad `thu_ghi_bcsx.py`).
   - **Chạy thật 23/11/2026 11:44** (anh Khoa cho phép): luật `nhan_su` đã đẩy lên af5bc7f8; agent ghi 838 người vào BCSX, app Kiểm kê vẫn nhận bình thường. Tự gắn 0 — cả 8 tài khoản BCSX đăng nhập **Gmail**, tên Google để "Tên Họ Đệm". Thêm luật **tên đảo thứ tự** ("Tùng Nông Văn" = Nông Văn Tùng, vẫn đúng dấu + đúng 1 người) ở app và agent → gắn được 2 (SKB); tên thiếu đệm ("Thu Lê") thì gợi ý người có đủ các chữ để admin bấm. Kế toán không có trên MySun Vp Bà Nà → admin khai tay. App tự gắn khi admin mở Danh bạ.
+- **Chữ ký điện tử mang danh tính danh bạ** (anh Khoa 23/11/2026; việc gắn tài khoản anh tự làm tay ở Danh bạ):
+  - `ChuKyDienTu` thêm `maNv` (mã CBNV) + `emailCty` (email MySun); `name` = họ tên theo danh bạ. App tải hồ sơ của mình (`hoSoDanhBa`, truy vấn `coTaiKhoan == true` + `uid`).
+  - `xinKy` CHẶN ký khi tài khoản chưa gắn danh bạ ("nhờ admin gắn ở mục Danh bạ") — áp cho mọi chỗ ký (phiếu nhập 3 ô + ký nháy, biên bản kiểm kê keg/bồn). Ô chữ ký (phiếu, BM-SKB-01, biên bản) hiện "Mã NV … · email".
+  - Danh bạ: khung "Tài khoản chưa gắn" nay gồm cả admin (admin cũng ký).
+  - Luật `chuKyMoiHopLe` nhận thêm 2 khoá tuỳ chọn, kiểm bằng `size()` (bản `is string` làm ca "trình lại phiếu bị trả" vượt ngưỡng 1.000). Thử 21/21 + 59/59 + 53/53, **đã đẩy luật TRƯỚC code** (code mới + luật cũ = mọi lần ký bị từ chối).
+  - **Việc anh làm**: gắn mọi tài khoản cần ký (admin, kế toán, giám sát xưởng, SX/nhập kho, xuất kho) ở Danh bạ — chưa gắn thì người đó không ký được.

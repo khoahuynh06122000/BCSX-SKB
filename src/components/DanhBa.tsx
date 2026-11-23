@@ -549,9 +549,10 @@ function KhungGan({
   const [moChon, setMoChon] = useState("");
   const [go, setGo] = useState("");
   const daGan = useMemo(() => new Set(ds.filter((r) => r.uid).map((r) => r.uid as string)), [ds]);
-  /* Trừ admin, MỌI tài khoản đang hoạt động phải gắn với nhân viên. */
+  /* MỌI tài khoản đang hoạt động phải gắn với nhân viên — kể cả admin: chữ
+     ký điện tử lấy họ tên, email MySun, mã CBNV từ đây (23/11/2026). */
   const chua = taiKhoan
-    .filter((t) => taiKhoanHoatDong(t) && t.role !== "OWNER" && !daGan.has(t.uid))
+    .filter((t) => taiKhoanHoatDong(t) && !daGan.has(t.uid))
     .sort(
       (a, b) =>
         tenVaiTro(a.role).localeCompare(tenVaiTro(b.role), "vi") ||
@@ -575,7 +576,7 @@ function KhungGan({
     <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
       <div>
         <p className="text-[13px] font-black text-slate-900">
-          Tài khoản chưa gắn với nhân viên ({chua.length}) · không tính admin
+          Tài khoản chưa gắn với nhân viên ({chua.length}) — chưa gắn thì chưa ký điện tử được
         </p>
         <p className="text-[12px] font-medium text-slate-500 mt-0.5">
           Trùng họ tên hoặc email là app tự gắn. Còn lại ở đây là tên trùng nhiều người, nhân viên đã gắn tài

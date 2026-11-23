@@ -371,6 +371,13 @@ export function KhoiKyBienBan({
               <p className="py-3 font-black text-emerald-700">✓ Đã ký</p>
             )}
             <p className="font-black text-slate-900">{sig.name}</p>
+            {(sig.maNv || sig.emailCty) && (
+              <p className="text-[9px] text-slate-500 break-all">
+                {sig.maNv ? `Mã NV ${sig.maNv}` : ""}
+                {sig.maNv && sig.emailCty ? " · " : ""}
+                {sig.emailCty}
+              </p>
+            )}
             <p className="font-mono text-[9px] text-slate-500">
               {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
               {sig.xacThuc === XAC_THUC_KY ? " · Google + PIN" : ""}
