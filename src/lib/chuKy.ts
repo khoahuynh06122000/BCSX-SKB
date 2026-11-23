@@ -190,3 +190,11 @@ export function noiDungKiemKeBon(r: {
     so(r.liters),
   ].join("|");
 }
+
+/** Ngày giờ ký hiện dưới chữ ký: "14:05:09 · 23/11/2026" (giờ máy, 24h). */
+export function gioKy(signedAt: string): string {
+  const d = new Date(signedAt);
+  if (Number.isNaN(d.getTime())) return signedAt || "";
+  const h = (n: number) => String(n).padStart(2, "0");
+  return `${h(d.getHours())}:${h(d.getMinutes())}:${h(d.getSeconds())} · ${h(d.getDate())}/${h(d.getMonth() + 1)}/${d.getFullYear()}`;
+}

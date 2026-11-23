@@ -24,7 +24,7 @@ import type {
   Partner,
   ImportSlip as ImportSlipType,
 } from "../types";
-import { bamSha256, maBamNgan, noiDungPhieuNhap, type ChuKyMau } from "../lib/chuKy";
+import { bamSha256, gioKy, maBamNgan, noiDungPhieuNhap, type ChuKyMau } from "../lib/chuKy";
 import { HinhChuKy } from "./ChuKy";
 import { cn, formatNumber } from "../lib/utils";
 import { parseSlipCode, phieuDaVaoTon } from "../lib/slip";
@@ -1065,7 +1065,8 @@ function OKy({
       <span className="font-bold uppercase">Ký nháy</span>
       {mauNhay && <HinhChuKy mau={mauNhay} className="h-6 w-16" />}
       <span className="font-bold">{nhay.name}</span>
-      <span className="font-mono">{new Date(nhay.signedAt).toLocaleString("vi-VN", { hour12: false })}</span>
+      {nhay.maNv && <span>Mã NV: {nhay.maNv}</span>}
+      <span className="font-mono">{gioKy(nhay.signedAt)}</span>
       {nhay.bamNoiDung && bamHienTai && nhay.bamNoiDung !== bamHienTai && <span className="font-black">⚠ số đã đổi</span>}
     </div>
   ) : null;
@@ -1093,16 +1094,9 @@ function OKy({
         <p className="py-4 font-black text-emerald-700">✓ Đã ký điện tử</p>
       )}
       <p className="font-black text-slate-900">{sig.name}</p>
-      {(sig.maNv || sig.emailCty) && (
-        <p className="text-[9px] text-slate-600 break-all">
-          {sig.maNv ? `Mã NV ${sig.maNv}` : ""}
-          {sig.maNv && sig.emailCty ? " · " : ""}
-          {sig.emailCty}
-        </p>
-      )}
-      <p className="font-mono text-[10px] text-slate-600">
-        {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
-      </p>
+      {sig.maNv && <p className="text-[10px] font-bold text-slate-700">Mã NV: {sig.maNv}</p>}
+      <p className="text-[10px] font-bold text-slate-700">Ký lúc: {gioKy(sig.signedAt)}</p>
+      {sig.emailCty && <p className="text-[9px] text-slate-600 break-all">{sig.emailCty}</p>}
       <p className="font-mono text-[9px] text-slate-500">
         {sig.xacThuc ? `Xác thực: ${sig.xacThuc === "GOOGLE+PIN" ? "Google + PIN" : sig.xacThuc}` : "Ký điện tử"} · Mã {sig.token}
       </p>

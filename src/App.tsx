@@ -8084,7 +8084,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                         Họ và tên
                       </p>
                       <p className="text-sm font-bold text-slate-900 truncate">
-                        {currentUserProfile.name || "Chưa đặt tên"}
+                        {hoSoDanhBa?.ho_ten || currentUserProfile.name || "Chưa đặt tên"}
                       </p>
                     </div>
                     {currentUserProfile.photoURL ? (
@@ -8102,6 +8102,54 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
 
                   <div className="h-[1px] bg-slate-200/50" />
 
+                  {/* Thông tin theo DANH BẠ NHÂN VIÊN đã gắn với tài khoản (23/11/2026). */}
+                  {hoSoDanhBa ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                        {(
+                          [
+                            ["Mã nhân viên", hoSoDanhBa.ma_nv],
+                            ["Cấp", hoSoDanhBa.cap_do ? "Cấp " + hoSoDanhBa.cap_do : ""],
+                            ["Chức danh", hoSoDanhBa.chuc_danh],
+                            ["Số điện thoại", hoSoDanhBa.sdt],
+                            ["Bộ phận", hoSoDanhBa.bo_phan],
+                            ["Email MySun", hoSoDanhBa.email_cty],
+                            [
+                              "Quản lý trực tiếp",
+                              Array.isArray(hoSoDanhBa.quan_ly) && hoSoDanhBa.quan_ly.length
+                                ? hoSoDanhBa.quan_ly[hoSoDanhBa.quan_ly.length - 1].ho_ten
+                                : "",
+                            ],
+                          ] as [string, string | null | undefined][]
+                        )
+                          .filter(([, v]) => v)
+                          .map(([k, v]) => (
+                            <div
+                              key={k}
+                              className={cn(
+                                "space-y-0.5 min-w-0",
+                                ["Bộ phận", "Email MySun", "Quản lý trực tiếp"].includes(k) && "col-span-2",
+                              )}
+                            >
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{k}</p>
+                              <p className="text-sm font-bold text-slate-900 break-words">{v}</p>
+                            </div>
+                          ))}
+                      </div>
+                      <p className="text-[10px] font-semibold text-slate-400">
+                        Theo danh bạ nhân viên {hoSoDanhBa.nguon === "app" ? "(hồ sơ khai tay)" : "MySun"} — admin gắn ở mục Danh bạ.
+                      </p>
+                    </>
+                  ) : (
+                    canChuKy(userRole) && (
+                      <p className="text-[12px] font-bold text-amber-700">
+                        Tài khoản chưa gắn với danh bạ nhân viên — nhờ admin gắn ở mục Danh bạ để có mã NV, email MySun và ký điện tử được.
+                      </p>
+                    )
+                  )}
+
+                  <div className="h-[1px] bg-slate-200/50" />
+
                   <div className="space-y-0.5">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
                       Tài khoản Google
@@ -8116,7 +8164,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Chức danh
+                        Vai trò trong app
                       </p>
                       <p className="text-sm font-bold text-slate-900">
                         {/* Tên vai trò lấy từ src/lib/quyen.ts, không viết
@@ -8154,11 +8202,15 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                     {mauCuaToi && (
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-center">
                         <HinhChuKy mau={mauCuaToi} className="mx-auto h-24 w-full max-w-sm" />
-                        <p className="text-xs font-black text-slate-900">{mauCuaToi.ten}</p>
+                        <p className="text-xs font-black text-slate-900">{hoSoDanhBa?.ho_ten || mauCuaToi.ten}</p>
+                        {hoSoDanhBa && (
+                          <p className="text-[11px] font-bold text-slate-600">Mã NV: {hoSoDanhBa.ma_nv}</p>
+                        )}
+                        <p className="text-[11px] font-bold text-slate-400">Ký lúc: ngày giờ ghi khi ký</p>
                       </div>
                     )}
                     <p className="text-[11px] font-semibold text-slate-500 leading-relaxed">
-                      Đóng lên chứng từ khi anh/chị trình, duyệt, ký nhận — kèm họ tên, giờ ký, nhập PIN mỗi lần ký.
+                      Đóng lên chứng từ khi anh/chị trình, duyệt, ký nhận — kèm họ tên, mã NV, email MySun, ngày giờ ký; nhập PIN mỗi lần ký.
                       Đổi chữ ký không làm đổi chứng từ đã ký trước đó.
                     </p>
                   </div>

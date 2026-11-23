@@ -6,7 +6,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eraser, Loader2, PenLine, ShieldCheck, X } from "lucide-react";
-import { bamSha256, chuKyDuNet, netTuDiem, XAC_THUC_KY, type ChuKyMau, type Diem } from "../lib/chuKy";
+import { bamSha256, chuKyDuNet, gioKy, netTuDiem, XAC_THUC_KY, type ChuKyMau, type Diem } from "../lib/chuKy";
 import type { ChuKyDienTu } from "../types";
 import { cn } from "../lib/utils";
 
@@ -371,17 +371,10 @@ export function KhoiKyBienBan({
               <p className="py-3 font-black text-emerald-700">✓ Đã ký</p>
             )}
             <p className="font-black text-slate-900">{sig.name}</p>
-            {(sig.maNv || sig.emailCty) && (
-              <p className="text-[9px] text-slate-500 break-all">
-                {sig.maNv ? `Mã NV ${sig.maNv}` : ""}
-                {sig.maNv && sig.emailCty ? " · " : ""}
-                {sig.emailCty}
-              </p>
-            )}
-            <p className="font-mono text-[9px] text-slate-500">
-              {new Date(sig.signedAt).toLocaleString("vi-VN", { hour12: false })}
-              {sig.xacThuc === XAC_THUC_KY ? " · Google + PIN" : ""}
-            </p>
+            {sig.maNv && <p className="text-[10px] font-bold text-slate-700">Mã NV: {sig.maNv}</p>}
+            <p className="text-[10px] font-bold text-slate-700">Ký lúc: {gioKy(sig.signedAt)}</p>
+            {sig.emailCty && <p className="text-[9px] text-slate-500 break-all">{sig.emailCty}</p>}
+            {sig.xacThuc === XAC_THUC_KY && <p className="font-mono text-[9px] text-slate-500">Google + PIN</p>}
             {khop === true && <p className="text-[9px] font-bold text-emerald-700">✓ Nội dung nguyên vẹn từ lúc ký</p>}
             {khop === false && <p className="text-[9px] font-black text-rose-700">⚠ Nội dung ĐÃ ĐỔI sau khi ký</p>}
           </div>
