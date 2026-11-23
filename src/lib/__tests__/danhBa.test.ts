@@ -61,6 +61,10 @@ const cap = capTuGan(
 );
 eq("tu gan: moi nhan vien mot tai khoan, bo cho duyet, bo da gan", cap.map((x) => [x.t.uid, x.r.ma_nv]), [["a", "1"], ["e", "2"]]);
 
+eq("ten dao thu tu Google", goiYGan(tk("g", "t@gmail.com", "Minh Phạm"), ns)?.r.ma_nv, "6");
+eq("ten dao: van phai dung dau", goiYGan(tk("g", "t@gmail.com", "Minh Pham"), ns), null);
+eq("ten dao: trung 2 nguoi thi thoi", goiYGan(tk("g", "t@gmail.com", "Thành Nguyễn Văn"), ns), null);
+eq("thieu ten dem: goi y nguoi du chu", viSaoChuaGan(tk("g", "", "Anh Trần"), [...ns, { ma_nv: "7", ho_ten: "Trần Thị Anh", dang_lam: true }]).chon.map((r) => r.ma_nv), ["7"]);
 eq("tim bo dau nhieu tu", khopTim(ns[2], "thanh san xuat"), true);
 eq("tim khong khop", khopTim(ns[2], "keg"), false);
 eq("tim rong la khop", khopTim(ns[0], "  "), true);

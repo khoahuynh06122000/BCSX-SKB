@@ -129,7 +129,7 @@ export const taiKhoanHoatDong = (t: TaiKhoanGan) => !!t.role && t.role !== "PEND
 export function goiYGan(
   t: TaiKhoanGan,
   ds: readonly NhanSu[],
-): { r: NhanSu; lyDo: "email" | "tên" } | null {
+): { r: NhanSu; lyDo: "email" | "tên" | "tên đảo thứ tự" } | null {
   const dangLam = ds.filter((r) => r.dang_lam !== false);
   const em = String(t.email || "").toLowerCase().trim();
   if (em) {
@@ -139,7 +139,20 @@ export function goiYGan(
   const tn = tenChuan(t.name);
   if (!tn) return null;
   const b = dangLam.filter((r) => tenChuan(r.ho_ten) === tn);
-  return b.length === 1 ? { r: b[0], lyDo: "tên" } : null;
+  if (b.length === 1) return { r: b[0], lyDo: "tên" };
+  if (b.length > 1) return null;
+  /* Tên Google hay để "Tên Họ Đệm" ("Tùng Nông Văn" = Nông Văn Tùng). Vẫn đòi
+     đúng cả dấu và đúng MỘT người. */
+  const dao = tenChuan(tenDao(t.name));
+  if (!dao || dao === tn) return null;
+  const c = dangLam.filter((r) => tenChuan(r.ho_ten) === dao);
+  return c.length === 1 ? { r: c[0], lyDo: "tên đảo thứ tự" } : null;
+}
+
+/** Đưa chữ đầu xuống cuối: "Tùng Nông Văn" → "Nông Văn Tùng". */
+export function tenDao(ten: unknown): string {
+  const w = String(ten ?? "").trim().split(/\s+/).filter(Boolean);
+  return w.length > 1 ? [...w.slice(1), w[0]].join(" ") : "";
 }
 
 /**
@@ -157,6 +170,19 @@ export function viSaoChuaGan(
   const gan = dangLam.filter((r) => vnNorm(r.ho_ten) === vnNorm(t.name) && vnNorm(t.name));
   if (gan.length)
     return { lyDo: "Danh bạ có tên gần giống (khác dấu) — bấm nếu đúng người:", chon: gan };
+  /* Tên Google thiếu tên đệm ("Thu Lê"): người có ĐỦ các chữ trong tên, đúng dấu. */
+  const chu = tenChuan(t.name).split(" ").filter(Boolean);
+  if (chu.length >= 2) {
+    const du = dangLam.filter((r) => {
+      const co = tenChuan(r.ho_ten).split(" ");
+      return chu.every((x) => co.includes(x));
+    });
+    if (du.length)
+      return {
+        lyDo: `Danh bạ có ${du.length} người có đủ các chữ trong tên — bấm nếu đúng người:`,
+        chon: du,
+      };
+  }
   return {
     lyDo:
       "Không có trong danh bạ Vp Bà Nà — thường là thời vụ, sinh viên thực tập, đã nghỉ việc hoặc làm ở địa điểm khác.",
