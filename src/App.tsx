@@ -10319,15 +10319,16 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                 taiKhoan={
                   isOwner
                     ? (() => {
+                        /* Admin nhận diện theo email cố định; hồ sơ admin trong
+                           bảng users có thể ghi "chờ duyệt" hoặc không có → coi là
+                           OWNER để admin gắn được danh bạ (ký số). */
+                        const me = auth.currentUser;
                         const ds = allUserProfiles.map((u) => ({
                           uid: u.uid,
                           email: u.email,
                           name: u.name,
-                          role: u.role,
+                          role: me && u.uid === me.uid && userRole === "OWNER" ? "OWNER" : u.role,
                         }));
-                        /* Admin nhận diện theo email cố định, không có hồ sơ trong
-                           bảng users → tự thêm để admin gắn được danh bạ (ký số). */
-                        const me = auth.currentUser;
                         if (me && userRole === "OWNER" && !ds.some((t) => t.uid === me.uid))
                           ds.unshift({
                             uid: me.uid,

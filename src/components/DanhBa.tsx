@@ -75,7 +75,9 @@ export default function DanhBa({ laAdmin, uid, email, taiKhoan, bao }: Props) {
   const [ds, setDs] = useState<NhanSu[] | null>(null);
   const [loi, setLoi] = useState("");
   const [tim, setTim] = useState("");
-  const [loc, setLoc] = useState<"" | "tk" | "chua" | "nghi">("");
+  /* Mặc định chỉ hiện người CÓ tài khoản app (anh Khoa 23/11/2026: 838 thẻ
+     không cần đọc); gõ tìm thì tìm trong cả danh bạ. */
+  const [loc, setLoc] = useState<"" | "tk" | "chua" | "nghi">("tk");
   const [soHien, setSoHien] = useState(60);
   const [moHoSo, setMoHoSo] = useState<NhanSu | null>(null);
   const [khai, setKhai] = useState<{ t: TaiKhoanGan | null; cu: NhanSu | null } | null>(null);
@@ -179,7 +181,7 @@ export default function DanhBa({ laAdmin, uid, email, taiKhoan, bao }: Props) {
         if (!laAdmin && r.dang_lam === false) return false;
         if (loc === "nghi") return r.dang_lam === false;
         if (laAdmin && loc && r.dang_lam === false) return false;
-        if (loc === "tk" && !r.coTaiKhoan) return false;
+        if (loc === "tk" && !r.coTaiKhoan && !tim.trim()) return false;
         if (loc === "chua" && r.coTaiKhoan) return false;
         return khopTim(r, tim);
       })
@@ -256,8 +258,8 @@ export default function DanhBa({ laAdmin, uid, email, taiKhoan, bao }: Props) {
           <div className="flex flex-wrap gap-1.5">
             {(
               [
-                ["", "Tất cả"],
                 ["tk", "Có tài khoản app"],
+                ["", "Tất cả"],
                 ["chua", "Chưa có tài khoản"],
                 ["nghi", "Đã nghỉ việc"],
               ] as const
@@ -282,7 +284,10 @@ export default function DanhBa({ laAdmin, uid, email, taiKhoan, bao }: Props) {
         )}
       </div>
 
-      <p className="text-[12px] font-bold text-slate-400">{loc2.length} nhân viên</p>
+      <p className="text-[12px] font-bold text-slate-400">
+        {loc2.length} nhân viên
+        {loc === "tk" && !tim.trim() ? " có tài khoản app · gõ tên để tìm trong cả danh bạ" : ""}
+      </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {loc2.slice(0, soHien).map((r) => (
           <button
