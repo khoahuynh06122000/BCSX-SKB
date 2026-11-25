@@ -23,6 +23,7 @@ import {
   bangHoaDon,
   boDauKetXuat,
   danhDauKetXuat,
+  dotHieuLuc,
   type HoaDonGhiNhan,
 } from "../lib/hoaDon";
 import { stableHash } from "../lib/hash";
@@ -156,6 +157,31 @@ export default function DebtExport({
     }
   }, [dot]);
 
+  /*
+   * ĐỢT DÙNG ĐỂ TÍNH (25/11/2026): đợt khai ở trên lưu riêng từng trình duyệt,
+   * nên máy này khai đợt khác máy kế toán là khoá hóa đơn lệch — bảng "chờ
+   * điền số" trống, thẻ "Chưa xuất" coi chuyến đã xuất là chưa (xuất trùng).
+   * Đợt của hóa đơn ĐÃ kết xuất / có số là cố định; đợt khai chỉ phủ phần
+   * ngày còn lại. Chỉ lấy đợt cố định nằm trong khoảng đang khai — riêng thẻ
+   * Đã xuất lấy thêm MỌI tờ đã kết xuất mà còn chờ điền số, ở đợt nào cũng vậy.
+   */
+  const dotTinh = useMemo(() => {
+    const tu = dot.reduce((a, d) => (!a || d.tuNgay < a ? d.tuNgay : a), "");
+    const den = dot.reduce((a, d) => (d.denNgay > a ? d.denNgay : a), "");
+    const lienQuan = hoaDon.filter((h) => {
+      const t = String(h.tuNgay || "").slice(0, 10);
+      const d = String(h.denNgay || "").slice(0, 10);
+      if (tu && den && !(d < tu || t > den)) return true;
+      return (
+        phan === "da" &&
+        !h.biThayTheBoi &&
+        !String(h.soHoaDon || "").trim() &&
+        !!String(h.ngayKetXuat || "").trim()
+      );
+    });
+    return dotHieuLuc(lienQuan, dot);
+  }, [hoaDon, dot, phan]);
+
   /** Số hóa đơn thật đã lưu, tra theo `<tuNgay>|<denNgay>|<maBp>`. */
   const hoaDonThat = useMemo(() => {
     const m = new Map<string, { soHoaDon: string; ngayHoaDon: string }>();
@@ -178,12 +204,12 @@ export default function DebtExport({
         transactions,
         products,
         partners,
-        dot,
+        dot: dotTinh,
         tienToHoaDon: tienTo,
         soHoaDonBatDau: soBatDau,
         hoaDonThat,
       }),
-    [transactions, products, partners, dot, tienTo, soBatDau, hoaDonThat],
+    [transactions, products, partners, dotTinh, tienTo, soBatDau, hoaDonThat],
   );
 
   /*
@@ -224,7 +250,7 @@ export default function DebtExport({
     () =>
       dongCanDienHoaDon(
         bang.dong,
-        dot.map((d) => ({
+        dotTinh.map((d) => ({
           tuNgay: d.tuNgay,
           denNgay: d.denNgay,
           nhan: nhanNgayGiao(d.tuNgay, d.denNgay),
@@ -232,7 +258,7 @@ export default function DebtExport({
         daGhi,
         stableHash,
       ),
-    [bang.dong, dot, daGhi],
+    [bang.dong, dotTinh, daGhi],
   );
 
   /**

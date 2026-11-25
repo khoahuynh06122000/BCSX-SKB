@@ -236,3 +236,65 @@ export function boDauKetXuat(d: DongCanDien): HoaDonGhiNhan {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/*  ĐỢT HIỆU LỰC — đợt đã chốt trên máy chủ thắng đợt khai ở từng máy   */
+/* ------------------------------------------------------------------ */
+
+const ngayCong = (ymd: string, n: number): string => {
+  const d = new Date(ymd + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * ĐỢT DÙNG ĐỂ DỰNG BẢNG CÔNG NỢ (anh Khoa 25/11/2026).
+ *
+ * Danh sách đợt khai lưu ở TỪNG TRÌNH DUYỆT (localStorage). Máy kế toán khai
+ * 18–20/11 rồi kết xuất → hóa đơn lưu khoá theo "18–20". Máy admin khai một
+ * đợt dài 15.10–21.11 → khoá lệch: bảng "chờ điền số" trống trơn, còn thẻ
+ * "Chưa xuất" coi mọi chuyến đã xuất là CHƯA xuất → nguy cơ xuất trùng.
+ *
+ * Nên: đợt của hóa đơn ĐÃ kết xuất / đã có số (bản còn hiệu lực) là đợt CỐ
+ * ĐỊNH, máy nào cũng thấy như nhau. Đợt khai ở máy chỉ còn phủ những ngày
+ * CHƯA thuộc đợt cố định nào (cắt bỏ phần chồng).
+ */
+export function dotHieuLuc(
+  hoaDon: readonly HoaDonGhiNhan[],
+  dotKhai: readonly { id: string; tuNgay: string; denNgay: string }[],
+): { id: string; tuNgay: string; denNgay: string }[] {
+  const coDinh = new Map<string, { id: string; tuNgay: string; denNgay: string }>();
+  hoaDon.forEach((h) => {
+    if (!h || h.biThayTheBoi) return;
+    if (!String(h.ngayKetXuat || "").trim() && !String(h.soHoaDon || "").trim()) return;
+    const tuNgay = String(h.tuNgay || "").slice(0, 10);
+    const denNgay = String(h.denNgay || "").slice(0, 10);
+    if (!tuNgay || !denNgay || denNgay < tuNgay) return;
+    const k = `${tuNgay}|${denNgay}`;
+    if (!coDinh.has(k)) coDinh.set(k, { id: `chot-${k}`, tuNgay, denNgay });
+  });
+  const chot = Array.from(coDinh.values()).sort((a, b) => a.tuNgay.localeCompare(b.tuNgay));
+
+  const ra = [...chot];
+  dotKhai.forEach((d) => {
+    let doan: { tu: string; den: string }[] = [{ tu: d.tuNgay.slice(0, 10), den: d.denNgay.slice(0, 10) }];
+    chot.forEach((c) => {
+      const moi: { tu: string; den: string }[] = [];
+      doan.forEach((x) => {
+        if (c.denNgay < x.tu || c.tuNgay > x.den) {
+          moi.push(x);
+          return;
+        }
+        if (x.tu < c.tuNgay) moi.push({ tu: x.tu, den: ngayCong(c.tuNgay, -1) });
+        if (x.den > c.denNgay) moi.push({ tu: ngayCong(c.denNgay, 1), den: x.den });
+      });
+      doan = moi;
+    });
+    doan.forEach((x, i) => {
+      if (x.tu > x.den) return;
+      if (ra.some((r) => !(r.denNgay < x.tu || r.tuNgay > x.den))) return;
+      ra.push({ id: doan.length > 1 ? `${d.id}-${i}` : d.id, tuNgay: x.tu, denNgay: x.den });
+    });
+  });
+  return ra.sort((a, b) => a.tuNgay.localeCompare(b.tuNgay));
+}
+
