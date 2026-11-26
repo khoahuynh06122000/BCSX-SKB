@@ -6578,31 +6578,40 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     }
   };
 
-  const handleXoaKiemKeBon = async (id: string) => {
-    if (!window.confirm("Xoá bản kiểm kê bồn FST/BBT này?")) return;
+  /*
+   * XOÁ BẢN KIỂM KÊ KÈM ẢNH (26/11/2026). Ảnh kiểm kê gắn chứng từ = id bản
+   * kiểm kê. Xoá bản mà để ảnh lại là ảnh mồ côi chiếm kho Cloudinary. Xoá tệp
+   * trên Cloudinary chỉ admin làm được, nên bản CÓ ảnh chỉ admin xoá; bản
+   * không ảnh thì người có quyền xoá như trước.
+   */
+  const xoaKiemKeKemAnh = async (bang: "kiem_ke_bon" | "kiem_ke_keg", id: string, ten: string) => {
+    if (!daTaiAnhRef.current) {
+      alert("Bảng ảnh chưa tải xong nên chưa biết ảnh nào đi theo bản kiểm kê. Đợi vài giây rồi bấm lại. Chưa xoá gì.");
+      return;
+    }
+    const conSong = new Set<string>();
+    anhChungTu.forEach((a) => a.chungTu.forEach((c) => c !== id && conSong.add(c)));
+    const viec = viecAnhKhiXoa(anhChungTu, [id], conSong);
+    const soAnh = viec.xoa.length + viec.go.length;
+    if (soAnh > 0 && !isOwner) {
+      alert(`Bản ${ten} này có ${soAnh} ảnh. Xoá ảnh trên kho chỉ admin làm được — nhờ admin xoá bản này để ảnh đi theo, không bỏ lại ảnh mồ côi.`);
+      return;
+    }
+    if (!window.confirm(`Xoá bản ${ten} này${soAnh ? ` cùng ${soAnh} ảnh` : ""}? Không lấy lại được.`)) return;
     setLoading(true);
     try {
-      await deleteDoc(doc(db, "kiem_ke_bon", id));
-      showNotification("Đã xoá bản kiểm kê bồn FST/BBT");
+      await deleteDoc(doc(db, bang, id));
+      const kqAnh = soAnh ? await lamViecAnhKhiXoa(viec) : { tong: 0, daXoa: 0, loi: "" };
+      showNotification(`Đã xoá bản ${ten}${chuAnhDaXoa(kqAnh)}`);
+      baoAnhChuaXoa(kqAnh);
     } catch (e) {
-      alert(handleFirestoreError(e, OperationType.DELETE, "kiem_ke_bon"));
+      alert(handleFirestoreError(e, OperationType.DELETE, bang));
     } finally {
       setLoading(false);
     }
   };
-
-  const handleXoaKiemKeKeg = async (id: string) => {
-    if (!window.confirm("Xoá bản kiểm kê Keg & Lít này?")) return;
-    setLoading(true);
-    try {
-      await deleteDoc(doc(db, "kiem_ke_keg", id));
-      showNotification("Đã xoá bản kiểm kê Keg & Lít");
-    } catch (e) {
-      alert(handleFirestoreError(e, OperationType.DELETE, "kiem_ke_keg"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleXoaKiemKeBon = (id: string) => xoaKiemKeKemAnh("kiem_ke_bon", id, "kiểm kê bồn FST/BBT");
+  const handleXoaKiemKeKeg = (id: string) => xoaKiemKeKemAnh("kiem_ke_keg", id, "kiểm kê Keg & Lít");
 
   /*
    * SAU KHI XOÁ LẺ: số phiếu nào không còn dòng hàng nào phía sau thì hỏi hủy

@@ -20,7 +20,7 @@
  * gọi sai có thể xoá ảnh của app kia.
  */
 
-import { gocFirestore, requireOwner, xacMinhDangNhap } from "../_auth.js";
+import { gocFirestore, laNguoiDaDuyet, requireOwner, xacMinhDangNhap } from "../_auth.js";
 import {
   cauHinhCloudinary,
   kiemTraKhoaCloudinary,
@@ -52,6 +52,10 @@ export default async function handler(req: any, res: any) {
   if (vuaTai) {
     const xm = await xacMinhDangNhap(req, res);
     if (!xm) return;
+    // Tài khoản chờ duyệt không tải được ảnh (luật Firestore) nên cũng không
+    // có tệp "vừa tải" nào để dọn — chặn hẳn để khỏi đốt hạn mức Admin API.
+    if (!(await laNguoiDaDuyet(xm.user, xm.token)))
+      return res.status(403).json({ error: "Tài khoản chưa được duyệt." });
     nguoiGoi = xm.user;
     token = xm.token;
   } else {

@@ -158,4 +158,10 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
 
 ### 25/11/2026 (Claude Code)
 - **Lỗi "mất" hóa đơn chờ điền số** (anh Khoa thấy bảng "Chờ điền số" trống dù đợt 18–20/11 FV/NVT/BNC đã kết xuất 22/11 chưa có số, cùng BNC 14–15/11): danh sách đợt khai lưu ở **localStorage từng máy**; máy admin khai một đợt 15.10–21.11, máy kế toán khai 18–20 → khoá hóa đơn `hd-<băm tu|den|maBp>` lệch, bảng trống; thẻ Chưa xuất ở máy admin coi chuyến đã xuất là CHƯA (nguy cơ xuất trùng). Sửa: `dotHieuLuc` (`lib/hoaDon.ts`, test 6 ca) — đợt của hóa đơn đã kết xuất / có số là CỐ ĐỊNH, đợt khai chỉ phủ phần ngày còn lại; DebtExport tính bảng theo `dotTinh` (đợt cố định trong khoảng đang khai; thẻ Đã xuất thêm mọi tờ chờ số). Số hóa đơn trong app hở 302, 308–310 → nhiều khả năng là 4 tờ chờ số; anh điền.
+- **Rà soát hạn mức & kho ảnh** (danh sách anh Khoa dán 26/11/2026):
+  - Firestore bật `persistentLocalCache` + `persistentMultipleTabManager` (`src/firebase.ts`): F5 đọc từ IndexedDB, nghe lại trong 30 phút chỉ tính tài liệu đổi. Bộ đếm lượt gọi vốn bỏ `fromCache`.
+  - `/api/anh/xoa` chiều `vuaTai` chặn tài khoản chờ duyệt / chưa có vai trò (`laNguoiDaDuyet` trong `api/_auth.ts`; chủ sở hữu gốc theo email được qua dù `users` ghi PENDING) — mục C15 cũ.
+  - Xoá kiểm kê bồn / keg dọn ảnh theo (`xoaKiemKeKemAnh` trong App) — mục C16 cũ ghi "đã sửa" nhưng code chưa có. Bản có ảnh chỉ admin xoá (xoá tệp Cloudinary cần admin); bản không ảnh giữ quyền cũ.
+  - `.gitignore` thêm `.claude/` (`.claude/launch.json` đã theo dõi từ trước nên vẫn giữ trong repo).
+  - CHƯA làm: chuyển tải ảnh sang **ký trên máy chủ** (preset unsigned `zjtjeyqd` lộ ở client — cần tạo preset signed trên Cloudinary + API ký, anh quyết); hạ ảnh 2000px → 1280px (chờ anh chọn vì ảnh bảng FST cần đọc được số).
 

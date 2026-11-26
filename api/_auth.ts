@@ -151,6 +151,18 @@ async function docVaiTro(uid: string, idToken: string): Promise<string> {
 }
 
 /**
+ * Người gọi đã được DUYỆT (có vai trò, không phải PENDING) — hoặc là chủ sở
+ * hữu gốc. Dùng cho cửa mở với mọi người dùng thật nhưng tốn hạn mức (gọi
+ * Admin API Cloudinary): tài khoản Google bất kỳ mới đăng nhập, chưa ai
+ * duyệt, không được gọi.
+ */
+export async function laNguoiDaDuyet(user: VerifiedUser, token: string): Promise<boolean> {
+  if (user.email.toLowerCase() === EMAIL_CHU_SO_HUU) return true;
+  const vt = await docVaiTro(user.uid, token);
+  return !!vt && vt !== "PENDING";
+}
+
+/**
  * CỬA CHỈ DÀNH CHO ADMIN — dùng cho những việc không lấy lại được (xoá ảnh
  * thật trên Cloudinary, liệt kê toàn bộ kho ảnh).
  *

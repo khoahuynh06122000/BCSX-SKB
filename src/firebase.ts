@@ -9,6 +9,8 @@ import {
 } from 'firebase/auth';
 import {
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection,
   doc,
   setDoc as fsSetDoc,
@@ -59,8 +61,16 @@ if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
 const app = initializeApp(firebaseConfig);
 
 // Using initializeFirestore with experimentalForceLongPolling to bypass potential WebSocket blocks
+//
+// BỘ NHỚ ĐỆM TRÊN MÁY (26/11/2026, chống hết hạn mức lượt đọc): app mở 15
+// onSnapshot cả bảng. Không có bộ đệm thì mỗi lần F5 tải lại TOÀN BỘ các bảng
+// = tính tiền lại từng tài liệu. Có bộ đệm (IndexedDB) thì lần sau dữ liệu
+// hiện ngay từ máy, và nếu nghe lại trong vòng 30 phút Firestore chỉ tính
+// những tài liệu ĐÃ ĐỔI. Nhiều tab dùng chung một bộ đệm. Trình duyệt không
+// cho IndexedDB (ẩn danh cũ…) thì SDK tự về bộ nhớ tạm như trước.
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 }, firestoreDatabaseId);
 
 export const firebaseProjectId = firebaseConfig.projectId as string;

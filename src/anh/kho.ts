@@ -190,6 +190,6 @@ export function baoAnhChuaXoa(kq: KetQuaXoaTep): void {
   if (kq.daXoa >= kq.tong && !kq.loi) return;
   alert(
     `Dữ liệu đã xoá, nhưng ${Math.max(0, kq.tong - kq.daXoa)}/${kq.tong} ảnh CHƯA xoá được trên Cloudinary.\n\n` +
-      `${kq.loi}\n\nNhững ảnh này vẫn hiện trong Thư viện ảnh (ghi "chứng từ đã xoá"). Admin mở từng tấm và bấm xoá lại.`,
+      `${kq.loi}\n\nBản ghi của những ảnh này còn giữ lại để xoá lại sau — báo Tin Tin / admin kiểm tra kho ảnh.`,
   );
 }

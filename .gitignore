@@ -13,3 +13,5 @@ firebase-applet-config.json
 # Tep mau SAP that: chua ten khach hang, ma so thue, so tien - khong day len GitHub
 sap-mau/
 
+# Du lieu rieng cua Claude Code tren may (launch.json van duoc theo doi)
+.claude/
