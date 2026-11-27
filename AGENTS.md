@@ -189,4 +189,4 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Sổ tay: 21 mục khởi đầu (`agent/so_tay_mau.py`, rút từ nhật ký này) + bài học từ commit `Sua-loi:` → xuất `docs/SO-TAY-SU-CO.md`, bot commit + đẩy đúng tệp đó.
   - Luật: `loi_app` người đã duyệt tạo lỗi của chính mình (khoá giới hạn), admin đọc / đánh dấu; `su_co`, `so_tay` chỉ admin; `thong_bao_app` mọi người đã duyệt đọc, admin ghi. Thử 18/18 (`thu_luat_suco.py`) + các bộ cũ.
   - Lượt thử đầu: đúng như dự đoán ngày 25/11, kế toán đã điền #302, #308–310.
-
+  - Triển khai 27/11/2026 (anh cho phép): luật 4 bảng đã đẩy lên af5bc7f8 TRƯỚC code (`34e2dd7`); bot chạy thật lần đầu 12:04 — thêm 21 mục sổ tay, tự commit `docs/SO-TAY-SU-CO.md`; Task Scheduler **"BCSX - Canh bao 17h"** (pythonw -I agent/canh_bao.py, chỉ chạy khi anh đăng nhập máy). Tóm tắt chỉ đánh dấu đã gửi khi Telegram nhận. **Còn chờ anh**: đặt biến `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (lấy từ GitHub secrets của repo Kiểm kê) bằng `setx` trên máy — chưa có thì bot chỉ ghi nhật ký `agent/nhat_ky_canh_bao.txt`.

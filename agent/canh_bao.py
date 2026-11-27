@@ -596,8 +596,8 @@ def chay():
         L += [f"• Lượt đọc Firebase hôm qua {hq:,} / {HAN_MUC_DOC:,}".replace(',', '.'),
               f"• Hóa đơn chờ điền số: {tom.get('hd_cho', 0)}",
               f"• Bản đang chạy: {sha or '?'}"]
-        gui_telegram('\n'.join(L))
-        moc_doc['tomTatNgay'] = hom_nay
+        if gui_telegram('\n'.join(L)):  # chưa gửi được (thiếu token) thì lượt sau gửi lại
+            moc_doc['tomTatNgay'] = hom_nay
 
     viec.append(('su_co', '_moc', {'lanChay': luc, 'tomTatNgay': moc_doc.get('tomTatNgay', '')}, True))
     ghi(viec)
