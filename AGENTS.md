@@ -164,4 +164,4 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - Xoá kiểm kê bồn / keg dọn ảnh theo (`xoaKiemKeKemAnh` trong App) — mục C16 cũ ghi "đã sửa" nhưng code chưa có. Bản có ảnh chỉ admin xoá (xoá tệp Cloudinary cần admin); bản không ảnh giữ quyền cũ.
   - `.gitignore` thêm `.claude/` (`.claude/launch.json` đã theo dõi từ trước nên vẫn giữ trong repo).
   - CHƯA làm: chuyển tải ảnh sang **ký trên máy chủ** (preset unsigned `zjtjeyqd` lộ ở client — cần tạo preset signed trên Cloudinary + API ký, anh quyết); hạ ảnh 2000px → 1280px (chờ anh chọn vì ảnh bảng FST cần đọc được số).
-
+- **27/11/2026** Khung "Xác nhận cả phiếu giao hàng" trên điện thoại: đầu khung (nút Chụp thêm / Chọn từ máy) bị thanh tiêu đề che, kéo lên không tới — khung `fixed` nằm trong vùng nội dung có hiệu ứng (transform) nên bám theo vùng đó chứ không theo màn hình. Sửa: `createPortal` gắn khung vào `<body>`, z-[90], cao tối đa `92dvh` (thanh địa chỉ điện thoại không ăn mất đầu khung). 5 khung `fixed` khác trong App chưa chuyển — gặp lỗi tương tự thì làm cùng cách.

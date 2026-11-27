@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createPortal } from "react-dom";
 import React, { useState, useMemo, useEffect, useRef, useCallback, ReactNode } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -9890,8 +9891,13 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                 {/* Loss Reporting Modal */}
                 {showLossModal &&
                   selectedInTransitGroup &&
-                  selectedInTransitGroup.length > 0 && (
-                    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                  selectedInTransitGroup.length > 0 &&
+                  /* GẮN THẲNG VÀO <body> (27/11/2026): khung nằm trong vùng nội
+                     dung có hiệu ứng (transform) nên `fixed` bám theo vùng đó,
+                     không theo màn hình — trên điện thoại thanh tiêu đề che mất
+                     đầu khung, kéo lên không tới chỗ chụp / chọn ảnh. */
+                  createPortal(
+                    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-4">
                       <div
                         onClick={() => {
                           // Đã chọn ảnh thì bấm trượt ra nền không được đóng —
@@ -9906,7 +9912,7 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                         trước ăn mất khoảng 40px bề ngang — trên máy 375px thì
                         đó là hơn một phần mười, đủ để tên bia bị cắt.
                       */}
-                      <div className="relative w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+                      <div className="relative w-full max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] max-h-[92dvh] sm:max-h-[90vh]">
                         <div className="px-4 py-3 sm:p-8 sm:pb-4 border-b border-slate-100">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -10345,7 +10351,8 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
                           </Button>
                         </div>
                       </div>
-                    </div>
+                    </div>,
+                    document.body,
                   )}
               </div>
             )}
