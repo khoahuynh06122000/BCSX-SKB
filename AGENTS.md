@@ -10,6 +10,23 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
 - Giữ phong cách làm việc của một chuyên gia giỏi nhất thế giới.
 - **Xong mỗi task thì ghi vào mục "Nhật ký công việc" bên dưới** (ngày, việc gì, commit, còn dở gì) — để phiên sau (Claude Code hay Antigravity) đọc là nắm được ngay. Ghi cùng commit với code.
 
+## ⚠️ LUẬT BẮT BUỘC: ĐỌC BÀI HỌC TRƯỚC KHI SỬA LỖI · GHI BÀI HỌC KHI SỬA XONG (anh Khoa 27/11/2026)
+1. **Trước khi sửa bất kỳ lỗi nào**: `git pull` rồi đọc `docs/SO-TAY-SU-CO.md` (bot `agent/canh_bao.py` tự xuất từ bảng
+   `so_tay` sau mỗi lượt 17h). Lỗi đang sửa trùng / gần một bài học cũ thì phải làm đúng mục "Chặn tái phát" của bài học đó.
+2. **Mọi commit SỬA LỖI phải có các dòng sau trong thân commit** (bot đọc git log, tự sinh bài học `git-<sha7>` và canh
+   tái phát — thiếu dòng `Sua-loi:` là lần sửa đó KHÔNG được nhớ):
+   ```
+   Sua-loi: <tiêu đề lỗi, tiếng Việt có dấu>
+   Muc: S1|S2|S3
+   Trieu-chung: <người dùng thấy gì>
+   Nguyen-nhan: <nguyên nhân gốc>
+   Cach-sua: <đã sửa thế nào>
+   Chan-tai-phat: <quy tắc để không tái phạm>
+   Nhan-dien: <chuỗi trong câu lỗi / đầu mã sự cố để bot nhận ra lỗi quay lại>   (nếu có)
+   ```
+   Commit tính năng / giao diện không phải sửa lỗi thì KHÔNG ghi `Sua-loi`. Repo công khai: không ghi tên người, khoá, số tiền.
+3. Mức: **S1** app không dùng được hoặc số kho / tiền sai · **S2** một chức năng hỏng, nhiều người bị · **S3** lỗi lẻ, hiển thị.
+
 ## Ghi nhớ vận hành & Khắc phục sự cố thực tế:
 1. **Sự cố ảnh chứng từ "LỖI MẠNG / BỊ CHẶN" trên máy văn phòng Sun World (Kế toán)**:
    - Dữ liệu Firestore vẫn tải đủ 100% nhưng ảnh không hiện. Nút `SOÁT ẢNH` trả về Mã 0 (*Không hỏi tới máy chủ được*).
@@ -165,3 +182,11 @@ Bạn là một chuyên gia hàng đầu thế giới về hai lĩnh vực:
   - `.gitignore` thêm `.claude/` (`.claude/launch.json` đã theo dõi từ trước nên vẫn giữ trong repo).
   - CHƯA làm: chuyển tải ảnh sang **ký trên máy chủ** (preset unsigned `zjtjeyqd` lộ ở client — cần tạo preset signed trên Cloudinary + API ký, anh quyết); hạ ảnh 2000px → 1280px (chờ anh chọn vì ảnh bảng FST cần đọc được số).
 - **27/11/2026** Khung "Xác nhận cả phiếu giao hàng" trên điện thoại: đầu khung (nút Chụp thêm / Chọn từ máy) bị thanh tiêu đề che, kéo lên không tới — khung `fixed` nằm trong vùng nội dung có hiệu ứng (transform) nên bám theo vùng đó chứ không theo màn hình. Sửa: `createPortal` gắn khung vào `<body>`, z-[90], cao tối đa `92dvh` (thanh địa chỉ điện thoại không ăn mất đầu khung). 5 khung `fixed` khác trong App chưa chuyển — gặp lỗi tương tự thì làm cùng cách.
+- **Hệ báo sự cố** (anh Khoa 27/11/2026: "qua app kiểm kê xem cách làm bot báo cáo sự cố mà học theo"; chọn bot chạy MÁY ANH + chung bot Telegram Kiểm kê):
+  - App tự ghi lỗi → `loi_app` (`src/lib/ghiLoi.ts`: nghe `error`/`unhandledrejection` + mọi `handleFirestoreError`; bỏ lỗi mạng, che khoá/JWT, gộp 10 phút, hàng đợi localStorage ≤30). Phép tính dùng chung `src/lib/suCo.ts` (+ test 24 ca): gộp lỗi, mức S1 ≥4 người / S2 ≥2 người (app ít tài khoản nên hạ ngưỡng so Kiểm kê), tái phát theo `khoaNhanDien`.
+  - Tab **Sự cố hệ thống** (admin, `SuCoHeThong.tsx`): sự cố đang mở (đánh dấu đã xử lý → hỏi ghi bài học), lỗi 24 giờ, **thông báo bộ phận** (`thong_bao_app` → dải trên đầu app mọi người, tải lúc mở + 10 phút/lần, ✕ ẩn trên máy), sổ tay & bài học (`so_tay`). Đọc bằng getDocs, không nghe liên tục.
+  - Bot `agent/canh_bao.py` (Task Scheduler **17h hằng ngày** — anh chỉ cho đặt lịch 17h; phiên Firebase CLI): web mở + đúng bản (mã build trong JS = commit origin/main, lệch >15 phút = S1) · Firestore trả lời · lỗi người dùng từ lượt trước · hạn mức đọc ngày · hóa đơn trùng số (S1) / chờ điền số >3 ngày (S2, chỉ tờ tải sau tờ đầu tiên có số — tháng 9 chưa ghi số vào app) · agent danh bạ >8 ngày (S2). Một tin mở + một tin ✅; tóm tắt ở lượt đầu tiên trong ngày. Telegram: biến người dùng `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (chung bot Kiểm kê, tin gắn [BCSX]). `--thu` = chỉ in.
+  - Sổ tay: 21 mục khởi đầu (`agent/so_tay_mau.py`, rút từ nhật ký này) + bài học từ commit `Sua-loi:` → xuất `docs/SO-TAY-SU-CO.md`, bot commit + đẩy đúng tệp đó.
+  - Luật: `loi_app` người đã duyệt tạo lỗi của chính mình (khoá giới hạn), admin đọc / đánh dấu; `su_co`, `so_tay` chỉ admin; `thong_bao_app` mọi người đã duyệt đọc, admin ghi. Thử 18/18 (`thu_luat_suco.py`) + các bộ cũ.
+  - Lượt thử đầu: đúng như dự đoán ngày 25/11, kế toán đã điền #302, #308–310.
+

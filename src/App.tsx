@@ -51,6 +51,7 @@ import {
   BarChart3,
   PieChart,
   Contact,
+  Siren,
 } from "lucide-react";
 import {
   isValid,
@@ -209,6 +210,9 @@ import { danhKhoaBbgn, type BbgnDraft, dongCuNgoaiTep } from "./lib/bbgn";
 import DebtExport from "./components/DebtExport";
 import TraCuuHoaDon from "./components/TraCuuHoaDon";
 import DanhBa from "./components/DanhBa";
+import SuCoHeThong from "./components/SuCoHeThong";
+import { batDauNgheLoi, datNguCanhLoi, ghiLoiApp } from "./lib/ghiLoi";
+import type { ThongBaoApp } from "./lib/suCo";
 import type { NhanSu } from "./lib/danhBa";
 import {
   bangSoPhieu,
@@ -591,6 +595,28 @@ export default function App() {
   const [products] = useState<Product[]>(INITIAL_PRODUCTS);
 
   const [activeTab, setActiveTab] = useState("");
+
+  /* ---- HỆ BÁO SỰ CỐ (27/11/2026, học theo app Kiểm kê) ---- */
+  useEffect(() => {
+    batDauNgheLoi();
+  }, []);
+  const [thongBaoBat, setThongBaoBat] = useState<ThongBaoApp[]>([]);
+  const [thongBaoDaAn, setThongBaoDaAn] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("bcsx_tb_an_v1") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const anThongBao = (id: string) => {
+    const moi = [...thongBaoDaAn, id].slice(-50);
+    setThongBaoDaAn(moi);
+    try {
+      localStorage.setItem("bcsx_tb_an_v1", JSON.stringify(moi));
+    } catch {
+      /* không lưu được thì lần sau hiện lại */
+    }
+  };
   /**
    * Tab con trong mục Sổ kho & Xuất SAP (tách phần Tổng hợp thành tab riêng `overview`).
    */
@@ -3576,6 +3602,8 @@ export default function App() {
   ): string => {
     const ma = err?.code || "";
     const viec = TEN_VIEC[operation] || operation;
+    // Hệ báo sự cố: mọi lỗi Firestore người dùng gặp đều vào `loi_app`.
+    ghiLoiApp("firestore", `${operation} ${path ?? ""}: ${err?.message || ma || "lỗi"}`, ma, "");
     console.error(`Firestore [${operation}] ${path ?? ""}`, {
       code: ma,
       message: err?.message,
@@ -5769,6 +5797,34 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
     if (user && userRole && userRole !== "PENDING") void taiHoSoDanhBa();
   }, [user, userRole, taiHoSoDanhBa]);
 
+  /* Hệ báo sự cố: ngữ cảnh cho bộ ghi lỗi + dải thông báo cho bộ phận. */
+  useEffect(() => {
+    datNguCanhLoi({
+      man: activeTab,
+      vaiTro: userRole,
+      ten: hoSoDanhBa?.ho_ten || currentUserProfile?.name || "",
+      duocGhi: !!user && userRole !== "PENDING",
+    });
+  }, [activeTab, userRole, user, hoSoDanhBa, currentUserProfile]);
+  useEffect(() => {
+    if (!user || userRole === "PENDING") return;
+    let huy = false;
+    const tai = async () => {
+      try {
+        const s = await getDocs(query(collection(db, "thong_bao_app"), where("bat", "==", true)));
+        if (!huy) setThongBaoBat(s.docs.map((d) => ({ ...(d.data() as ThongBaoApp), id: d.id })));
+      } catch {
+        /* chưa có luật / mất mạng: không hiện dải, app vẫn chạy */
+      }
+    };
+    void tai();
+    const t = setInterval(tai, 10 * 60 * 1000);
+    return () => {
+      huy = true;
+      clearInterval(t);
+    };
+  }, [user, userRole]);
+
   const mauCuaToi = useMemo(
     () => mauMoiNhat(chuKyMau, auth.currentUser?.uid || ""),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7067,6 +7123,18 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
             color: "#0e7490",
             badge: 0,
           },
+          /* Sự cố hệ thống (hệ báo sự cố, 27/11/2026) — chỉ admin. */
+          ...(isOwnerRole
+            ? [
+                {
+                  id: "suco",
+                  label: "Sự cố hệ thống",
+                  icon: Siren,
+                  color: "#e11d48",
+                  badge: 0,
+                },
+              ]
+            : []),
           ...(isOwnerRole
             ? [
                 {
@@ -8610,6 +8678,27 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
               lo (đã dùng hoặc dự báo cuối ngày từ 50% mốc trở lên). Nói rõ
               loại nào, bao nhiêu, và còn bao lâu tới lúc hạn mức đặt lại.
             */}
+            {/* THÔNG BÁO CHO BỘ PHẬN (admin bật ở tab Sự cố hệ thống). */}
+            {thongBaoBat
+              .filter((x) => !thongBaoDaAn.includes(x.id))
+              .map((x) => (
+                <div
+                  key={x.id}
+                  className={cn(
+                    "p-3 rounded-2xl border flex gap-3 items-start",
+                    x.kieu === "da_sua" ? "border-emerald-200 bg-emerald-50" : "border-amber-300 bg-amber-50",
+                  )}
+                >
+                  <p className="flex-1 min-w-0 text-[13px] font-bold text-slate-800 leading-relaxed">{x.noiDung}</p>
+                  <button
+                    onClick={() => anThongBao(x.id)}
+                    aria-label="Ẩn thông báo trên máy này"
+                    className="p-1 rounded-full text-slate-400 hover:text-slate-900"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             {isOwner && canhBaoGoi.length > 0 && (
               <div
                 className={cn(
@@ -10378,6 +10467,10 @@ Phải lưu dạng "Đơn đi đường", rồi kho tổng chụp ảnh xác nh�
             {activeTab === "export" &&
               quyen.ghiXuat &&
               renderNhapXuatForm("export")}
+
+            {activeTab === "suco" && isOwner && (
+              <SuCoHeThong email={currentUserProfile?.email || user || ""} bao={showNotification} />
+            )}
 
             {activeTab === "danhba" && (
               <DanhBa

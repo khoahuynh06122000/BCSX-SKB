@@ -1238,6 +1238,34 @@ service cloud.firestore {
      * do — khong ai ghi duoc thu gi khac vao day. Xoa: chi admin.
      * Xem src/lib/doLuong.ts.
      */
+    // -------------------------------------------------------------------------
+    // HE BAO SU CO (27/11/2026, hoc theo app Kiem ke). Bot agent/canh_bao.py
+    // ghi bang phien Firebase CLI (IAM, khong qua luat nay).
+    // -------------------------------------------------------------------------
+    // Loi nguoi dung gap: nguoi da duyet tu ghi loi CUA MINH; chi admin doc / danh dau.
+    match /loi_app/{id} {
+      allow create: if isApproved()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['luc', 'loai', 'thongDiep', 'ma', 'chiTiet', 'ban', 'man', 'may', 'loaiMay', 'vaiTro', 'ten', 'uid', 'daXuLy'])
+        && request.resource.data.thongDiep is string && request.resource.data.thongDiep.size() <= 600
+        && request.resource.data.get('chiTiet', '').size() <= 1500
+        && request.resource.data.get('daXuLy', false) == false;
+      allow read, delete: if isOwner();
+      allow update: if isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['daXuLy']);
+    }
+    match /su_co/{id} {
+      allow read, write: if isOwner();
+    }
+    match /so_tay/{id} {
+      allow read, write: if isOwner();
+    }
+    // Dai thong bao cho bo phan: moi nguoi da duyet doc, admin ghi.
+    match /thong_bao_app/{id} {
+      allow read: if isApproved();
+      allow write: if isOwner();
+    }
+
     match /do_luong/{ngay} {
       allow read: if isApproved();
       allow create, update: if isApproved()

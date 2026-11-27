@@ -15,3 +15,7 @@ sap-mau/
 
 # Du lieu rieng cua Claude Code tren may (launch.json van duoc theo doi)
 .claude/
+
+# Nhat ky bot canh bao tren may admin
+agent/nhat_ky_canh_bao.txt
+agent/__pycache__/
